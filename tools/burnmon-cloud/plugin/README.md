@@ -1,7 +1,7 @@
 # BurnMon cloud
 
 Counts the tokens of Cowork sessions that run in Anthropic's cloud, for
-[BurnMon](https://github.com/wilcodetree/burnmon), the local token and cost monitor.
+[BurnMon](https://github.com/siteoffice/burnmon), the local token and cost monitor.
 
 A cloud session writes no transcript to your computer, so BurnMon cannot see it. This
 plugin runs inside each cloud session, reads that session's own transcript and keeps only
@@ -12,7 +12,7 @@ The copy is a plugin hook, so it costs no model tokens.
 
 Status: still under investigation. It only counts a cloud session that has `~/.burnmon`
 connected, and Claude does not connect that folder by itself. If you know a better way, please
-open an issue at https://github.com/wilcodetree/burnmon/issues.
+open an issue at https://github.com/siteoffice/burnmon/issues.
 
 ## Set up
 

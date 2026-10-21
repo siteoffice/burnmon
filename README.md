@@ -10,7 +10,7 @@ macOS and Linux, `burnmon` runs one web server that only this computer can reach
 
 BurnMon is the successor of [claudecost](https://github.com/wilcodetree/claudecost),
 renamed and extended from v0.2 onward. Repo:
-[wilcodetree/burnmon](https://github.com/wilcodetree/burnmon). Plan:
+[siteoffice/burnmon](https://github.com/siteoffice/burnmon). Plan:
 `02_roadmap\2026-09-22_burnmon_plan.md`; the spec building the current release:
 `02_roadmap\2026-09-23_v0.3_spec.md`.
 
@@ -68,7 +68,7 @@ without it is simply not counted, with no warning. That is not workable for most
 2026-10-13 we found no local, offline token monitor that counts cloud sessions without such a
 step: the tools that do count them send the numbers through an online service, or need an
 organization admin to set up Cowork's OpenTelemetry export. If you know a better way, please
-share it: open an issue at https://github.com/wilcodetree/burnmon/issues.
+share it: open an issue at https://github.com/siteoffice/burnmon/issues.
 
 A partial fix is an optional Claude plugin, `burnmon-cloud`, in `tools\burnmon-cloud`. Inside each
 cloud session it reads that session's own transcript at the end of each turn, when a
