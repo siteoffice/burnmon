@@ -283,7 +283,10 @@ func turnsToTarget(target, slope, intercept, lastX float64) float64 {
 	if current >= target {
 		return 0
 	}
-	turns := math.Ceil((target - current) / slope)
+	// The small epsilon absorbs float error: on arm64 Go fuses multiply-add
+	// (FMA), so an exact fit can land a hair above a whole number and Ceil
+	// would report one turn too many.
+	turns := math.Ceil((target-current)/slope - 1e-9)
 	if turns < 0 {
 		turns = 0
 	}

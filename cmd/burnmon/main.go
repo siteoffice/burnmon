@@ -18,7 +18,6 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -26,7 +25,6 @@ import (
 	"golang.org/x/sys/windows"
 
 	"burnmon/internal/adapter/codex"
-	"burnmon/internal/dataset"
 	"burnmon/internal/forecast"
 	"burnmon/internal/history"
 	"burnmon/internal/live"
@@ -319,44 +317,13 @@ func main() {
 		log.Println("could not bind ccRefresh:", err)
 	}
 
-	var bmLivePolls atomic.Uint64
+	// The bound functions' bodies live in bindings.go, shared with the
+	// browser bridge (browser.go) used on macOS and Linux.
 	// bucketSeconds (U5, v0.3): monitor view's braille chart calls
 	// bmLive(10) for finer columns than the Now page's own bmLive(), no
 	// second binding; live.BuildSnapshot defaults to 60 when omitted.
 	if err := w.Bind("bmLive", func(bucketSeconds ...int) (live.Snapshot, error) {
-		callStart := time.Now()
-		a.mu.Lock()
-		cfg := a.cfg
-		a.mu.Unlock()
-		now := time.Now()
-		// F1: bmLive is polled every 2 seconds by the Now page. It used to
-		// call st.AllEvents() and re-group the whole table on every tick
-		// (measured at 1,886 MB, memory thrashing); EventsSince bounds the
-		// read to live.ChartWindow, and ApplySessionTotals below fills in
-		// each running session's true lifetime totals from a small SQL
-		// aggregate instead of the full history.
-		storeStart := time.Now()
-		events, err := st.EventsSince(now.Add(-live.ChartWindow))
-		storeWait := time.Since(storeStart)
-		if err != nil {
-			log.Printf("bound bmLive: %v total, %v waiting for the store (EventsSince error: %v)", time.Since(callStart), storeWait, err)
-			return live.Snapshot{}, err
-		}
-		snap := live.BuildSnapshot(events, &cfg, now, bucketSeconds...)
-		totalsStart := time.Now()
-		if err := live.ApplySessionTotals(snap.Sessions, st, &cfg); err != nil {
-			log.Println("bmLive: session totals:", err)
-		}
-		storeWait += time.Since(totalsStart)
-		if n := bmLivePolls.Add(1); n%30 == 0 {
-			var mem runtime.MemStats
-			runtime.ReadMemStats(&mem)
-			log.Printf("debug: bmLive poll %d, HeapAlloc=%d bytes", n, mem.HeapAlloc)
-		}
-		if elapsed := time.Since(callStart); elapsed > 50*time.Millisecond {
-			log.Printf("bound bmLive: %v total, %v waiting for the store", elapsed, storeWait)
-		}
-		return snap, nil
+		return a.liveSnapshot(st, bucketSeconds...)
 	}); err != nil {
 		log.Println("could not bind bmLive:", err)
 	}
@@ -379,17 +346,7 @@ func main() {
 	// in a goroutine, resolve through asyncResolveJS.
 	if err := w.Bind("bmTurn", func(sessionID string, turn int) {
 		go func() {
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			start := time.Now()
-			detail, err := live.BuildTurnDetail(st, &cfg, sessionID, turn)
-			if err != nil {
-				log.Println("bmTurn:", sessionID, turn, ":", err)
-			}
-			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-				log.Printf("bound bmTurn: %v waiting for the store", elapsed)
-			}
+			detail := a.turnDetail(st, sessionID, turn)
 			key := fmt.Sprintf("%s:%d", sessionID, turn)
 			js, err := asyncResolveJS("__bmTurnResolve", key, detail)
 			if err != nil {
@@ -420,19 +377,7 @@ func main() {
 	// this and bmHistory use for that.
 	if err := w.Bind("bmSessionInsight", func(sessionID string) {
 		go func() {
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			start := time.Now()
-			findings, err := live.BuildSessionInsight(st, &cfg, sessionID)
-			if err != nil {
-				log.Println("bmSessionInsight:", sessionID, ":", err)
-				findings = nil
-			}
-			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-				log.Printf("bound bmSessionInsight: %v waiting for the store", elapsed)
-			}
-			js, err := asyncResolveJS("__bmSessionInsightResolve", sessionID, findings)
+			js, err := asyncResolveJS("__bmSessionInsightResolve", sessionID, a.sessionInsight(st, sessionID))
 			if err != nil {
 				log.Println("bmSessionInsight: encode result:", err)
 				return
@@ -454,18 +399,9 @@ func main() {
 	// than "no longer fires hundreds at once".
 	if err := w.Bind("bmHistory", func(reqID string, f history.Filter) {
 		go func() {
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			start := time.Now()
-			events, err := st.AllEvents()
+			payload, err := a.historyPayload(st, f)
 			if err != nil {
-				log.Println("bmHistory: AllEvents:", err)
 				return
-			}
-			payload := history.Build(events, &cfg, f)
-			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-				log.Printf("bound bmHistory: %v waiting for the store, %d rows", elapsed, len(events))
 			}
 			js, err := asyncResolveJS("__bmHistoryResolve", reqID, payload)
 			if err != nil {
@@ -483,15 +419,7 @@ func main() {
 	// aggregate against the whole events table rather than bmLive's
 	// windowed read.
 	if err := w.Bind("bmVendorStrip", func() (vendorstrip.Payload, error) {
-		callStart := time.Now()
-		a.mu.Lock()
-		cfg := a.cfg
-		a.mu.Unlock()
-		payload, err := vendorstrip.Build(st, &cfg, time.Now())
-		if elapsed := time.Since(callStart); elapsed > 50*time.Millisecond {
-			log.Printf("bound bmVendorStrip: %v total, %v waiting for the store", elapsed, elapsed)
-		}
-		return payload, err
+		return a.vendorStrip(st)
 	}); err != nil {
 		log.Println("could not bind bmVendorStrip:", err)
 	}
@@ -503,15 +431,7 @@ func main() {
 	// to, as long as the app is open at least once a minute somewhere in
 	// that week.
 	if err := w.Bind("bmForecast", func() (forecast.Payload, error) {
-		callStart := time.Now()
-		a.mu.Lock()
-		cfg := a.cfg
-		a.mu.Unlock()
-		payload, err := forecast.Build(st, &cfg, time.Now())
-		if elapsed := time.Since(callStart); elapsed > 50*time.Millisecond {
-			log.Printf("bound bmForecast: %v total, %v waiting for the store", elapsed, elapsed)
-		}
-		return payload, err
+		return a.forecastPayload(st)
 	}); err != nil {
 		log.Println("could not bind bmForecast:", err)
 	}
@@ -568,26 +488,6 @@ func main() {
 	}
 
 	w.Run()
-}
-
-// startupFailureMessage turns a Collect error from the very first pass (no
-// dashboard.html yet to fall back on) into plain text for the warming page.
-// Before this, any of these three errors was logged and then silently
-// swallowed, leaving the window stuck on "Reading your session
-// transcripts... Starting..." forever: exactly what a chat-only user, or
-// anyone whose Cowork sessions all run in Anthropic's cloud, hits, since
-// neither leaves a local transcript for this machine to find.
-func startupFailureMessage(err error) string {
-	switch {
-	case errors.Is(err, dataset.ErrNoSources):
-		return "No Claude transcript folders were found on this machine. Cowork sessions that run in Anthropic's cloud leave no local transcript, so there may be nothing local to read yet."
-	case errors.Is(err, dataset.ErrNoFiles):
-		return "Claude's folders exist but contain no transcript files. Cloud Cowork sessions and claude.ai browser chats leave no local transcript."
-	case errors.Is(err, dataset.ErrNoSessions):
-		return "Transcripts were found, but none with usage inside the reporting window."
-	default:
-		return "Could not read usage data: " + err.Error()
-	}
 }
 
 // progressReporter turns a Collect-shaped (done,total) callback into live

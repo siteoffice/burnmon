@@ -75,8 +75,8 @@ func PollOnce(dbPath string) ([]schema.Event, error) {
 	defer db.Close()
 
 	rows, err := db.Query(`
-SELECT s.id, s.cwd, e.model, e.input_tokens, e.output_tokens,
-	e.cache_read_tokens, e.cache_write_tokens, e.reasoning_tokens, e.created_at
+SELECT s.id, s.cwd, COALESCE(e.model, ''), COALESCE(e.input_tokens, 0), COALESCE(e.output_tokens, 0),
+	COALESCE(e.cache_read_tokens, 0), COALESCE(e.cache_write_tokens, 0), COALESCE(e.reasoning_tokens, 0), e.created_at
 FROM sessions s
 JOIN assistant_usage_events e ON e.id = (
 	SELECT id FROM assistant_usage_events

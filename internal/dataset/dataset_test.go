@@ -52,19 +52,20 @@ func TestDedupSessionsKeepsSameSessionIDAcrossVendors(t *testing.T) {
 }
 
 func TestAdapterForPathClassifiesByRoots(t *testing.T) {
+	home := filepath.Join("Users", "x")
 	roots := map[string][]string{
-		"claude": {`C:\Users\x\.claude\projects`},
-		"codex":  {`C:\Users\x\.codex\sessions`},
+		"claude": {filepath.Join(home, ".claude", "projects")},
+		"codex":  {filepath.Join(home, ".codex", "sessions")},
 	}
-	got := adapterForPath(`C:\Users\x\.codex\sessions\2026\09\20\rollout-1.jsonl`, roots)
+	got := adapterForPath(filepath.Join(home, ".codex", "sessions", "2026", "09", "20", "rollout-1.jsonl"), roots)
 	if got == nil || got.Name() != "codex" {
 		t.Fatalf("got %v, want codex adapter", got)
 	}
-	got2 := adapterForPath(`C:\Users\x\.claude\projects\proj\sess.jsonl`, roots)
+	got2 := adapterForPath(filepath.Join(home, ".claude", "projects", "proj", "sess.jsonl"), roots)
 	if got2 == nil || got2.Name() != "claude" {
 		t.Fatalf("got %v, want claude adapter", got2)
 	}
-	got3 := adapterForPath(`C:\Users\x\somewhere-else\file.jsonl`, roots)
+	got3 := adapterForPath(filepath.Join(home, "somewhere-else", "file.jsonl"), roots)
 	if got3 != nil {
 		t.Fatalf("got %v, want nil for a path under no known root", got3)
 	}

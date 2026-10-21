@@ -1,6 +1,10 @@
 package copilotcli
 
-import "testing"
+import (
+	"database/sql"
+	"path/filepath"
+	"testing"
+)
 
 // TestPollOnceFixture is A2's spec'd test: the fixture at testdata\copilot\
 // parses to the expected session count and tokens. The fixture holds three
@@ -86,5 +90,44 @@ func TestDefaultDBPathHonorsCopilotHome(t *testing.T) {
 	t.Setenv("COPILOT_HOME", "..")
 	if got := DefaultDBPath(); got != "" {
 		t.Errorf("DefaultDBPath() = %q, want \"\" (no session-store.db directly under internal/adapter)", got)
+	}
+}
+
+// TestPollOnceNullTokens: Copilot CLI's schema declares every token column
+// nullable, and real stores carry rows with reasoning_tokens NULL (seen on
+// macOS, 2026-10-20). A NULL must read as 0 instead of failing the whole poll.
+func TestPollOnceNullTokens(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "session-store.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`CREATE TABLE sessions (id TEXT PRIMARY KEY, cwd TEXT)`,
+		`CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, model TEXT,
+			input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+			cache_write_tokens INTEGER, reasoning_tokens INTEGER, created_at TEXT)`,
+		`INSERT INTO sessions VALUES ('s1', '/tmp/x')`,
+		`INSERT INTO assistant_usage_events VALUES (1, 's1', 'claude-sonnet-5', 100, 20, NULL, NULL, NULL, '2026-10-20T12:00:00.000Z')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	events, err := PollOnce(dbPath)
+	if err != nil {
+		t.Fatalf("PollOnce with NULL token columns: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	e := events[0]
+	if e.Input != 100 || e.Output != 20 {
+		t.Errorf("input/output = %d/%d, want 100/20", e.Input, e.Output)
+	}
+	if e.Reasoning == nil || *e.Reasoning != 0 {
+		t.Errorf("reasoning = %v, want 0", e.Reasoning)
 	}
 }

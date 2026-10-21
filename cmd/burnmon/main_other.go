@@ -1,21 +1,19 @@
 //go:build !windows
 
-// Command burnmon (darwin, linux; B1, 2026-09-23_v0.3_spec.md 2.4): a
-// browser-mode build of the same dashboard.html the Windows WebView2 window
-// shows. WebView2 itself is Windows-only (jchv/go-webview2 wraps the Win32
-// runtime), so there is no live app window here, no bound JS functions
-// (ccRefresh, bmLive, ...): a page opened this way already falls back to its
-// own "only available in the BurnMon app window" text for anything live and
-// otherwise reads exactly like a saved report, the same as
-// runWithoutWindow's own fallback page does today on Windows when the
-// WebView2 runtime itself is missing. Untested on real macOS/Linux
-// hardware: built here (CGO_ENABLED=0, no cgo) and cross-compiled by
-// build.ps1 and the release workflow from Windows.
+// Command burnmon (darwin, linux; B1, 2026-09-23_v0.3_spec.md 2.4): the same
+// dashboard.html the Windows WebView2 window shows, opened in the system
+// default browser instead. WebView2 itself is Windows-only (jchv/go-webview2
+// wraps the Win32 runtime), so the page's bound live functions (bmLive,
+// ccRefresh, ...) are served by browserBridge (browser.go), a localhost-only
+// HTTP server, rather than injected into a window.
 package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +27,8 @@ import (
 )
 
 func main() {
+	port := flag.Int("port", 47615, "localhost port the dashboard is served on")
+	noOpen := flag.Bool("no-open", false, "do not open the dashboard in the browser")
 	interval := flag.Duration("interval", 15*time.Minute, "how often to re-read transcripts and rewrite the dashboard")
 	monthsN := flag.Int("months", 2, "how many months to include, counting the current one")
 	seat := flag.String("seat", "Standard", "your own seat tier (Standard or Premium)")
@@ -46,7 +46,7 @@ func main() {
 		return
 	}
 	setupLog(dataDir)
-	log.Printf("burnmon %s starting, browser mode (%s/%s, untested)", version, runtime.GOOS, runtime.GOARCH)
+	log.Printf("burnmon %s starting, browser mode (%s/%s)", version, runtime.GOOS, runtime.GOARCH)
 
 	cfgFile := *cfgPath
 	if cfgFile == "" {
@@ -103,6 +103,30 @@ func main() {
 	}
 	a.cache.Store = st
 
+	// Serve the page before the first collection: the browser opens on the
+	// last snapshot (or the warming page on a first run) straight away, and
+	// the page reloads itself once the collection below rewrites it. A port
+	// already in use most likely means another instance: open that one.
+	bridge := &browserBridge{a: a, st: st, addr: fmt.Sprintf("127.0.0.1:%d", *port)}
+	ln, err := net.Listen("tcp", bridge.addr)
+	if err != nil {
+		log.Printf("could not listen on %s (%v); assuming burnmon is already running there", bridge.addr, err)
+		if !*noOpen {
+			openInBrowser(bridge.url())
+		}
+		return
+	}
+	go func() {
+		if err := http.Serve(ln, bridge.handler()); err != nil {
+			log.Println("browser bridge stopped:", err)
+		}
+	}()
+	log.Println("dashboard served at", bridge.url())
+	fmt.Println("BurnMon dashboard:", bridge.url())
+	if !*noOpen {
+		openInBrowser(bridge.url())
+	}
+
 	// Cowork (Cloud): the exe-adjacent .burnmon/cloud drop folder, created
 	// before the roots are resolved so the live watcher watches it.
 	if err := scan.EnsureCloudDropDir(); err != nil {
@@ -118,16 +142,15 @@ func main() {
 
 	if _, err := a.rebuild(true, nil); err != nil {
 		log.Println("initial collection failed:", err)
-		return
+		bridge.setStartErr(startupFailureMessage(err))
+	} else {
+		a.extendLiveWatchWSL(nativeClaudeRoots, nativeCodexRoots)
 	}
-	a.extendLiveWatchWSL(nativeClaudeRoots, nativeCodexRoots)
-	openInBrowser(a.htmlPath)
 
-	// Browser mode has no bound JS to push updates through, so the only way
-	// the open tab ever shows fresher numbers is a manual reload; this loop
-	// keeps dashboard.html itself current on disk so a reload (or the next
-	// launch's own open) picks up new turns. No WSL ticker: scan's own
-	// wsl_other.go stub already makes WSL detection a no-op off Windows.
+	// Re-collect on -interval; the open page notices the rewritten
+	// dashboard.html (bridgeScript polls /api/built) and reloads itself. No
+	// WSL ticker: scan's own wsl_other.go stub already makes WSL detection a
+	// no-op off Windows.
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -137,12 +160,11 @@ func main() {
 	}
 }
 
-// openInBrowser opens path (a file:// URL, via toFileURL) in the platform's
+// openInBrowser opens url in the platform's
 // default browser: "open" on darwin, "xdg-open" on linux (both bundled with
 // the OS, no extra dependency). Any other GOOS just logs the path, since
 // CGO_ENABLED=0 cross-compilation is not restricted to these two.
-func openInBrowser(path string) {
-	url := toFileURL(path)
+func openInBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
@@ -150,7 +172,7 @@ func openInBrowser(path string) {
 	case "linux":
 		cmd = exec.Command("xdg-open", url)
 	default:
-		log.Println("do not know how to open a browser on", runtime.GOOS, "; open manually:", path)
+		log.Println("do not know how to open a browser on", runtime.GOOS, "; open manually:", url)
 		return
 	}
 	if err := cmd.Start(); err != nil {

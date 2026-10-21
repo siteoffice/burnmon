@@ -819,3 +819,23 @@ func toFileURL(path string) string {
 	u := &url.URL{Scheme: "file", Path: "/" + filepath.ToSlash(path)}
 	return u.String()
 }
+
+// startupFailureMessage turns a Collect error from the very first pass (no
+// dashboard.html yet to fall back on) into plain text for the warming page.
+// Before this, any of these three errors was logged and then silently
+// swallowed, leaving the window stuck on "Reading your session
+// transcripts... Starting..." forever: exactly what a chat-only user, or
+// anyone whose Cowork sessions all run in Anthropic's cloud, hits, since
+// neither leaves a local transcript for this machine to find.
+func startupFailureMessage(err error) string {
+	switch {
+	case errors.Is(err, dataset.ErrNoSources):
+		return "No Claude transcript folders were found on this machine. Cowork sessions that run in Anthropic's cloud leave no local transcript, so there may be nothing local to read yet."
+	case errors.Is(err, dataset.ErrNoFiles):
+		return "Claude's folders exist but contain no transcript files. Cloud Cowork sessions and claude.ai browser chats leave no local transcript."
+	case errors.Is(err, dataset.ErrNoSessions):
+		return "Transcripts were found, but none with usage inside the reporting window."
+	default:
+		return "Could not read usage data: " + err.Error()
+	}
+}

@@ -247,17 +247,18 @@ nothing already stored is ever dropped). Click the gear icon to edit subscriptio
 numbers, seat counts and seat prices from inside the window; saving re-reads everything,
 since cached sessions carry costs computed with the old numbers.
 
-### macOS and Linux: untested
+### macOS and Linux
 
 `burnmon` and `burnmon-cli` also build for darwin and linux (amd64 and arm64,
 `CGO_ENABLED=0`, pure Go, no cgo), attached to every tagged release. Neither platform has
-WebView2, so there is no app window there: `burnmon` collects once, writes
-`dashboard.html`, opens it in the system default browser (`open` on macOS, `xdg-open` on
-Linux), then keeps re-collecting and rewriting that same file on `-interval` in the
-background; reload the browser tab to see newer numbers. No bound live functions exist
-outside the WebView2 window, so the page falls back to its own "only available in the
-BurnMon app window" text for anything live, the same as any saved report. **Untested**:
-built and cross-compiled, never run on real macOS or Linux hardware.
+WebView2, so there is no app window there: `burnmon` serves the dashboard from a
+localhost-only web server (`http://127.0.0.1:47615/`, change it with `-port`) and opens
+it in the system default browser (`-no-open` to skip). That server provides the same live
+functions the Windows window binds (Now, History, the vendor strip, the forecast, session
+findings, the turn drawer, Refresh now and Settings), refuses requests from any other host
+or origin, and is the one open port BurnMon has, on these two platforms only. The page
+reloads itself whenever the `-interval` re-collection rewrites it. Run on macOS (Apple
+Silicon) since 2026-10-20; Linux is still untested on real hardware.
 
 ### Help test macOS and Linux
 
@@ -482,7 +483,7 @@ Ideas and bug reports are welcome as GitHub issues.
   worst earlier ramp, but a Station left open costs about 4.5 points of one core more than
   closed, and CPU follows the page's animation rate. Cause not found. Closing it (Esc)
   removes the cost.
-- **macOS and Linux are untested** on real hardware, and have no app window.
+- **macOS and Linux have no app window**; the dashboard opens in the browser instead. Linux is untested on real hardware.
 - **History is slow on a large store.** Every filter change re-reads the whole store, about
   3 seconds at roughly 55,000 events.
 - **Time bounds compare text.** A stored timestamp in the first second of a range can be

@@ -2,6 +2,7 @@ package watch
 
 import (
 	"os"
+	"runtime"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -124,6 +125,9 @@ func TestWatcher_NewNestedDayFolderRace(t *testing.T) {
 // it always did, so this assertion only actually runs meaningfully on the
 // Windows binary go test ./... -count=1 builds and executes on this laptop.
 func TestWatcher_WatchCountStaysOneAcrossManySubdirectories(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("one handle per root is the Windows watcher only; fsnotify watches each subdirectory")
+	}
 	dir := t.TempDir()
 	c := &changeCollector{}
 	w, err := New([]string{dir}, nil, c.onChange)

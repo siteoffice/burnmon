@@ -900,7 +900,7 @@ func TestResetCollapsedCodexSessions(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{`C:\s\rollout-a.jsonl`, `C:\s\rollout-b.jsonl`, `C:\s\rollout-c.jsonl`} {
+	for _, p := range []string{filepath.Join("s", "rollout-a.jsonl"), filepath.Join("s", "rollout-b.jsonl"), filepath.Join("s", "rollout-c.jsonl")} {
 		if err := st.SetCursor(p, 100, at, 100); err != nil {
 			t.Fatal(err)
 		}
@@ -924,10 +924,10 @@ func TestResetCollapsedCodexSessions(t *testing.T) {
 	if len(left) != 2 || !left["rollout-b:15"] || !left["rollout-c:12"] {
 		t.Fatalf("events left = %v, want rollout-b:15 and rollout-c:12", left)
 	}
-	if _, _, _, ok, _ := st.Cursor(`C:\s\rollout-a.jsonl`); ok {
+	if _, _, _, ok, _ := st.Cursor(filepath.Join("s", "rollout-a.jsonl")); ok {
 		t.Fatal("cursor for rollout-a still present, file would not be re-read")
 	}
-	if _, _, _, ok, _ := st.Cursor(`C:\s\rollout-c.jsonl`); !ok {
+	if _, _, _, ok, _ := st.Cursor(filepath.Join("s", "rollout-c.jsonl")); !ok {
 		t.Fatal("cursor for healthy rollout-c was removed")
 	}
 	if e, c, err := st.ResetCollapsedCodexSessions(); err != nil || e != 0 || c != 0 {
