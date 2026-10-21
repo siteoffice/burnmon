@@ -133,11 +133,12 @@ class ExtractTest(Base):
         self.assertEqual(manifest["version"], "1.1.4")
         self.assertEqual(self.mod.__version__, manifest["version"])
 
-    def test_manifest_is_off_by_default(self):
-        # Claude Code loads a synced plugin unless the manifest says otherwise.
+    def test_manifest_stays_enabled_by_default(self):
+        # defaultEnabled false also switched the hooks off in Cowork (tested 3.4.2),
+        # so no copy ran and no usage reached the laptop. Never set it to false.
         with open(os.path.join(PLUGIN, ".claude-plugin", "plugin.json"), encoding="utf-8") as f:
             manifest = json.load(f)
-        self.assertIs(manifest.get("defaultEnabled"), False)
+        self.assertNotIn("defaultEnabled", manifest)
 
     # --watch
 

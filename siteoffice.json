@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "type": "project",
+  "name": "burnmon",
+  "parent": "ZeroNonsense.dev",
+  "children": [],
+  "language": "en",
+  "approver": "Wilco",
+  "instructionFile": "AGENTS.md",
+  "setup": "filled",
+  "settings": {
+    "planningHorizonWeeks": 2,
+    "languages": [
+      "en"
+    ],
+    "timeRegistration": false
+  },
+  "labels": {},
+  "display_name": "BurnMon",
+  "profiles": {}
+}

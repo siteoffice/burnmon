@@ -2,7 +2,6 @@
   "name": "burnmon-cloud",
   "displayName": "BurnMon cloud",
   "version": "1.1.4",
-  "defaultEnabled": false,
   "description": "Sends the token usage of cloud Cowork sessions to BurnMon on your computer. Usage numbers only: no prompts, answers, tool input or paths leave the session.",
   "author": {
     "name": "ZeroNonsense.dev"

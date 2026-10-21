@@ -44,6 +44,11 @@ seconds into a cloud session (measured: 6 events for 90 writes). Version 3.4.0 d
 extra copies and lost data, so 3.4.1 has them back. They go again when the watcher is proven
 reliable with `tools/burnmon-cloud/coverage.py` in the BurnMon repository.
 
+What does not work: `"defaultEnabled": false` in the manifest. Claude Code then leaves a synced
+plugin off, but Cowork leaves it off too. In the 3.4.2 test, a cloud session with four turns
+sent no usage to BurnMon. A watcher test of the folder watch (3.4.1) covered 40% of writes:
+it fires for 0.5 to 2.5 minutes after each session start, then stops.
+
 ## What it does not cover
 
 - A session without `~/.burnmon` connected is not counted. Neither is a session started on
