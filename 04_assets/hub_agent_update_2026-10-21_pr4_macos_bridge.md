@@ -28,7 +28,7 @@ Not merged, not tagged, no build from this PR on Windows. The PR comment asking 
   **Context:** Outside PR #4 (merkendiep) found the macOS browser dashboard never loads its live sections, because the live functions exist only inside the Windows WebView2 window. His fix is a localhost bridge. BurnMon's public positioning was "no network, no server, no ports".
   **Alternatives considered:** Reject the bridge and do roadmap row 10a (hide the Refresh button), keeping browser mode a static report and the promise intact everywhere.
   **Consequences:** The "no ports" claim becomes platform-scoped in public material. Merge needs a per-run secret (localhost is shared by all users on a machine), the README text, and a Windows verify after 2026-11-01. More code to maintain on platforms Wilco does not run.
-  **Links:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-10-21_pr4_macos_bridge_decision.md`, https://github.com/wilcodetree/burnmon/pull/4
+  **Links:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-10-21_pr4_macos_bridge_decision.md`, https://github.com/siteoffice/burnmon/pull/4
 
 ## 6. What the next hub read should update
 `C:\ZND\10_holding\03_logs\decisions.md` (block above), `C:\ZND\10_holding\01_projects\burnmon.md` (open item: PR #4 merge after the park). STATUS: new top paragraph, already written in the project. DEADLINES: no change.

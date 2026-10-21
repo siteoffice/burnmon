@@ -1,6 +1,6 @@
 # PR #4: macOS and Linux localhost bridge, decision and conditions
 
-Date: 2026-10-21. Decided by: Wilco de Tree. PR: https://github.com/wilcodetree/burnmon/pull/4
+Date: 2026-10-21. Decided by: Wilco de Tree. PR: https://github.com/siteoffice/burnmon/pull/4
 (merkendiep, branch `merkendiep:macos-support`, head `3292cb1`, base `2e20ebb`).
 
 ## Decision

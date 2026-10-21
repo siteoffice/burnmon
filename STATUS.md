@@ -1,13 +1,16 @@
 # BurnMon, status
 
-What is true on 2026-10-21: `origin/main` is `ce85753`, the merge of PR #4 from merkendiep
-(checked by Wilco with `git ls-remote origin refs/heads/main`). On macOS and Linux,
-`burnmon` now serves the dashboard from a local web server on 127.0.0.1 with the live
-functions; Windows keeps no server and no open port (decision
-`02_roadmap\2026-10-21_pr4_macos_bridge_decision.md`). Not tagged: no release until the
-follow-up branch `fix/pr4-bridge-secret` (per-run secret and README text, park exception
-granted 2026-10-21) is merged. Version constants unchanged. The paragraph below describes
-2026-10-12 and is kept as history.
+What is true on 2026-10-21: the repository lives at `github.com/siteoffice/burnmon`
+(moved from `wilcodetree`, confirmed by Wilco 2026-10-21). `origin/main` is `14e96bf`
+(checked by Wilco with `git ls-remote origin refs/heads/main`), the only branch on GitHub.
+Merged today: PR #4 from merkendiep (`ce85753`, macOS and Linux serve the dashboard from a
+local web server on 127.0.0.1 with the live functions; Windows keeps no server and no open
+port, decision `02_roadmap\2026-10-21_pr4_macos_bridge_decision.md`), PR #5 (`7acd088`,
+per-run secret on that server and the README text, park exception granted 2026-10-21) and
+PR #6 (`14e96bf`, burnmon-cloud manifest no longer sets `defaultEnabled` false, which had
+switched its hooks off in Cowork; plus `siteoffice.json`). No new tag; version constants
+unchanged, so a build from `main` carries more than `v0.4.0-alpha.10` and `0.3.2`. The
+paragraph below describes 2026-10-12 and is kept as history.
 
 What is true at this commit (2026-10-12): `HEAD` and `origin/main` are `2728264` (checked
 2026-10-12 with `git ls-remote origin HEAD`). No new tag: `burnmon-dev.exe` still reports
