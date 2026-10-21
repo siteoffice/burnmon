@@ -1,5 +1,14 @@
 # BurnMon, status
 
+What is true on 2026-10-21: `origin/main` is `ce85753`, the merge of PR #4 from merkendiep
+(checked by Wilco with `git ls-remote origin refs/heads/main`). On macOS and Linux,
+`burnmon` now serves the dashboard from a local web server on 127.0.0.1 with the live
+functions; Windows keeps no server and no open port (decision
+`02_roadmap\2026-10-21_pr4_macos_bridge_decision.md`). Not tagged: no release until the
+follow-up branch `fix/pr4-bridge-secret` (per-run secret and README text, park exception
+granted 2026-10-21) is merged. Version constants unchanged. The paragraph below describes
+2026-10-12 and is kept as history.
+
 What is true at this commit (2026-10-12): `HEAD` and `origin/main` are `2728264` (checked
 2026-10-12 with `git ls-remote origin HEAD`). No new tag: `burnmon-dev.exe` still reports
 `0.4.0-alpha.10` and `burnmon.exe` and `burnmon-cli.exe` report `0.3.2` (version constants

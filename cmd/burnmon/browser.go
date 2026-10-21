@@ -3,6 +3,9 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,17 +36,99 @@ import (
 // It listens on 127.0.0.1 only. Requests are refused unless the Host header
 // names this exact listener (blocks DNS rebinding), and POSTs must be JSON
 // from this origin (a foreign page cannot send one without a CORS preflight,
-// which nothing here answers).
+// which nothing here answers). Every request, the page included, must carry
+// the per-run token: localhost is shared by every user and process on the
+// machine, and the page itself holds token, project and session data
+// (decision 2026-10-21, PR #4 condition 1).
 type browserBridge struct {
-	a    *app
-	st   *store.Store
-	addr string // host:port the page is served from, e.g. 127.0.0.1:47615
+	a     *app
+	st    *store.Store
+	addr  string // host:port the page is served from, e.g. 127.0.0.1:47615
+	token string // per-run secret, required on every request
 
 	mu       sync.Mutex
 	startErr string // first collection's failure, shown on the warming page
 }
 
-func (b *browserBridge) url() string { return "http://" + b.addr + "/" }
+// tokenHeader carries the per-run token on the page's API calls; the page
+// itself gets it as the t query parameter.
+const tokenHeader = "X-BurnMon-Token"
+
+// bridgeTokenFile holds the current run's token in the data folder, readable
+// only by the user, so a second start can open the running instance.
+const bridgeTokenFile = "bridge-token"
+
+func (b *browserBridge) url() string { return bridgeURL(b.addr, b.token) }
+
+func bridgeURL(addr, token string) string { return "http://" + addr + "/?t=" + token }
+
+// newBridgeToken makes a random 32-byte token for this run and writes it, as
+// 64 hex characters, to bridgeTokenFile in dir with mode 0600.
+func newBridgeToken(dir string) (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	tok := hex.EncodeToString(raw)
+	path := filepath.Join(dir, bridgeTokenFile)
+	_ = os.Remove(path) // a fresh file, so the mode below always applies
+	if err := os.WriteFile(path, []byte(tok), 0o600); err != nil {
+		return "", err
+	}
+	return tok, nil
+}
+
+// readBridgeToken returns the token in dir's bridgeTokenFile, or "" if there
+// is none.
+func readBridgeToken(dir string) string {
+	raw, err := os.ReadFile(filepath.Join(dir, bridgeTokenFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+// probeBridge reports whether addr answers as a running BurnMon bridge that
+// accepts token: a 200 JSON reply from /api/built with a "built" field.
+// Anything else (another program, an old run, a wrong token) is false.
+func probeBridge(addr, token string) bool {
+	if token == "" {
+		return false
+	}
+	req, err := http.NewRequest(http.MethodGet, "http://"+addr+"/api/built", nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set(tokenHeader, token)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var reply map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&reply); err != nil {
+		return false
+	}
+	_, ok := reply["built"]
+	return ok
+}
+
+func (b *browserBridge) tokenOK(r *http.Request) bool {
+	got := r.Header.Get(tokenHeader)
+	if got == "" {
+		got = r.URL.Query().Get("t")
+	}
+	return b.token != "" && subtle.ConstantTimeCompare([]byte(got), []byte(b.token)) == 1
+}
+
+// staleLinkHTML answers a page request without a valid token, most likely a
+// bookmark or an open tab from an earlier start.
+const staleLinkHTML = `<!doctype html><meta charset="utf-8"><title>BurnMon</title>
+<p style="font-family:sans-serif">This BurnMon link is missing its key or is from an earlier start.
+Open the link burnmon printed when it started, or start burnmon again.</p>`
 
 func (b *browserBridge) setStartErr(msg string) {
 	b.mu.Lock()
@@ -64,6 +150,16 @@ func (b *browserBridge) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !allowedHosts[r.Host] {
 			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		if !b.tokenOK(r) {
+			if r.Method == http.MethodGet && !strings.HasPrefix(r.URL.Path, "/api/") {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusForbidden)
+				fmt.Fprint(w, staleLinkHTML)
+				return
+			}
+			http.Error(w, "forbidden: missing or wrong token", http.StatusForbidden)
 			return
 		}
 		if r.Method == http.MethodPost {
@@ -101,16 +197,23 @@ func (b *browserBridge) servePage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// No snapshot yet (first run): the warming page, which reloads into
 		// the dashboard once the first collection has written it.
-		fmt.Fprint(w, strings.Replace(warmingPageHTML(), "</body>", warmingPollScript+"</body>", 1))
+		poll := b.fillScript(warmingPollScript)
+		fmt.Fprint(w, strings.Replace(warmingPageHTML(), "</body>", poll+"</body>", 1))
 		return
 	}
-	shim := strings.Replace(bridgeScript, "__BUILT__", strconv.Quote(b.builtStamp()), 1)
+	shim := strings.Replace(b.fillScript(bridgeScript), "__BUILT__", strconv.Quote(b.builtStamp()), 1)
 	if i := strings.Index(html, "<head>"); i >= 0 {
 		html = html[:i+len("<head>")] + shim + html[i+len("<head>"):]
 	} else {
 		html = shim + html
 	}
 	fmt.Fprint(w, html)
+}
+
+// fillScript puts this run's token and its header name into script.
+func (b *browserBridge) fillScript(script string) string {
+	script = strings.ReplaceAll(script, "__TOKEN__", strconv.Quote(b.token))
+	return strings.ReplaceAll(script, "__HEADER__", strconv.Quote(tokenHeader))
 }
 
 // readDashboard reads dashboard.html, retrying briefly if it catches the
@@ -235,8 +338,10 @@ func writeJSON(w http.ResponseWriter, v any) {
 const bridgeScript = `<script>
 (function(){
   var built = __BUILT__;
+  var hdr = {}; hdr[__HEADER__] = __TOKEN__;
   function call(name, args){
-    return fetch('/api/' + name, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(args || [])})
+    var h = {'Content-Type': 'application/json'}; h[__HEADER__] = __TOKEN__;
+    return fetch('/api/' + name, {method: 'POST', headers: h, body: JSON.stringify(args || [])})
       .then(function(r){ return r.text().then(function(t){
         if(!r.ok) throw new Error(t || r.statusText);
         return t ? JSON.parse(t) : null;
@@ -277,7 +382,7 @@ const bridgeScript = `<script>
   };
 
   setInterval(function(){
-    fetch('/api/built').then(function(r){ return r.json(); }).then(function(b){
+    fetch('/api/built', {headers: hdr}).then(function(r){ return r.json(); }).then(function(b){
       if(b.built && b.built !== built){ built = b.built; reload(); }
     }).catch(function(){});
   }, 10000);
@@ -288,8 +393,9 @@ const bridgeScript = `<script>
 // reloads as soon as the first dashboard.html exists, or shows the first
 // collection's failure the same way the app window does (ccWarmFail).
 const warmingPollScript = `<script>
+var bmHdr = {}; bmHdr[__HEADER__] = __TOKEN__;
 setInterval(function(){
-  fetch('/api/built').then(function(r){ return r.json(); }).then(function(b){
+  fetch('/api/built', {headers: bmHdr}).then(function(r){ return r.json(); }).then(function(b){
     if(b.built){ location.reload(); }
     else if(b.error && window.ccWarmFail){ ccWarmFail(b.error); }
   }).catch(function(){});

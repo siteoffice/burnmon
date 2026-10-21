@@ -41,7 +41,7 @@ func newTestBridge(t *testing.T) (*browserBridge, *httptest.Server) {
 	a := &app{cfg: cfg, htmlPath: filepath.Join(dir, "dashboard.html")}
 	a.cache.Store = st
 
-	b := &browserBridge{a: a, st: st}
+	b := &browserBridge{a: a, st: st, token: testToken}
 	srv := httptest.NewUnstartedServer(nil)
 	b.addr = srv.Listener.Addr().String()
 	srv.Config.Handler = b.handler()
@@ -50,9 +50,14 @@ func newTestBridge(t *testing.T) (*browserBridge, *httptest.Server) {
 	return b, srv
 }
 
+const testToken = "test-token-0123456789"
+
 func post(t *testing.T, srv *httptest.Server, name, body string) (int, string) {
 	t.Helper()
-	resp, err := http.Post(srv.URL+"/api/"+name, "application/json", strings.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/"+name, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(tokenHeader, testToken)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +106,7 @@ func TestBrowserBridgeInjectsScriptIntoHead(t *testing.T) {
 	b, srv := newTestBridge(t)
 
 	// No dashboard yet: the self-reloading warming page.
-	resp, err := http.Get(srv.URL + "/")
+	resp, err := http.Get(srv.URL + "/?t=" + testToken)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +119,7 @@ func TestBrowserBridgeInjectsScriptIntoHead(t *testing.T) {
 	if err := os.WriteFile(b.a.htmlPath, []byte("<html><head><title>x</title></head><body></body></html>"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	resp, err = http.Get(srv.URL + "/")
+	resp, err = http.Get(srv.URL + "/?t=" + testToken)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,17 +148,142 @@ func TestBrowserBridgeRefusesForeignRequests(t *testing.T) {
 	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/api/bmLive", strings.NewReader("[]"))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "http://evil.example")
+	req.Header.Set(tokenHeader, testToken)
 	if resp, err := http.DefaultClient.Do(req); err != nil {
 		t.Fatal(err)
 	} else if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("foreign Origin: got %d, want 403", resp.StatusCode)
 	}
 
-	resp, err := http.Post(srv.URL+"/api/bmLive", "text/plain", strings.NewReader("[]"))
+	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/api/bmLive", strings.NewReader("[]"))
+	req.Header.Set("Content-Type", "text/plain")
+	req.Header.Set(tokenHeader, testToken)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != http.StatusUnsupportedMediaType {
 		t.Errorf("non-JSON POST: got %d, want 415", resp.StatusCode)
+	}
+}
+
+// Localhost is shared by every user and process on the machine, and the page
+// itself carries token, project and session data, so every request needs
+// the per-run secret (decision 2026-10-21, PR #4 condition 1).
+func TestBrowserBridgeRequiresToken(t *testing.T) {
+	b, srv := newTestBridge(t)
+	if err := os.WriteFile(b.a.htmlPath, []byte("<html><head></head><body>secret data</body></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	get := func(path string) (int, string) {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+	for _, path := range []string{"/", "/?t=wrong", "/api/built", "/api/built?t=wrong"} {
+		code, body := get(path)
+		if code != http.StatusForbidden {
+			t.Errorf("GET %s: got %d, want 403", path, code)
+		}
+		if strings.Contains(body, "secret data") {
+			t.Errorf("GET %s leaked the dashboard", path)
+		}
+	}
+	if code, _ := get("/?t=" + testToken); code != http.StatusOK {
+		t.Errorf("GET / with the token: got %d, want 200", code)
+	}
+
+	for _, tok := range []string{"", "wrong"} {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/bmLive", strings.NewReader("[]"))
+		req.Header.Set("Content-Type", "application/json")
+		if tok != "" {
+			req.Header.Set(tokenHeader, tok)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("POST bmLive with token %q: got %d, want 403", tok, resp.StatusCode)
+		}
+	}
+}
+
+// The injected script must send the token on every call it makes, the
+// warming page's poll included.
+func TestBrowserBridgeScriptsCarryToken(t *testing.T) {
+	b, srv := newTestBridge(t)
+	read := func() string {
+		resp, err := http.Get(srv.URL + "/?t=" + testToken)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return string(body)
+	}
+	warm := read()
+	if !strings.Contains(warm, testToken) || !strings.Contains(warm, tokenHeader) {
+		t.Errorf("warming page poll does not send the token")
+	}
+	if err := os.WriteFile(b.a.htmlPath, []byte("<html><head></head><body></body></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	page := read()
+	if !strings.Contains(page, testToken) || !strings.Contains(page, tokenHeader) || strings.Contains(page, "__TOKEN__") {
+		t.Errorf("bridge script does not send the token")
+	}
+}
+
+func TestBridgeTokenFile(t *testing.T) {
+	dir := t.TempDir()
+	tok1, err := newBridgeToken(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tok1) != 64 {
+		t.Errorf("token length %d, want 64 hex characters", len(tok1))
+	}
+	fi, err := os.Stat(filepath.Join(dir, bridgeTokenFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("token file mode %v, want 0600", fi.Mode().Perm())
+	}
+	if got := readBridgeToken(dir); got != tok1 {
+		t.Errorf("readBridgeToken = %q, want %q", got, tok1)
+	}
+	tok2, err := newBridgeToken(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok2 == tok1 {
+		t.Error("two starts produced the same token")
+	}
+}
+
+// A second start that finds the port taken opens the running BurnMon only if
+// that port really answers as BurnMon with this token.
+func TestProbeBridge(t *testing.T) {
+	_, srv := newTestBridge(t)
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	if !probeBridge(addr, testToken) {
+		t.Error("probe did not recognise a running bridge")
+	}
+	if probeBridge(addr, "wrong") {
+		t.Error("probe accepted a wrong token")
+	}
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "hello from another program")
+	}))
+	defer other.Close()
+	if probeBridge(strings.TrimPrefix(other.URL, "http://"), testToken) {
+		t.Error("probe took another program for BurnMon")
 	}
 }

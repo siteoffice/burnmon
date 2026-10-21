@@ -107,13 +107,29 @@ func main() {
 	// last snapshot (or the warming page on a first run) straight away, and
 	// the page reloads itself once the collection below rewrites it. A port
 	// already in use most likely means another instance: open that one.
+	// A port already in use is opened only if it answers as BurnMon with
+	// the token the running instance wrote; anything else is another
+	// program, and the user is told to pick a different -port.
 	bridge := &browserBridge{a: a, st: st, addr: fmt.Sprintf("127.0.0.1:%d", *port)}
 	ln, err := net.Listen("tcp", bridge.addr)
 	if err != nil {
-		log.Printf("could not listen on %s (%v); assuming burnmon is already running there", bridge.addr, err)
-		if !*noOpen {
-			openInBrowser(bridge.url())
+		if tok := readBridgeToken(dataDir); probeBridge(bridge.addr, tok) {
+			log.Printf("burnmon is already running on %s; opening it", bridge.addr)
+			fmt.Println("BurnMon dashboard:", bridgeURL(bridge.addr, tok))
+			if !*noOpen {
+				openInBrowser(bridgeURL(bridge.addr, tok))
+			}
+			return
 		}
+		log.Printf("could not listen on %s (%v), and it does not answer as BurnMon", bridge.addr, err)
+		fmt.Printf("Port %d is used by another program. Start burnmon with -port <number> to use a different port.\n", *port)
+		return
+	}
+	bridge.token, err = newBridgeToken(dataDir)
+	if err != nil {
+		log.Println("could not create the dashboard key:", err)
+		fmt.Println("Could not create the dashboard key:", err)
+		ln.Close()
 		return
 	}
 	go func() {

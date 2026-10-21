@@ -76,6 +76,10 @@ Priority order lives here and only here.
     a. Browser mode (darwin, linux): the Refresh button stays on "Rebuilding..." because
        `window.ccRefresh` is not bound outside the WebView2 window (`cmd\burnmon\main_other.go`).
        Hide the button in browser mode and say the page reloads with the next rewrite.
+       **Replaced 2026-10-21 (Wilco):** PR #4 (merkendiep) adds a localhost-only bridge on
+       macOS and Linux that serves the live functions, Refresh included. Accepted on three
+       conditions (per-run secret, README says it plainly, Windows verify after the park).
+       Decision: `2026-10-21_pr4_macos_bridge_decision.md`.
     b. Auto theme: a third theme state next to Dark and Light that follows the system
        (`prefers-color-scheme`), in `internal\report\template.html` and
        `cmd\burnmon-dev\page.html`.

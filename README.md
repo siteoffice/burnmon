@@ -3,8 +3,10 @@
 BurnMon is a vendor-agnostic token and cost monitor for your own AI coding sessions: a
 portable Windows app (`burnmon.exe`) and a single-file CLI (`burnmon-cli.exe`), reading
 the session transcripts your tools already write on this machine. No API key, no admin
-rights, no network calls, no server, no telemetry: everything happens by reading local
-files and everything stays on this device.
+rights, no network calls, no telemetry: everything happens by reading local files and
+everything stays on this device. On Windows there is also no server and no open port. On
+macOS and Linux, `burnmon` runs one web server that only this computer can reach
+(127.0.0.1); see "macOS and Linux".
 
 BurnMon is the successor of [claudecost](https://github.com/wilcodetree/claudecost),
 renamed and extended from v0.2 onward. Repo:
@@ -237,7 +239,7 @@ vendor and week.
 Double-click `burnmon.exe`. One window opens, no console, no tray icon, no browser tab.
 It collects on startup, again every 15 minutes (`-interval`, floor 5 minutes) while the
 window stays open, and whenever you press "Refresh now". Close the window and the app is
-gone; nothing keeps running in the background. No open ports, no admin rights
+gone; nothing keeps running in the background. No open ports on Windows, no admin rights
 (`asInvoker`). Needs the WebView2 runtime (ships with Edge on Windows 10/11); without it,
 the app writes the report once and opens it in your default browser instead.
 
@@ -252,13 +254,23 @@ since cached sessions carry costs computed with the old numbers.
 `burnmon` and `burnmon-cli` also build for darwin and linux (amd64 and arm64,
 `CGO_ENABLED=0`, pure Go, no cgo), attached to every tagged release. Neither platform has
 WebView2, so there is no app window there: `burnmon` serves the dashboard from a
-localhost-only web server (`http://127.0.0.1:47615/`, change it with `-port`) and opens
-it in the system default browser (`-no-open` to skip). That server provides the same live
+localhost-only web server (`http://127.0.0.1:47615/?t=<key>`, change the port with
+`-port`), prints that link and opens it in the system default browser (`-no-open` to
+skip). That server provides the same live
 functions the Windows window binds (Now, History, the vendor strip, the forecast, session
 findings, the turn drawer, Refresh now and Settings), refuses requests from any other host
 or origin, and is the one open port BurnMon has, on these two platforms only. The page
 reloads itself whenever the `-interval` re-collection rewrites it. Run on macOS (Apple
 Silicon) since 2026-10-20; Linux is still untested on real hardware.
+
+**The one open port.** On macOS and Linux, `burnmon` listens on `127.0.0.1:47615`. Other
+computers cannot reach it. Other users and programs on the same computer can reach the
+port, so every request needs a secret that `burnmon` makes at each start and keeps in a
+file only you can read (`bridge-token` in the data folder, mode 0600). A link from an
+earlier start stops working; open the link `burnmon` printed, or start it again. Starting
+`burnmon` a second time opens the running one. If another program already uses port
+47615, `burnmon` says so; start it with `-port <number>`. The Windows app has no server
+and no open port.
 
 ### Help test macOS and Linux
 
@@ -427,7 +439,9 @@ A few things are worth knowing:
 
 ## What BurnMon never does
 
-No server, no network call of any kind, no telemetry, no account. The optional cloud plugin
+No server on Windows, no network call to the internet of any kind, no telemetry, no
+account. On macOS and Linux there is one local web server on 127.0.0.1 for the dashboard,
+protected by a secret that changes every start. The optional cloud plugin
 runs inside Claude's own cloud session, not in BurnMon, and the Claude app copies its file to
 your disk. BurnMon reads only your own transcript folders, never aggregates or compares
 across people, and refuses no one because there is nothing to refuse: other people's
@@ -483,7 +497,7 @@ Ideas and bug reports are welcome as GitHub issues.
   worst earlier ramp, but a Station left open costs about 4.5 points of one core more than
   closed, and CPU follows the page's animation rate. Cause not found. Closing it (Esc)
   removes the cost.
-- **macOS and Linux have no app window**; the dashboard opens in the browser instead. Linux is untested on real hardware.
+- **macOS and Linux have no app window**; the dashboard opens in the browser instead, served by a local web server on 127.0.0.1 (see "macOS and Linux"). Linux is untested on real hardware.
 - **History is slow on a large store.** Every filter change re-reads the whole store, about
   3 seconds at roughly 55,000 events.
 - **Time bounds compare text.** A stored timestamp in the first second of a range can be
