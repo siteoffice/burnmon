@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "written_at": "2026-10-23T10:00:00Z",
+  "tick_seconds": 5,
+  "sources": [
+    {
+      "name": "store",
+      "ok": true,
+      "read_at": "2026-10-23T10:00:00Z"
+    },
+    {
+      "name": "sysmon",
+      "ok": false,
+      "read_at": "2026-10-23T10:00:00Z",
+      "error": "process list unavailable"
+    }
+  ],
+  "sessions": [
+    {
+      "vendor": "anthropic",
+      "agent": "claude-code",
+      "id": "example-parent",
+      "project": "C:\\example\\project",
+      "model": "claude-opus-5-5",
+      "state": "coding",
+      "state_since": "2026-10-23T09:59:30Z",
+      "tokens": 1200,
+      "cost": {
+        "usd": 2.5,
+        "eur": 2.3,
+        "label": "API price equivalent"
+      },
+      "last_activity": "2026-10-23T09:59:40Z",
+      "source": "store",
+      "age_seconds": 20
+    },
+    {
+      "vendor": "anthropic",
+      "agent": "claude-code",
+      "id": "example-sub",
+      "parent_id": "example-parent",
+      "project": "C:\\example\\project",
+      "state": "waiting",
+      "state_since": "2026-10-23T09:58:30Z",
+      "tokens": 300,
+      "cost": {
+        "usd": 0.5,
+        "eur": 0.46,
+        "label": "API price equivalent"
+      },
+      "last_activity": "2026-10-23T09:59:55Z",
+      "source": "store",
+      "age_seconds": 5
+    }
+  ],
+  "burn": {
+    "tokens_last_5min": 600,
+    "tokens_per_minute": 120,
+    "cost": {
+      "usd": 1,
+      "eur": 0.92,
+      "label": "API price equivalent"
+    },
+    "source": "store",
+    "age_seconds": 0
+  },
+  "processes": [
+    {
+      "harness": "claude",
+      "cpu_pct": 12.5,
+      "mem_mb": 300,
+      "io_bps": 10,
+      "source": "sysmon",
+      "age_seconds": 2
+    }
+  ],
+  "waits_on_you": [
+    {
+      "vendor": "anthropic",
+      "session_id": "example-sub",
+      "project": "C:\\example\\project",
+      "since": "2026-10-23T09:58:30Z",
+      "waiting_seconds": 90,
+      "source": "store",
+      "age_seconds": 5
+    }
+  ]
+}
