@@ -13,84 +13,95 @@ func TestSevenSectionsInOrder(t *testing.T) {
 	}
 }
 
-func TestPresets(t *testing.T) {
-	dev := Developer()
+// The first run is Standard with every section on. Plain starts with the
+// placeholder set (the old Simple set): Processes and Git off.
+func TestDefaults(t *testing.T) {
+	d := Default()
+	if d.Plain || d.Mode() != "standard" {
+		t.Fatalf("default mode %q, want standard", d.Mode())
+	}
 	for _, id := range IDs {
-		if !dev.On(id) {
-			t.Errorf("developer: %s is off", id)
+		if !d.OnIn("standard", id) {
+			t.Errorf("standard: %s is off", id)
 		}
 	}
-	if dev.Plain {
-		t.Error("developer: plain mode is on")
-	}
-
-	simple := Simple()
-	if !simple.Plain {
-		t.Error("simple: plain mode is off")
-	}
 	for _, id := range []string{"waits", "outcomes", "burn", "agents_map", "sessions"} {
-		if !simple.On(id) {
-			t.Errorf("simple: %s is off", id)
+		if !d.OnIn("plain", id) {
+			t.Errorf("plain: %s is off", id)
 		}
 	}
 	for _, id := range []string{"processes", "git"} {
-		if simple.On(id) {
-			t.Errorf("simple: %s is on", id)
+		if d.OnIn("plain", id) {
+			t.Errorf("plain: %s is on", id)
 		}
 	}
 }
 
-func TestPresetNameIsDerived(t *testing.T) {
-	if got := Simple().PresetName(); got != "simple" {
-		t.Errorf("simple preset named %q", got)
+func TestOnFollowsTheMode(t *testing.T) {
+	d := Default()
+	if !d.On("git") {
+		t.Error("standard: git should be on")
 	}
-	if got := Developer().PresetName(); got != "developer" {
-		t.Errorf("developer preset named %q", got)
+	p := d.WithPlain(true)
+	if p.Mode() != "plain" || p.On("git") {
+		t.Errorf("plain: mode %q, git on %v", p.Mode(), p.On("git"))
 	}
-	s := Developer().With("git", false)
-	if got := s.PresetName(); got != "custom" {
-		t.Errorf("developer with git off named %q, want custom", got)
-	}
-	// Flipping one switch back to a preset's exact shape names it again.
-	if got := s.With("git", true).PresetName(); got != "developer" {
-		t.Errorf("restored developer named %q", got)
-	}
-	// Plain Mode is part of the shape.
-	if got := Simple().WithPlain(false).PresetName(); got != "custom" {
-		t.Errorf("simple with plain off named %q, want custom", got)
+	if !p.On("burn") {
+		t.Error("plain: burn should be on")
 	}
 }
 
-func TestWithIgnoresUnknownSection(t *testing.T) {
-	s := Developer().With("bogus", false)
-	if !reflect.DeepEqual(s, Developer()) {
-		t.Errorf("unknown id changed the state: %+v", s)
+// One list per mode: a switch in one mode never moves the other.
+func TestWithChangesOnlyThatMode(t *testing.T) {
+	d := Default().With("plain", "git", true).With("standard", "burn", false)
+	if !d.OnIn("plain", "git") || d.OnIn("standard", "burn") {
+		t.Fatalf("switches not set: %+v", d)
+	}
+	if !d.OnIn("standard", "git") || !d.OnIn("plain", "burn") {
+		t.Fatalf("a switch leaked into the other mode: %+v", d)
+	}
+}
+
+func TestWithIgnoresUnknownInput(t *testing.T) {
+	d := Default()
+	for _, c := range [][2]string{{"standard", "bogus"}, {"wild", "git"}, {"", "git"}} {
+		if got := d.With(c[0], c[1], false); !reflect.DeepEqual(got, d) {
+			t.Errorf("With(%q, %q) changed the state: %+v", c[0], c[1], got)
+		}
 	}
 }
 
 func TestNormalizeFillsAndDrops(t *testing.T) {
-	got := State{Sections: map[string]bool{"git": false, "nonsense": true}}.Normalize()
-	if got.On("git") {
+	got := State{Standard: map[string]bool{"git": false, "nonsense": true}}.Normalize()
+	if got.OnIn("standard", "git") {
 		t.Error("git switch lost")
 	}
-	if !got.On("burn") {
-		t.Error("a section missing from a saved file must default to on")
+	if !got.OnIn("standard", "burn") {
+		t.Error("a standard section missing from a saved file must default to on")
 	}
-	if _, ok := got.Sections["nonsense"]; ok {
+	if got.OnIn("plain", "git") || !got.OnIn("plain", "burn") {
+		t.Error("plain list missing from a saved file must default to the placeholder set")
+	}
+	if _, ok := got.Standard["nonsense"]; ok {
 		t.Error("unknown section kept")
 	}
-	if len(got.Sections) != len(IDs) {
-		t.Errorf("%d sections, want %d", len(got.Sections), len(IDs))
+	if len(got.Standard) != len(IDs) || len(got.PlainSet) != len(IDs) {
+		t.Errorf("%d and %d sections, want %d each", len(got.Standard), len(got.PlainSet), len(IDs))
 	}
 }
 
+// Saving then loading from a fresh Load call is what a restart does.
 func TestStoreRoundTripAndDefault(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "view.json")
-	if got := Load(path); !reflect.DeepEqual(got, Developer()) {
-		t.Errorf("no file: %+v, want developer", got)
+	path := filepath.Join(t.TempDir(), "view.json")
+	if got := Load(path); !reflect.DeepEqual(got, Default()) {
+		t.Errorf("no file: %+v, want default", got)
 	}
-	for _, want := range []State{Simple(), Developer().With("processes", false), Developer()} {
+	for _, want := range []State{
+		Default().WithPlain(true),
+		Default().With("standard", "processes", false).With("plain", "git", true),
+		Default().With("plain", "burn", false).WithPlain(true),
+		Default(),
+	} {
 		if err := Save(path, want); err != nil {
 			t.Fatal(err)
 		}
@@ -100,14 +111,13 @@ func TestStoreRoundTripAndDefault(t *testing.T) {
 	}
 }
 
-// The view file also holds ui_theme. Saving sections must not drop it, and
-// saving a theme must not drop the sections.
+// The view file also holds ui_theme. Saving sections must not drop it.
 func TestSaveKeepsOtherKeys(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "view.json")
 	if err := writeRaw(path, `{"ui_theme": "light"}`); err != nil {
 		t.Fatal(err)
 	}
-	if err := Save(path, Simple()); err != nil {
+	if err := Save(path, Default().WithPlain(true)); err != nil {
 		t.Fatal(err)
 	}
 	if got := readRaw(t, path)["ui_theme"]; got != "light" {
@@ -115,14 +125,41 @@ func TestSaveKeepsOtherKeys(t *testing.T) {
 	}
 }
 
-func TestLoadBadFileIsDeveloper(t *testing.T) {
+// The R8 first cut saved "sections" and "plain_mode". The mode carries over;
+// the old single list is dropped from the file and never read as either list.
+func TestOldR8FileKeepsModeOnly(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "view.json")
-	for _, body := range []string{`{"sections": `, `{"sections": 3}`, `[]`, ``} {
+	old := `{"ui_theme": "dark", "plain_mode": true, "sections": {"burn": false, "git": true}}`
+	if err := writeRaw(path, old); err != nil {
+		t.Fatal(err)
+	}
+	got := Load(path)
+	if !got.Plain {
+		t.Error("plain_mode from the old file was lost")
+	}
+	if !got.OnIn("standard", "burn") || got.OnIn("plain", "git") {
+		t.Errorf("old single list leaked into the new lists: %+v", got)
+	}
+	if err := Save(path, got); err != nil {
+		t.Fatal(err)
+	}
+	raw := readRaw(t, path)
+	if _, ok := raw["sections"]; ok {
+		t.Error("old sections key still in the file after Save")
+	}
+	if raw["ui_theme"] != "dark" {
+		t.Errorf("ui_theme = %v", raw["ui_theme"])
+	}
+}
+
+func TestLoadBadFileIsDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "view.json")
+	for _, body := range []string{`{"sections_standard": `, `{"sections_standard": 3}`, `[]`, ``} {
 		if err := writeRaw(path, body); err != nil {
 			t.Fatal(err)
 		}
-		if got := Load(path); !reflect.DeepEqual(got, Developer()) {
-			t.Errorf("body %q: %+v, want developer", body, got)
+		if got := Load(path); !reflect.DeepEqual(got, Default()) {
+			t.Errorf("body %q: %+v, want default", body, got)
 		}
 	}
 }

@@ -364,28 +364,28 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   header{min-height:40px}
 }
 
-/* R8 sections (agent control plan, row R8). The sections host sits between
-   the header and the older burn and system zones. Plain Mode hides those two
-   zones and the To Do panel: they are the Developer detail. Everything a
-   switch turns off gets .sec-off. */
+/* R8 sections (agent control plan, row R8), follow-up 2026-10-23. Two modes.
+   Standard shows every section and the page scrolls: the sections host sits
+   above the older Burn and System zones inside #pageScroll, and #legacy gets
+   exactly the window's height so those zones lay out as they always did.
+   Plain fits the window, hides the older zones and the To Do panel, and drops
+   whole sections, last first, when they do not fit. Everything a switch turns
+   off gets .sec-off. */
 .sec-off{display:none !important}
+#pageScroll{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden}
+body.sec-standard #pageScroll{overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+#legacy{flex:1 1 auto; min-height:0; display:flex; flex-direction:column}
+body.sec-standard #legacy{flex:0 0 auto}
 .sechost{flex:0 0 auto; overflow:hidden; margin:4px 4px 0; display:flex; flex-direction:column; gap:4px; min-height:0}
-.sechost.sec-fill{flex:1 1 auto; max-height:none; margin-bottom:4px}
-.secbar{display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; font-size:11.5px; color:var(--dim)}
-.secbar .secsw{display:inline-flex; gap:5px; align-items:center; cursor:pointer; white-space:nowrap}
-.secbar .secsw input{margin:0; accent-color:var(--amber)}
-.secbar .textbtn.on{color:var(--txt); text-decoration:underline}
-.secbar .secpreset{color:var(--txt)}
+.sechost.sec-fill{flex:1 1 auto; margin-bottom:4px}
 .secnotice{padding:6px 8px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font-size:12px}
 .secnotice.warn{border-color:var(--amber)}
 .secpanels{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:4px}
 .secpanel .secbody{padding:6px 8px; display:flex; flex-direction:column; gap:3px; font-size:12px; overflow:hidden}
+body.plain .secpanel .secbody{font-size:13.5px}
 .secpanel.secwide{grid-column:1 / -1}
-/* No scrollbars (d9): a panel that does not fit is dropped whole, last first, and the bar says so. */
+/* No scrollbars in Plain: a panel that does not fit is dropped whole, last first, and a line says so. */
 .secpanel.sec-cut{display:none !important}
-/* When even the bar does not fit: first only the preset buttons and Plain Mode, then nothing. */
-.sechost.sec-squeeze{display:none}
-.sechost.sec-compact .secshow, .sechost.sec-compact #secNotice{display:none}
 .secbig{font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--strong)}
 .secbig small{font-size:12px; font-weight:400; color:var(--dim)}
 .secstub{color:var(--dim)}
@@ -393,6 +393,23 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
 .secrow b{color:var(--txt)}
 .sechint{color:var(--dim); font-size:11px}
 .sesub td:first-child{padding-left:20px}
+/* The Export line: the Plain toggle at the left, the gear and EXPORT at the right. */
+.hdrline{flex:1 1 360px; display:flex; align-items:center; gap:14px; min-width:0}
+.plaintoggle{border:1px solid var(--bd); background:var(--panel2); color:var(--dim); font:700 11.5px/1 var(--mono);
+  letter-spacing:.04em; padding:4px 11px; border-radius:12px; cursor:pointer; white-space:nowrap}
+.plaintoggle:hover{border-color:var(--amber)}
+.plaintoggle.on{background:var(--amber); border-color:var(--amber); color:var(--bg)}
+.gearbtn{background:none; border:none; color:var(--blu); font:15px/1 var(--mono); cursor:pointer; padding:2px 4px}
+.gearbtn:hover, .gearbtn.on{color:var(--amber)}
+#secSettings{position:fixed; right:14px; top:60px; z-index:1700; background:var(--panel); border:1px solid var(--bd);
+  border-top:2px solid var(--amber); padding:10px 14px; display:none; flex-direction:column; gap:8px; font-size:12px;
+  box-shadow:0 6px 24px var(--scrim)}
+#secSettings.open{display:flex}
+#secSettings .setcols{display:flex; gap:28px}
+#secSettings .setcol{display:flex; flex-direction:column; gap:5px}
+#secSettings h4{margin:0 0 2px; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase}
+#secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
+#secSettings input{margin:0; accent-color:var(--amber)}
 </style>
 </head>
 <body>
@@ -415,15 +432,21 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   <div class="hstat" id="hdrClock">-</div>
   <div class="hstat" id="hdrSnapAge" title="Age of %USERPROFILE%\.burnmon\snapshot.json, written by BurnMon every 5 seconds">snapshot -</div>
   <div class="hstat" id="hdrBackfillStatus" style="display:none"></div>
-  <div class="hdrspacer"></div>
-  <button class="textbtn" id="exportBtn" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
-  <div class="hstat" id="exportStatus"></div>
+  <div class="hdrline">
+    <button class="plaintoggle" id="plainToggle" type="button" aria-pressed="false" title="Plain words, and a page that fits the window. No model is called.">Plain: off</button>
+    <div class="hdrspacer"></div>
+    <button class="gearbtn" id="secGear" type="button" aria-expanded="false" title="Choose which sections each mode shows">&#9881;</button>
+    <button class="textbtn" id="exportBtn" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
+    <div class="hstat" id="exportStatus"></div>
+  </div>
 </header>
+<div id="pageScroll">
 <div class="sechost" id="secHost">
-  <div class="secbar" id="secBar"></div>
   <div id="secNotice"></div>
+  <div class="sechint" id="secCutNote"></div>
   <div class="secpanels" id="secPanels"></div>
 </div>
+<div id="legacy">
 <main>
   <section class="zone burn">
     <div class="zonelabel">Burn, last 30 min</div>
@@ -523,6 +546,13 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   <div class="panelhead">Microsoft To Do</div>
   <div class="todobody" id="todoBody"></div>
 </section>
+</div>
+</div>
+<div id="secSettings" role="dialog" aria-label="Sections each mode shows">
+  <h4>Sections each mode shows</h4>
+  <div class="setcols" id="secSettingsCols"></div>
+  <div class="sechint">Esc closes this list</div>
+</div>
 <div id="turnPopupOverlay" class="hidden">
   <div id="turnPopup">
     <button id="turnPopupClose" type="button" title="Close" aria-label="Close">&times;</button>
@@ -2987,6 +3017,8 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     for(var i = 0; i < zones.length; i++){
       if(zones[i].scrollHeight > zones[i].clientHeight + 1) return true;
     }
+    var lg = document.getElementById('legacy');
+    if(lg && lg.scrollHeight > lg.clientHeight + 1) return true;
     return false;
   }
   // A panel's own width/height-cropped content (renderHeatmap,
@@ -3048,6 +3080,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     window.__bdevTodoLayout = { applied: true, plainHistH: plainH, histH: hist.getBoundingClientRect().height };
   }
   function applyPanelFit(){
+    secSizeLegacy();
     secCutAll();
     var histBefore = document.querySelector('.histwrap');
     var histHBefore = histBefore ? histBefore.getBoundingClientRect().height : 0;
@@ -3095,13 +3128,13 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   });
 
   // ---- R8 sections -------------------------------------------------------
-  // Seven sections, one switch each, two presets (Simple, Developer) and Plain
-  // Mode. The choice is stored by the Go side (bdevSetSections, written to
-  // burnmon-dev-view.json); this code only draws it. The numbers come from
+  // Seven sections, two modes (Standard and Plain), one switch per section in
+  // each mode. The choice is stored by the Go side (bdevSetSections, written
+  // to burnmon-dev-view.json); this code only draws it. The numbers come from
   // %USERPROFILE%\.burnmon\snapshot.json through bdevSections, never from a
   // port. A stale or missing file is shown as "BurnMon is not running" and
-  // its old numbers are not drawn. Plain Mode means plain words and the
-  // simple form of each section; it makes no model call.
+  // its old numbers are not drawn. Plain Mode means plain words, a page that
+  // fits the window and the Plain list of sections; it makes no model call.
   var SEC_ORDER = ['waits','outcomes','burn','agents_map','sessions','processes','git'];
   var SEC_TITLE = {
     waits:['Waits on you','Needs you'], outcomes:['Outcomes','Results'], burn:['Burn','Token use'],
@@ -3113,9 +3146,10 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { sections:{}, plain:false, preset:'developer', order:SEC_ORDER };
+  var secState = { plain:false, sections:{}, standard:{}, plainSet:{}, order:SEC_ORDER };
   var secReading = { status:'missing', age_seconds:0 };
   var secLastJSON = '';
+  var secLastSig = '';
   var secFrozen = false; // set by the test hook so the poll cannot overwrite what it injected
 
   function secTitle(id){ return SEC_TITLE[id][secState.plain ? 1 : 0]; }
@@ -3157,7 +3191,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'No session is waiting on you.') + '</div>';
     w.forEach(function(x){
       html += '<div class="secrow"><span><b>' + esc(secBase(x.project)) + '</b> <span class="dim">' + esc(x.vendor) + '</span></span>' +
-        '<span>' + 'waiting ' + esc(secDur(x.waiting_seconds)) + '</span></div>';
+        '<span>waiting ' + esc(secDur(x.waiting_seconds)) + '</span></div>';
     });
     return html + '<div class="sechint">' + esc(secState.plain ?
       'Questions and approvals from your flows are coming.' :
@@ -3232,21 +3266,36 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   var SEC_BODY = { waits:secBodyWaits, outcomes:secBodyOutcomes, burn:secBodyBurn, agents_map:secBodyAgents,
     sessions:secBodySessions, processes:secBodyProcesses, git:secBodyGit };
 
-  function secRenderBar(){
-    var st = secState, html = '<span>View:</span>';
-    ['simple','developer'].forEach(function(p){
-      html += '<button class="textbtn' + (st.preset === p ? ' on' : '') + '" data-preset="' + p + '">' +
-        (p === 'simple' ? 'Simple' : 'Developer') + '</button>';
+  // The Plain toggle on the Export line. The state is in its text, so colour
+  // is not the only signal.
+  function secRenderToggle(){
+    var t = document.getElementById('plainToggle');
+    if(!t) return;
+    t.textContent = secState.plain ? 'Plain: on' : 'Plain: off';
+    t.classList.toggle('on', secState.plain);
+    t.setAttribute('aria-pressed', secState.plain ? 'true' : 'false');
+  }
+
+  // The gear's list: one column of switches per mode. Built once, then only
+  // the ticks are synced, so a poll never replaces a box under the pointer.
+  function secRenderSettings(){
+    var box = document.getElementById('secSettingsCols');
+    if(!box) return;
+    if(!box.firstChild){
+      var html = '';
+      [['standard','Standard',0],['plain','Plain',1]].forEach(function(m){
+        html += '<div class="setcol"><h4>' + m[1] + '</h4>';
+        SEC_ORDER.forEach(function(id){
+          html += '<label><input type="checkbox" data-mode="' + m[0] + '" data-sw="' + id + '"> ' + esc(SEC_TITLE[id][m[2]]) + '</label>';
+        });
+        html += '</div>';
+      });
+      box.innerHTML = html;
+    }
+    Array.prototype.forEach.call(box.querySelectorAll('input[data-sw]'), function(i){
+      var list = i.getAttribute('data-mode') === 'plain' ? secState.plainSet : secState.standard;
+      i.checked = !!list[i.getAttribute('data-sw')];
     });
-    if(st.preset === 'custom') html += '<span class="secpreset">Custom</span>';
-    html += '<span class="secshow"><span>Show:</span>';
-    (st.order || SEC_ORDER).forEach(function(id){
-      html += '<label class="secsw"><input type="checkbox" data-sw="' + id + '"' + (st.sections[id] ? ' checked' : '') + '> ' + esc(secTitle(id)) + '</label>';
-    });
-    html += '</span>';
-    html += '<label class="secsw" title="Plain words, and the simple form of each section. No model is called."><input type="checkbox" data-plain="1"' +
-      (st.plain ? ' checked' : '') + '> Plain Mode</label><span class="sechint" id="secCutNote"></span>';
-    return html;
   }
 
   function secRender(){
@@ -3255,7 +3304,8 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     var r = secReading, head = secHeadline(r), snap = r.status === 'ok' ? r.snapshot : null;
     var age = document.getElementById('hdrSnapAge');
     if(age){ age.textContent = head.text; age.style.color = head.down ? 'var(--amber)' : ''; }
-    document.getElementById('secBar').innerHTML = secRenderBar();
+    secRenderToggle();
+    secRenderSettings();
     var notice = document.getElementById('secNotice');
     notice.innerHTML = head.down ? '<div class="secnotice warn">' + esc(head.text + '. No current numbers are shown.') + '</div>' : '';
     var html = '', ids = secState.order || SEC_ORDER;
@@ -3271,52 +3321,77 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     secFit();
   }
 
-  // The older zones fit first (applyPanelFit calls secCutAll before it
-  // measures), then secFit gives the host whatever room is left: panels come
-  // back in order until the page or the host would overflow, and the rest
-  // stay dropped. No scrollbar, and the older panels never lose room to this.
+  // Standard shows the older Burn and System zones and the To Do panel, each
+  // zone with its section switch. Plain hides all of them and the host fills
+  // the window.
+  function secApplyLegacy(){
+    var plain = secState.plain, s = secState.sections;
+    var showBurn = !plain && !!s.burn, showSys = !plain && !!s.processes;
+    function set(el, hide){ if(el) el.classList.toggle('sec-off', hide); }
+    set(document.querySelector('.zone.burn'), !showBurn);
+    set(document.querySelector('.zone.system'), !showSys);
+    set(document.querySelector('main'), !showBurn && !showSys);
+    set(document.getElementById('todoPanel'), plain);
+    set(document.getElementById('legacy'), plain);
+    document.getElementById('secHost').classList.toggle('sec-fill', plain);
+    document.body.classList.toggle('sec-standard', !plain);
+    document.body.classList.toggle('plain', plain);
+    secSizeLegacy();
+    // The charts were drawn at a size they no longer have; the resize handler redraws them.
+    var sig = [plain, showBurn, showSys].join();
+    if(sig !== secLastSig){ secLastSig = sig; window.dispatchEvent(new Event('resize')); }
+  }
+
+  // In Standard the older zones get exactly the height of the scroll area, the
+  // same room they had before R8, so they fit as they always did. The sections
+  // host sits above them and the page scrolls.
+  function secSizeLegacy(){
+    var lg = document.getElementById('legacy'), ps = document.getElementById('pageScroll'), main = document.querySelector('main');
+    if(!lg || !ps) return;
+    lg.style.height = (secState.plain || !main || main.classList.contains('sec-off')) ? '' : ps.clientHeight + 'px';
+  }
+
+  // Plain fits the window. The older zones are hidden, so secFit only has the
+  // host to size: panels come back in order until the host would overflow,
+  // and the rest stay dropped with a line that says how many. Standard drops
+  // nothing. applyPanelFit calls secCutAll first and secFit last.
   function secCutAll(){
-    var h = document.getElementById('secHost');
-    if(h) h.classList.add('sec-squeeze');
-    Array.prototype.forEach.call(document.querySelectorAll('#secPanels .secpanel'), function(p){ p.classList.add('sec-cut'); });
+    Array.prototype.forEach.call(document.querySelectorAll('#secPanels .secpanel'), function(p){
+      p.classList.toggle('sec-cut', secState.plain);
+    });
   }
   function secFit(){
     var host = document.getElementById('secHost'), note = document.getElementById('secCutNote');
     if(!host) return;
-    var panels = Array.prototype.slice.call(host.querySelectorAll('.secpanel')), shown = 0;
-    secCutAll();
-    host.classList.remove('sec-squeeze', 'sec-compact');
-    if(pageOverflows()) host.classList.add('sec-compact');
-    if(pageOverflows()){ host.classList.add('sec-squeeze'); return; }
-    for(var i = 0; i < panels.length; i++){
-      panels[i].classList.remove('sec-cut');
-      if(pageOverflows() || host.scrollHeight > host.clientHeight + 1){ panels[i].classList.add('sec-cut'); break; }
-      shown++;
+    var panels = Array.prototype.slice.call(host.querySelectorAll('.secpanel')), shown = panels.length;
+    if(secState.plain){
+      secCutAll();
+      shown = 0;
+      for(var i = 0; i < panels.length; i++){
+        panels[i].classList.remove('sec-cut');
+        if(host.scrollHeight > host.clientHeight + 1){ panels[i].classList.add('sec-cut'); break; }
+        shown++;
+      }
+    } else {
+      panels.forEach(function(p){ p.classList.remove('sec-cut'); });
     }
-    var cut = panels.length - shown;
-    if(note) note.textContent = cut ? cut + (cut === 1 ? ' section' : ' sections') + ' hidden, the window is too small' : '';
-  }
-
-  // The older Burn and System zones and the To Do panel are the Developer
-  // detail: shown with their section switch, hidden in Plain Mode.
-  function secApplyLegacy(){
-    var dev = !secState.plain, s = secState.sections;
-    var showBurn = dev && !!s.burn, showSys = dev && !!s.processes;
-    function set(el, hide){ if(el) el.classList.toggle('sec-off', hide); }
-    var wasHidden = !!document.querySelector('main.sec-off, .zone.sec-off, #todoPanel.sec-off');
-    set(document.querySelector('.zone.burn'), !showBurn);
-    set(document.querySelector('.zone.system'), !showSys);
-    set(document.querySelector('main'), !showBurn && !showSys);
-    set(document.getElementById('todoPanel'), !dev);
-    var host = document.getElementById('secHost');
-    host.classList.toggle('sec-fill', !showBurn && !showSys);
-    var nowHidden = !!document.querySelector('main.sec-off, .zone.sec-off, #todoPanel.sec-off');
-    // The charts were drawn at a size they no longer have; the resize handler redraws them.
-    if(wasHidden !== nowHidden || secLastJSON === '') window.dispatchEvent(new Event('resize'));
+    // The note takes a line of its own, so once something is dropped, drop
+    // more until the host fits with the note in it.
+    function say(){
+      var cut = panels.length - shown;
+      if(note) note.textContent = cut ? cut + (cut === 1 ? ' section' : ' sections') + ' hidden, the window is too small' : '';
+    }
+    say();
+    while(secState.plain && shown > 0 && host.scrollHeight > host.clientHeight + 1){
+      shown--;
+      panels[shown].classList.add('sec-cut');
+      say();
+    }
   }
 
   function secApplyPayload(p){
-    secState = { sections:p.sections || {}, plain:!!p.plain_mode, preset:p.preset || 'custom', order:p.order || SEC_ORDER };
+    secState = { plain:!!p.plain_mode, sections:p.sections || {}, standard:p.sections_standard || {},
+      plainSet:p.sections_plain || {}, order:p.order || SEC_ORDER };
     secReading = p.reading || { status:'missing', age_seconds:0 };
     secRender();
   }
@@ -3334,15 +3409,36 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     return window.bdevSetSections(change).then(function(){ secLastJSON = 'x'; return secPoll(); })
       .catch(function(e){ console.log('bdevSetSections:', e); });
   }
-  document.getElementById('secHost').addEventListener('click', function(e){
-    var b = e.target.closest('[data-preset]');
-    if(b) secSend({ preset: b.getAttribute('data-preset') });
+
+  var secSettingsEl = document.getElementById('secSettings'), secGearEl = document.getElementById('secGear');
+  function secSettingsOpen(open){
+    if(open){
+      var r = secGearEl.getBoundingClientRect();
+      secSettingsEl.style.top = Math.round(r.bottom + 6) + 'px';
+    }
+    secSettingsEl.classList.toggle('open', open);
+    secGearEl.classList.toggle('on', open);
+    secGearEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  document.getElementById('plainToggle').addEventListener('click', function(){
+    var want = !secState.plain;
+    if(secFrozen){ secState.plain = want; secRender(); return; }
+    secSend({ plain: want });
   });
-  document.getElementById('secHost').addEventListener('change', function(e){
+  secGearEl.addEventListener('click', function(e){ e.stopPropagation(); secSettingsOpen(!secSettingsEl.classList.contains('open')); });
+  secSettingsEl.addEventListener('click', function(e){ e.stopPropagation(); });
+  secSettingsEl.addEventListener('change', function(e){
     var t = e.target;
-    if(t.hasAttribute('data-sw')) secSend({ section: t.getAttribute('data-sw'), on: t.checked });
-    else if(t.hasAttribute('data-plain')) secSend({ plain: t.checked });
+    if(t.hasAttribute('data-sw')) secSend({ mode: t.getAttribute('data-mode'), section: t.getAttribute('data-sw'), on: t.checked });
   });
+  document.addEventListener('click', function(){ if(secSettingsEl.classList.contains('open')) secSettingsOpen(false); });
+  // Esc closes the list first, before the Station or fullscreen handlers see it.
+  document.addEventListener('keydown', function(e){
+    if((e.key === 'Escape' || e.key === 'Esc') && secSettingsEl.classList.contains('open')){
+      secSettingsOpen(false);
+      e.stopImmediatePropagation();
+    }
+  }, true);
   // The page can be driven without Go (uicheck d29 feeds the frozen example).
   window.__bdevSections = { apply: function(p){ secFrozen = true; secApplyPayload(p); }, state: function(){ return secState; } };
   secPoll();

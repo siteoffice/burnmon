@@ -14,21 +14,24 @@ import (
 	"burnmon/internal/snapshot"
 )
 
-// sectionsPayload is bdevSections' return value.
+// sectionsPayload is bdevSections' return value. The embedded state carries
+// plain_mode and both lists; Sections is the list of the current mode, so the
+// page can draw without choosing.
 type sectionsPayload struct {
 	sections.State
-	Preset  string           `json:"preset"`
-	Order   []string         `json:"order"`
-	Reading snapshot.Reading `json:"reading"`
+	Mode     string           `json:"mode"`
+	Sections map[string]bool  `json:"sections"`
+	Order    []string         `json:"order"`
+	Reading  snapshot.Reading `json:"reading"`
 }
 
-// sectionsChange is what the page sends: a preset name, one switch, or Plain
-// Mode. Exactly one of the three is set.
+// sectionsChange is what the page sends: the mode toggle (Plain), or one
+// switch (Mode, Section and On together). Anything else is refused.
 type sectionsChange struct {
-	Preset  string `json:"preset,omitempty"`
+	Plain   *bool  `json:"plain,omitempty"`
+	Mode    string `json:"mode,omitempty"`
 	Section string `json:"section,omitempty"`
 	On      *bool  `json:"on,omitempty"`
-	Plain   *bool  `json:"plain,omitempty"`
 }
 
 func loadSections(dataDir string) sections.State {
@@ -42,10 +45,11 @@ func saveSections(dataDir string, s sections.State) error {
 func sectionsPayloadFor(dataDir, snapPath string, now time.Time) sectionsPayload {
 	st := loadSections(dataDir)
 	return sectionsPayload{
-		State:   st,
-		Preset:  st.PresetName(),
-		Order:   sections.IDs,
-		Reading: snapshot.Load(snapPath, now),
+		State:    st,
+		Mode:     st.Mode(),
+		Sections: st.Current(),
+		Order:    sections.IDs,
+		Reading:  snapshot.Load(snapPath, now),
 	}
 }
 
@@ -54,21 +58,18 @@ func sectionsPayloadFor(dataDir, snapPath string, now time.Time) sectionsPayload
 func applySectionsChange(dataDir string, c sectionsChange) error {
 	cur := loadSections(dataDir)
 	switch {
-	case c.Preset == "simple":
-		return saveSections(dataDir, sections.Simple())
-	case c.Preset == "developer":
-		return saveSections(dataDir, sections.Developer())
-	case c.Preset != "":
-		return fmt.Errorf("preset %q is not simple or developer", c.Preset)
-	case c.Plain != nil:
+	case c.Plain != nil && c.Mode == "" && c.Section == "":
 		return saveSections(dataDir, cur.WithPlain(*c.Plain))
-	case c.Section != "" && c.On != nil:
+	case c.Mode != "" && c.Section != "" && c.On != nil:
+		if c.Mode != sections.ModeStandard && c.Mode != sections.ModePlain {
+			return fmt.Errorf("mode %q is not standard or plain", c.Mode)
+		}
 		for _, id := range sections.IDs {
 			if id == c.Section {
-				return saveSections(dataDir, cur.With(id, *c.On))
+				return saveSections(dataDir, cur.With(c.Mode, id, *c.On))
 			}
 		}
 		return fmt.Errorf("section %q is not one of the seven", c.Section)
 	}
-	return fmt.Errorf("empty sections change")
+	return fmt.Errorf("sections change needs plain, or mode with section and on")
 }

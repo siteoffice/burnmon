@@ -67,6 +67,9 @@ func init() {
   };
   window.__bdevEnterFakeMode();
   window.__bdevPaintFake(snap);
+  // Standard scrolls (R8 follow-up): the older zones, To Do included, fill the window's height below the
+  // sections, so scroll to the end before measuring where To Do sits.
+  document.getElementById('pageScroll').scrollTop = 1e9;
   var todo = document.getElementById('todoPanel');
   var tr = todo.getBoundingClientRect();
   var zones = document.querySelectorAll('.zonebody'), zoneOver = false;

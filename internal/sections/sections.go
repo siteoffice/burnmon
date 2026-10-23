@@ -1,8 +1,8 @@
 // Package sections is R8 of the agent control plan: the seven sections
-// BurnMon Dev is built from, one switch per section, and the two presets
-// (Simple and Developer). It holds no page code and no snapshot logic. The
-// choice is stored under "sections" and "plain_mode" in burnmon-dev-view.json,
-// next to the light or dark theme.
+// BurnMon Dev is built from, and which of them each mode shows. There are two
+// modes, Standard and Plain, one switch for the mode and one list of section
+// switches per mode. It holds no page code and no snapshot logic. The choice
+// is stored in burnmon-dev-view.json, next to the light or dark theme.
 package sections
 
 import (
@@ -25,121 +25,118 @@ const (
 // IDs lists every section in display order.
 var IDs = []string{Waits, Outcomes, Burn, AgentsMap, Sessions, Processes, Git}
 
-// State is the switches. Plain Mode here means plain-word labels and short
-// explanations written into the page. It makes no model call.
+// Mode names.
+const (
+	ModeStandard = "standard"
+	ModePlain    = "plain"
+)
+
+// State is the mode and one list of switches per mode. Plain Mode means plain
+// words, a page that fits the window, and the Plain list. It makes no model
+// call. The key "plain_mode" keeps the name the first R8 cut gave it.
 type State struct {
-	Sections map[string]bool `json:"sections"`
 	Plain    bool            `json:"plain_mode"`
+	Standard map[string]bool `json:"sections_standard"`
+	PlainSet map[string]bool `json:"sections_plain"`
 }
 
-func build(on map[string]bool, plain bool) State {
+func listOf(on func(id string) bool) map[string]bool {
 	m := make(map[string]bool, len(IDs))
 	for _, id := range IDs {
-		m[id] = on[id]
+		m[id] = on(id)
 	}
-	return State{Sections: m, Plain: plain}
+	return m
 }
 
-// Developer is every section on and Plain Mode off. It is also what a missing
-// or unreadable view file means, so BurnMon Dev looks as it did before R8.
-func Developer() State {
-	on := map[string]bool{}
-	for _, id := range IDs {
-		on[id] = true
+// Default is Standard with every section on. Plain starts with Processes and
+// Git off. That Plain set is a placeholder until Wilco decides what Plain shows.
+func Default() State {
+	return State{
+		Standard: listOf(func(string) bool { return true }),
+		PlainSet: listOf(func(id string) bool { return id != Processes && id != Git }),
 	}
-	return build(on, false)
 }
 
-// Simple drops Processes and Git and turns Plain Mode on.
-func Simple() State {
-	on := map[string]bool{}
-	for _, id := range IDs {
-		on[id] = id != Processes && id != Git
+// Mode is "plain" or "standard".
+func (s State) Mode() string {
+	if s.Plain {
+		return ModePlain
 	}
-	return build(on, true)
+	return ModeStandard
 }
 
-// On reports whether a section is switched on. An unknown id is off.
-func (s State) On(id string) bool { return s.Sections[id] }
+func (s State) list(mode string) map[string]bool {
+	switch mode {
+	case ModeStandard:
+		return s.Standard
+	case ModePlain:
+		return s.PlainSet
+	}
+	return nil
+}
 
-// With returns a copy with one section switched. An unknown id changes nothing.
-func (s State) With(id string, on bool) State {
+// OnIn reports whether a section is on in the given mode. Unknown is off.
+func (s State) OnIn(mode, id string) bool { return s.list(mode)[id] }
+
+// On reports whether a section is on in the current mode.
+func (s State) On(id string) bool { return s.OnIn(s.Mode(), id) }
+
+// Current is the switch list of the current mode.
+func (s State) Current() map[string]bool { return s.list(s.Mode()) }
+
+// With returns a copy with one section switched in one mode. An unknown mode
+// or section changes nothing.
+func (s State) With(mode, id string, on bool) State {
 	out := s.Normalize()
-	if _, ok := out.Sections[id]; ok {
-		out.Sections[id] = on
+	if l := out.list(mode); l != nil {
+		if _, ok := l[id]; ok {
+			l[id] = on
+		}
 	}
 	return out
 }
 
-// WithPlain returns a copy with Plain Mode switched.
+// WithPlain returns a copy with the mode switched.
 func (s State) WithPlain(plain bool) State {
 	out := s.Normalize()
 	out.Plain = plain
 	return out
 }
 
-// Normalize returns a copy with exactly the known sections: unknown ids are
-// dropped, a section missing from a saved file is on.
+// Normalize returns a copy with exactly the known sections in each list:
+// unknown ids are dropped, and one missing from a saved file takes its
+// default (on in Standard, the placeholder set in Plain).
 func (s State) Normalize() State {
-	m := make(map[string]bool, len(IDs))
-	for _, id := range IDs {
-		v, ok := s.Sections[id]
-		m[id] = v || !ok
+	d := Default()
+	pick := func(saved, def map[string]bool) map[string]bool {
+		return listOf(func(id string) bool {
+			if v, ok := saved[id]; ok {
+				return v
+			}
+			return def[id]
+		})
 	}
-	return State{Sections: m, Plain: s.Plain}
+	return State{Plain: s.Plain, Standard: pick(s.Standard, d.Standard), PlainSet: pick(s.PlainSet, d.PlainSet)}
 }
 
-func (s State) equal(o State) bool {
-	s, o = s.Normalize(), o.Normalize()
-	if s.Plain != o.Plain {
-		return false
-	}
-	for _, id := range IDs {
-		if s.Sections[id] != o.Sections[id] {
-			return false
-		}
-	}
-	return true
-}
-
-// PresetName is "simple" or "developer" when the switches match a preset
-// exactly, otherwise "custom". It is derived, never stored, so it cannot
-// disagree with the switches.
-func (s State) PresetName() string {
-	switch {
-	case s.equal(Simple()):
-		return "simple"
-	case s.equal(Developer()):
-		return "developer"
-	}
-	return "custom"
-}
-
-type file struct {
-	Sections map[string]bool `json:"sections"`
-	Plain    *bool           `json:"plain_mode"`
-}
-
-// Load reads the sections from the view file at path. A missing, unparsable
-// or incomplete file gives Developer, or Developer's values for what is missing.
+// Load reads the state from the view file at path. A missing or unparsable
+// file gives Default. A file from the first R8 cut keeps its mode and takes
+// the defaults for both lists, since its single list belonged to no mode.
 func Load(path string) State {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return Developer()
+		return Default()
 	}
-	var f file
-	if json.Unmarshal(b, &f) != nil || f.Sections == nil {
-		return Developer()
-	}
-	st := State{Sections: f.Sections}
-	if f.Plain != nil {
-		st.Plain = *f.Plain
+	var st State
+	if json.Unmarshal(b, &st) != nil {
+		return Default()
 	}
 	return st.Normalize()
 }
 
-// Save writes the sections into the view file at path and keeps every other
-// key in it (the theme). A file that cannot be parsed is replaced.
+// Save writes the state into the view file at path and keeps every other key
+// in it (the theme). The first cut's "sections" key is removed. A file that
+// cannot be parsed is replaced.
 func Save(path string, s State) error {
 	s = s.Normalize()
 	rest := map[string]json.RawMessage{}
@@ -148,11 +145,15 @@ func Save(path string, s State) error {
 			rest = map[string]json.RawMessage{}
 		}
 	}
+	delete(rest, "sections")
 	var err error
-	if rest["sections"], err = json.Marshal(s.Sections); err != nil {
+	if rest["plain_mode"], err = json.Marshal(s.Plain); err != nil {
 		return err
 	}
-	if rest["plain_mode"], err = json.Marshal(s.Plain); err != nil {
+	if rest["sections_standard"], err = json.Marshal(s.Standard); err != nil {
+		return err
+	}
+	if rest["sections_plain"], err = json.Marshal(s.PlainSet); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(rest, "", "  ")
