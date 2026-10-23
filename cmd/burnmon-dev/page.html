@@ -392,6 +392,39 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .secrow{display:flex; gap:10px; justify-content:space-between}
 .secrow b{color:var(--txt)}
 .sechint{color:var(--dim); font-size:11px}
+/* R7 agent map. The overview in the section is static, read-only text; the
+   full map takes the Station's place (same layer) and is static too, so
+   nothing here animates and the Station is closed while it is open. */
+.mapopen{all:unset; box-sizing:border-box; display:flex; flex-direction:column; gap:3px; cursor:pointer; width:100%}
+.mapopen:hover .sechint, .mapopen:focus-visible .sechint{color:var(--amber)}
+.mapopen:focus-visible{outline:1px solid var(--amber)}
+#mapOverlay{position:fixed; inset:0; z-index:1500; display:none; flex-direction:column; background:var(--bg); color:var(--txt); font-size:12px}
+#mapOverlay.on{display:flex}
+body.plain #mapOverlay{font-size:13.5px}
+.maphead{display:flex; align-items:center; gap:14px; padding:8px 12px; border-bottom:1px solid var(--bd); background:var(--panel)}
+.mapttl{font-weight:700; color:var(--strong); font-size:14px}
+.maptabs{display:flex; gap:4px}
+.maptabs button, .mapclose{border:1px solid var(--bd); background:var(--panel2); color:var(--dim); font:inherit; padding:3px 10px; cursor:pointer}
+.maptabs button[aria-pressed="true"]{color:var(--strong); border-color:var(--amber)}
+.maptabs button:hover, .mapclose:hover{border-color:var(--amber)}
+.mapsrc{flex:1 1 auto; color:var(--dim); text-align:right; min-width:0}
+.mapbody{flex:1 1 auto; min-height:0; overflow-y:auto; padding:10px 14px; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+.mapgroup{margin-bottom:14px}
+.maphd{display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; padding:4px 0; border-bottom:1px solid var(--bd); margin-bottom:6px}
+.maphd b{color:var(--strong); font-size:13px}
+.mapkids{margin-left:18px; padding-left:10px; border-left:1px solid var(--bd)}
+.mapnode{margin:3px 0}
+.mapcard{all:unset; box-sizing:border-box; display:inline-flex; flex-wrap:wrap; gap:2px 10px; align-items:baseline; cursor:pointer; padding:3px 8px;
+  border:1px solid var(--bd); background:var(--panel2)}
+.mapcard:hover, .mapcard:focus-visible, .mapcard.sel{border-color:var(--amber)}
+.mapcard.wait{border-left:3px solid var(--amber)}
+.mapname{color:var(--strong); font-weight:600}
+.maptag, .mapstate{color:var(--dim)}
+.mapwait{color:var(--amber)}
+.mapmeta{color:var(--dim); margin:1px 0 0 9px; font-size:11px}
+.mapdetail{margin:2px 0 4px 9px; padding:4px 8px; border:1px solid var(--bd); color:var(--txt)}
+.mapnote{color:var(--dim); margin-top:10px}
+.mapidle summary{cursor:pointer; color:var(--dim)}
 .sesub td:first-child{padding-left:20px}
 /* The Export line: the Plain toggle at the left, the gear and EXPORT at the right. */
 .hdrline{flex:1 1 360px; display:flex; align-items:center; gap:14px; min-width:0}
@@ -560,6 +593,15 @@ body.plain .secpanel .secbody{font-size:13.5px}
   </div>
 </div>
 <div id="stationOverlay"></div>
+<div id="mapOverlay" role="dialog" aria-modal="true" aria-label="Agent map">
+  <div class="maphead">
+    <span class="mapttl" id="mapTitle">Agent map</span>
+    <span class="maptabs" id="mapTabs"></span>
+    <span class="mapsrc" id="mapSrc"></span>
+    <button type="button" id="mapClose" class="mapclose">Close (Esc)</button>
+  </div>
+  <div class="mapbody" id="mapBody"></div>
+</div>
 <!--BM_STATION-->
 <script>
 (function(){
@@ -1766,6 +1808,7 @@ body.plain .secpanel .secbody{font-size:13.5px}
   }
   function openStation(m){
     if(!ensureStation()) return;
+    mapCloseView(); // the map and the Station take the same place, one at a time
     closeStation();
     // The full Station covers an already open turn popup; close it so the
     // first Esc does not close something nobody can see.
@@ -1782,6 +1825,7 @@ body.plain .secpanel .secbody{font-size:13.5px}
     if(k === 'p'){ stationMode === 'full' ? closeStation() : openStation('full'); e.preventDefault(); }
     else if(k === 'o'){ stationMode === 'panel' ? closeStation() : openStation('panel'); e.preventDefault(); }
     else if(k === 'i'){ stationMode === 'iso' ? closeStation() : openStation('iso'); e.preventDefault(); }
+    else if(k === 'm'){ mapOpen ? mapCloseView() : mapOpenView(secAgentMap ? 'live' : '24'); e.preventDefault(); }
     else if(k === 't'){ toggleStationTheme(); e.preventDefault(); }
     else if(k === 'l'){ toggleLightTheme(); e.preventDefault(); }
   });
@@ -1921,6 +1965,10 @@ body.plain .secpanel .secbody{font-size:13.5px}
     var overlay = document.getElementById('turnPopupOverlay');
     if(overlay && !overlay.classList.contains('hidden')){
       closeTurnPopup();
+      return;
+    }
+    if(mapOpen){
+      mapCloseView();
       return;
     }
     if(stationMode){
@@ -3148,6 +3196,7 @@ body.plain .secpanel .secbody{font-size:13.5px}
   };
   var secState = { plain:false, sections:{}, standard:{}, plainSet:{}, order:SEC_ORDER };
   var secReading = { status:'missing', age_seconds:0 };
+  var secAgentMap = null; // the live agent map from the payload; null unless the snapshot is current
   var secLastJSON = '';
   var secLastSig = '';
   var secFrozen = false; // set by the test hook so the poll cannot overwrite what it injected
@@ -3217,10 +3266,34 @@ body.plain .secpanel .secbody{font-size:13.5px}
     if(secState.plain) html += '<div class="sechint">' + esc('This is what the tokens would cost at list price. It is not a bill.') + '</div>';
     return html;
   }
+  // R7: the small, read-only overview of the agent map. One click opens the
+  // full map (mapOpenView below). It draws text only and never animates.
+  function mapCardCount(cards){
+    var n = 0;
+    (cards || []).forEach(function(c){ n += 1 + mapCardCount(c.children); });
+    return n;
+  }
   function secBodyAgents(){
-    return '<div id="secAgentsSlot">' + secStub(secState.plain ?
-      'Not built yet. A picture of which agent started which will appear here.' :
-      'Not built yet. The agent map comes with R7.') + '</div>';
+    var v = secAgentMap, plain = secState.plain, html = '';
+    if(!v){
+      html = '<div class="secstub">' + esc(plain ? 'No current numbers. Open the map to look at the last 24 hours.' :
+        'No current snapshot. Open the map for the last 24 hours.') + '</div>';
+    } else {
+      var c = v.counts || {};
+      function n(k, one, many){ return '<b>' + k + '</b> ' + esc(k === 1 ? one : many); }
+      html = '<div>' + n(c.sessions || 0, 'session', 'sessions') + ', ' + n(c.subagents || 0, plain ? 'helper' : 'subagent', plain ? 'helpers' : 'subagents') +
+        ', <b>' + (c.waiting || 0) + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') + '</div>';
+      var groups = v.groups || [];
+      groups.slice(0, 3).forEach(function(g){
+        html += '<div class="secrow"><span><b>' + esc(g.label) + '</b>' + (g.status ? ' <span class="dim">' + esc(g.status) + '</span>' : '') + '</span>' +
+          '<span>' + mapCardCount(g.cards) + (mapCardCount(g.cards) === 1 ? ' agent' : ' agents') + '</span></div>';
+      });
+      if(groups.length > 3) html += '<div class="dim">' + (groups.length - 3) + ' more</div>';
+      if(!groups.length) html += '<div class="dim">' + esc(plain ? 'Nothing is running.' : 'No running sessions.') + '</div>';
+      if((v.idle || []).length) html += '<div class="dim">' + v.idle.length + ' ' + esc(plain ? 'jobs with no running session' : 'sprints or flows with no session') + '</div>';
+    }
+    return '<button type="button" class="mapopen" id="secAgentsSlot" data-act="open-map" data-src="' + (v ? 'live' : '24') + '">' + html +
+      '<span class="sechint">' + esc(plain ? 'Click to open the full map (M)' : 'Open the full map (M)') + '</span></button>';
   }
   function secBodyGit(){
     return secStub(secState.plain ?
@@ -3393,7 +3466,9 @@ body.plain .secpanel .secbody{font-size:13.5px}
     secState = { plain:!!p.plain_mode, sections:p.sections || {}, standard:p.sections_standard || {},
       plainSet:p.sections_plain || {}, order:p.order || SEC_ORDER };
     secReading = p.reading || { status:'missing', age_seconds:0 };
+    secAgentMap = p.agent_map || null;
     secRender();
+    if(mapOpen && mapSource === 'live') mapRender();
   }
   function secPoll(){
     if(typeof window.bdevSections !== 'function' || document.hidden || secFrozen) return Promise.resolve();
@@ -3439,6 +3514,172 @@ body.plain .secpanel .secbody{font-size:13.5px}
       e.stopImmediatePropagation();
     }
   }, true);
+  // ---- R7 agent map: the full view, in the Station's place ---------------
+  // Opened by a click on the section's overview or by M. It draws the groups
+  // and cards that internal/agentmap built from nodes[] and edges[] (live from
+  // the snapshot, or a past window from the store through bdevAgentMapHistory).
+  // A card click opens the latest turn in the same compact card the Station
+  // uses; that is where the interaction starts. The Station is closed while
+  // this is open, and this view has no animation, so only one of the two ever
+  // costs anything.
+  var mapOpen = false, mapSource = 'live', mapHist = null, mapHistErr = '', mapHistToken = 0, mapSel = '';
+  var MAP_TABS = [['live', 'Live now'], ['24', 'Last 24 hours'], ['168', 'Last 7 days']];
+
+  // session:<vendor>:<id> to the id the turn popup knows.
+  function mapSid(nodeId){
+    var s = String(nodeId || '').replace(/^session:/, ''), i = s.indexOf(':');
+    return i < 0 ? s : s.slice(i + 1);
+  }
+  function mapWho(c){ return c.subagent ? (c.agent_type || c.label || 'helper') : (c.label || c.agent || 'session'); }
+
+  function mapCardHTML(c){
+    var plain = secState.plain, sel = mapSel === c.id;
+    var h = '<div class="mapnode"><button type="button" class="mapcard' + (c.waits_on_you ? ' wait' : '') + (sel ? ' sel' : '') +
+      '" data-node="' + esc(c.id) + '" aria-expanded="' + (sel ? 'true' : 'false') + '"><span class="mapname">' + esc(mapWho(c)) + '</span>';
+    if(c.subagent) h += '<span class="maptag">' + esc(plain ? 'helper' : 'subagent') + '</span>';
+    if(c.agent) h += '<span class="maptag">' + esc(c.agent) + (c.model ? ', ' + esc(c.model) : '') + '</span>';
+    if(c.state) h += '<span class="mapstate">' + esc(secWord(c.state)) + '</span>';
+    if(c.waits_on_you) h += '<span class="mapwait">' + esc(plain ? 'waiting for you' : 'waits on you') + '</span>';
+    h += '</button>';
+    var meta = [];
+    if(c.repo) meta.push((plain ? 'project ' : 'repo ') + c.repo);
+    if(c.branch) meta.push('branch ' + c.branch);
+    (c.mcp || []).forEach(function(m){
+      meta.push((plain ? 'tool server ' : 'MCP ') + m.name + ((m.ports || []).length ? ' (port ' + m.ports.join(', ') + ')' : ''));
+    });
+    meta.push((mapSource === 'live' ? 'last active ' : 'last seen ') + secDur(c.age_seconds) + ' ago');
+    h += '<div class="mapmeta">' + esc(meta.join(' - ')) + '</div>';
+    if(sel){
+      h += '<div class="mapdetail">' + esc(plain ? 'No turn details for this one. They are only kept for sessions that are running now.' :
+        'No turn detail for this card: only live sessions carry it.') + '</div>';
+    }
+    if((c.children || []).length) h += '<div class="mapkids">' + c.children.map(mapCardHTML).join('') + '</div>';
+    return h + '</div>';
+  }
+
+  function mapGroupHTML(g){
+    var plain = secState.plain, head = '<div class="maphd"><b>' + esc(g.label) + '</b>';
+    if(g.kind !== 'none') head += '<span class="dim">' + esc(plain ? 'Foreman job' : g.kind) + '</span>';
+    if(g.status) head += '<span class="dim">' + esc(g.status) + '</span>';
+    if(g.phase) head += '<span class="dim">' + esc(g.phase) + '</span>';
+    if(g.gate) head += '<span class="dim">gate ' + esc(g.gate) + '</span>';
+    if(g.waits_on_you) head += '<span class="mapwait">' + esc(plain ? 'waiting for you' : 'waits on you') + '</span>';
+    var basis = (g.cards || []).some(function(c){ return c.basis === 'inferred'; });
+    if(basis) head += '<span class="dim" title="' + esc(plain ? 'BurnMon matched the folders itself. The tool did not say so.' :
+      'Linked by BurnMon from the session folder, not stated by the tool.') + '">' + esc(plain ? 'link guessed' : 'link inferred') + '</span>';
+    return '<div class="mapgroup">' + head + '</div>' + (g.cards || []).map(mapCardHTML).join('') + '</div>';
+  }
+
+  function mapRender(){
+    var body = document.getElementById('mapBody');
+    if(!mapOpen || !body) return;
+    var plain = secState.plain, v = null, src = '', empty = '';
+    document.getElementById('mapTitle').textContent = secTitle('agents_map');
+    document.getElementById('mapTabs').innerHTML = MAP_TABS.map(function(t){
+      return '<button type="button" data-src="' + t[0] + '" aria-pressed="' + (mapSource === t[0] ? 'true' : 'false') + '">' + esc(t[1]) + '</button>';
+    }).join('');
+    if(mapSource === 'live'){
+      v = secAgentMap;
+      src = secHeadline(secReading).text;
+      if(!v) empty = plain ? 'BurnMon is not running, so there is no live picture. Pick a past window.' : 'No current snapshot. Pick a past window.';
+    } else if(mapHistErr){
+      empty = mapHistErr;
+    } else if(!mapHist){
+      empty = 'Reading the store...';
+    } else {
+      v = mapHist.view;
+      src = 'From the store, last ' + mapHist.hours + ' h' + (mapHist.note ? '. ' + mapHist.note : '');
+    }
+    document.getElementById('mapSrc').textContent = src;
+    var html = '';
+    if(!v){
+      html = '<div class="secstub">' + esc(empty) + '</div>';
+    } else {
+      if(!(v.groups || []).length) html += '<div class="secstub">' + esc(plain ? 'No agents in this window.' : 'No sessions in this window.') + '</div>';
+      (v.groups || []).forEach(function(g){ html += mapGroupHTML(g); });
+      if((v.idle || []).length){
+        html += '<details class="mapidle"><summary>' + v.idle.length + ' ' + esc(plain ? 'Foreman jobs with no running session' : 'sprints and flows with no session') + '</summary>';
+        v.idle.forEach(function(i){
+          html += '<div class="mapmeta">' + esc(i.label) + ' - ' + esc(i.kind) + (i.status ? ', ' + esc(i.status) : '') +
+            (i.waits_on_you ? ', ' + esc(plain ? 'waiting for you' : 'waits on you') : '') + ', ' + esc(secDur(i.age_seconds)) + ' old</div>';
+        });
+        html += '</details>';
+      }
+      (v.notes || []).forEach(function(n){ html += '<div class="mapnote">' + esc(n) + '</div>'; });
+    }
+    var top = body.scrollTop;
+    body.innerHTML = html;
+    body.scrollTop = top;
+  }
+
+  function mapLoadHistory(hours){
+    var token = ++mapHistToken;
+    mapHist = null; mapHistErr = '';
+    if(typeof window.bdevAgentMapHistory !== 'function'){
+      mapHistErr = 'History is only available in the BurnMon app window.';
+      mapRender();
+      return;
+    }
+    mapRender();
+    window.bdevAgentMapHistory(hours).then(function(p){
+      if(token !== mapHistToken) return;
+      mapHist = p; mapRender();
+    }).catch(function(e){
+      if(token !== mapHistToken) return;
+      mapHistErr = 'Could not read the store: ' + (e && e.message ? e.message : String(e));
+      mapRender();
+    });
+  }
+
+  function mapOpenView(src){
+    if(stationMode) closeStation();
+    closeTurnPopup();
+    mapOpen = true;
+    mapSel = '';
+    document.getElementById('mapOverlay').classList.add('on');
+    mapChoose(src || 'live');
+    var c = document.getElementById('mapClose');
+    if(c) c.focus();
+  }
+  function mapCloseView(){
+    if(!mapOpen) return;
+    mapOpen = false;
+    mapHistToken++;
+    document.getElementById('mapOverlay').classList.remove('on');
+  }
+  function mapChoose(src){
+    mapSource = src;
+    mapSel = '';
+    if(src === 'live') mapRender(); else mapLoadHistory(parseInt(src, 10));
+  }
+
+  var mapOverlayEl = document.getElementById('mapOverlay');
+  document.getElementById('mapClose').addEventListener('click', mapCloseView);
+  document.getElementById('mapTabs').addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('button[data-src]') : null;
+    if(b) mapChoose(b.getAttribute('data-src'));
+  });
+  mapOverlayEl.addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('.mapcard') : null;
+    if(!b) return;
+    var id = b.getAttribute('data-node'), sid = mapSid(id);
+    var turn = mapSource === 'live' ? stationTurnCount(sid) : 0;
+    if(turn){
+      cardAnchor = {x: e.clientX, y: e.clientY};
+      document.getElementById('turnPopupOverlay').classList.add('over-station');
+      openTurnPopup(sid, turn);
+      return;
+    }
+    mapSel = mapSel === id ? '' : id;
+    mapRender();
+  });
+  document.getElementById('secPanels').addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('.mapopen') : null;
+    if(b) mapOpenView(b.getAttribute('data-src'));
+  });
+  window.__bdevMap = { open: mapOpenView, close: mapCloseView, choose: mapChoose, isOpen: function(){ return mapOpen; },
+    setHistory: function(p){ mapSource = '24'; mapHist = p; mapHistErr = ''; mapRender(); } }; // tools\uicheck only
+
   // The page can be driven without Go (uicheck d29 feeds the frozen example).
   window.__bdevSections = { apply: function(p){ secFrozen = true; secApplyPayload(p); }, state: function(){ return secState; } };
   secPoll();

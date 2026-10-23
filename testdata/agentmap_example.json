@@ -1,0 +1,64 @@
+{
+  "groups": [
+    {
+      "id": "sprint:example__sprint__1",
+      "kind": "sprint",
+      "label": "sprint-example",
+      "status": "running",
+      "phase": "build",
+      "waits_on_you": false,
+      "age_seconds": 60,
+      "cards": [
+        {
+          "id": "session:anthropic:example-parent",
+          "label": "project",
+          "vendor": "anthropic",
+          "agent": "claude-code",
+          "state": "coding",
+          "subagent": false,
+          "waits_on_you": false,
+          "basis": "inferred",
+          "repo": "project",
+          "worktree": "sprint-example",
+          "branch": "sprint/example",
+          "mcp": [
+            {
+              "name": "example-server",
+              "ports": [
+                "8765"
+              ]
+            }
+          ],
+          "age_seconds": 20,
+          "children": [
+            {
+              "id": "session:anthropic:example-sub",
+              "label": "Explore",
+              "vendor": "anthropic",
+              "agent": "claude-code",
+              "agent_type": "Explore",
+              "model": "sonnet",
+              "state": "waiting",
+              "subagent": true,
+              "waits_on_you": true,
+              "mcp": [],
+              "age_seconds": 5,
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "idle": [],
+  "counts": {
+    "sessions": 1,
+    "subagents": 1,
+    "waiting": 1,
+    "sprints": 1,
+    "flows": 0
+  },
+  "notes": [
+    "Not shown: messages between agents. No tool's local files record who sent what to whom."
+  ]
+}

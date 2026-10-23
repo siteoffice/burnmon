@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"burnmon/internal/agentmap"
 	"burnmon/internal/sections"
 	"burnmon/internal/snapshot"
 )
@@ -23,6 +24,9 @@ type sectionsPayload struct {
 	Sections map[string]bool  `json:"sections"`
 	Order    []string         `json:"order"`
 	Reading  snapshot.Reading `json:"reading"`
+	// AgentMap is the live map for the Agents map section, nil unless the
+	// snapshot is current. History is a separate call (agentmap_view.go).
+	AgentMap *agentmap.View `json:"agent_map"`
 }
 
 // sectionsChange is what the page sends: the mode toggle (Plain), or one
@@ -44,13 +48,18 @@ func saveSections(dataDir string, s sections.State) error {
 
 func sectionsPayloadFor(dataDir, snapPath string, now time.Time) sectionsPayload {
 	st := loadSections(dataDir)
-	return sectionsPayload{
+	p := sectionsPayload{
 		State:    st,
 		Mode:     st.Mode(),
 		Sections: st.Current(),
 		Order:    sections.IDs,
 		Reading:  snapshot.Load(snapPath, now),
 	}
+	if p.Reading.Status == snapshot.StatusOK && p.Reading.Snapshot != nil {
+		v := agentmap.Build(p.Reading.Snapshot.Nodes, p.Reading.Snapshot.Edges)
+		p.AgentMap = &v
+	}
+	return p
 }
 
 // applySectionsChange validates a change from the page and saves it. A change
