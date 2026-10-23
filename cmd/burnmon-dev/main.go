@@ -34,6 +34,7 @@ import (
 	"burnmon/internal/history"
 	"burnmon/internal/live"
 	"burnmon/internal/scan"
+	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
 	"burnmon/internal/todo"
@@ -344,6 +345,28 @@ func main() {
 		}
 	}); err != nil {
 		log.Println("could not bind bdevSetUITheme:", err)
+	}
+
+	// bdevSections (R8): the section switches, the preset they make, and the
+	// newest snapshot reading. bdevSetSections saves one change from the page
+	// (a preset, one switch, or Plain Mode). Both read and write files only.
+	snapPath, snapPathErr := snapshot.DefaultPath()
+	if snapPathErr != nil {
+		log.Println("snapshot path:", snapPathErr)
+	}
+	if err := w.Bind("bdevSections", func() sectionsPayload {
+		return sectionsPayloadFor(dataDir, snapPath, time.Now())
+	}); err != nil {
+		log.Println("could not bind bdevSections:", err)
+	}
+	if err := w.Bind("bdevSetSections", func(c sectionsChange) error {
+		err := applySectionsChange(dataDir, c)
+		if err != nil {
+			log.Println("bdevSetSections:", err)
+		}
+		return err
+	}); err != nil {
+		log.Println("could not bind bdevSetSections:", err)
 	}
 
 	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon

@@ -1,7 +1,7 @@
 //go:build windows
 
 // viewstate.go remembers the one view preference the page has: light or dark
-// (the L key). It lives in burnmon-dev-view.json next to burnmon-dev.db and
+// (the L key); sections_view.go keeps the section switches in the same file. It lives in burnmon-dev-view.json next to burnmon-dev.db and
 // is written by the app, never by hand and never into burnmon-dev.json, which
 // is the user's own config and is never rewritten. The page is loaded with
 // NavigateToString, whose origin is opaque, so localStorage cannot hold it.
@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type viewState struct {
@@ -41,7 +42,15 @@ func saveUITheme(dataDir, theme string) error {
 	if theme != "light" && theme != "dark" {
 		return fmt.Errorf("ui theme %q is not light or dark", theme)
 	}
-	b, err := json.MarshalIndent(viewState{UITheme: theme}, "", "  ")
+	// The file also holds the sections choice (sections_view.go); keep it.
+	rest := map[string]json.RawMessage{}
+	if b, err := os.ReadFile(viewStatePath(dataDir)); err == nil {
+		if json.Unmarshal(b, &rest) != nil || rest == nil {
+			rest = map[string]json.RawMessage{}
+		}
+	}
+	rest["ui_theme"] = json.RawMessage(strconv.Quote(theme))
+	b, err := json.MarshalIndent(rest, "", "  ")
 	if err != nil {
 		return err
 	}

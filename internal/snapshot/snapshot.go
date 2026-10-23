@@ -286,3 +286,50 @@ func Read(path string) (Snapshot, error) {
 	}
 	return s, nil
 }
+
+// Reading status values, as the page sees them.
+const (
+	StatusOK          = "ok"
+	StatusStale       = "stale"
+	StatusMissing     = "missing"
+	StatusUnreadable  = "unreadable"
+	StatusUnsupported = "unsupported_version"
+)
+
+// Reading is what a reader gets back from Load: the file's state, its age,
+// and the snapshot only when it is fresh and a version this code understands.
+type Reading struct {
+	Status     string    `json:"status"`
+	AgeSeconds int64     `json:"age_seconds"` // seconds since written_at; 0 when unknown
+	Error      string    `json:"error,omitempty"`
+	Snapshot   *Snapshot `json:"snapshot,omitempty"`
+}
+
+// Load reads the snapshot file at path and judges it at now. A stale file
+// means BurnMon is not running, so its numbers are withheld rather than shown
+// as current. Load never returns an error: every fault is a Status.
+func Load(path string, now time.Time) Reading {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return Reading{Status: StatusMissing}
+	}
+	if err != nil {
+		return Reading{Status: StatusUnreadable, Error: err.Error()}
+	}
+	var s Snapshot
+	if err := json.Unmarshal(b, &s); err != nil {
+		return Reading{Status: StatusUnreadable, Error: err.Error()}
+	}
+	if s.SchemaVersion != SchemaVersion {
+		return Reading{Status: StatusUnsupported}
+	}
+	at, err := time.Parse(time.RFC3339, s.WrittenAt)
+	if err != nil {
+		return Reading{Status: StatusUnreadable, Error: "written_at: " + err.Error()}
+	}
+	age := ageSeconds(now, at)
+	if s.IsStale(now) {
+		return Reading{Status: StatusStale, AgeSeconds: age}
+	}
+	return Reading{Status: StatusOK, AgeSeconds: age, Snapshot: &s}
+}
