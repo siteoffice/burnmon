@@ -1036,6 +1036,76 @@ WHERE vendor = 'openai' AND agent = 'codex' AND request_id = session_id || ':0'`
 	return events, cursors, nil
 }
 
+// BackfillClaudeParents sets parent_id on Claude subagent rows ingested
+// before the adapter read it (R6). A subagent's trail sits at
+// <parent>\subagents\agent-<id>.jsonl, so the cursor path names the parent;
+// a row whose trail has no cursor left is not touched. With apply false it
+// only counts the rows it would update. Returns the row count.
+func (s *Store) BackfillClaudeParents(apply bool) (int, error) {
+	rows, err := s.db.Query(`SELECT path FROM cursors`)
+	if err != nil {
+		return 0, fmt.Errorf("store: list cursor paths: %w", err)
+	}
+	parentOf := map[string]string{}
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		sid := sessionIDFromPath(p)
+		dir := filepath.Dir(p)
+		if strings.HasPrefix(sid, "agent-") && filepath.Base(dir) == "subagents" {
+			parentOf[sid] = filepath.Base(filepath.Dir(dir))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	rows.Close()
+	if len(parentOf) == 0 {
+		return 0, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	count, err := tx.Prepare(`SELECT COUNT(*) FROM events WHERE vendor = 'anthropic' AND session_id = ? AND parent_id = ''`)
+	if err != nil {
+		return 0, err
+	}
+	defer count.Close()
+	update, err := tx.Prepare(`UPDATE events SET parent_id = ? WHERE vendor = 'anthropic' AND session_id = ? AND parent_id = ''`)
+	if err != nil {
+		return 0, err
+	}
+	defer update.Close()
+	total := 0
+	for sid, parent := range parentOf {
+		if !apply {
+			var n int
+			if err := count.QueryRow(sid).Scan(&n); err != nil {
+				return 0, fmt.Errorf("store: count %s: %w", sid, err)
+			}
+			total += n
+			continue
+		}
+		res, err := update.Exec(parent, sid)
+		if err != nil {
+			return 0, fmt.Errorf("store: backfill parent of %s: %w", sid, err)
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+	}
+	if !apply {
+		return total, nil
+	}
+	return total, tx.Commit()
+}
+
 // sessionIDFromPath mirrors the claude adapter's own session id derivation
 // (the transcript file's base name, extension stripped).
 func sessionIDFromPath(path string) string {

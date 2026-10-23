@@ -13,12 +13,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"burnmon/internal/graph"
 	"burnmon/internal/live"
 	"burnmon/internal/sysmon"
 )
 
 // SchemaVersion is bumped on any change a reader could trip over. Version 1
-// is frozen at the end of R4; R6 adds nodes and edges as new fields only.
+// is frozen at the end of R4; R6 added nodes and edges as new fields only.
 const SchemaVersion = 1
 
 // CostLabel is the plain label every cost carries: the figure is what the
@@ -111,6 +112,10 @@ type Snapshot struct {
 	Burn          Burn      `json:"burn"`
 	Processes     []Process `json:"processes"`
 	WaitsOnYou    []Wait    `json:"waits_on_you"`
+
+	// R6, added to version 1 as new fields only: the live relation graph.
+	Nodes []graph.Node `json:"nodes"`
+	Edges []graph.Edge `json:"edges"`
 }
 
 // Input is everything Build needs, already collected by the caller.
@@ -123,6 +128,7 @@ type Input struct {
 	Live      live.Snapshot
 	Sources   []Source
 	Processes []sysmon.ProcessGroupSample
+	Graph     graph.Graph
 }
 
 func cost(usd, fx float64) Cost {
@@ -149,6 +155,8 @@ func Build(in Input) Snapshot {
 		Sessions:      []Session{},
 		Processes:     []Process{},
 		WaitsOnYou:    []Wait{},
+		Nodes:         append([]graph.Node{}, in.Graph.Nodes...),
+		Edges:         append([]graph.Edge{}, in.Graph.Edges...),
 	}
 
 	var walk func(ls *live.Session, parent string)

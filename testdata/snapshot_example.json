@@ -13,6 +13,31 @@
       "ok": false,
       "read_at": "2026-10-23T10:00:00Z",
       "error": "process list unavailable"
+    },
+    {
+      "name": "claude_pids",
+      "ok": true,
+      "read_at": "2026-10-23T10:00:00Z"
+    },
+    {
+      "name": "foreman",
+      "ok": true,
+      "read_at": "2026-10-23T10:00:00Z"
+    },
+    {
+      "name": "mcp_config",
+      "ok": true,
+      "read_at": "2026-10-23T10:00:00Z"
+    },
+    {
+      "name": "net_tables",
+      "ok": true,
+      "read_at": "2026-10-23T10:00:00Z"
+    },
+    {
+      "name": "git",
+      "ok": true,
+      "read_at": "2026-10-23T10:00:00Z"
     }
   ],
   "sessions": [
@@ -83,6 +108,286 @@
       "waiting_seconds": 90,
       "source": "store",
       "age_seconds": 5
+    }
+  ],
+  "nodes": [
+    {
+      "id": "device:local",
+      "kind": "device",
+      "label": "This PC",
+      "source": "sysmon",
+      "age_seconds": 0
+    },
+    {
+      "id": "harness:claude",
+      "kind": "harness",
+      "label": "Claude Code",
+      "source": "sysmon",
+      "age_seconds": 0
+    },
+    {
+      "id": "session:anthropic:example-parent",
+      "kind": "session",
+      "label": "project",
+      "vendor": "anthropic",
+      "attrs": {
+        "agent": "claude-code",
+        "state": "coding"
+      },
+      "source": "store",
+      "age_seconds": 20
+    },
+    {
+      "id": "session:anthropic:example-sub",
+      "kind": "subagent",
+      "label": "Explore",
+      "vendor": "anthropic",
+      "attrs": {
+        "agent": "claude-code",
+        "agent_type": "Explore",
+        "model": "sonnet",
+        "state": "waiting"
+      },
+      "source": "store",
+      "age_seconds": 5
+    },
+    {
+      "id": "process:4100:134372210257685063",
+      "kind": "process",
+      "label": "claude.exe",
+      "attrs": {
+        "harness": "claude",
+        "pid": "4100"
+      },
+      "source": "sysmon",
+      "age_seconds": 2
+    },
+    {
+      "id": "process:4200:134372210300000000",
+      "kind": "process",
+      "label": "bash.exe",
+      "attrs": {
+        "harness": "claude",
+        "pid": "4200"
+      },
+      "source": "sysmon",
+      "age_seconds": 2
+    },
+    {
+      "id": "process:4300:134372210257690000",
+      "kind": "process",
+      "label": "node.exe",
+      "attrs": {
+        "harness": "claude",
+        "pid": "4300"
+      },
+      "source": "sysmon",
+      "age_seconds": 2
+    },
+    {
+      "id": "mcp:example-server",
+      "kind": "mcp",
+      "label": "example-server",
+      "source": "mcp_config",
+      "age_seconds": 2
+    },
+    {
+      "id": "port:tcp:8765",
+      "kind": "port",
+      "label": "tcp 8765",
+      "source": "net_tables",
+      "age_seconds": 0
+    },
+    {
+      "id": "sprint:example__sprint__1",
+      "kind": "sprint",
+      "label": "sprint-example",
+      "attrs": {
+        "phase": "build",
+        "status": "running"
+      },
+      "source": "foreman",
+      "age_seconds": 60
+    },
+    {
+      "id": "worktree:c:\\example\\project\\.worktrees\\sprint-example",
+      "kind": "worktree",
+      "label": "sprint-example",
+      "source": "git",
+      "age_seconds": 0
+    },
+    {
+      "id": "repo:c:\\example\\project",
+      "kind": "repo",
+      "label": "project",
+      "source": "git",
+      "age_seconds": 0
+    },
+    {
+      "id": "branch:c:\\example\\project#sprint/example",
+      "kind": "branch",
+      "label": "sprint/example",
+      "source": "git",
+      "age_seconds": 0
+    },
+    {
+      "id": "person:you",
+      "kind": "person",
+      "label": "You",
+      "source": "store",
+      "age_seconds": 0
+    }
+  ],
+  "edges": [
+    {
+      "from": "harness:claude",
+      "to": "device:local",
+      "kind": "runs_on",
+      "basis": "vendor",
+      "source": "store",
+      "age_seconds": 0,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "harness:claude",
+      "kind": "runs_in",
+      "basis": "vendor",
+      "source": "store",
+      "age_seconds": 20,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-sub",
+      "to": "harness:claude",
+      "kind": "runs_in",
+      "basis": "vendor",
+      "source": "store",
+      "age_seconds": 5,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "session:anthropic:example-sub",
+      "kind": "spawned",
+      "basis": "vendor",
+      "source": "store",
+      "age_seconds": 5,
+      "first_seen": "2026-10-23T09:55:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "process:4100:134372210257685063",
+      "kind": "runs_in",
+      "basis": "vendor",
+      "source": "claude_pids",
+      "age_seconds": 1,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "process:4100:134372210257685063",
+      "to": "process:4200:134372210300000000",
+      "kind": "started",
+      "basis": "vendor",
+      "source": "sysmon",
+      "age_seconds": 2,
+      "first_seen": "2026-10-23T09:59:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "process:4100:134372210257685063",
+      "to": "process:4300:134372210257690000",
+      "kind": "started",
+      "basis": "vendor",
+      "source": "sysmon",
+      "age_seconds": 2,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "mcp:example-server",
+      "kind": "uses",
+      "basis": "inferred",
+      "source": "mcp_config",
+      "age_seconds": 2,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "mcp:example-server",
+      "to": "process:4300:134372210257690000",
+      "kind": "runs_as",
+      "basis": "inferred",
+      "source": "mcp_config",
+      "age_seconds": 2,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "process:4300:134372210257690000",
+      "to": "port:tcp:8765",
+      "kind": "listens_on",
+      "basis": "vendor",
+      "source": "net_tables",
+      "age_seconds": 0,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "sprint:example__sprint__1",
+      "kind": "works_for",
+      "basis": "inferred",
+      "source": "foreman",
+      "age_seconds": 60,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "worktree:c:\\example\\project\\.worktrees\\sprint-example",
+      "kind": "touches",
+      "basis": "inferred",
+      "source": "git",
+      "age_seconds": 0,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "branch:c:\\example\\project#sprint/example",
+      "kind": "touches",
+      "basis": "inferred",
+      "source": "git",
+      "age_seconds": 0,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "worktree:c:\\example\\project\\.worktrees\\sprint-example",
+      "to": "repo:c:\\example\\project",
+      "kind": "part_of",
+      "basis": "vendor",
+      "source": "git",
+      "age_seconds": 0,
+      "first_seen": "2026-10-23T09:40:00Z",
+      "last_seen": "2026-10-23T10:00:00Z"
+    },
+    {
+      "from": "session:anthropic:example-sub",
+      "to": "person:you",
+      "kind": "waits_on",
+      "basis": "inferred",
+      "source": "store",
+      "age_seconds": 5,
+      "first_seen": "2026-10-23T09:58:30Z",
+      "last_seen": "2026-10-23T10:00:00Z"
     }
   ]
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"burnmon/internal/graph"
 	"burnmon/internal/live"
 	"burnmon/internal/sysmon"
 )
@@ -124,7 +125,7 @@ func TestEmptyListsEncodeAsArraysNotNull(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"sources", "sessions", "processes", "waits_on_you"} {
+	for _, k := range []string{"sources", "sessions", "processes", "waits_on_you", "nodes", "edges"} {
 		if string(m[k]) != "[]" {
 			t.Fatalf("%s should be [], got %s", k, m[k])
 		}
@@ -190,7 +191,34 @@ func TestFixtureMatchesSchema(t *testing.T) {
 	if len(got.Sessions) == 0 || len(got.Processes) == 0 || len(got.WaitsOnYou) == 0 || len(got.Sources) == 0 {
 		t.Fatalf("fixture should exercise every list: %+v", got)
 	}
+	if len(got.Nodes) == 0 || len(got.Edges) == 0 {
+		t.Fatalf("fixture should carry the R6 graph: %d nodes, %d edges", len(got.Nodes), len(got.Edges))
+	}
+	ids := map[string]bool{}
+	for _, n := range got.Nodes {
+		ids[n.ID] = true
+	}
+	for _, e := range got.Edges {
+		if !ids[e.From] || !ids[e.To] || e.Basis == "" || e.Source == "" {
+			t.Fatalf("fixture edge %+v points outside the graph or lacks basis or source", e)
+		}
+	}
 	if got.Sessions[0].Cost.Label != CostLabel {
 		t.Fatalf("fixture cost label wrong: %q", got.Sessions[0].Cost.Label)
+	}
+}
+
+// R6: the graph goes into the snapshot as nodes[] and edges[], unchanged.
+func TestBuildCarriesGraph(t *testing.T) {
+	g := graph.Graph{
+		Nodes: []graph.Node{{ID: "device:local", Kind: "device", Label: "This PC", Source: "sysmon"}, {ID: "harness:claude", Kind: "harness", Label: "Claude Code", Source: "sysmon"}},
+		Edges: []graph.Edge{{From: "harness:claude", To: "device:local", Kind: "runs_on", Basis: "vendor", Source: "store", FirstSeen: "x", LastSeen: "y"}},
+	}
+	s := Build(Input{Now: t0, TickSeconds: 5, Graph: g})
+	if len(s.Nodes) != 2 || len(s.Edges) != 1 || s.Edges[0].Kind != "runs_on" {
+		t.Fatalf("graph not carried: %+v %+v", s.Nodes, s.Edges)
+	}
+	if s.SchemaVersion != 1 {
+		t.Fatalf("the graph is additive; schema_version must stay 1, got %d", s.SchemaVersion)
 	}
 }

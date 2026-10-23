@@ -47,6 +47,9 @@ func NewProcessSampler() *ProcessSampler {
 // process groups panel only ever shows named harnesses (design doc
 // section 4). The first call after NewProcessSampler has zero IO rates,
 // since a rate needs two points.
+// Procs is Windows only for now (the R6 relation graph); here it is empty.
+func (ps *ProcessSampler) Procs() ([]ProcRow, time.Time) { return nil, time.Time{} }
+
 func (ps *ProcessSampler) Tick(copilotVSCodeConfigured bool) ([]ProcessGroupSample, error) {
 	procs, err := process.Processes()
 	if err != nil {

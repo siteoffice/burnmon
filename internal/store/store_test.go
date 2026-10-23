@@ -289,8 +289,8 @@ func TestFreshStoreAtHeadVersion(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version: %v", err)
 	}
-	if version != 7 {
-		t.Fatalf("schema_version = %d, want 7", version)
+	if version != 8 {
+		t.Fatalf("schema_version = %d, want 8", version)
 	}
 }
 
@@ -517,8 +517,8 @@ func TestMigrateRealV01Store(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version after migrate: %v", err)
 	}
-	if version != 7 {
-		t.Fatalf("schema_version after migrate = %d, want 7", version)
+	if version != 8 {
+		t.Fatalf("schema_version after migrate = %d, want 8", version)
 	}
 
 	got, err := st.AllEvents()

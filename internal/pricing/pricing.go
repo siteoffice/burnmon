@@ -235,6 +235,12 @@ type Config struct {
 	// default) means the adapter is off: no VS Code settings configured, no
 	// file to poll.
 	CopilotVSCodeOtelFile string `json:"copilot_vscode_otel_file,omitempty"`
+
+	// ForemanRoot is the folder that holds Foreman's flows and sprints
+	// folders, for the relation graph's works-for and gate links (R6).
+	// Empty (the default) means no Foreman: the graph has no Foreman links
+	// and the snapshot lists no foreman source.
+	ForemanRoot string `json:"foreman_root,omitempty"`
 }
 
 // DefaultClaudeCodeCacheTTLMinutes is the compiled-in cache-lifetime

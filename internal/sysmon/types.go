@@ -77,6 +77,17 @@ type ProcessGroupSample struct {
 	IOBps   float64
 }
 
+// ProcRow is one process from the last ProcessSampler.Tick, for the R6
+// relation graph. Cmdline is for matching only; it can hold secrets and must
+// not be written anywhere.
+type ProcRow struct {
+	PID, PPID  int32
+	Name       string
+	Cmdline    string
+	CreateTime int64 // FILETIME, the process identity together with PID
+	Harness    Harness
+}
+
 // TickTiming is how long each phase of one Sampler.Tick took (WS2 alpha.7
 // item 2's slow-pass log). The drive and wifi refresh runs on its own
 // goroutine (runSlowRefresh), so it has no phase here.
