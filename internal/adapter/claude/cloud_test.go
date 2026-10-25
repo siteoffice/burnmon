@@ -65,7 +65,8 @@ func TestParseCloudDrop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 3 || events[0].SessionID != "1afdc570-0ca2" || events[0].RequestID != "req_C" {
-		t.Fatalf("after rewrite got %d events, first %+v; want 3 starting with req_C", len(events), events[0])
+	// req_C is a subagent row (agent-a1): its own session under its parent.
+	if len(events) != 3 || events[0].SessionID != "agent-a1" || events[0].ParentID != "1afdc570-0ca2" || events[0].RequestID != "req_C" {
+		t.Fatalf("after rewrite got %d events, first %+v; want 3 starting with req_C as agent-a1 under 1afdc570-0ca2", len(events), events[0])
 	}
 }
