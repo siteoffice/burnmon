@@ -3,6 +3,7 @@ package graph
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -198,4 +199,97 @@ func TestReadForemanRealRoot(t *testing.T) {
 		t.Logf("sprint %s status %s worktree %q main %q log entries %d", s.ID, s.Status, s.WorktreePath, sprintMainRepo(s.WorktreePath), len(s.LogTimes))
 	}
 	t.Logf("%d sprints, %d flows", len(sprints), len(flows))
+}
+
+func TestReadForemanResultsAndPaths(t *testing.T) {
+	root := t.TempDir()
+	wdir := filepath.Join(root, "sprints", "p", "waiting")
+	write(t, filepath.Join(wdir, "sprint.json"), `{"sprint_id":"p__waiting__1","slug":"waiting","project":"example","status":"waiting-on-you","updated_at":"2026-10-23T09:10:00Z","spec_path":"C:\\example\\specs\\w.md","tasks":[{"n":1,"title":"one","state":"done"},{"n":2,"title":"two","state":"parked"}],"last_verify_result":{"outcome":"fail","summary":"verify broke","at":"2026-10-23T09:00:00Z"}}`)
+	write(t, filepath.Join(wdir, "report.md"), "# report\n")
+	write(t, filepath.Join(wdir, "action-log.ndjson"), `{"ts":"2026-10-23T09:30:00Z","action":"task_parked","task":2,"detail":"needs a key"}`+"\n")
+	ddir := filepath.Join(root, "sprints", "p", "done")
+	write(t, filepath.Join(ddir, "sprint.json"), `{"sprint_id":"p__done__1","slug":"done","phase":"done","status":"passing","updated_at":"2026-10-23T09:20:00Z","report_path":"C:\\example\\r.md","last_test_result":{"exit_code":0,"summary":"ok","at":"2026-10-23T09:15:00Z"}}`)
+	write(t, filepath.Join(root, "flows", "p", "open", "flow.json"), `{"flow_id":"f-open","slug":"open","project":"example","status":"awaiting-owner","spec_path":"C:\\example\\specs\\f.md","gate":{"id":"G4","status":"awaiting-owner","opened_at":"2026-10-23T08:00:00Z"},"updated_at":"2026-10-23T09:00:00Z"}`)
+	write(t, filepath.Join(root, "flows", "p", "decided", "flow.json"), `{"flow_id":"f-dec","slug":"decided","gate":{"id":"G2","status":"decided"}}`)
+	sprints, flows, err := ReadForeman(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w, d Sprint
+	for _, s := range sprints {
+		switch s.ID {
+		case "p__waiting__1":
+			w = s
+		case "p__done__1":
+			d = s
+		}
+	}
+	if w.Project != "example" || w.SpecPath != `C:\example\specs\w.md` || w.Dir != wdir || w.ResultPath != filepath.Join(wdir, "report.md") {
+		t.Errorf("waiting sprint = %+v", w)
+	}
+	at := time.Date(2026, 10, 23, 9, 30, 0, 0, time.UTC)
+	if len(w.Parked) != 1 || w.Parked[0].N != 2 || w.Parked[0].Title != "two" || w.Parked[0].Reason != "needs a key" || !w.Parked[0].At.Equal(at) {
+		t.Errorf("parked = %+v", w.Parked)
+	}
+	if !w.LastParkedAt.Equal(at) {
+		t.Errorf("LastParkedAt = %v", w.LastParkedAt)
+	}
+	if w.Verify == nil || !w.Verify.Failed || w.Verify.Label != "verify fail" || w.Verify.Summary != "verify broke" || w.Test != nil {
+		t.Errorf("checks = %+v %+v", w.Verify, w.Test)
+	}
+	if d.ResultPath != `C:\example\r.md` || d.Test == nil || d.Test.Failed || d.Test.Label != "test exit 0" {
+		t.Errorf("done sprint = %+v", d)
+	}
+	for _, f := range flows {
+		switch f.ID {
+		case "f-open":
+			if !f.GatePending || !f.GateOpenedAt.Equal(time.Date(2026, 10, 23, 8, 0, 0, 0, time.UTC)) || f.SpecPath != `C:\example\specs\f.md` || f.Project != "example" {
+				t.Errorf("open flow = %+v", f)
+			}
+		case "f-dec":
+			if f.GatePending {
+				t.Errorf("decided flow pending: %+v", f)
+			}
+		}
+	}
+}
+
+func TestReadForemanOddFieldsAreSkipped(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "sprints", "p", "odd", "sprint.json"), `{"sprint_id":"p__odd__1","slug":"odd","last_test_result":"x","last_verify_result":{"outcome":3},"tasks":{"n":1},"spec_path":5}`)
+	write(t, filepath.Join(root, "sprints", "p", "half", "sprint.json"), `{"sprint_id": "p__x`)
+	write(t, filepath.Join(root, "sprints", "p", "fine", "sprint.json"), `{"sprint_id":"p__fine__1","slug":"fine"}`)
+	write(t, filepath.Join(root, "flows", "p", "odd", "flow.json"), `{"flow_id":"f-odd","slug":"odd","gate":{"id":"G2","opened_at":5}}`)
+	sprints, flows, err := ReadForeman(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sprints) != 2 {
+		t.Fatalf("sprints = %+v", sprints)
+	}
+	for _, s := range sprints {
+		if s.Test != nil || s.Verify != nil || len(s.Parked) != 0 {
+			t.Errorf("odd fields kept: %+v", s)
+		}
+	}
+	if len(flows) != 1 || flows[0].Gate != "G2" || !flows[0].GateOpenedAt.IsZero() {
+		t.Fatalf("flows = %+v", flows)
+	}
+}
+
+func TestReadForemanParkedReasonSurvivesBadLines(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "sprints", "p", "x")
+	write(t, filepath.Join(dir, "sprint.json"), `{"sprint_id":"p__x__1","slug":"x","tasks":[{"n":2,"title":"two","state":"parked"}]}`)
+	log := strings.Repeat("a", 300000) + "\n" + "not json\n" +
+		`{"ts":"2026-10-23T09:40:00Z","action":"task_parked","task":2,"detail":"newer"}` + "\n" +
+		`{"ts":"2026-10-23T09:30:00Z","action":"task_parked","task":2,"detail":"older"}` + "\n"
+	write(t, filepath.Join(dir, "action-log.ndjson"), log)
+	sprints, _, err := ReadForeman(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sprints) != 1 || len(sprints[0].Parked) != 1 || sprints[0].Parked[0].Reason != "newer" {
+		t.Fatalf("sprints = %+v", sprints)
+	}
 }
