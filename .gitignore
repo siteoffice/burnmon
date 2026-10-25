@@ -21,3 +21,4 @@ tools/station_atlas/kits/
 # BurnMon cloud probe drop folder (usage numbers only, local data)
 .burnmon/
 tools/burnmon-cloud/dist/
+03_logs/blackbox/
