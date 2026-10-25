@@ -69,7 +69,7 @@ func stubOpener(t *testing.T) *[]string {
 func TestItemFileAllowedOpensListedFiles(t *testing.T) {
 	e := newItemEnv(t, itemNow)
 	for _, p := range []string{e.spec, e.report, strings.ToUpper(e.spec), strings.Replace(e.spec, "spec.md", "spec.MD", 1)} {
-		if err := itemFileAllowed(e.snap, itemNow, p); err != nil {
+		if _, err := itemFileAllowed(e.snap, itemNow, p); err != nil {
 			t.Errorf("%q should be allowed: %v", p, err)
 		}
 	}
@@ -121,7 +121,7 @@ func TestItemFileAllowedRefuses(t *testing.T) {
 		cases = append(cases, struct{ name, snap, path, want string }{"ext " + filepath.Base(p), e2.snap, p, "file type not allowed"})
 	}
 	for _, c := range cases {
-		err := itemFileAllowed(c.snap, itemNow, c.path)
+		_, err := itemFileAllowed(c.snap, itemNow, c.path)
 		if err == nil || err.Error() != c.want {
 			t.Errorf("%s: err = %v, want %q", c.name, err, c.want)
 		}
@@ -132,11 +132,11 @@ func TestItemFileAllowedRefuses(t *testing.T) {
 
 	// Stale snapshot: the listed spec is refused.
 	st := newItemEnv(t, itemNow.Add(-20*time.Second))
-	if err := itemFileAllowed(st.snap, itemNow, st.spec); err == nil || err.Error() != "snapshot is not current" {
+	if _, err := itemFileAllowed(st.snap, itemNow, st.spec); err == nil || err.Error() != "snapshot is not current" {
 		t.Errorf("stale: err = %v", err)
 	}
 	// Missing snapshot file.
-	if err := itemFileAllowed(filepath.Join(t.TempDir(), "none.json"), itemNow, e.spec); err == nil || err.Error() != "snapshot is not current" {
+	if _, err := itemFileAllowed(filepath.Join(t.TempDir(), "none.json"), itemNow, e.spec); err == nil || err.Error() != "snapshot is not current" {
 		t.Errorf("missing snapshot: err = %v", err)
 	}
 	if err := openItemFileChecked(st.snap, itemNow, st.spec); err == nil {
@@ -159,7 +159,91 @@ func TestBindingOpensOnlyAllowed(t *testing.T) {
 	if err := openItemFileChecked(e.snap, itemNow, strings.ToUpper(e.spec)); err != nil {
 		t.Fatal(err)
 	}
-	if len(*calls) != 1 || !strings.EqualFold(filepath.Clean((*calls)[0]), filepath.Clean(e.spec)) {
+	if len(*calls) != 1 || (*calls)[0] != e.spec {
 		t.Fatalf("calls = %v", *calls)
+	}
+}
+
+func gateItem(id, spec string) waits.Item {
+	return waits.Item{Kind: waits.KindGate, ID: "g:" + id, Title: id, Since: "2026-10-23T09:00:00Z", Source: "foreman", SpecPath: spec}
+}
+
+// TestItemFileHostileSpellings lists and requests hostile spellings with real
+// values. Every case is refused with the stated error and the opener, a
+// recorder, is never called.
+func TestItemFileHostileSpellings(t *testing.T) {
+	d := t.TempDir()
+	write := func(name string) string {
+		p := filepath.Join(d, name)
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	plain := write("spec.md")
+	kelvin := write("kelvin.md")
+	long := `C:\` + strings.Repeat("d", 130) + `\` + strings.Repeat("e", 130) + `\x.md`
+
+	extra := []waits.Item{
+		gateItem("ads", `C:\x\spec.md:s`),
+		gateItem("dot", plain+"."),
+		gateItem("space", plain+" "),
+		gateItem("nul", `C:\dir\NUL.md`),
+		gateItem("long", long),
+		gateItem("kelvin", kelvin),
+	}
+	link := filepath.Join(d, "link.md")
+	symlinkErr := os.Symlink(plain, link)
+	if symlinkErr == nil {
+		extra = append(extra, gateItem("link", link))
+	}
+	e := newItemEnv(t, itemNow, extra...)
+	calls := stubOpener(t)
+
+	cases := []struct{ name, path, want string }{
+		{"ads listed and requested", `C:\x\spec.md:s`, "path is not absolute"},
+		{"ads requested, plain listed", plain + ":s", "path is not in the snapshot"},
+		{"trailing dot listed and requested", plain + ".", "file type not allowed"},
+		{"trailing space listed and requested", plain + " ", "file type not allowed"},
+		{"embedded NUL requested", plain + "\x00", "path is not in the snapshot"},
+		{"NUL before extension", strings.TrimSuffix(plain, ".md") + "\x00.md", "path is not in the snapshot"},
+		{"reserved device name listed", `C:\dir\NUL.md`, "not a file"},
+		{"over 260 characters", long, "path is too long"},
+		{"kelvin sign look-alike", strings.Replace(kelvin, "kelvin", "\u212Aelvin", 1), "path is not in the snapshot"},
+	}
+	if symlinkErr == nil {
+		cases = append(cases, struct{ name, path, want string }{"symlink to a listed-type file", link, "not a file"})
+	}
+	for _, c := range cases {
+		_, err := itemFileAllowed(e.snap, itemNow, c.path)
+		if err == nil || err.Error() != c.want {
+			t.Errorf("%s: err = %v, want %q", c.name, err, c.want)
+		}
+		if err := openItemFileChecked(e.snap, itemNow, c.path); err == nil {
+			t.Errorf("%s: openItemFileChecked returned nil", c.name)
+		}
+	}
+	if len(*calls) != 0 {
+		t.Errorf("opener called for refused paths: %v", *calls)
+	}
+	if symlinkErr != nil {
+		t.Skipf("symlink creation not permitted here, symlink case not run: %v", symlinkErr)
+	}
+}
+
+// TestItemFileOpenerGetsListedSpelling asserts that spellings which Clean or
+// ASCII case folding make equal still open the snapshot's own spelling.
+func TestItemFileOpenerGetsListedSpelling(t *testing.T) {
+	e := newItemEnv(t, itemNow)
+	calls := stubOpener(t)
+	for _, p := range []string{strings.ToUpper(e.spec), strings.ReplaceAll(e.spec, `\`, "/"), filepath.Dir(e.spec) + `\.\spec.md`} {
+		*calls = nil
+		if err := openItemFileChecked(e.snap, itemNow, p); err != nil {
+			t.Errorf("%q: %v", p, err)
+			continue
+		}
+		if len(*calls) != 1 || (*calls)[0] != e.spec {
+			t.Errorf("%q: opener got %v, want exactly %q", p, *calls, e.spec)
+		}
 	}
 }

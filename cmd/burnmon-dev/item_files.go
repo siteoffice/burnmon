@@ -50,47 +50,67 @@ func plainDrivePath(p string) bool {
 	return !strings.ContainsAny(p[3:], ":?*<>|\"")
 }
 
-// itemFileAllowed returns nil only when the snapshot at snapPath reads ok at
-// now, lists path (compared cleaned and case-folded) as a spec or result path,
-// the path is a plain absolute drive path, ends in an allowed type, and names
-// an existing regular file.
-func itemFileAllowed(snapPath string, now time.Time, path string) error {
+// asciiFold lowercases A-Z only. Unicode folding is not used: the Kelvin sign
+// (U+212A) lowercases to "k" there, so a look-alike would match a listed path.
+func asciiFold(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+// itemFileAllowed returns the snapshot's own spelling of path (cleaned) and a
+// nil error only when the snapshot at snapPath reads ok at now, lists path
+// (compared cleaned and ASCII case-folded) as a spec or result path, the
+// listed path is a plain absolute drive path under 260 characters, ends in an
+// allowed type, and names an existing regular file that is not a link. The
+// caller must open the returned string, never the page's.
+func itemFileAllowed(snapPath string, now time.Time, path string) (string, error) {
 	r := snapshot.Load(snapPath, now)
 	if r.Status != snapshot.StatusOK || r.Snapshot == nil {
-		return errors.New("snapshot is not current")
+		return "", errors.New("snapshot is not current")
 	}
-	want := strings.ToLower(filepath.Clean(path))
 	if strings.TrimSpace(path) == "" {
-		return errors.New("path is not in the snapshot")
+		return "", errors.New("path is not in the snapshot")
 	}
+	want := asciiFold(filepath.Clean(path))
 	var listed string
-	for _, list := range [][]struct{ spec, result string }{pathsOf(r.Snapshot)} {
-		for _, it := range list {
-			for _, p := range []string{it.spec, it.result} {
-				if p != "" && strings.ToLower(filepath.Clean(p)) == want {
-					listed = filepath.Clean(p)
-				}
+	for _, it := range pathsOf(r.Snapshot) {
+		for _, p := range []string{it.spec, it.result} {
+			if p != "" && asciiFold(filepath.Clean(p)) == want {
+				listed = filepath.Clean(p)
 			}
 		}
 	}
 	if listed == "" {
-		return errors.New("path is not in the snapshot")
+		return "", errors.New("path is not in the snapshot")
 	}
 	if !plainDrivePath(listed) {
-		return errors.New("path is not absolute")
+		return "", errors.New("path is not absolute")
 	}
-	if !itemFileExts[strings.ToLower(filepath.Ext(listed))] {
-		return errors.New("file type not allowed")
+	if len(listed) >= 260 {
+		return "", errors.New("path is too long")
 	}
-	fi, err := os.Stat(listed)
-	if err != nil || !fi.Mode().IsRegular() {
-		return errors.New("not a file")
+	if !itemFileExts[asciiFold(filepath.Ext(listed))] {
+		return "", errors.New("file type not allowed")
 	}
-	// A link or junction must not lead to a type that is not allowed.
-	if real, err := filepath.EvalSymlinks(listed); err == nil && !itemFileExts[strings.ToLower(filepath.Ext(real))] {
-		return errors.New("file type not allowed")
+	li, err := os.Lstat(listed)
+	if err != nil || li.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 || !li.Mode().IsRegular() {
+		return "", errors.New("not a file")
 	}
-	return nil
+	// Fail closed: a resolution error refuses, and the real target must also
+	// be an allowed type (a parent folder may be a link or junction).
+	real, err := filepath.EvalSymlinks(listed)
+	if err != nil {
+		return "", errors.New("not a file")
+	}
+	if !itemFileExts[asciiFold(filepath.Ext(real))] {
+		return "", errors.New("file type not allowed")
+	}
+	return listed, nil
 }
 
 func pathsOf(s *snapshot.Snapshot) []struct{ spec, result string } {
@@ -107,10 +127,11 @@ func pathsOf(s *snapshot.Snapshot) []struct{ spec, result string } {
 // openItemFileChecked is what the binding calls: check, then open the
 // snapshot's own spelling of the path (not the page's).
 func openItemFileChecked(snapPath string, now time.Time, path string) error {
-	if err := itemFileAllowed(snapPath, now, path); err != nil {
+	listed, err := itemFileAllowed(snapPath, now, path)
+	if err != nil {
 		return err
 	}
-	return openItemFile(filepath.Clean(path))
+	return openItemFile(listed)
 }
 
 func bdevOpenItemFile(snapPath, path string) error {
