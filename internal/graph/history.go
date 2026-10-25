@@ -69,7 +69,7 @@ func History(st *store.Store, hi HistoryInput) (Graph, error) {
 	sessions := make([]Session, 0, len(hs))
 	for _, h := range hs {
 		sessions = append(sessions, Session{Vendor: h.Vendor, Agent: h.Agent, ID: h.SessionID, ParentID: h.ParentID,
-			Project: h.Project, LastActivity: h.Last})
+			Project: h.Project, FirstActivity: h.First, LastActivity: h.Last})
 	}
 	g := Build(Input{Now: hi.Now, Sessions: sessions, RepoFor: hi.RepoFor, Sprints: hi.Sprints, SubagentFor: hi.SubagentFor})
 

@@ -281,7 +281,7 @@ func init() {
 		if !ok || !strings.Contains(you.Text, "1 waiting on you") {
 			return d30Fail("no You box saying who waits: %+v", you)
 		}
-		for _, id := range []string{"Claude Code", "example-server", "port 8765", "2 programs", "Explore", "waits on you"} {
+		for _, id := range []string{"Claude Code", "example-server", "port 8765", "2 programs", "Explore", "done", "waits on you"} {
 			all := ""
 			for _, b := range p.Boxes {
 				all += b.Text + "|"
@@ -313,8 +313,8 @@ func init() {
 		if err := d30Has("session evidence", p.Panel, "Tokens", "1,200", "API price equivalent", "€2.30", "claude-opus-5-5", "Last active", "store, 20 s old", "matched by BurnMon from the folder", "sprint/example"); err != nil {
 			return err
 		}
-		if p.HlLines != 4 || p.DimBoxes != 1 {
-			return d30Fail("session selected: %d highlighted lines (want 4), %d dimmed boxes (want 1)", p.HlLines, p.DimBoxes)
+		if p.HlLines != 5 || p.DimBoxes != 0 {
+			return d30Fail("session selected: %d highlighted lines (want 5), %d dimmed boxes (want 0)", p.HlLines, p.DimBoxes)
 		}
 		if _, err := screenshot(hwnd, "d30-map-selected"); err != nil {
 			return err
@@ -322,16 +322,16 @@ func init() {
 		if p, err = click(`.mapbox.sub`); err != nil {
 			return err
 		}
-		if err := d30Has("subagent evidence", p.Panel, "waits on you", "Explore", "sonnet", "300"); err != nil {
+		if err := d30Has("subagent evidence", p.Panel, "done", "Explore", "sonnet", "300"); err != nil {
 			return err
 		}
-		if p.HlLines != 2 {
-			return d30Fail("subagent selected: %d highlighted lines, want 2", p.HlLines)
+		if p.HlLines != 1 {
+			return d30Fail("subagent selected: %d highlighted lines, want 1 (a finished subagent waits on no one)", p.HlLines)
 		}
 		if p, err = click(`.mapbox.you`); err != nil {
 			return err
 		}
-		if err := d30Has("You evidence", p.Panel, "agent", "Explore"); err != nil {
+		if err := d30Has("You evidence", p.Panel, "agent", "project"); err != nil {
 			return err
 		}
 		if p, err = click(`.mapbox.you`); err != nil {

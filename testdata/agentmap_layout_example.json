@@ -35,12 +35,12 @@
       "id": "session:anthropic:example-parent",
       "kind": "session",
       "title": "project",
-      "pill": "coding",
+      "pill": "waits on you",
       "line": "1,200 tokens - 20 s ago",
       "column": 1,
       "row": 0,
       "group": "frame:sprint:example__sprint__1",
-      "waits_on_you": false,
+      "waits_on_you": true,
       "facts": [
         {
           "label": "Kind",
@@ -56,7 +56,7 @@
         },
         {
           "label": "State",
-          "value": "coding"
+          "value": "waiting"
         },
         {
           "label": "Tokens",
@@ -158,12 +158,12 @@
       "id": "session:anthropic:example-sub",
       "kind": "sub",
       "title": "Explore",
-      "pill": "waits on you",
+      "pill": "done",
       "line": "300 tokens - 5 s ago",
       "column": 2,
       "row": 2,
       "group": "frame:sprint:example__sprint__1",
-      "waits_on_you": true,
+      "waits_on_you": false,
       "facts": [
         {
           "label": "Kind",
@@ -179,7 +179,7 @@
         },
         {
           "label": "State",
-          "value": "waiting"
+          "value": "done"
         },
         {
           "label": "Tokens",
@@ -210,12 +210,12 @@
       "pill": "waits on you",
       "line": "1 waiting on you",
       "column": 4,
-      "row": 2,
+      "row": 0,
       "waits_on_you": true,
       "facts": [
         {
           "label": "agent",
-          "value": "Explore (5 s old)"
+          "value": "project (20 s old)"
         }
       ]
     }
@@ -250,7 +250,7 @@
       "you": false
     },
     {
-      "from": "session:anthropic:example-sub",
+      "from": "session:anthropic:example-parent",
       "to": "you",
       "word": "waits on",
       "basis": "vendor",

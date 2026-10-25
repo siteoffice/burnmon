@@ -62,8 +62,8 @@ func TestAgentMapLiveFromFrozenExample(t *testing.T) {
 	if factIn(s, "Tokens") != "1,200" || factIn(s, "API price equivalent") != "\u20ac2.30" || factIn(s, "Model") != "claude-opus-5-5" {
 		t.Errorf("evidence facts %+v", s.Facts)
 	}
-	if b, _ := boxIn(p.Layout, "session:anthropic:example-sub"); b.Pill != "waits on you" {
-		t.Errorf("standard pill %q", b.Pill)
+	if b, _ := boxIn(p.Layout, "session:anthropic:example-sub"); b.Pill != "done" {
+		t.Errorf("standard pill %q: a subagent that ended its turn is done", b.Pill)
 	}
 
 	if err := saveSections(dir, sections.Default().WithPlain(true)); err != nil {
@@ -73,7 +73,7 @@ func TestAgentMapLiveFromFrozenExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := boxIn(q.Layout, "session:anthropic:example-sub"); b.Pill != "waiting for you" {
+	if b, _ := boxIn(q.Layout, "session:anthropic:example-sub"); b.Pill != "finished" {
 		t.Errorf("plain pill %q", b.Pill)
 	}
 }

@@ -148,6 +148,11 @@ func newModel(nodes []graph.Node, edges []graph.Edge) *model {
 			if e.Kind != graph.KindWaitsOn || m.nodes[e.To].Kind != graph.KindPerson {
 				continue
 			}
+			// A subagent whose turn ended has finished. Older stored history
+			// still carries a wait for it; it is not a question for a person.
+			if m.nodes[e.From].Kind == graph.KindSubagent {
+				continue
+			}
 			id := e.From
 			if m.nodes[id].Kind == graph.KindGate {
 				for _, p := range m.out[id] {

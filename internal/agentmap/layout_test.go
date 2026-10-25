@@ -44,9 +44,28 @@ func fact(b Box, label string) (string, bool) {
 	return "", false
 }
 
-func exampleLayout(t *testing.T, mut func(*LayoutInput)) Layout {
+// askingExample is the frozen example with its session asking the person
+// something (its turn ended and it waits). The example's subagent also ended
+// its turn, and an old stored edge says it waited: it is finished, not asking.
+func askingExample(t *testing.T) ([]graph.Node, []graph.Edge) {
 	t.Helper()
 	nodes, edges := fixture(t)
+	for i := range nodes {
+		if nodes[i].ID == parentID {
+			attrs := map[string]string{}
+			for k, v := range nodes[i].Attrs {
+				attrs[k] = v
+			}
+			attrs["state"] = "waiting"
+			nodes[i].Attrs = attrs
+		}
+	}
+	return nodes, append(edges, edge(parentID, "person:you", graph.KindWaitsOn))
+}
+
+func exampleLayout(t *testing.T, mut func(*LayoutInput)) Layout {
+	t.Helper()
+	nodes, edges := askingExample(t)
 	in := LayoutInput{Nodes: nodes, Edges: edges}
 	if mut != nil {
 		mut(&in)
@@ -54,10 +73,10 @@ func exampleLayout(t *testing.T, mut func(*LayoutInput)) Layout {
 	return BuildLayout(in)
 }
 
-// The frozen example is one sprint: a Claude Code harness, one session with
-// an MCP server and two programs it started, and one subagent that waits on
-// you. Boxes sit in columns, the harness first, the tools after the deepest
-// subagent column, You last.
+// The frozen example is one sprint: a Claude Code harness, one session that
+// waits on you, with an MCP server and two programs it started, and one
+// subagent. Boxes sit in columns, the harness first, the tools after the
+// deepest subagent column, You last.
 func TestLayoutExampleColumnsAndBoxes(t *testing.T) {
 	l := exampleLayout(t, nil)
 	want := []string{"Tool", "Session", "Subagent", "Programs and servers", "You"}
@@ -74,7 +93,7 @@ func TestLayoutExampleColumnsAndBoxes(t *testing.T) {
 		{subID, 2, 2},
 		{"mcp:example-server@" + parentID, 3, 0},
 		{"programs:" + parentID, 3, 1},
-		{"you", 4, 2},
+		{"you", 4, 0},
 	} {
 		b, ok := boxByID(l, w.id)
 		if !ok {
@@ -104,7 +123,7 @@ func TestLayoutExampleLines(t *testing.T) {
 		{parentID, subID, "started"},
 		{parentID, "mcp:example-server@" + parentID, "uses"},
 		{parentID, "programs:" + parentID, "started"},
-		{subID, "you", "waits on"},
+		{parentID, "you", "waits on"},
 	} {
 		if _, ok := lineOf(l, w.from, w.to, w.word); !ok {
 			t.Errorf("no line %s -[%s]-> %s", w.from, w.word, w.to)
@@ -113,7 +132,7 @@ func TestLayoutExampleLines(t *testing.T) {
 	if len(l.Lines) != 5 {
 		t.Errorf("%d lines, want 5: %+v", len(l.Lines), l.Lines)
 	}
-	if ln, _ := lineOf(l, subID, "you", "waits on"); !ln.You {
+	if ln, _ := lineOf(l, parentID, "you", "waits on"); !ln.You {
 		t.Error("the waits-on line to You is not marked")
 	}
 	for _, ln := range l.Lines {
@@ -282,13 +301,13 @@ func TestLayoutPlainWords(t *testing.T) {
 	if l.Columns[2] != "Helper" || l.Columns[3] != "Programs and tool servers" {
 		t.Errorf("plain columns %v", l.Columns)
 	}
-	if s, _ := boxByID(l, subID); s.Pill != "waiting for you" {
-		t.Errorf("plain pill %q", s.Pill)
+	if p, _ := boxByID(l, parentID); p.Pill != "waiting for you" {
+		t.Errorf("plain pill %q", p.Pill)
 	}
-	if p, _ := boxByID(l, parentID); p.Pill != "writing code" {
-		t.Errorf("plain state %q, want writing code", p.Pill)
+	if s, _ := boxByID(l, subID); s.Pill != "finished" {
+		t.Errorf("plain pill of the finished subagent %q, want finished", s.Pill)
 	}
-	if _, ok := lineOf(l, subID, "you", "waiting for"); !ok {
+	if _, ok := lineOf(l, parentID, "you", "waiting for"); !ok {
 		t.Error("plain line word is not 'waiting for'")
 	}
 	if f := l.Frames[0]; !strings.Contains(f.Explain, "Foreman job") {
@@ -629,5 +648,41 @@ func TestLayoutSingularWords(t *testing.T) {
 		if b.Kind == "folded" && strings.Contains(b.Line, "1 agents") {
 			t.Errorf("folded line %q", b.Line)
 		}
+	}
+}
+
+// A subagent that finished shows as done, never as waiting on you, even when
+// an older stored edge in a history window says it waited; only a person
+// really asked something is a wait on you.
+func TestLayoutFinishedSubagentIsDone(t *testing.T) {
+	nodes := []graph.Node{
+		sess("s:a", "a", "coding"), sub("s:k", "Explore", "waiting"),
+		{ID: "person:you", Kind: graph.KindPerson, Label: "You"},
+	}
+	edges := []graph.Edge{edge("s:a", "s:k", graph.KindSpawned), edge("s:k", "person:you", graph.KindWaitsOn)}
+	l := BuildLayout(LayoutInput{Nodes: nodes, Edges: edges})
+	k, _ := boxByID(l, "s:k")
+	if k.Pill != "done" || k.WaitsOnYou {
+		t.Errorf("finished subagent pill %q, waits on you %v", k.Pill, k.WaitsOnYou)
+	}
+	if _, ok := boxByID(l, "you"); ok || l.Counts.Waiting != 0 {
+		t.Errorf("a finished subagent made a You box or counted as waiting: %+v", l.Counts)
+	}
+	if st, _ := fact(k, "State"); st != "done" {
+		t.Errorf("state fact %q, want done", st)
+	}
+	p := BuildLayout(LayoutInput{Nodes: nodes, Edges: edges, Plain: true})
+	if k, _ := boxByID(p, "s:k"); k.Pill != "finished" {
+		t.Errorf("plain pill %q, want finished", k.Pill)
+	}
+	// The session that spawned it still waits on you when it is asked something.
+	nodes[0] = sess("s:a", "a", "waiting")
+	edges = append(edges, edge("s:a", "person:you", graph.KindWaitsOn))
+	l = BuildLayout(LayoutInput{Nodes: nodes, Edges: edges})
+	if a, _ := boxByID(l, "s:a"); a.Pill != "waits on you" {
+		t.Errorf("session pill %q", a.Pill)
+	}
+	if y, ok := boxByID(l, "you"); !ok || !strings.Contains(y.Line, "1 waiting") {
+		t.Errorf("You box %+v", y)
 	}
 }

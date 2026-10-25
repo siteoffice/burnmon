@@ -94,11 +94,11 @@ func TestSessionsBetween(t *testing.T) {
 	for _, s := range got {
 		switch s.SessionID {
 		case "S1":
-			if !s.Last.Equal(at.Add(time.Minute)) || s.Project != `C:\w` || s.ParentID != "" {
+			if !s.Last.Equal(at.Add(time.Minute)) || !s.First.Equal(at) || s.Project != `C:\w` || s.ParentID != "" {
 				t.Fatalf("S1 = %+v", s)
 			}
 		case "agent-a":
-			if s.ParentID != "S1" {
+			if s.ParentID != "S1" || !s.First.Equal(at.Add(2*time.Minute)) {
 				t.Fatalf("agent-a = %+v", s)
 			}
 		default:

@@ -126,6 +126,18 @@ func wordsFor(plain bool) wording {
 		frameKind: map[string]string{"sprint": "Foreman sprint", "flow": "Foreman flow"}}
 }
 
+// cardState is the word for a card's state: a subagent whose turn ended is
+// done, never waiting for a person.
+func (w wording) cardState(c Card) string {
+	if c.Subagent && c.State == "waiting" {
+		if w.plain {
+			return "finished"
+		}
+		return "done"
+	}
+	return w.state(c.State)
+}
+
 func (w wording) state(s string) string {
 	if w.stateWord != nil {
 		if p, ok := w.stateWord[s]; ok {
@@ -408,7 +420,7 @@ func (b *builder) cardFacts(c Card, g Group) []Fact {
 		source = fmt.Sprintf("%s, %s old", val(ev.Source), fmtDur(ev.AgeSeconds))
 	}
 	f := []Fact{
-		{"Kind", kind}, {"Agent", val(agent)}, {"Model", val(model)}, {"State", b.w.state(c.State)},
+		{"Kind", kind}, {"Agent", val(agent)}, {"Model", val(model)}, {"State", b.w.cardState(c)},
 		{"Tokens", tokens}, {label, price}, {"Last active", fmtDur(c.AgeSeconds) + " ago"}, {"Source", source},
 	}
 	if g.Kind == "sprint" || g.Kind == "flow" {
@@ -453,7 +465,7 @@ func (b *builder) cardTitle(c Card) string {
 // place puts a card and what belongs to it: its tools under its own row, its
 // children after them. It returns the rows used.
 func (b *builder) place(c Card, g Group, fid string, col, row int) int {
-	pill := b.w.state(c.State)
+	pill := b.w.cardState(c)
 	if c.WaitsOnYou {
 		pill = b.w.waitsPill
 	}

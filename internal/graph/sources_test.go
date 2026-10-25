@@ -182,3 +182,20 @@ func TestRepoLocator(t *testing.T) {
 		t.Fatal("a folder outside any repo has no repo")
 	}
 }
+
+// TestReadForemanRealRoot tries a real Foreman folder: set BURNMON_FOREMAN_ROOT.
+// It is skipped otherwise and checks nothing but that the folder reads.
+func TestReadForemanRealRoot(t *testing.T) {
+	root := os.Getenv("BURNMON_FOREMAN_ROOT")
+	if root == "" {
+		t.Skip("set BURNMON_FOREMAN_ROOT to a Foreman folder to try a real one")
+	}
+	sprints, flows, err := ReadForeman(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range sprints {
+		t.Logf("sprint %s status %s worktree %q main %q log entries %d", s.ID, s.Status, s.WorktreePath, sprintMainRepo(s.WorktreePath), len(s.LogTimes))
+	}
+	t.Logf("%d sprints, %d flows", len(sprints), len(flows))
+}

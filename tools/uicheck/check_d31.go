@@ -18,7 +18,10 @@ import (
 // boxes that belong to it, for the README (d31-live-map-readme). It prints
 // every string that shows in that picture so a person can check it for private
 // data before it goes anywhere. It asserts nothing about content: what a real
-// run shows is the finding. Usage: uicheck d31 <frame label>, default znd-skills.
+// run shows is the finding. uicheck.ps1 passes no arguments through, so the
+// choices are environment variables: D31_FRAME is the frame to draw for the
+// README (default znd-skills) and D31_HOURS, when set, asks for that many hours
+// of the store instead of the live snapshot.
 const d31FilterJS = `(function(label){
   var p = window.__d31, L = p && p.layout;
   if(!L) return {err: 'no layout'};
@@ -45,7 +48,7 @@ const d31FilterJS = `(function(label){
   var lines = L.lines.filter(function(l){ return keep[l.to] && (keep[l.from] || l.from === f.id); });
   var counts = {sessions: boxes.filter(function(b){ return b.kind === 'session'; }).length, subagents: boxes.filter(function(b){ return b.kind === 'sub'; }).length};
   var layout = {columns: L.columns, boxes: boxes, lines: lines, frames: [fr], idle: [], counts: counts, notes: L.notes};
-  window.__bdevMap.setPayload({source: 'live', hours: 0, status: p.status, age_seconds: p.age_seconds, note: '', layout: layout}, 'live');
+  window.__bdevMap.setPayload({source: p.source, hours: p.hours || 0, status: p.status, age_seconds: p.age_seconds, note: p.note || '', layout: layout}, p.source === 'live' ? 'live' : String(p.hours));
   var st = document.getElementById('mapStage');
   return {boxes: Array.prototype.map.call(st.querySelectorAll('.mapbox'), function(e){ return e.textContent; }),
     frame: Array.prototype.map.call(st.querySelectorAll('.mapframe'), function(e){ return e.textContent; }),
@@ -58,8 +61,15 @@ const d31FilterJS = `(function(label){
 func init() {
 	checks["d31"] = func(hwnd uintptr, args []string) error {
 		label := "znd-skills"
-		if len(args) > 0 {
-			label = args[0]
+		if v := os.Getenv("D31_FRAME"); v != "" {
+			label = v
+		}
+		source, hours := "live", 0
+		if v := os.Getenv("D31_HOURS"); v != "" {
+			if _, err := fmt.Sscanf(v, "%d", &hours); err != nil || hours <= 0 {
+				return fmt.Errorf("d31: D31_HOURS %q is not a number of hours", v)
+			}
+			source = "history"
 		}
 		if err := ensureWindowSizeWH(hwnd, 1280, 900); err != nil {
 			return err
@@ -68,7 +78,7 @@ func init() {
 		if err := d30Eval(`window.__bdevMap.open('live')`); err != nil {
 			return err
 		}
-		if err := d30Eval(`(function(){ window.__d31 = null; window.bdevAgentMap({source:'live', hours:0, open:[]}).then(function(r){ window.__d31 = r; }, function(e){ window.__d31 = {err: String(e)}; }); })()`); err != nil {
+		if err := d30Eval(`(function(){ window.__d31 = null; window.bdevAgentMap({source:` + fmt.Sprintf("%q", source) + `, hours:` + fmt.Sprint(hours) + `, open:[]}).then(function(r){ window.__d31 = r; }, function(e){ window.__d31 = {err: String(e)}; }); })()`); err != nil {
 			return err
 		}
 		var raw json.RawMessage
@@ -118,7 +128,7 @@ func init() {
 		if live.Err != "" {
 			return fmt.Errorf("d31: real live map: %s", live.Err)
 		}
-		fmt.Printf("d31: live map, snapshot %s: %d boxes, %d lines, %d frames, %d idle sprints\n", live.Status, len(live.Layout.Boxes), len(live.Layout.Lines), len(live.Layout.Frames), len(live.Layout.Idle))
+		fmt.Printf("d31: %s map, status %s: %d boxes, %d lines, %d frames, %d idle sprints\n", source, live.Status, len(live.Layout.Boxes), len(live.Layout.Lines), len(live.Layout.Frames), len(live.Layout.Idle))
 		words := map[string]int{}
 		for _, l := range live.Layout.Lines {
 			words[l.Word+"/"+l.Basis]++

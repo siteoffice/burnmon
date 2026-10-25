@@ -77,10 +77,11 @@ func TestBuildSprintWithSubagent(t *testing.T) {
 		t.Fatalf("children = %d, want 1", len(c.Children))
 	}
 	k := c.Children[0]
-	if !k.Subagent || k.AgentType != "Explore" || k.Model != "sonnet" || !k.WaitsOnYou {
+	// The example's subagent ended its turn: it is finished, and waits on no one.
+	if !k.Subagent || k.AgentType != "Explore" || k.Model != "sonnet" || k.WaitsOnYou {
 		t.Errorf("subagent card = %+v", k)
 	}
-	want := Counts{Sessions: 1, Subagents: 1, Waiting: 1, Sprints: 1}
+	want := Counts{Sessions: 1, Subagents: 1, Waiting: 0, Sprints: 1}
 	if v.Counts != want {
 		t.Errorf("counts = %+v, want %+v", v.Counts, want)
 	}
@@ -252,7 +253,7 @@ func TestBuildOrderIsStable(t *testing.T) {
 // the page check (tools\uicheck d30) feeds the page what Build really makes.
 // Regenerate with UPDATE_GOLDEN=1 after a deliberate change.
 func TestExampleViewMatchesGolden(t *testing.T) {
-	nodes, edges := fixture(t)
+	nodes, edges := askingExample(t)
 	got, err := json.MarshalIndent(Build(nodes, edges), "", "  ")
 	if err != nil {
 		t.Fatal(err)
