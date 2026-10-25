@@ -67,8 +67,8 @@ const stationMarker = "<!--BM_STATION-->"
 // (window.BMStation is checked before use), so a missing marker only costs
 // the secret screen.
 func assemblePage(theme, uiTheme string) string {
-	if theme != "space" {
-		theme = "site"
+	if theme != "site" {
+		theme = "space"
 	}
 	page := pageHTML
 	if uiTheme == "light" {
@@ -347,6 +347,19 @@ func main() {
 		}
 	}); err != nil {
 		log.Println("could not bind bdevSetUITheme:", err)
+	}
+
+	// bdevSetStationTheme: the "Station starts as" setting, saved to
+	// burnmon-dev.json (station_theme.go) and used at the next start. It does
+	// not touch devCfg or the Station that is open now.
+	if err := w.Bind("bdevSetStationTheme", func(theme string) error {
+		err := saveStationTheme(dataDir, theme)
+		if err != nil {
+			log.Println("bdevSetStationTheme:", err)
+		}
+		return err
+	}); err != nil {
+		log.Println("could not bind bdevSetStationTheme:", err)
 	}
 
 	// bdevSections (B2): the part switches per mode, the overall scrollbar flag, and the

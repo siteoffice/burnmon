@@ -19,22 +19,22 @@ func writeDevJSON(t *testing.T, body string) string {
 	return dir
 }
 
-// TestLoadDevConfigStationTheme: "site" is the default, "space" is the only
-// other value, anything else falls back to "site".
+// TestLoadDevConfigStationTheme: "space" is the default, "site" is the only
+// other value, anything else falls back to "space".
 func TestLoadDevConfigStationTheme(t *testing.T) {
 	cases := []struct {
 		name string
 		body string // empty means no file at all
 		want string
 	}{
-		{"no file", "", "site"},
-		{"key absent", `{"retention_days": 3}`, "site"},
+		{"no file", "", "space"},
+		{"key absent", `{"retention_days": 3}`, "space"},
 		{"site", `{"station_theme": "site"}`, "site"},
 		{"space", `{"station_theme": "space"}`, "space"},
-		{"unknown", `{"station_theme": "moon"}`, "site"},
-		{"wrong case", `{"station_theme": "Space"}`, "site"},
-		{"quote injection", `{"station_theme": "x\";alert(1);//"}`, "site"},
-		{"parse error", `{"station_theme": `, "site"},
+		{"unknown", `{"station_theme": "moon"}`, "space"},
+		{"wrong case", `{"station_theme": "Space"}`, "space"},
+		{"quote injection", `{"station_theme": "x\";alert(1);//"}`, "space"},
+		{"parse error", `{"station_theme": `, "space"},
 	}
 	for _, c := range cases {
 		dir := t.TempDir()

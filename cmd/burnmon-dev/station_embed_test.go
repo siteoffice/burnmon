@@ -39,14 +39,14 @@ func TestAssemblePageSplicesStation(t *testing.T) {
 }
 
 // TestAssemblePageThemeIsClamped: the theme lands in a script string, so
-// anything but the two known names must fall back to "site".
+// anything but the two known names must fall back to "space".
 func TestAssemblePageThemeIsClamped(t *testing.T) {
 	page := assemblePage(`x";alert(1);//`, "dark")
 	if strings.Contains(page, "alert(1)") {
 		t.Fatal("unknown theme reached the page")
 	}
-	if !strings.Contains(page, `window.BM_STATION_THEME = "site";`) {
-		t.Fatal("unknown theme did not fall back to site")
+	if !strings.Contains(page, `window.BM_STATION_THEME = "space";`) {
+		t.Fatal("unknown theme did not fall back to space")
 	}
 }
 

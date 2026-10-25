@@ -22,10 +22,13 @@ import (
 // the labels and order of the gear list.
 type sectionsPayload struct {
 	sections.State
-	Mode    string           `json:"mode"`
-	Parts   map[string]bool  `json:"parts"`
-	Groups  []sections.Group `json:"groups"`
-	Reading snapshot.Reading `json:"reading"`
+	Mode   string           `json:"mode"`
+	Parts  map[string]bool  `json:"parts"`
+	Groups []sections.Group `json:"groups"`
+	// StationTheme is the saved startup theme ("space" or "site") for the
+	// gear's "Station starts as" setting.
+	StationTheme string           `json:"station_theme"`
+	Reading      snapshot.Reading `json:"reading"`
 	// AgentMap is the live map for the Agents map section, nil unless the
 	// snapshot is current. History is a separate call (agentmap_view.go).
 	AgentMap *agentmap.View `json:"agent_map"`
@@ -54,11 +57,12 @@ func saveSections(dataDir string, s sections.State) error {
 func sectionsPayloadFor(dataDir, snapPath string, now time.Time) sectionsPayload {
 	st := loadSections(dataDir)
 	p := sectionsPayload{
-		State:   st,
-		Mode:    st.Mode(),
-		Parts:   st.Current(),
-		Groups:  sections.Groups,
-		Reading: snapshot.Load(snapPath, now),
+		State:        st,
+		Mode:         st.Mode(),
+		Parts:        st.Current(),
+		Groups:       sections.Groups,
+		StationTheme: loadDevConfig(dataDir).StationTheme,
+		Reading:      snapshot.Load(snapPath, now),
 	}
 	if p.Reading.Status == snapshot.StatusOK && p.Reading.Snapshot != nil {
 		v := agentmap.Build(p.Reading.Snapshot.Nodes, p.Reading.Snapshot.Edges)
