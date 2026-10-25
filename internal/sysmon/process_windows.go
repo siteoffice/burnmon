@@ -224,7 +224,11 @@ type ProcessSampler struct {
 	reg    map[int32]*trackedProc
 	lastAt time.Time
 	buf    []byte
+	rows   []ProcRow
 }
+
+// Procs returns every process from the last Tick and when it was sampled.
+func (ps *ProcessSampler) Procs() ([]ProcRow, time.Time) { return ps.rows, ps.lastAt }
 
 func NewProcessSampler() *ProcessSampler {
 	return &ProcessSampler{reg: map[int32]*trackedProc{}}
@@ -312,6 +316,12 @@ func (ps *ProcessSampler) Tick(copilotVSCodeConfigured bool) ([]ProcessGroupSamp
 	ps.lastAt = now
 
 	harnessByPID := resolveHarnesses(infoByPID, copilotVSCodeConfigured)
+
+	ps.rows = make([]ProcRow, 0, len(infoByPID))
+	for pid, p := range infoByPID {
+		ps.rows = append(ps.rows, ProcRow{PID: pid, PPID: p.PPID, Name: p.Name, Cmdline: p.Cmdline,
+			CreateTime: ps.reg[pid].createTime, Harness: harnessByPID[pid]})
+	}
 
 	sums := map[Harness]*ProcessGroupSample{}
 	for pid, h := range harnessByPID {

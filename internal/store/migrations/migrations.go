@@ -24,6 +24,7 @@ var All = []Migration{
 	{5, "forecast_scores table (F1)", migration5},
 	{6, "session_id-only index on events (v0.2.1 hang patch)", migration6},
 	{7, "client column on events (v0.3 K1 client map)", migration7},
+	{8, "graph_nodes and graph_edges tables (R6 relation graph)", migration8},
 }
 
 // migration1 records the v0.1 schema as version 1 without changing it: the
@@ -155,5 +156,39 @@ func migration6(tx *sql.Tx) error {
 // sets a Client).
 func migration7(tx *sql.Tx) error {
 	_, err := tx.Exec(`ALTER TABLE events ADD COLUMN client TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+// migration8 adds R6's relation graph history: the nodes and edges BurnMon
+// sees only live (a process and what it started, an MCP server, a listening
+// port, a Foreman link, who waits on you), so the map can show them after
+// they are gone. Edges the events table can rebuild (a subagent's parent, a
+// session's harness) are not stored here. One row per edge (from, to, kind)
+// with the first and last time it was seen; times are RFC3339 UTC to the
+// second, so they compare as text.
+func migration8(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS graph_nodes (
+	id         TEXT PRIMARY KEY,
+	kind       TEXT NOT NULL,
+	label      TEXT NOT NULL,
+	vendor     TEXT NOT NULL DEFAULT '',
+	attrs      TEXT NOT NULL DEFAULT '{}',
+	source     TEXT NOT NULL,
+	first_seen TEXT NOT NULL,
+	last_seen  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS graph_edges (
+	from_id    TEXT NOT NULL,
+	to_id      TEXT NOT NULL,
+	kind       TEXT NOT NULL,
+	basis      TEXT NOT NULL,
+	source     TEXT NOT NULL,
+	first_seen TEXT NOT NULL,
+	last_seen  TEXT NOT NULL,
+	PRIMARY KEY (from_id, to_id, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_last_seen ON graph_edges (last_seen);
+`)
 	return err
 }

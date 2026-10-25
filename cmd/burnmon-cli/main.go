@@ -26,6 +26,7 @@ import (
 
 	"burnmon/internal/dataset"
 	"burnmon/internal/export"
+	"burnmon/internal/graph"
 	"burnmon/internal/insight"
 	"burnmon/internal/live"
 	"burnmon/internal/merge"
@@ -57,6 +58,14 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "reown" {
 		os.Exit(runReown(os.Args[2:]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "graph" {
+		os.Exit(runGraph(os.Args[2:]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "backfill-parents" {
+		os.Exit(runBackfillParents(os.Args[2:]))
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "tools" {
@@ -196,6 +205,102 @@ func runReown(args []string) int {
 		return 1
 	}
 	fmt.Printf("reowned %d event(s)\n", n)
+	return 0
+}
+
+// runGraph prints the relation graph (R6) for a past window as JSON: the
+// sessions and subagents from the store, the live-only edges it recorded,
+// and Foreman sprints when a Foreman folder is configured (foreman_root in
+// burnmon.json, or -foreman).
+func runGraph(args []string) int {
+	fs := flag.NewFlagSet("graph", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
+	since := fs.String("since", "24h", "window to show, e.g. 2h or 7d")
+	foreman := fs.String("foreman", "", "Foreman folder (overrides foreman_root in the config)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	d, err := parseSinceDuration(*since)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	cfg, err := loadConfig(*cfgPath, true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		return 1
+	}
+	root := cfg.ForemanRoot
+	if *foreman != "" {
+		root = *foreman
+	}
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open the local store at", storePath, ":", err)
+		return 1
+	}
+	defer st.Close()
+	now := time.Now()
+	hi := graph.HistoryInput{From: now.Add(-d), To: now, Now: now, RepoFor: graph.NewRepoLocator().For}
+	if home, err := os.UserHomeDir(); err == nil {
+		hi.SubagentFor = graph.NewSubagentMeta(filepath.Join(home, ".claude", "projects")).Lookup
+	}
+	if root != "" {
+		sprints, _, err := graph.ReadForeman(root)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "could not read Foreman state:", err)
+			return 1
+		}
+		hi.Sprints = sprints
+	}
+	g, err := graph.History(st, hi)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not build the graph:", err)
+		return 1
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(g); err != nil {
+		return 1
+	}
+	return 0
+}
+
+// runBackfillParents sets the parent session on Claude subagent rows stored
+// before the adapter read it (R6). Without -apply it is a dry run: it only
+// prints how many rows it would change. Copy the store file first.
+func runBackfillParents(args []string) int {
+	fs := flag.NewFlagSet("backfill-parents", flag.ExitOnError)
+	apply := fs.Bool("apply", false, "write the change (default: dry run, count only)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open the local store at", storePath, ":", err)
+		return 1
+	}
+	defer st.Close()
+	n, err := st.BackfillClaudeParents(*apply)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not backfill parents:", err)
+		return 1
+	}
+	if *apply {
+		fmt.Printf("store %s: set the parent on %d row(s)\n", storePath, n)
+	} else {
+		fmt.Printf("store %s: dry run, %d row(s) would get a parent\n", storePath, n)
+	}
 	return 0
 }
 

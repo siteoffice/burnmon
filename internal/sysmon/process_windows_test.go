@@ -162,3 +162,26 @@ func TestProcessSampler_Tick_DetectsPIDReuseViaCreateTime(t *testing.T) {
 		t.Fatalf("entry.cmdline is still the stale value; pid-reuse re-registration did not re-fetch it")
 	}
 }
+
+// R6: after a Tick, Procs lists every process with its parent, start time
+// and harness, so the relation graph can build process trees.
+func TestProcessSamplerProcsListsSelf(t *testing.T) {
+	ps := NewProcessSampler()
+	if _, err := ps.Tick(false); err != nil {
+		t.Fatal(err)
+	}
+	rows, at := ps.Procs()
+	if at.IsZero() {
+		t.Fatal("Procs has no sample time after a Tick")
+	}
+	pid := int32(os.Getpid())
+	for _, r := range rows {
+		if r.PID == pid {
+			if r.PPID != int32(os.Getppid()) || r.CreateTime == 0 || r.Name == "" {
+				t.Fatalf("own row = %+v", r)
+			}
+			return
+		}
+	}
+	t.Fatalf("own pid %d not in %d rows", pid, len(rows))
+}

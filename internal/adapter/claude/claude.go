@@ -217,6 +217,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 
 	cwd := ""
 	title := ""
+	parentID := ""
 	type turn struct {
 		key                      string
 		ts                       string
@@ -264,6 +265,13 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 		if cwd == "" {
 			if c, ok := obj["cwd"].(string); ok && c != "" {
 				cwd = c
+			}
+		}
+		// A subagent's trail (<parent>\subagents\agent-<id>.jsonl) carries
+		// the parent's sessionId and isSidechain true on every line (R6).
+		if parentID == "" && obj["isSidechain"] == true {
+			if p, ok := obj["sessionId"].(string); ok {
+				parentID = p
 			}
 		}
 		if obj["type"] == "user" {
@@ -381,6 +389,9 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 	surface := classifySurface(path, cwd)
 	base := filepath.Base(path)
 	sessionID := strings.TrimSuffix(base, filepath.Ext(base))
+	if parentID == sessionID {
+		parentID = ""
+	}
 
 	var events []schema.Event
 	consumedToolKeys := map[string]bool{}
@@ -388,7 +399,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 		t := calls[k]
 		e := schema.Event{
 			Vendor: "anthropic", Agent: agentFor(surface), Surface: surface,
-			SessionID: sessionID, RequestID: k, Project: cwd, Title: title,
+			SessionID: sessionID, ParentID: parentID, RequestID: k, Project: cwd, Title: title,
 			Model: t.model, Input: t.fresh, Output: t.o,
 		}
 		if t.cacheW > 0 {
@@ -422,7 +433,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 		}
 		events = append(events, schema.Event{
 			Vendor: "anthropic", Agent: agentFor(surface), Surface: surface,
-			SessionID: sessionID, RequestID: k, Project: cwd, Title: title,
+			SessionID: sessionID, ParentID: parentID, RequestID: k, Project: cwd, Title: title,
 			Tools: tools,
 		})
 	}
