@@ -33,7 +33,6 @@ import (
 	"burnmon/internal/mergereport"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
-	"burnmon/internal/schema"
 	"burnmon/internal/store"
 )
 
@@ -505,9 +504,9 @@ func runExport(args []string) int {
 		fmt.Fprintln(os.Stderr, "config error:", err)
 		return 1
 	}
-	if len(cfg.Owners) > 0 && len(owners) == 0 {
-		fmt.Fprintln(os.Stderr, "export: owner rules are configured; --owner is required "+
-			"(repeat --owner for more than one), so a ClientA row never leaves by accident")
+	f := export.Filter{Since: *since, Until: *until, Owners: owners}
+	if err := export.Validate(&cfg, f); err != nil {
+		fmt.Fprintln(os.Stderr, "export:", err)
 		return 1
 	}
 
@@ -533,38 +532,8 @@ func runExport(args []string) int {
 		}
 	}
 
-	events, err := st.AllEvents()
+	doc, err := writeExport(st, &cfg, f, *label, *out, time.Now())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "internal error:", err)
-		return 1
-	}
-
-	ownerSet := map[string]bool{}
-	for _, o := range owners {
-		ownerSet[o] = true
-	}
-	var filtered []schema.Event
-	for _, e := range events {
-		day := e.At.In(time.Local).Format("2006-01-02")
-		if *since != "" && day < *since {
-			continue
-		}
-		if *until != "" && day > *until {
-			continue
-		}
-		if len(ownerSet) > 0 && !ownerSet[e.Owner] {
-			continue
-		}
-		filtered = append(filtered, e)
-	}
-
-	doc := export.Build(filtered, &cfg, *label, time.Now())
-	b, err := json.MarshalIndent(doc, "", " ")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "internal error:", err)
-		return 1
-	}
-	if err := os.WriteFile(*out, b, 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, "could not write", *out, ":", err)
 		return 1
 	}
@@ -572,6 +541,23 @@ func runExport(args []string) int {
 	return 0
 }
 
+// writeExport selects, builds and writes one export file through the same
+// path the apps use, and returns the document it wrote.
+func writeExport(st *store.Store, cfg *pricing.Config, f export.Filter, label, out string, now time.Time) (export.Doc, error) {
+	events, err := st.AllEvents()
+	if err != nil {
+		return export.Doc{}, err
+	}
+	doc := export.Build(export.Select(events, f), cfg, label, now)
+	b, err := export.Encode(doc)
+	if err != nil {
+		return export.Doc{}, err
+	}
+	if err := os.WriteFile(out, b, 0o644); err != nil {
+		return export.Doc{}, err
+	}
+	return doc, nil
+}
 // runMerge combines K4 export files into K5's merged.json plus a static,
 // offline report.html: `burnmon-cli merge <file>... --out <dir>`. Refuses
 // files whose schema value differs (merge.Merge).

@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
 	"time"
 
+	"burnmon/internal/export"
+	"burnmon/internal/export/exporttest"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
@@ -128,5 +132,24 @@ func TestLiveQueryPathStaysBoundedOnLargeStore(t *testing.T) {
 	if grew > memLimit {
 		t.Fatalf("live query path grew heap by %d bytes, want under %d (50 MB) on a %d-event store",
 			grew, memLimit, oldEventCount+len(recent))
+	}
+}
+
+// TestWriteExportMatchesGolden pins the CLI's export bytes to the shared
+// export path: the file writeExport leaves is exactly Encode(Build(Select())).
+func TestWriteExportMatchesGolden(t *testing.T) {
+	st := exporttest.Store(t)
+	cfg := pricing.Defaults()
+	f := export.Filter{Owners: []string{"wilco"}}
+	out := filepath.Join(t.TempDir(), "export.json")
+	if _, err := writeExport(st, &cfg, f, "dev-1", out, exporttest.FixedNow); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := exporttest.Golden(t, st, &cfg, f, "dev-1"); !bytes.Equal(got, want) {
+		t.Fatalf("export file differs from the golden bytes")
 	}
 }
