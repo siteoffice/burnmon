@@ -506,7 +506,7 @@ func runExport(args []string) int {
 	}
 	f := export.Filter{Since: *since, Until: *until, Owners: owners}
 	if err := export.Validate(&cfg, f); err != nil {
-		fmt.Fprintln(os.Stderr, "export:", err)
+		fmt.Fprintln(os.Stderr, exportValidateText(err))
 		return 1
 	}
 
@@ -534,7 +534,7 @@ func runExport(args []string) int {
 
 	doc, err := writeExport(st, &cfg, f, *label, *out, time.Now())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "could not write", *out, ":", err)
+		fmt.Fprintln(os.Stderr, exportFailureText(err, *out))
 		return 1
 	}
 	fmt.Printf("Wrote %s with %d row(s), label %q\n", *out, len(doc.Rows), doc.Label)
@@ -554,10 +554,38 @@ func writeExport(st *store.Store, cfg *pricing.Config, f export.Filter, label, o
 		return export.Doc{}, err
 	}
 	if err := os.WriteFile(out, b, 0o644); err != nil {
-		return export.Doc{}, err
+		return export.Doc{}, &exportWriteError{err}
 	}
 	return doc, nil
 }
+
+// exportWriteError marks the one failure the CLI reports as "could not write":
+// the file write itself.
+type exportWriteError struct{ err error }
+
+func (e *exportWriteError) Error() string { return e.err.Error() }
+func (e *exportWriteError) Unwrap() error { return e.err }
+
+// exportValidateText is what the CLI prints when export.Validate refuses. The
+// missing-owner words are the CLI's own (--owner), not the shared error text.
+func exportValidateText(err error) string {
+	if errors.Is(err, export.ErrOwnerRequired) {
+		return "export: owner rules are configured; --owner is required " +
+			"(repeat --owner for more than one), so a ClientA row never leaves by accident"
+	}
+	return "export: " + err.Error()
+}
+
+// exportFailureText is what the CLI prints when writeExport fails: "could not
+// write" for the file write, "internal error:" for everything else.
+func exportFailureText(err error, out string) string {
+	var we *exportWriteError
+	if errors.As(err, &we) {
+		return "could not write " + out + " : " + err.Error()
+	}
+	return "internal error: " + err.Error()
+}
+
 // runMerge combines K4 export files into K5's merged.json plus a static,
 // offline report.html: `burnmon-cli merge <file>... --out <dir>`. Refuses
 // files whose schema value differs (merge.Merge).

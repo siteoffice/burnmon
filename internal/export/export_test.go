@@ -223,3 +223,22 @@ func TestWriteToDirWritesNamedFile(t *testing.T) {
 		t.Fatal("file content differs from Encode(doc)")
 	}
 }
+func TestSelectSinceWithOwners(t *testing.T) {
+	events := selectEvents()
+	got := Select(events, Filter{Since: "2026-10-19", Owners: []string{"wilco"}})
+	if len(got) != 1 || got[0].RequestID != "r3" {
+		t.Fatalf("since 19th + owner wilco kept %+v, want only r3", got)
+	}
+}
+
+func TestSelectUntilDayBoundary(t *testing.T) {
+	at := func(day, h, m int) time.Time { return time.Date(2026, 10, day, h, m, 0, 0, time.Local) }
+	events := []schema.Event{
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "late", At: at(19, 23, 30), Model: "m", Input: 1, Output: 1},
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "next", At: at(20, 0, 30), Model: "m", Input: 1, Output: 1},
+	}
+	got := Select(events, Filter{Until: "2026-10-19"})
+	if len(got) != 1 || got[0].RequestID != "late" {
+		t.Fatalf("until 19th kept %+v, want only the 23:30 event", got)
+	}
+}

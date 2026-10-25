@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -151,5 +152,28 @@ func TestWriteExportMatchesGolden(t *testing.T) {
 	}
 	if want := exporttest.Golden(t, st, &cfg, f, "dev-1"); !bytes.Equal(got, want) {
 		t.Fatalf("export file differs from the golden bytes")
+	}
+}
+
+// TestExportValidateText pins the CLI's missing-owner words, which scripts and
+// docs quote: the shared export.ErrOwnerRequired text is for the apps.
+func TestExportValidateText(t *testing.T) {
+	want := "export: owner rules are configured; --owner is required " +
+		"(repeat --owner for more than one), so a ClientA row never leaves by accident"
+	if got := exportValidateText(export.ErrOwnerRequired); got != want {
+		t.Fatalf("missing-owner text = %q, want %q", got, want)
+	}
+}
+
+// TestExportFailureText pins the prefixes the CLI printed before the export
+// refactor: "could not write" only for the file write, "internal error:" for
+// reading events and encoding.
+func TestExportFailureText(t *testing.T) {
+	boom := errors.New("boom")
+	if got, want := exportFailureText(&exportWriteError{boom}, "x.json"), "could not write x.json : boom"; got != want {
+		t.Fatalf("write failure = %q, want %q", got, want)
+	}
+	if got, want := exportFailureText(boom, "x.json"), "internal error: boom"; got != want {
+		t.Fatalf("other failure = %q, want %q", got, want)
 	}
 }
