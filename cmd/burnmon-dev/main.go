@@ -208,6 +208,7 @@ func main() {
 	a.cache.Store = st
 	a.perf.startPerfLog()
 	a.startSampling()
+	a.startSnapshotWriter(st)
 	a.startRetentionPrune(devCfg.RetentionDays)
 	// Backgrounded (found by review, 2026-09-25): startSlowRefreshers' own
 	// first pass per cache runs synchronously before that cache's own
