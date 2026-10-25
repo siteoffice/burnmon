@@ -219,6 +219,10 @@ number of exports (free, no cap) into `merged.json` and a `report.html` that ope
 offline with no network script, one column per export's `--label`, totals by client,
 vendor and week.
 
+Both apps write the same file as `burnmon-cli export`, from the same settings places as
+above. You type the folder as an absolute path (it starts as your Downloads folder), and
+can set since, until and a label. When `owners` rules exist, tick at least one owner.
+
 ## The CLI
 
     burnmon-cli                        build the dashboard and open it in the browser
@@ -291,6 +295,16 @@ Things worth checking:
 - Does `burnmon-cli price-check` and `burnmon-cli export` work?
 
 Please leave out prompts, project names and client names from anything you paste.
+
+## What needs BurnMon
+
+The Fleet and the Setup Doctor read the snapshot file, `%USERPROFILE%\.burnmon\snapshot.json`,
+so they need `burnmon.exe` or `burnmon-dev.exe` running. Without either, the file goes
+stale and they say BurnMon is not running. Groundwork works without BurnMon.
+
+Either exe writes the file. With both running, one writes: the one that holds the lock
+`%USERPROFILE%\.burnmon\snapshot.lock`. The other only reads. If the writer exits, the
+other takes over at its next tick (5 seconds). See `docs\snapshot_schema.md`.
 
 ## BurnMon Dev
 
@@ -414,6 +428,15 @@ two locations: the pre-rename config name, kept working for anyone who has not r
 their file yet. `burnmon.json` always wins when both are present. Rename to
 `burnmon.json` when convenient; there is no reason to keep using the old name once you
 have.
+
+`keep_history` (default `true`) goes in `burnmon.json` and is read by both apps. It does
+not go in `burnmon-dev.json`. While `keep_history` is on, deleting a transcript does not delete BurnMon's copy of it: its events stay in the store and only the read position for
+that file is forgotten. Set it to `false` and a transcript that vanishes takes its events
+with it. Both apps can also delete history from their own settings (`burnmon.exe` in
+Settings, `burnmon-dev.exe` in the gear dialog): older than N days, one session, or all.
+Each delete needs two presses, the second on a button that now reads "Confirm: ...". A
+delete keeps the read position, so deleted turns are not read back in from a transcript
+that is still on disk.
 
 ## WSL
 
