@@ -394,6 +394,12 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .secrow{display:flex; gap:10px; justify-content:space-between}
 .secrow b{color:var(--txt)}
 .sechint{color:var(--dim); font-size:11px}
+.secitem{white-space:nowrap; align-items:baseline}
+.secitemtxt{min-width:0; overflow:hidden; text-overflow:ellipsis}
+.secitemmeta{flex:0 0 auto}
+.secpanel.sec-aged .secbody{opacity:.55}
+.secaged{color:var(--amber); font-size:11px}
+.secfile{color:var(--amber)}
 /* R7 agent map. The overview in the section is static, read-only text; the
    full map takes the Station's place (same layer): boxes in columns, lines
    between them, a panel with the evidence on the right. Nothing here
@@ -3428,7 +3434,8 @@ body.plain #mapOverlay{font-size:13.5px}
   function secWord(state){ return secState.plain ? (SEC_STATE_PLAIN[state] || state) : state; }
   function secStub(text){ return '<div class="secstub">' + esc(text) + '</div>'; }
   function secPanel(id, body, wide){
-    return '<section class="panel secpanel' + (wide ? ' secwide' : '') + '" data-sec="' + id + '" data-part="' + id + '">' +
+    var aged = (id === 'waits' || id === 'outcomes') && secReading.status === 'ok' && secAged(secReading.snapshot);
+    return '<section class="panel secpanel' + (wide ? ' secwide' : '') + (aged ? ' sec-aged' : '') + '" data-sec="' + id + '" data-part="' + id + '">' +
       '<div class="panelhead">' + esc(secTitle(id)) + '</div><div class="secbody">' + body + '</div></section>';
   }
 
@@ -3445,25 +3452,53 @@ body.plain #mapOverlay{font-size:13.5px}
     return { text:'snapshot file cannot be read' + (r.error ? ': ' + r.error : ''), down:true };
   }
 
+  // R9: one line per item. Every item field goes through esc, so a title or
+  // path holding < " or & is shown as text and the link carries the exact path.
+  var SEC_KIND = { gate:['gate','Decision needed'], sprint:['sprint waiting','Job paused, needs you'],
+    failed_check:['failed check','A check failed'], question:['question','Question for you'],
+    prompt:['permission prompt','Approval needed'], session:['session waiting','Session waiting for you'],
+    finished:['finished','Done'] };
+  function secAged(snap){ return secReading.age_seconds > 2 * ((snap && snap.tick_seconds) || 5); }
+  function secAgedLine(){
+    var n = Math.round(secReading.age_seconds || 0);
+    return '<div class="secaged">' + esc(secState.plain ? 'This list is ' + n + ' s old' :
+      'snapshot ' + n + ' s old, this list may be behind') + '</div>';
+  }
+  function secItemRow(it, outcome){
+    function link(path, word, none){
+      return path ? '<a href="#" class="secfile" data-path="' + esc(path) + '">' + esc(word) + '</a>' :
+        '<span class="dim">' + esc(none) + '</span>';
+    }
+    var plain = secState.plain, k = SEC_KIND[it.kind] || [it.kind, it.kind], word = k[plain ? 1 : 0], txt = word;
+    if(!plain && it.kind === 'gate') txt = word + ' ' + (it.detail || '');
+    var detail = '';
+    if(plain){
+      if(it.kind === 'sprint' && it.parked && it.parked.length) detail = it.parked.length + (it.parked.length === 1 ? ' task needs you' : ' tasks need you');
+    } else if(it.kind !== 'gate') detail = it.detail || '';
+    var age = secDur((it.age_seconds || 0) + (secReading.age_seconds || 0));
+    var full = word + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age);
+    var html = '<div class="secrow secitem" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
+      '<span class="secitemtxt"><span class="dim">' + esc(txt) + '</span> <b>' + esc(it.title) + '</b>' +
+      (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') + '</span>' +
+      '<span class="secitemmeta">' + esc(outcome ? age + ' ago' : 'waiting ' + age) + ' ' +
+      link(it.spec_path, plain ? 'request' : 'spec', plain ? 'no request' : 'no spec') + ' ' +
+      link(it.result_path, 'result', 'no result yet') + '</span></div>';
+    return html;
+  }
   function secBodyWaits(snap){
-    var w = snap.waits_on_you || [], html = '';
-    if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'No session is waiting on you.') + '</div>';
-    w.forEach(function(x){
-      html += '<div class="secrow"><span><b>' + esc(secBase(x.project)) + '</b> <span class="dim">' + esc(x.vendor) + '</span></span>' +
-        '<span>waiting ' + esc(secDur(x.waiting_seconds)) + '</span></div>';
-    });
-    return html + '<div class="sechint">' + esc(secState.plain ?
-      'Questions and approvals from your flows are coming.' :
-      'Foreman gates, questions and permission prompts: coming (R9).') + '</div>';
+    var w = snap.wait_items || [], html = secAged(snap) ? secAgedLine() : '';
+    if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'Nothing waits on you.') + '</div>';
+    w.forEach(function(it){ html += secItemRow(it, false); });
+    return html;
   }
   function secBodyOutcomes(snap){
-    var s = snap.sessions || [], waiting = 0, busy = 0;
+    var s = snap.sessions || [], waiting = 0, busy = 0, o = snap.outcome_items || [];
     s.forEach(function(x){ if(x.state === 'waiting') waiting++; else if(x.state !== 'dormant') busy++; });
-    var html = '<div><b>' + s.length + '</b> ' + esc(s.length === 1 ? 'session' : 'sessions') + ' running, ' +
+    var html = (secAged(snap) ? secAgedLine() : '') + '<div><b>' + s.length + '</b> ' + esc(s.length === 1 ? 'session' : 'sessions') + ' running, ' +
       '<b>' + busy + '</b> at work, <b>' + waiting + '</b> ' + esc(secState.plain ? 'waiting for you' : 'waiting') + '</div>';
-    return html + '<div class="sechint">' + esc(secState.plain ?
-      'Results of your flows are coming.' :
-      'Gates, failed checks and their results: coming (R9).') + '</div>';
+    if(!o.length) html += '<div>' + esc(secState.plain ? 'Nothing finished in the last 24 hours.' : 'Nothing finished or failed in the last 24 hours.') + '</div>';
+    o.forEach(function(it){ html += secItemRow(it, true); });
+    return html;
   }
   // Burn leads with tokens, then plan limits, then the price figure.
   function secBodyBurn(snap){
@@ -4060,6 +4095,14 @@ body.plain #mapOverlay{font-size:13.5px}
   document.getElementById('secPanels').addEventListener('click', function(e){
     var b = e.target.closest ? e.target.closest('.mapopen') : null;
     if(b) mapOpenView(b.getAttribute('data-src'));
+    var f = e.target.closest ? e.target.closest('.secfile') : null;
+    if(f){
+      e.preventDefault();
+      if(typeof window.bdevOpenItemFile === 'function'){
+        var r = window.bdevOpenItemFile(f.getAttribute('data-path'));
+        if(r && r.catch) r.catch(function(err){ console.error('bdevOpenItemFile:', err); });
+      }
+    }
   });
   window.__bdevMap = { open: mapOpenView, close: mapCloseView, choose: mapChoose, isOpen: function(){ return mapOpen; },
     // uicheck only: draw a payload without calling Go. src is live or the hours.

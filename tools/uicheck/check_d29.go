@@ -247,7 +247,7 @@ func init() {
 		if !strings.Contains(p.Header, "snapshot 7 s old") {
 			return d29Fail("header %q does not show the snapshot age", p.Header)
 		}
-		for _, want := range []string{"project", "API price equivalent", "Plan limits", "Not built yet", "coming (R9)", "120"} {
+		for _, want := range []string{"project", "API price equivalent", "Plan limits", "Not built yet", "G4", "120"} {
 			if !strings.Contains(p.Text, want) {
 				return d29Fail("panels do not show %q from the example", want)
 			}
