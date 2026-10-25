@@ -155,6 +155,9 @@ func TestVanishedTranscriptReappearsWithoutDoubling(t *testing.T) {
 	if _, err := env.collect(t, &cfg); err != nil {
 		t.Fatal(err)
 	}
+	if _, _, _, ok, err := env.st.Cursor(env.path("sess-b")); err != nil || ok {
+		t.Fatalf("cursor for the vanished transcript: ok=%v err=%v, want forgotten", ok, err)
+	}
 	env.write(t, "sess-b")
 	if _, err := env.collect(t, &cfg); err != nil {
 		t.Fatal(err)

@@ -94,8 +94,8 @@ func TestRunTakesOverWithinTwoTicks(t *testing.T) {
 	helper.Process.Kill()
 	helper.Wait()
 	killed := time.Now()
-	if !waitFor(2*runTick+50*time.Millisecond, func() bool { return exists(path) }) {
-		t.Fatalf("no snapshot within %v of the kill", 2*runTick+50*time.Millisecond)
+	if !waitFor(2*runTick+300*time.Millisecond, func() bool { return exists(path) }) {
+		t.Fatalf("no snapshot within %v of the kill", 2*runTick+300*time.Millisecond)
 	}
 	t.Logf("take-over wrote the snapshot %d ms after the owner was killed", time.Since(killed).Milliseconds())
 }

@@ -136,13 +136,22 @@ func (a *app) historyBlockHTML() string {
   (function(){
     var $ = function(id){ return document.getElementById(id); };
     if(!$('cc_h_block')) return;
-    // Two-step confirmation: first click arms for 5 seconds, second sends.
-    function twoStep(btn, label, run){
-      var timer = null, text = btn.textContent;
+    // Two-step confirmation: the first press validates the field, locks the
+    // value into the request and arms the button for 5 seconds with a label
+    // naming what will go; the second press sends that locked request. If the
+    // field changed in between, it re-arms with the new value instead of
+    // sending. Invalid input disarms.
+    function twoStep(btn, build){
+      var timer = null, armed = null, text = btn.textContent;
+      function disarm(){ if(timer){ clearTimeout(timer); timer = null; } armed = null; btn.textContent = text; }
       btn.onclick = function(){
-        if(timer){ clearTimeout(timer); timer = null; btn.textContent = text; run(); return; }
-        btn.textContent = 'Confirm: ' + label;
-        timer = setTimeout(function(){ timer = null; btn.textContent = text; }, 5000);
+        var cur = build();
+        if(!cur){ disarm(); return; }
+        if(armed && armed.key === cur.key){ var req = armed.req; disarm(); sendDelete(req); return; }
+        disarm();
+        armed = cur;
+        btn.textContent = 'Confirm: ' + cur.label;
+        timer = setTimeout(disarm, 5000);
       };
     }
     function sendDelete(req){
@@ -152,18 +161,24 @@ func (a *app) historyBlockHTML() string {
         out.textContent = 'Deleted ' + r.events + ' events and ' + r.tool_calls + ' tool calls. The dashboard refreshes at the next rebuild.';
       }).catch(function(e){ out.textContent = 'Delete failed: ' + String((e && e.message) || e); });
     }
-    twoStep($('cc_h_delete_older'), 'delete older history', function(){
-      var days = parseInt($('cc_h_days').value, 10);
-      if(isNaN(days) || days < 1){ $('cc_h_delete_result').textContent = 'Enter a number of days, 1 or more.'; return; }
-      sendDelete({scope: 'older_than', days: days, confirm: true});
+    twoStep($('cc_h_delete_older'), function(){
+      var raw = $('cc_h_days').value.trim();
+      var days = Number(raw);
+      if(raw === '' || !Number.isInteger(days) || days < 1){
+        $('cc_h_delete_result').textContent = 'Enter a whole number of days, 1 or more.';
+        return null;
+      }
+      return {key: 'older:' + days, label: 'delete older than ' + days + ' days',
+        req: {scope: 'older_than', days: days, confirm: true}};
     });
-    twoStep($('cc_h_delete_session'), 'delete this session', function(){
+    twoStep($('cc_h_delete_session'), function(){
       var id = $('cc_h_session').value.trim();
-      if(!id){ $('cc_h_delete_result').textContent = 'Enter a session id.'; return; }
-      sendDelete({scope: 'session', session_id: id, confirm: true});
+      if(!id){ $('cc_h_delete_result').textContent = 'Enter a session id.'; return null; }
+      return {key: 'session:' + id, label: 'delete session ' + id,
+        req: {scope: 'session', session_id: id, confirm: true}};
     });
-    twoStep($('cc_h_delete_all'), 'delete all history', function(){
-      sendDelete({scope: 'all', confirm: true});
+    twoStep($('cc_h_delete_all'), function(){
+      return {key: 'all', label: 'delete all history', req: {scope: 'all', confirm: true}};
     });
     var expBtn = $('cc_h_export'), expOut = $('cc_h_export_result');
     window.__bmExportHistoryResolve = function(key, d){

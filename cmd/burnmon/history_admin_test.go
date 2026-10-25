@@ -99,6 +99,8 @@ func TestSettingsModalHasHistoryBlock(t *testing.T) {
 	for _, want := range []string{
 		`id="cc_h_delete_older"`, `id="cc_h_delete_session"`, `id="cc_h_delete_all"`,
 		`id="cc_h_export"`, "keep_history",
+		`'Confirm: ' + cur.label`, `'delete older than ' + days + ' days'`,
+		`'delete session ' + id`, `'delete all history'`, `Number.isInteger(days)`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("settings modal lacks %s", want)

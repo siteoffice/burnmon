@@ -156,6 +156,18 @@ func TestExportEqualsCLIGolden(t *testing.T) {
 	}
 }
 
+func TestExportEmptyLabelUsesDefaultInFileName(t *testing.T) {
+	st := exporttest.Store(t)
+	cfg := testConfig(t)
+	res, err := Export(st, &cfg, ExportRequest{Dir: t.TempDir(), Label: "", Owners: []string{"wilco"}}, exporttest.FixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := export.FileName(export.DefaultLabel, exporttest.FixedNow); filepath.Base(res.Path) != want {
+		t.Fatalf("file name = %q, want %q", filepath.Base(res.Path), want)
+	}
+}
+
 func TestExportRefusesWithoutOwnerWhenRulesExist(t *testing.T) {
 	st := exporttest.Store(t)
 	cfg := testConfig(t)
