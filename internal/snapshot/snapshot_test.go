@@ -53,13 +53,13 @@ func itemsFixture() []waits.Item {
 
 func buildFixture() Snapshot {
 	return Build(Input{
-		Now:         t0,
-		TickSeconds: 5,
-		FXUSDEUR:    0.5,
-		Live:        liveFixture(),
-		Sources:     []Source{{Name: "store", OK: true, ReadAt: t0.Format(time.RFC3339)}, {Name: "sysmon", OK: false, ReadAt: t0.Format(time.RFC3339), Error: "boom"}},
-		Processes:   []sysmon.ProcessGroupSample{{Ts: t0.Add(-2 * time.Second), Harness: sysmon.HarnessClaude, CPUPct: 12.5, MemMB: 300, IOBps: 10}},
-		WaitItems:   itemsFixture()[:1],
+		Now:          t0,
+		TickSeconds:  5,
+		FXUSDEUR:     0.5,
+		Live:         liveFixture(),
+		Sources:      []Source{{Name: "store", OK: true, ReadAt: t0.Format(time.RFC3339)}, {Name: "sysmon", OK: false, ReadAt: t0.Format(time.RFC3339), Error: "boom"}},
+		Processes:    []sysmon.ProcessGroupSample{{Ts: t0.Add(-2 * time.Second), Harness: sysmon.HarnessClaude, CPUPct: 12.5, MemMB: 300, IOBps: 10}},
+		WaitItems:    itemsFixture()[:1],
 		OutcomeItems: itemsFixture()[1:],
 	})
 }
