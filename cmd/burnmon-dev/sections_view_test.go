@@ -275,22 +275,28 @@ func TestPageHasNoItemControls(t *testing.T) {
 	}
 }
 
-// Review findings of Task 7: the person's actions panel is not the one the fit
-// pass drops first, each list shows at most 5 rows, the tooltip carries what
-// the row shows, and a prompt row does not say its kind twice.
-func TestPageCapsItemRowsAndFixesWording(t *testing.T) {
+// Review findings of Task 7 and iteration 2: the person's actions panel is not
+// the one the fit pass drops first, the tooltip carries what the row shows, a
+// prompt row does not say its kind twice, and no list is cut off: every item
+// is a row, inside a bounded scroll area, with the total in the header.
+func TestPageListsEveryItemInBoundedScrollArea(t *testing.T) {
 	for _, want := range []string{
-		`var SEC_ROWS_CAP = 5;`,
-		`function secMoreLine(`,
-		`'+' + n + ' more'`,
-		`'and ' + n + ' more'`,
-		`.slice(0, SEC_ROWS_CAP)`,
 		`var shown = plain ? word : txt;`,
 		`var full = shown + ' ' + (it.title || '')`,
 		`String(it.detail).toLowerCase() === k[0].toLowerCase()`,
+		`w.forEach(function(it){ rows += secItemRow(it, false); });`,
+		`o.forEach(function(it){ rows += secItemRow(it, true); });`,
+		`.seclist{`,
+		`overflow-y:auto`,
+		`secCount(`,
 	} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %s", want)
+		}
+	}
+	for _, bad := range []string{`SEC_ROWS_CAP`, `secMoreLine`, `.slice(0, SEC_ROWS_CAP)`} {
+		if strings.Contains(pageHTML, bad) {
+			t.Errorf("page still has the row cap: %s", bad)
 		}
 	}
 }

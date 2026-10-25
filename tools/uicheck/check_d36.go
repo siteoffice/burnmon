@@ -9,7 +9,10 @@ import (
 )
 
 // d36: Waits on you and Outcomes list the items (agent control plan row R9).
-// Fed the frozen example (testdata\snapshot_example.json) it proves:
+// Fed the UNMODIFIED frozen example (testdata\snapshot_example.json, the gate is not moved
+// to the front) it proves:
+//   - every wait item is a row in the DOM (the list scrolls inside the panel, none is
+//     cut off), the header carries the count ("Waits on you (6)"), no +k more line;
 //   - Standard: the Waits rows are the example's wait_items and the Outcomes
 //     rows its outcome_items, in order; the gate row reads "gate G4", the
 //     prompt row "permission prompt", the sprint row "2 tasks parked"; every
@@ -85,27 +88,6 @@ func init() {
 			return err
 		}
 		fail := func(format string, a ...any) error { return fmt.Errorf("d36: "+format, a...) }
-		// The page shows the first 5 wait items. Put the gate first so the
-		// gate checks below still see its row (the example lists it last).
-		var rawMap map[string]json.RawMessage
-		var rawWait []json.RawMessage
-		if err := json.Unmarshal(raw, &rawMap); err != nil {
-			return err
-		}
-		if err := json.Unmarshal(rawMap["wait_items"], &rawWait); err != nil || len(rawWait) != len(ex.Wait) {
-			return fmt.Errorf("d36: wait_items do not parse: %v", err)
-		}
-		for i := range ex.Wait {
-			if ex.Wait[i].Kind == "gate" {
-				ex.Wait = append([]d36Item{ex.Wait[i]}, append(append([]d36Item{}, ex.Wait[:i]...), ex.Wait[i+1:]...)...)
-				rawWait = append([]json.RawMessage{rawWait[i]}, append(append([]json.RawMessage{}, rawWait[:i]...), rawWait[i+1:]...)...)
-				break
-			}
-		}
-		rawMap["wait_items"], _ = json.Marshal(rawWait)
-		if raw, err = json.Marshal(rawMap); err != nil {
-			return err
-		}
 		if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
 			return err
 		}
@@ -119,15 +101,7 @@ func init() {
 			err := evalInto(d36ReadJS, &p)
 			return p, err
 		}
-		const rowCap = 5 // SEC_ROWS_CAP in page.html
-		capItems := func(items []d36Item) []d36Item {
-			if len(items) > rowCap {
-				return items[:rowCap]
-			}
-			return items
-		}
 		sameRows := func(label string, rows []d36Row, items []d36Item) error {
-			items = capItems(items)
 			if len(rows) != len(items) {
 				return fail("%s: %d rows, want %d", label, len(rows), len(items))
 			}
@@ -162,8 +136,13 @@ func init() {
 		if err := sameRows("standard outcomes", p.Outcomes, ex.Outcome); err != nil {
 			return err
 		}
-		if more := len(ex.Wait) - rowCap; more > 0 && !strings.Contains(p.WaitsTxt, fmt.Sprintf("+%d more", more)) {
-			return fail("standard Waits lacks the +%d more line", more)
+		// Nothing is cut off: every wait item is a row (sameRows above), the header
+		// carries the total and there is no +k more line.
+		if want := fmt.Sprintf("Waits on you (%d)", len(ex.Wait)); !strings.Contains(p.WaitsTxt, want) {
+			return fail("standard Waits header lacks %q", want)
+		}
+		if strings.Contains(p.WaitsTxt, " more") || strings.Contains(p.OutTxt, " more") {
+			return fail("a list still ends in a more line")
 		}
 		if strings.Contains(p.WaitsTxt, "permission prompt project permission prompt") {
 			return fail("standard prompt row repeats its kind word")
@@ -185,6 +164,9 @@ func init() {
 		}
 		if err := sameRows("plain waits", p.Waits, ex.Wait); err != nil {
 			return err
+		}
+		if want := fmt.Sprintf("Needs you (%d)", len(ex.Wait)); !strings.Contains(p.WaitsTxt, want) {
+			return fail("plain Waits header lacks %q", want)
 		}
 		for _, want := range []string{"Decision needed", "Approval needed", "Question for you", "Job paused, needs you", "2 tasks need you"} {
 			if !strings.Contains(p.WaitsTxt, want) {

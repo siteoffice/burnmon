@@ -24,9 +24,12 @@ import (
 // not running.
 const Tick = 5 * time.Second
 
-// foremanEvery is how often the Foreman state files are read again: they
-// change at gate and phase speed, not every tick.
-const foremanEvery = 30 * time.Second
+// foremanEvery is how often the Foreman state files are read again. One read
+// takes 250 to 680 ms on the real tree (92 sprints, 56 flows), so it is not
+// done every tick, but a new gate must show within two ticks (R9): 1.5 ticks
+// leaves room for tick jitter, so the read is due on the second tick at the
+// latest.
+const foremanEvery = Tick + Tick/2
 
 // GraphReaders holds the relation graph's own sources (R6) between ticks.
 // Every reader is local disk or the Windows process and TCP tables: no port,
@@ -41,6 +44,8 @@ type GraphReaders struct {
 	// time.Now).
 	AgentView func(ctx context.Context) ([]byte, error)
 	Now       func() time.Time
+
+	agentViewRefused error // why EnableAgentView started no poller
 
 	poll  agentPoll
 	mcp   *graph.MCPConfig
@@ -142,6 +147,9 @@ func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, no
 		} else {
 			sources = append(sources, source(waits.SourceAgentView, at.UTC().Format(time.RFC3339), aerr))
 		}
+	}
+	if gr.AgentView == nil && gr.agentViewRefused != nil {
+		sources = append(sources, source(waits.SourceAgentView, stamp, gr.agentViewRefused))
 	}
 	waitItems, outcomeItems := waits.Build(wi)
 

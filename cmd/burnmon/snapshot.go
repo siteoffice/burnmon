@@ -30,9 +30,7 @@ func (a *app) newSnapshotWriter(st *store.Store, path string) *snapshotwriter.Wr
 		w.Graph = snapshotwriter.NewGraphReaders(home, cfg.ForemanRoot)
 		w.Graph.Rows = ps.Procs
 		if cfg.AgentView {
-			if p, err := exec.LookPath("claude"); err == nil {
-				w.Graph.AgentView = snapshotwriter.ClaudeAgentView(p)
-			}
+			w.Graph.EnableAgentView(exec.LookPath)
 		}
 	} else {
 		log.Println("snapshot: no home folder, relation graph sources off:", err)

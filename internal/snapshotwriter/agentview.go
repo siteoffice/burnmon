@@ -20,7 +20,9 @@ const (
 
 // ClaudeAgentView returns a runner for "<claudePath> agents --json": hidden
 // window, stdout only. A non-zero exit is an error that carries the first 200
-// bytes of stderr. It never goes through cmd /c, WMI or CIM.
+// bytes of stderr. claudePath must come from ResolveClaude, which accepts only a
+// directly startable binary (a .exe on Windows), so no cmd.exe sits between
+// the timeout and claude. It never goes through cmd /c, WMI or CIM.
 func ClaudeAgentView(claudePath string) func(ctx context.Context) ([]byte, error) {
 	return func(ctx context.Context) ([]byte, error) {
 		cmd := exec.CommandContext(ctx, claudePath, "agents", "--json")
