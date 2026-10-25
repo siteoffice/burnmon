@@ -755,6 +755,7 @@ func (a *app) settingsModalHTML() string {
     <label>Window<input id="cc_s_window" type="text" value="` + escapeAttr(sub.Window) + `"></label>
    </div>
   </details>
+` + a.historyBlockHTML() + `
   <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
    <button id="cc_s_cancel" style="padding:6px 14px;border:1px solid var(--pine-40);border-radius:6px;background:transparent;color:#fff;font:13px 'Inter','Segoe UI',sans-serif;cursor:pointer">Cancel</button>
    <button id="cc_s_save" style="padding:6px 14px;border:1px solid #FFDD32;border-radius:6px;background:transparent;color:#FFDD32;font:13px 'Inter','Segoe UI',sans-serif;cursor:pointer">Save and reload</button>

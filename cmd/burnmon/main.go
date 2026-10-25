@@ -27,6 +27,7 @@ import (
 	"burnmon/internal/adapter/codex"
 	"burnmon/internal/forecast"
 	"burnmon/internal/history"
+	"burnmon/internal/historyadmin"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/scan"
@@ -455,6 +456,29 @@ func main() {
 		return nil
 	}); err != nil {
 		log.Println("could not bind ccSaveSettings:", err)
+	}
+
+	// bmDeleteHistory and bmExportHistory (B1): the settings dialog's History
+	// block. Delete is quick and returns its counts (a Promise); export reads
+	// the whole store, so like bmHistory it returns at once and resolves
+	// through asyncResolveJS. The apps only call a.deleteHistory and
+	// a.exportHistory, which hold the confirm and absolute-folder rules.
+	if err := w.Bind("bmDeleteHistory", func(req historyadmin.DeleteRequest) (historyadmin.DeleteResult, error) {
+		return a.deleteHistory(st, req)
+	}); err != nil {
+		log.Println("could not bind bmDeleteHistory:", err)
+	}
+	if err := w.Bind("bmExportHistory", func(req historyadmin.ExportRequest) {
+		go func() {
+			js, err := asyncResolveJS("__bmExportHistoryResolve", "export", a.exportOutcome(st, req))
+			if err != nil {
+				log.Println("bmExportHistory: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+	}); err != nil {
+		log.Println("could not bind bmExportHistory:", err)
 	}
 
 	go func() {

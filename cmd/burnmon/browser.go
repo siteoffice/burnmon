@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"burnmon/internal/history"
+	"burnmon/internal/historyadmin"
 	"burnmon/internal/store"
 )
 
@@ -310,6 +311,16 @@ func (b *browserBridge) serveAPI(w http.ResponseWriter, r *http.Request) {
 				result = map[string]string{"rebuildError": rebuildErr}
 			}
 		}
+	case "bmDeleteHistory":
+		var req historyadmin.DeleteRequest
+		if err = arg(0, &req); err == nil {
+			result, err = b.a.deleteHistory(b.st, req)
+		}
+	case "bmExportHistory":
+		var req historyadmin.ExportRequest
+		if err = arg(0, &req); err == nil {
+			result, err = b.a.exportHistory(b.st, req, time.Now())
+		}
 	default:
 		http.NotFound(w, r)
 		return
@@ -367,6 +378,14 @@ const bridgeScript = `<script>
     call('bmHistory', [reqID, filter]).then(function(d){
       window.__bmHistoryResolve && window.__bmHistoryResolve(reqID, d);
     }).catch(logErr('bmHistory'));
+  };
+  window.bmDeleteHistory = function(req){ return call('bmDeleteHistory', [req]); };
+  window.bmExportHistory = function(req){
+    call('bmExportHistory', [req]).then(function(d){
+      window.__bmExportHistoryResolve && window.__bmExportHistoryResolve('export', d);
+    }).catch(function(e){
+      window.__bmExportHistoryResolve && window.__bmExportHistoryResolve('export', {error: String(e.message || e)});
+    });
   };
   window.ccRefresh = function(){
     call('ccRefresh').then(reload).catch(function(){ window.ccRefreshFailed && window.ccRefreshFailed(); });
