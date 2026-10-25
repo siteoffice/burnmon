@@ -153,7 +153,14 @@ func d34Off(tag string, p d34Page, wantHidden bool) error {
 	if p.Natural <= 0 || p.Floor < 0.6*p.Natural-1 || p.Floor < 59 {
 		return d34Fail("%s: floor %.1f px, natural %.1f px, want at least 60 percent and 60 px", tag, p.Floor, p.Natural)
 	}
-	if p.HistH < p.Floor-1 {
+	systemHidden := false
+	for _, id := range p.Hidden {
+		if id == "system" {
+			systemHidden = true
+		}
+	}
+	// A hidden System panel has no chart height left to hold to the floor.
+	if !systemHidden && p.HistH < p.Floor-1 {
 		return d34Fail("%s: System chart %.1f px is below its floor %.1f px", tag, p.HistH, p.Floor)
 	}
 	if len(p.Hidden) > 0 && p.AtHide > p.Floor+2 {
