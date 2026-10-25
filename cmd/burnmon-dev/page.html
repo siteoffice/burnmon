@@ -363,6 +363,53 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
 @media (max-aspect-ratio: 4/5){
   header{min-height:40px}
 }
+
+/* R8 sections (agent control plan, row R8), follow-up 2026-10-23. Two modes.
+   Standard shows every section and the page scrolls: the sections host sits
+   above the older Burn and System zones inside #pageScroll, and #legacy gets
+   exactly the window's height so those zones lay out as they always did.
+   Plain fits the window, hides the older zones and the To Do panel, and drops
+   whole sections, last first, when they do not fit. Everything a switch turns
+   off gets .sec-off. */
+.sec-off{display:none !important}
+#pageScroll{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden}
+body.sec-standard #pageScroll{overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+#legacy{flex:1 1 auto; min-height:0; display:flex; flex-direction:column}
+body.sec-standard #legacy{flex:0 0 auto}
+.sechost{flex:0 0 auto; overflow:hidden; margin:4px 4px 0; display:flex; flex-direction:column; gap:4px; min-height:0}
+.sechost.sec-fill{flex:1 1 auto; margin-bottom:4px}
+.secnotice{padding:6px 8px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font-size:12px}
+.secnotice.warn{border-color:var(--amber)}
+.secpanels{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:4px}
+.secpanel .secbody{padding:6px 8px; display:flex; flex-direction:column; gap:3px; font-size:12px; overflow:hidden}
+body.plain .secpanel .secbody{font-size:13.5px}
+.secpanel.secwide{grid-column:1 / -1}
+/* No scrollbars in Plain: a panel that does not fit is dropped whole, last first, and a line says so. */
+.secpanel.sec-cut{display:none !important}
+.secbig{font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--strong)}
+.secbig small{font-size:12px; font-weight:400; color:var(--dim)}
+.secstub{color:var(--dim)}
+.secrow{display:flex; gap:10px; justify-content:space-between}
+.secrow b{color:var(--txt)}
+.sechint{color:var(--dim); font-size:11px}
+.sesub td:first-child{padding-left:20px}
+/* The Export line: the Plain toggle at the left, the gear and EXPORT at the right. */
+.hdrline{flex:1 1 360px; display:flex; align-items:center; gap:14px; min-width:0}
+.plaintoggle{border:1px solid var(--bd); background:var(--panel2); color:var(--dim); font:700 11.5px/1 var(--mono);
+  letter-spacing:.04em; padding:4px 11px; border-radius:12px; cursor:pointer; white-space:nowrap}
+.plaintoggle:hover{border-color:var(--amber)}
+.plaintoggle.on{background:var(--amber); border-color:var(--amber); color:var(--bg)}
+.gearbtn{background:none; border:none; color:var(--blu); font:15px/1 var(--mono); cursor:pointer; padding:2px 4px}
+.gearbtn:hover, .gearbtn.on{color:var(--amber)}
+#secSettings{position:fixed; right:14px; top:60px; z-index:1700; background:var(--panel); border:1px solid var(--bd);
+  border-top:2px solid var(--amber); padding:10px 14px; display:none; flex-direction:column; gap:8px; font-size:12px;
+  box-shadow:0 6px 24px var(--scrim)}
+#secSettings.open{display:flex}
+#secSettings .setcols{display:flex; gap:28px}
+#secSettings .setcol{display:flex; flex-direction:column; gap:5px}
+#secSettings h4{margin:0 0 2px; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase}
+#secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
+#secSettings input{margin:0; accent-color:var(--amber)}
 </style>
 </head>
 <body>
@@ -383,11 +430,23 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   <div class="hstat">CPU <b id="hdrCPU">-</b></div>
   <div class="hstat">RAM <b id="hdrRAM">-</b></div>
   <div class="hstat" id="hdrClock">-</div>
+  <div class="hstat" id="hdrSnapAge" title="Age of %USERPROFILE%\.burnmon\snapshot.json, written by BurnMon every 5 seconds">snapshot -</div>
   <div class="hstat" id="hdrBackfillStatus" style="display:none"></div>
-  <div class="hdrspacer"></div>
-  <button class="textbtn" id="exportBtn" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
-  <div class="hstat" id="exportStatus"></div>
+  <div class="hdrline">
+    <button class="plaintoggle" id="plainToggle" type="button" aria-pressed="false" title="Plain words, and a page that fits the window. No model is called.">Plain: off</button>
+    <div class="hdrspacer"></div>
+    <button class="gearbtn" id="secGear" type="button" aria-expanded="false" title="Choose which sections each mode shows">&#9881;</button>
+    <button class="textbtn" id="exportBtn" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
+    <div class="hstat" id="exportStatus"></div>
+  </div>
 </header>
+<div id="pageScroll">
+<div class="sechost" id="secHost">
+  <div id="secNotice"></div>
+  <div class="sechint" id="secCutNote"></div>
+  <div class="secpanels" id="secPanels"></div>
+</div>
+<div id="legacy">
 <main>
   <section class="zone burn">
     <div class="zonelabel">Burn, last 30 min</div>
@@ -414,7 +473,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
            them again later, ensureVendorRow's own doc comment) - accepted
            as a lesser problem than an "always stay" panel disappearing
            outright. -->
-      <div class="panel" style="flex:0 0 auto; max-height:180px">
+      <div class="panel" id="vendorStripPanel" style="flex:0 0 auto; max-height:clamp(180px, calc(100vh - 780px), 260px)">
         <div class="panelhead">Vendor strip</div>
         <table>
           <thead><tr><th></th><th>Today</th><th>Week</th><th>Month</th></tr></thead>
@@ -487,6 +546,13 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   <div class="panelhead">Microsoft To Do</div>
   <div class="todobody" id="todoBody"></div>
 </section>
+</div>
+</div>
+<div id="secSettings" role="dialog" aria-label="Sections each mode shows">
+  <h4>Sections each mode shows</h4>
+  <div class="setcols" id="secSettingsCols"></div>
+  <div class="sechint">Esc closes this list</div>
+</div>
 <div id="turnPopupOverlay" class="hidden">
   <div id="turnPopup">
     <button id="turnPopupClose" type="button" title="Close" aria-label="Close">&times;</button>
@@ -2951,6 +3017,8 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     for(var i = 0; i < zones.length; i++){
       if(zones[i].scrollHeight > zones[i].clientHeight + 1) return true;
     }
+    var lg = document.getElementById('legacy');
+    if(lg && lg.scrollHeight > lg.clientHeight + 1) return true;
     return false;
   }
   // A panel's own width/height-cropped content (renderHeatmap,
@@ -3012,6 +3080,8 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     window.__bdevTodoLayout = { applied: true, plainHistH: plainH, histH: hist.getBoundingClientRect().height };
   }
   function applyPanelFit(){
+    secSizeLegacy();
+    secCutAll();
     var histBefore = document.querySelector('.histwrap');
     var histHBefore = histBefore ? histBefore.getBoundingClientRect().height : 0;
     clearTodoGrow();
@@ -3028,6 +3098,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
       if(wasDropped[el.id] && !stillDropped[el.id]) rerenderFitCandidate(el.id);
     });
     applyTodoGrow();
+    secFit();
     // The chart canvas was drawn at the height it had before this pass;
     // redraw it when the grow (or its undo) changed that height.
     var histAfter = document.querySelector('.histwrap');
@@ -3055,6 +3126,323 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
       renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
     });
   });
+
+  // ---- R8 sections -------------------------------------------------------
+  // Seven sections, two modes (Standard and Plain), one switch per section in
+  // each mode. The choice is stored by the Go side (bdevSetSections, written
+  // to burnmon-dev-view.json); this code only draws it. The numbers come from
+  // %USERPROFILE%\.burnmon\snapshot.json through bdevSections, never from a
+  // port. A stale or missing file is shown as "BurnMon is not running" and
+  // its old numbers are not drawn. Plain Mode means plain words, a page that
+  // fits the window and the Plain list of sections; it makes no model call.
+  var SEC_ORDER = ['waits','outcomes','burn','agents_map','sessions','processes','git'];
+  var SEC_TITLE = {
+    waits:['Waits on you','Needs you'], outcomes:['Outcomes','Results'], burn:['Burn','Token use'],
+    agents_map:['Agents map','Who works with whom'], sessions:['Sessions','Running sessions'],
+    processes:['Processes','Programs running'], git:['Git','Code changes']
+  };
+  var SEC_STATE_PLAIN = {
+    arriving:'starting up', reading:'reading files', fetching:'looking things up', planning:'planning',
+    coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
+    waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
+  };
+  var secState = { plain:false, sections:{}, standard:{}, plainSet:{}, order:SEC_ORDER };
+  var secReading = { status:'missing', age_seconds:0 };
+  var secLastJSON = '';
+  var secLastSig = '';
+  var secFrozen = false; // set by the test hook so the poll cannot overwrite what it injected
+
+  function secTitle(id){ return SEC_TITLE[id][secState.plain ? 1 : 0]; }
+  function secBase(path){
+    var p = String(path || '').split(/[\\/]/).filter(Boolean);
+    return p.length ? p[p.length - 1] : '-';
+  }
+  function secDur(sec){
+    sec = Math.max(0, Math.round(sec || 0));
+    if(sec < 60) return sec + ' s';
+    if(sec < 3600){ var m = Math.floor(sec / 60), s = sec % 60; return m + ' min' + (s ? ' ' + s + ' s' : ''); }
+    var h = Math.floor(sec / 3600), mm = Math.floor((sec % 3600) / 60);
+    return h + ' h' + (mm ? ' ' + mm + ' min' : '');
+  }
+  function secEuro(c){ return '€' + ((c && c.eur) || 0).toFixed(2); }
+  function secLabel(c){ return (c && c.label) || 'API price equivalent'; }
+  function secWord(state){ return secState.plain ? (SEC_STATE_PLAIN[state] || state) : state; }
+  function secStub(text){ return '<div class="secstub">' + esc(text) + '</div>'; }
+  function secPanel(id, body, wide){
+    return '<section class="panel secpanel' + (wide ? ' secwide' : '') + '" data-sec="' + id + '">' +
+      '<div class="panelhead">' + esc(secTitle(id)) + '</div><div class="secbody">' + body + '</div></section>';
+  }
+
+  // secHeadline is the one sentence about the snapshot: its age in the
+  // header, and a plain statement when BurnMon is not running.
+  function secHeadline(r){
+    var age = secDur(r.age_seconds);
+    switch(r.status){
+      case 'ok': return { text:'snapshot ' + age + ' old', down:false };
+      case 'stale': return { text:'BurnMon is not running (last snapshot ' + age + ' old)', down:true };
+      case 'missing': return { text:'BurnMon is not running (no snapshot file)', down:true };
+      case 'unsupported_version': return { text:'snapshot is a newer version than this window reads', down:true };
+    }
+    return { text:'snapshot file cannot be read' + (r.error ? ': ' + r.error : ''), down:true };
+  }
+
+  function secBodyWaits(snap){
+    var w = snap.waits_on_you || [], html = '';
+    if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'No session is waiting on you.') + '</div>';
+    w.forEach(function(x){
+      html += '<div class="secrow"><span><b>' + esc(secBase(x.project)) + '</b> <span class="dim">' + esc(x.vendor) + '</span></span>' +
+        '<span>waiting ' + esc(secDur(x.waiting_seconds)) + '</span></div>';
+    });
+    return html + '<div class="sechint">' + esc(secState.plain ?
+      'Questions and approvals from your flows are coming.' :
+      'Foreman gates, questions and permission prompts: coming (R9).') + '</div>';
+  }
+  function secBodyOutcomes(snap){
+    var s = snap.sessions || [], waiting = 0, busy = 0;
+    s.forEach(function(x){ if(x.state === 'waiting') waiting++; else if(x.state !== 'dormant') busy++; });
+    var html = '<div><b>' + s.length + '</b> ' + esc(s.length === 1 ? 'session' : 'sessions') + ' running, ' +
+      '<b>' + busy + '</b> at work, <b>' + waiting + '</b> ' + esc(secState.plain ? 'waiting for you' : 'waiting') + '</div>';
+    return html + '<div class="sechint">' + esc(secState.plain ?
+      'Results of your flows are coming.' :
+      'Gates, failed checks and their results: coming (R9).') + '</div>';
+  }
+  // Burn leads with tokens, then plan limits, then the price figure.
+  function secBodyBurn(snap){
+    var b = snap.burn || {};
+    var html = '<div class="secbig">' + esc(fmtTokensFull(b.tokens_per_minute || 0)) + ' <small>' +
+      esc(secState.plain ? 'tokens a minute' : 'tokens/min') + '</small></div>' +
+      '<div class="dim">' + esc(fmtTokensFull(b.tokens_last_5min || 0)) + ' tokens in the last 5 minutes</div>' +
+      '<div class="dim">Plan limits: not in the snapshot yet</div>' +
+      '<div>' + esc(secEuro(b.cost)) + ' <span class="dim">' + esc(secLabel(b.cost)) + ', last 5 minutes</span></div>';
+    if(secState.plain) html += '<div class="sechint">' + esc('This is what the tokens would cost at list price. It is not a bill.') + '</div>';
+    return html;
+  }
+  function secBodyAgents(){
+    return '<div id="secAgentsSlot">' + secStub(secState.plain ?
+      'Not built yet. A picture of which agent started which will appear here.' :
+      'Not built yet. The agent map comes with R7.') + '</div>';
+  }
+  function secBodyGit(){
+    return secStub(secState.plain ?
+      'Not built yet. Changes waiting to be saved will appear here.' :
+      'Not built yet. Branch and worktree state will appear here.');
+  }
+  function secBodySessions(snap){
+    var all = snap.sessions || [], ids = {}, kids = {}, tops = [];
+    all.forEach(function(x){ ids[x.id] = true; });
+    all.forEach(function(x){
+      if(x.parent_id && ids[x.parent_id]) (kids[x.parent_id] = kids[x.parent_id] || []).push(x);
+      else tops.push(x);
+    });
+    if(!all.length) return '<div>' + esc(secState.plain ? 'No sessions are running.' : 'No running sessions.') + '</div>';
+    function row(x, sub){
+      return '<tr' + (sub ? ' class="sesub"' : '') + '><td>' + esc(x.agent) + '</td><td>' + esc(secBase(x.project)) + '</td><td>' +
+        esc(secWord(x.state)) + '</td><td class="num">' + esc(fmtTokens(x.tokens)) + '</td><td class="num">' +
+        esc(secEuro(x.cost)) + '</td><td class="num">' + esc(secDur(x.age_seconds)) + '</td></tr>';
+    }
+    var rows = '';
+    tops.forEach(function(x){ rows += row(x, false); (kids[x.id] || []).forEach(function(k){ rows += row(k, true); }); });
+    var head = secState.plain ?
+      ['Tool','Project','Doing now','Tokens','Price at list','Last active'] :
+      ['Agent','Project','State','Tokens','API price equiv.','Idle'];
+    return '<table><thead><tr>' + head.map(function(h, i){ return '<th' + (i < 3 ? ' style="text-align:left"' : '') + '>' + esc(h) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+  function secBodyProcesses(snap){
+    var p = snap.processes || [], bad = (snap.sources || []).filter(function(s){ return s.name === 'sysmon' && !s.ok; });
+    var html = bad.length ? '<div class="secnotice warn">' + esc(secState.plain ? 'The program list is not available right now.' : 'sysmon: ' + (bad[0].error || 'not ok')) + '</div>' : '';
+    if(!p.length) return html + '<div>' + esc(secState.plain ? 'No agent programs are running.' : 'No harness process is running.') + '</div>';
+    var rows = p.map(function(x){
+      return '<tr><td>' + esc(x.harness) + '</td><td class="num">' + (x.cpu_pct || 0).toFixed(1) + '</td><td class="num">' +
+        Math.round(x.mem_mb || 0) + ' MB</td><td class="num">' + esc(fmtBytes(x.io_bps)) + '</td></tr>';
+    }).join('');
+    var head = secState.plain ? ['Program','Processor %','Memory','Disk use'] : ['Harness','CPU %','RAM','IO/s'];
+    return html + '<table><thead><tr>' + head.map(function(h, i){ return '<th' + (i === 0 ? ' style="text-align:left"' : '') + '>' + esc(h) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function secVisible(id){ return !!secState.sections[id]; }
+  var SEC_NEEDS_SNAPSHOT = { waits:1, outcomes:1, burn:1, sessions:1, processes:1 };
+  var SEC_BODY = { waits:secBodyWaits, outcomes:secBodyOutcomes, burn:secBodyBurn, agents_map:secBodyAgents,
+    sessions:secBodySessions, processes:secBodyProcesses, git:secBodyGit };
+
+  // The Plain toggle on the Export line. The state is in its text, so colour
+  // is not the only signal.
+  function secRenderToggle(){
+    var t = document.getElementById('plainToggle');
+    if(!t) return;
+    t.textContent = secState.plain ? 'Plain: on' : 'Plain: off';
+    t.classList.toggle('on', secState.plain);
+    t.setAttribute('aria-pressed', secState.plain ? 'true' : 'false');
+  }
+
+  // The gear's list: one column of switches per mode. Built once, then only
+  // the ticks are synced, so a poll never replaces a box under the pointer.
+  function secRenderSettings(){
+    var box = document.getElementById('secSettingsCols');
+    if(!box) return;
+    if(!box.firstChild){
+      var html = '';
+      [['standard','Standard',0],['plain','Plain',1]].forEach(function(m){
+        html += '<div class="setcol"><h4>' + m[1] + '</h4>';
+        SEC_ORDER.forEach(function(id){
+          html += '<label><input type="checkbox" data-mode="' + m[0] + '" data-sw="' + id + '"> ' + esc(SEC_TITLE[id][m[2]]) + '</label>';
+        });
+        html += '</div>';
+      });
+      box.innerHTML = html;
+    }
+    Array.prototype.forEach.call(box.querySelectorAll('input[data-sw]'), function(i){
+      var list = i.getAttribute('data-mode') === 'plain' ? secState.plainSet : secState.standard;
+      i.checked = !!list[i.getAttribute('data-sw')];
+    });
+  }
+
+  function secRender(){
+    var host = document.getElementById('secHost');
+    if(!host) return;
+    var r = secReading, head = secHeadline(r), snap = r.status === 'ok' ? r.snapshot : null;
+    var age = document.getElementById('hdrSnapAge');
+    if(age){ age.textContent = head.text; age.style.color = head.down ? 'var(--amber)' : ''; }
+    secRenderToggle();
+    secRenderSettings();
+    var notice = document.getElementById('secNotice');
+    notice.innerHTML = head.down ? '<div class="secnotice warn">' + esc(head.text + '. No current numbers are shown.') + '</div>' : '';
+    var html = '', ids = secState.order || SEC_ORDER;
+    ids.forEach(function(id){
+      if(!secVisible(id)) return;
+      var body;
+      if(SEC_NEEDS_SNAPSHOT[id] && !snap) body = secStub(secState.plain ? 'No current numbers. Start BurnMon to see them.' : 'No current snapshot.');
+      else body = SEC_BODY[id](snap);
+      html += secPanel(id, body, id === 'sessions' || id === 'processes');
+    });
+    document.getElementById('secPanels').innerHTML = html;
+    secApplyLegacy();
+    secFit();
+  }
+
+  // Standard shows the older Burn and System zones and the To Do panel, each
+  // zone with its section switch. Plain hides all of them and the host fills
+  // the window.
+  function secApplyLegacy(){
+    var plain = secState.plain, s = secState.sections;
+    var showBurn = !plain && !!s.burn, showSys = !plain && !!s.processes;
+    function set(el, hide){ if(el) el.classList.toggle('sec-off', hide); }
+    set(document.querySelector('.zone.burn'), !showBurn);
+    set(document.querySelector('.zone.system'), !showSys);
+    set(document.querySelector('main'), !showBurn && !showSys);
+    set(document.getElementById('todoPanel'), plain);
+    set(document.getElementById('legacy'), plain);
+    document.getElementById('secHost').classList.toggle('sec-fill', plain);
+    document.body.classList.toggle('sec-standard', !plain);
+    document.body.classList.toggle('plain', plain);
+    secSizeLegacy();
+    // The charts were drawn at a size they no longer have; the resize handler redraws them.
+    var sig = [plain, showBurn, showSys].join();
+    if(sig !== secLastSig){ secLastSig = sig; window.dispatchEvent(new Event('resize')); }
+  }
+
+  // In Standard the older zones get exactly the height of the scroll area, the
+  // same room they had before R8, so they fit as they always did. The sections
+  // host sits above them and the page scrolls.
+  function secSizeLegacy(){
+    var lg = document.getElementById('legacy'), ps = document.getElementById('pageScroll'), main = document.querySelector('main');
+    if(!lg || !ps) return;
+    lg.style.height = (secState.plain || !main || main.classList.contains('sec-off')) ? '' : ps.clientHeight + 'px';
+  }
+
+  // Plain fits the window. The older zones are hidden, so secFit only has the
+  // host to size: panels come back in order until the host would overflow,
+  // and the rest stay dropped with a line that says how many. Standard drops
+  // nothing. applyPanelFit calls secCutAll first and secFit last.
+  function secCutAll(){
+    Array.prototype.forEach.call(document.querySelectorAll('#secPanels .secpanel'), function(p){
+      p.classList.toggle('sec-cut', secState.plain);
+    });
+  }
+  function secFit(){
+    var host = document.getElementById('secHost'), note = document.getElementById('secCutNote');
+    if(!host) return;
+    var panels = Array.prototype.slice.call(host.querySelectorAll('.secpanel')), shown = panels.length;
+    if(secState.plain){
+      secCutAll();
+      shown = 0;
+      for(var i = 0; i < panels.length; i++){
+        panels[i].classList.remove('sec-cut');
+        if(host.scrollHeight > host.clientHeight + 1){ panels[i].classList.add('sec-cut'); break; }
+        shown++;
+      }
+    } else {
+      panels.forEach(function(p){ p.classList.remove('sec-cut'); });
+    }
+    // The note takes a line of its own, so once something is dropped, drop
+    // more until the host fits with the note in it.
+    function say(){
+      var cut = panels.length - shown;
+      if(note) note.textContent = cut ? cut + (cut === 1 ? ' section' : ' sections') + ' hidden, the window is too small' : '';
+    }
+    say();
+    while(secState.plain && shown > 0 && host.scrollHeight > host.clientHeight + 1){
+      shown--;
+      panels[shown].classList.add('sec-cut');
+      say();
+    }
+  }
+
+  function secApplyPayload(p){
+    secState = { plain:!!p.plain_mode, sections:p.sections || {}, standard:p.sections_standard || {},
+      plainSet:p.sections_plain || {}, order:p.order || SEC_ORDER };
+    secReading = p.reading || { status:'missing', age_seconds:0 };
+    secRender();
+  }
+  function secPoll(){
+    if(typeof window.bdevSections !== 'function' || document.hidden || secFrozen) return Promise.resolve();
+    return window.bdevSections().then(function(p){
+      var j = JSON.stringify(p);
+      if(j === secLastJSON) return;
+      secApplyPayload(p);
+      secLastJSON = j;
+    }).catch(function(e){ console.log('bdevSections:', e); });
+  }
+  function secSend(change){
+    if(typeof window.bdevSetSections !== 'function') return Promise.resolve();
+    return window.bdevSetSections(change).then(function(){ secLastJSON = 'x'; return secPoll(); })
+      .catch(function(e){ console.log('bdevSetSections:', e); });
+  }
+
+  var secSettingsEl = document.getElementById('secSettings'), secGearEl = document.getElementById('secGear');
+  function secSettingsOpen(open){
+    if(open){
+      var r = secGearEl.getBoundingClientRect();
+      secSettingsEl.style.top = Math.round(r.bottom + 6) + 'px';
+    }
+    secSettingsEl.classList.toggle('open', open);
+    secGearEl.classList.toggle('on', open);
+    secGearEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  document.getElementById('plainToggle').addEventListener('click', function(){
+    var want = !secState.plain;
+    if(secFrozen){ secState.plain = want; secRender(); return; }
+    secSend({ plain: want });
+  });
+  secGearEl.addEventListener('click', function(e){ e.stopPropagation(); secSettingsOpen(!secSettingsEl.classList.contains('open')); });
+  secSettingsEl.addEventListener('click', function(e){ e.stopPropagation(); });
+  secSettingsEl.addEventListener('change', function(e){
+    var t = e.target;
+    if(t.hasAttribute('data-sw')) secSend({ mode: t.getAttribute('data-mode'), section: t.getAttribute('data-sw'), on: t.checked });
+  });
+  document.addEventListener('click', function(){ if(secSettingsEl.classList.contains('open')) secSettingsOpen(false); });
+  // Esc closes the list first, before the Station or fullscreen handlers see it.
+  document.addEventListener('keydown', function(e){
+    if((e.key === 'Escape' || e.key === 'Esc') && secSettingsEl.classList.contains('open')){
+      secSettingsOpen(false);
+      e.stopImmediatePropagation();
+    }
+  }, true);
+  // The page can be driven without Go (uicheck d29 feeds the frozen example).
+  window.__bdevSections = { apply: function(p){ secFrozen = true; secApplyPayload(p); }, state: function(){ return secState; } };
+  secPoll();
+  setInterval(secPoll, 5000);
   setupExportButton();
 })();
 </script>

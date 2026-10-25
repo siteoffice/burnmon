@@ -35,6 +35,9 @@ func init() {
     var el = all[i];
     if (el.id === 'turnTicker' || el.closest('#turnTicker')) continue;
     if (el.id === 'todoBody' || el.closest('#todoBody')) continue;
+    // The R8 follow-up decided that Standard scrolls (decision of 2026-10-23, "for now"): #pageScroll is the
+    // one deliberate scroll area besides the ticker and the To Do body. Plain keeps it overflow:hidden (d29).
+    if (el.id === 'pageScroll') continue;
     var cs = getComputedStyle(el);
     if (cs.display === 'none') continue;
     var vOver = el.scrollHeight > el.clientHeight + 1 && cs.overflowY !== 'hidden';
