@@ -15,6 +15,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,7 @@ import (
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
 	"burnmon/internal/store"
+	"burnmon/internal/waits"
 )
 
 const version = "0.3.2"
@@ -61,6 +63,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "graph" {
 		os.Exit(runGraph(os.Args[2:]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "waits" {
+		os.Exit(runWaits(os.Args[2:]))
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "backfill-parents" {
@@ -268,6 +274,116 @@ func runGraph(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// runWaits prints the Foreman waits and outcomes (R9) for the live check:
+// open gates, waiting sprints, failed checks and sprints finished in the last
+// 24 hours. Read only: no store, no sessions, no agent view.
+func runWaits(args []string) int { return runWaitsTo(os.Stdout, args) }
+
+func runWaitsTo(w io.Writer, args []string) int {
+	fs := flag.NewFlagSet("waits", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
+	foreman := fs.String("foreman", "", "Foreman folder (overrides foreman_root in the config)")
+	jsonOut := fs.Bool("json", false, "print the items as JSON")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	cfg, err := loadConfig(*cfgPath, true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		return 1
+	}
+	root := cfg.ForemanRoot
+	if *foreman != "" {
+		root = *foreman
+	}
+	if root == "" {
+		fmt.Fprintln(os.Stderr, "no Foreman folder: pass -foreman <dir> or set foreman_root in burnmon.json")
+		return 1
+	}
+	sprints, flows, err := graph.ReadForeman(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not read Foreman state:", err)
+		return 1
+	}
+	wait, outcomes := waits.Build(waits.Input{Now: time.Now(), Sprints: sprints, Flows: flows})
+	if *jsonOut {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		out := struct {
+			WaitItems    []waits.Item `json:"wait_items"`
+			OutcomeItems []waits.Item `json:"outcome_items"`
+		}{wait, outcomes}
+		if err := enc.Encode(out); err != nil {
+			return 1
+		}
+		return 0
+	}
+	fmt.Fprint(w, waitsReport(wait, outcomes))
+	return 0
+}
+
+// waitsReport is the text form: one line per item under two headings, then
+// the counts line. A failed check is counted once per id even when it is in
+// both lists.
+func waitsReport(wait, outcomes []waits.Item) string {
+	var b strings.Builder
+	line := func(it waits.Item) {
+		spec, result := it.SpecPath, it.ResultPath
+		if spec == "" {
+			spec = "-"
+		}
+		if result == "" {
+			result = "-"
+		}
+		fmt.Fprintf(&b, "%s  %s  %s  %s  spec=%s  result=%s\n", it.Kind, it.Title, it.Detail,
+			waitsAge(it.AgeSeconds), spec, result)
+	}
+	b.WriteString("Waits on you\n")
+	for _, it := range wait {
+		line(it)
+	}
+	b.WriteString("Outcomes, last 24 h\n")
+	for _, it := range outcomes {
+		line(it)
+	}
+	gates, sprints, finished := 0, 0, 0
+	checks := map[string]bool{}
+	for _, it := range wait {
+		switch it.Kind {
+		case waits.KindGate:
+			gates++
+		case waits.KindSprint:
+			sprints++
+		case waits.KindFailedCheck:
+			checks[it.ID] = true
+		}
+	}
+	for _, it := range outcomes {
+		switch it.Kind {
+		case waits.KindFinished:
+			finished++
+		case waits.KindFailedCheck:
+			checks[it.ID] = true
+		}
+	}
+	fmt.Fprintf(&b, "open gates: %d, waiting sprints: %d, failed checks: %d, finished last 24 h: %d\n",
+		gates, sprints, len(checks), finished)
+	return b.String()
+}
+
+func waitsAge(s int64) string {
+	d := time.Duration(s) * time.Second
+	switch {
+	case d >= 24*time.Hour:
+		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
+	case d >= time.Hour:
+		return fmt.Sprintf("%dh", int(d/time.Hour))
+	case d >= time.Minute:
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 // runBackfillParents sets the parent session on Claude subagent rows stored
