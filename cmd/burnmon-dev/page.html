@@ -3260,9 +3260,33 @@ body.plain #mapOverlay{font-size:13.5px}
   function fitSay(n){
     var note = document.getElementById('secCutNote');
     if(note) note.textContent = n ? n + (n === 1 ? ' section' : ' sections') + ' hidden, the window is too small' : '';
+    secHostSync();
+  }
+  // A zone whose parts are all off or hidden leaves no empty box and label
+  // behind; main and #legacy go with their last zone. fitClearDrops restores them.
+  function fitShells(hidden){
+    function gone(ids){ return ids.every(function(id){ return !secPartOn(id) || hidden.indexOf(id) >= 0; }); }
+    var b = gone(SEC_BURN_PARTS), s = gone(SEC_SYSTEM_PARTS);
+    function drop(el, v){ if(el) el.classList.toggle('fit-dropped', v); }
+    drop(document.querySelector('.zone.burn'), b);
+    drop(document.querySelector('.zone.system'), s);
+    drop(document.querySelector('main'), b && s);
+    drop(document.getElementById('legacy'), b && s && gone(['todo']));
+  }
+  // The Activity and Heatmap row follows its two halves: both gone, the row goes;
+  // one gone (hidden or switched off), the other takes the row.
+  function fitRow(hidden){
+    var row = document.getElementById('activityHeatmapRow');
+    if(!row) return;
+    row.classList.remove('fit-dropped');
+    row.classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
+    if(!hidden.some(function(id){ return id === 'activity' || id === 'heatmap'; })) return;
+    var aGone = !secPartOn('activity') || hidden.indexOf('activity') >= 0, hGone = !secPartOn('heatmap') || hidden.indexOf('heatmap') >= 0;
+    if(aGone && hGone) row.classList.add('fit-dropped');
+    else row.classList.add('split-one');
   }
   function fitRunOff(fit){
-    var hidden = [];
+    var hidden = [], elsOf = {};
     for(var i = 0; i < FIT_OFF_ORDER.length; i++){
       if(!pageOverflows()) break;
       var id = FIT_OFF_ORDER[i];
@@ -3271,19 +3295,30 @@ body.plain #mapOverlay{font-size:13.5px}
       if(!els.length) continue;
       if(!hidden.length) fit.histAtHide = fitHistH();
       els.forEach(function(el){ el.classList.add('fit-dropped'); });
+      elsOf[id] = els;
       hidden.push(id);
+      fitRow(hidden);
+      fitShells(hidden);
       // The note takes a line of its own, so it counts in the next overflow test.
       fitSay(hidden.length);
     }
+    // The greedy pass never looks back: put each hidden part back, latest first,
+    // and keep it when the page still fits. The count and the list stay exact.
+    hidden.slice().reverse().forEach(function(id){
+      var at = hidden.indexOf(id);
+      elsOf[id].forEach(function(el){ el.classList.remove('fit-dropped'); });
+      hidden.splice(at, 1);
+      fitRow(hidden);
+      fitShells(hidden);
+      fitSay(hidden.length);
+      if(!pageOverflows()) return;
+      elsOf[id].forEach(function(el){ el.classList.add('fit-dropped'); });
+      hidden.splice(at, 0, id);
+      fitRow(hidden);
+      fitShells(hidden);
+      fitSay(hidden.length);
+    });
     fit.hidden = hidden;
-    // Both halves of the Activity and Heatmap row gone: the row goes too.
-    var row = document.getElementById('activityHeatmapRow');
-    // A part the switch turned off counts as gone too. One half gone: the other takes the row.
-    var aGone = !secPartOn('activity') || hidden.indexOf('activity') >= 0, hGone = !secPartOn('heatmap') || hidden.indexOf('heatmap') >= 0;
-    if(row && hidden.some(function(id){ return id === 'activity' || id === 'heatmap'; })){
-      if(aGone && hGone) row.classList.add('fit-dropped');
-      else row.classList.add('split-one');
-    }
   }
   function rerenderFitPart(id){
     if(id === 'activity') renderHeatmap(lastHeatmapPayload);
@@ -3583,6 +3618,13 @@ body.plain #mapOverlay{font-size:13.5px}
   // nothing in it is on. Without any part on the host is simply empty.
   var SEC_BURN_PARTS = ['burn_30min','vendor_strip','activity','heatmap','turn_ticker'];
   var SEC_SYSTEM_PARTS = ['system','process_groups'];
+  // The sections host goes when nothing is in it: no section on, no notice, no cut note.
+  function secHostSync(){
+    var host = document.getElementById('secHost'), nt = document.getElementById('secNotice'), cut = document.getElementById('secCutNote');
+    if(!host) return;
+    var empty = !SEC_ORDER.some(secPartOn) && !(nt && nt.innerHTML) && !(cut && cut.textContent);
+    host.classList.toggle('sec-off', empty);
+  }
   function secApplyParts(){
     var plain = secState.plain;
     function set(el, hide){ if(el) el.classList.toggle('sec-off', hide); }
@@ -3597,7 +3639,9 @@ body.plain #mapOverlay{font-size:13.5px}
     set(document.getElementById('legacy'), hideLegacy);
     set(document.getElementById('activityHeatmapRow'), !secPartOn('activity') && !secPartOn('heatmap'));
     document.getElementById('activityHeatmapRow').classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
-    document.getElementById('secHost').classList.toggle('sec-fill', hideLegacy);
+    // Only the scrollbar-off page fills the window; with it on the host keeps its natural height so the page scrolls.
+    document.getElementById('secHost').classList.toggle('sec-fill', hideLegacy && !secState.scrollbar);
+    secHostSync();
     document.body.classList.toggle('scroll-on', !!secState.scrollbar);
     document.body.classList.toggle('plain', plain);
     secSizeLegacy();

@@ -139,10 +139,17 @@ func d34Off(tag string, p d34Page, wantHidden bool) error {
 	if len(p.Hidden) > len(d34Order) {
 		return d34Fail("%s: hid %v, more than the drop order holds", tag, p.Hidden)
 	}
-	for i, id := range p.Hidden {
-		if id != d34Order[i] {
-			return d34Fail("%s: hidden %v is not a prefix of the drop order %v", tag, p.Hidden, d34Order)
+	// The greedy pass puts a part back when the page still fits, so the list
+	// is the drop order with gaps: every entry in order, none out of place.
+	at := 0
+	for _, id := range p.Hidden {
+		for at < len(d34Order) && d34Order[at] != id {
+			at++
 		}
+		if at == len(d34Order) {
+			return d34Fail("%s: hidden %v is not in the drop order %v", tag, p.Hidden, d34Order)
+		}
+		at++
 	}
 	if len(p.Dropped) != len(p.Hidden) {
 		return d34Fail("%s: hidden %v but %v carry fit-dropped", tag, p.Hidden, p.Dropped)
@@ -253,6 +260,26 @@ func init() {
 		}
 		if _, err := screenshot(hwnd, "d34-plain-scroll-off"); err != nil {
 			return err
+		}
+		// Scrollbar on with the Plain defaults: no older zone is showing, the
+		// sections host must keep its natural height so the page scrolls and
+		// no panel is cut off by the host.
+		if err := size(1024, 480); err != nil {
+			return err
+		}
+		plainDef := d29Payload(d29Opts{Plain: true, Scrollbar: true, Status: "ok", Snap: snap})
+		p, err = d34Apply(plainDef)
+		if err != nil {
+			return err
+		}
+		if !p.Scroll || p.OverflowY != "auto" || !p.Scrolls {
+			return d34Fail("plain defaults 1024x480 scrollbar on: the page does not scroll (scroll %v, overflow-y %q, scrolls %v)", p.Scroll, p.OverflowY, p.Scrolls)
+		}
+		if p.HostOver > 1 || p.BodyOver > 1 {
+			return d34Fail("plain defaults 1024x480 scrollbar on: host cuts its panels off by %.0f px, body %.0f px", p.HostOver, p.BodyOver)
+		}
+		if p.Note != "" || len(p.Hidden) != 0 {
+			return d34Fail("plain defaults 1024x480 scrollbar on hides %v with note %q", p.Hidden, p.Note)
 		}
 		return size(1152, 2048)
 	}

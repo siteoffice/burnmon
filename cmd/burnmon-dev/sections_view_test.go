@@ -210,3 +210,23 @@ func TestPageHasScrollbarFitPass(t *testing.T) {
 		t.Errorf("page still uses the body.sec-standard class")
 	}
 }
+// Review findings of iteration 3: the host fills the window only with the
+// scrollbar off, the greedy pass puts parts back, and an empty zone leaves no shell.
+func TestPageFitPassReviewFixes(t *testing.T) {
+	for _, want := range []string{
+		`classList.toggle('sec-fill', hideLegacy && !secState.scrollbar)`,
+		`function secHostSync()`,
+		`function fitShells(hidden)`,
+		`function fitRow(hidden)`,
+		`hidden.slice().reverse().forEach(function(id){`,
+		`hidden.splice(at, 0, id);`,
+		`drop(document.getElementById('legacy'), b && s && gone(['todo']));`,
+	} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	if strings.Contains(pageHTML, "toggle('sec-fill', hideLegacy)") {
+		t.Errorf("sec-fill still ignores the scrollbar switch")
+	}
+}
