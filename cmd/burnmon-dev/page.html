@@ -367,17 +367,17 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
 }
 
 /* R8 sections (agent control plan, row R8), follow-up 2026-10-23. Two modes.
-   Standard shows every section and the page scrolls: the sections host sits
+   With Overall scrollbar on (body.scroll-on, both modes) the page scrolls: the sections host sits
    above the older Burn and System zones inside #pageScroll, and #legacy gets
    exactly the window's height so those zones lay out as they always did.
-   Plain fits the window, hides the older zones and the To Do panel, and drops
-   whole sections, last first, when they do not fit. Everything a switch turns
+   With it off the page fits the window: the System chart shrinks to its floor,
+   then parts are hidden in FIT_OFF_ORDER and a line says how many. Everything a switch turns
    off gets .sec-off. */
 .sec-off{display:none !important}
 #pageScroll{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden}
-body.sec-standard #pageScroll{overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+body.scroll-on #pageScroll{overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
 #legacy{flex:1 1 auto; min-height:0; display:flex; flex-direction:column}
-body.sec-standard #legacy{flex:0 0 auto}
+body.scroll-on #legacy{flex:0 0 auto}
 .sechost{flex:0 0 auto; overflow:hidden; margin:4px 4px 0; display:flex; flex-direction:column; gap:4px; min-height:0}
 .sechost.sec-fill{flex:1 1 auto; margin-bottom:4px}
 .secnotice{padding:6px 8px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font-size:12px}
@@ -388,8 +388,6 @@ body.sec-standard #legacy{flex:0 0 auto}
 .secpanel .secbody{padding:6px 8px; display:flex; flex-direction:column; gap:3px; font-size:12px; overflow:hidden}
 body.plain .secpanel .secbody{font-size:13.5px}
 .secpanel.secwide{grid-column:1 / -1}
-/* No scrollbars in Plain: a panel that does not fit is dropped whole, last first, and a line says so. */
-.secpanel.sec-cut{display:none !important}
 .secbig{font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--strong)}
 .secbig small{font-size:12px; font-weight:400; color:var(--dim)}
 .secstub{color:var(--dim)}
@@ -2603,7 +2601,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // figure).
   // lastHarnessHeatmapNow: the shared tick's own "now" (section 5, "all
   // time-axis charts... use the same now from the snapshot"), so a resize
-  // or a panel un-hiding (rerenderFitCandidate) can redraw against a
+  // or a panel un-hiding (rerenderFitPart) can redraw against a
   // reasonable anchor even without a fresh snapshot in hand.
   var lastHarnessHeatmapNow = Date.now();
 
@@ -3156,6 +3154,12 @@ body.plain #mapOverlay{font-size:13.5px}
     }
     var lg = document.getElementById('legacy');
     if(lg && lg.scrollHeight > lg.clientHeight + 1) return true;
+    // Scrollbar off: the page area and the sections host must fit as well.
+    if(!document.body.classList.contains('scroll-on')){
+      var ps = document.getElementById('pageScroll'), host = document.getElementById('secHost');
+      if(ps && ps.scrollHeight > ps.clientHeight + 1) return true;
+      if(host && host.scrollHeight > host.clientHeight + 1) return true;
+    }
     return false;
   }
   // A panel's own width/height-cropped content (renderHeatmap,
@@ -3166,15 +3170,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // slow poll happens to land (up to 60s later). applyPanelFit re-renders
   // any candidate that just went from dropped to shown, from its own
   // last-fetched cache, so it repaints correctly the instant it reappears
-  // (fixed after review, 2026-09-25).
-  function rerenderFitCandidate(id){
-    if(id === 'activityHeatmapRow'){
-      renderHeatmap(lastHeatmapPayload);
-      renderHarnessHeatmap(lastProcessGroupsHistory);
-    } else if(id === 'processGroupsPanel'){
-      renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
-    }
-  }
+  // (fixed after review, 2026-09-25). The redraw is rerenderFitPart, below.
   // applyTodoGrow/clearTodoGrow (alpha.7 item 3, Wilco 2026-09-29): with
   // To Do visible, the System chart (.histwrap) gets 70% of the height it
   // has in the plain layout at the same window size, and To Do takes the
@@ -3216,30 +3212,111 @@ body.plain #mapOverlay{font-size:13.5px}
     if(pageOverflows()){ clearTodoGrow(); return; }
     window.__bdevTodoLayout = { applied: true, plainHistH: plainH, histH: hist.getBoundingClientRect().height };
   }
-  function applyPanelFit(){
+  // B2 fit pass, keyed on the Overall scrollbar switch (secState.scrollbar).
+  //   On: today's layout. The older zones get the scroll area's height and the
+  //   page scrolls; To Do, process groups and the Activity and Heatmap row are
+  //   dropped silently, in that order, when a zone would overflow.
+  //   Off: the page fits the window. The System chart (.histwrap) may shrink
+  //   to FIT_FLOOR of its natural height (the height it has with the switch
+  //   on, measured by running that layout first); while the page still
+  //   overflows, parts are hidden in FIT_OFF_ORDER and #secCutNote counts them.
+  //   Never hidden: burn_30min, vendor_strip, turn_ticker, system.
+  // Every pass starts from show-all, so hidden parts come back when there is room.
+  var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn'];
+  var FIT_FLOOR = 0.6;
+  // __bdevFit is tools\uicheck's own read (check_d34.go).
+  window.__bdevFit = { scroll: true, histNatural: 0, histFloor: 0, histH: 0, histAtHide: 0, hidden: [] };
+  function fitHistH(){
+    var h = document.querySelector('.histwrap');
+    return h ? h.getBoundingClientRect().height : 0;
+  }
+  // Clears every drop and returns the part ids that were dropped.
+  function fitClearDrops(){
+    var was = {};
+    Array.prototype.forEach.call(document.querySelectorAll('.fit-dropped'), function(el){
+      if(el.id === 'activityHeatmapRow'){ was.activity = true; was.heatmap = true; }
+      var id = el.getAttribute('data-part');
+      if(id) was[id] = true;
+      el.classList.remove('fit-dropped');
+    });
+    return was;
+  }
+  // The scrollbar-on layout; returns the System chart height before the To Do grow.
+  function fitRunOn(){
     secSizeLegacy();
-    secCutAll();
-    var histBefore = document.querySelector('.histwrap');
-    var histHBefore = histBefore ? histBefore.getBoundingClientRect().height : 0;
     clearTodoGrow();
     var candidates = FIT_CANDIDATE_IDS.map(function(id){ return document.getElementById(id); }).filter(Boolean);
-    var wasDropped = {};
-    candidates.forEach(function(el){ wasDropped[el.id] = el.classList.contains('fit-dropped'); el.classList.remove('fit-dropped'); });
-    var stillDropped = {};
     for(var i = 0; i < candidates.length; i++){
       if(!pageOverflows()) break;
       candidates[i].classList.add('fit-dropped');
-      stillDropped[candidates[i].id] = true;
     }
-    candidates.forEach(function(el){
-      if(wasDropped[el.id] && !stillDropped[el.id]) rerenderFitCandidate(el.id);
-    });
+    var natural = fitHistH();
     applyTodoGrow();
-    secFit();
+    return natural;
+  }
+  function fitSay(n){
+    var note = document.getElementById('secCutNote');
+    if(note) note.textContent = n ? n + (n === 1 ? ' section' : ' sections') + ' hidden, the window is too small' : '';
+  }
+  function fitRunOff(fit){
+    var hidden = [];
+    for(var i = 0; i < FIT_OFF_ORDER.length; i++){
+      if(!pageOverflows()) break;
+      var id = FIT_OFF_ORDER[i];
+      if(!secPartOn(id)) continue;
+      var els = Array.prototype.filter.call(document.querySelectorAll('[data-part="' + id + '"]'), function(el){ return el.getClientRects().length > 0; });
+      if(!els.length) continue;
+      if(!hidden.length) fit.histAtHide = fitHistH();
+      els.forEach(function(el){ el.classList.add('fit-dropped'); });
+      hidden.push(id);
+      // The note takes a line of its own, so it counts in the next overflow test.
+      fitSay(hidden.length);
+    }
+    fit.hidden = hidden;
+    // Both halves of the Activity and Heatmap row gone: the row goes too.
+    var row = document.getElementById('activityHeatmapRow');
+    if(row && hidden.indexOf('activity') >= 0 && hidden.indexOf('heatmap') >= 0) row.classList.add('fit-dropped');
+  }
+  function rerenderFitPart(id){
+    if(id === 'activity') renderHeatmap(lastHeatmapPayload);
+    else if(id === 'heatmap') renderHarnessHeatmap(lastProcessGroupsHistory);
+    else if(id === 'process_groups') renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
+  }
+  function applyPanelFit(){
+    var body = document.body, hist = document.querySelector('.histwrap');
+    var histHBefore = fitHistH();
+    var scroll = !!secState.scrollbar;
+    var was = fitClearDrops();
+    fitSay(0);
+    var fit = { scroll: scroll, histNatural: 0, histFloor: 0, histH: 0, histAtHide: 0, hidden: [] };
+    if(hist) hist.style.minHeight = '';
+    body.classList.add('scroll-on');
+    fit.histNatural = fitRunOn();
+    if(!scroll){
+      body.classList.remove('scroll-on');
+      fitClearDrops();
+      clearTodoGrow();
+      secSizeLegacy();
+      if(hist && fit.histNatural > 0){
+        fit.histFloor = Math.max(60, Math.round(FIT_FLOOR * fit.histNatural));
+        hist.style.minHeight = fit.histFloor + 'px';
+      }
+      fitRunOff(fit);
+      applyTodoGrow();
+      if(fit.histFloor && fitHistH() < fit.histFloor - 1) clearTodoGrow();
+    }
+    fit.histH = fitHistH();
+    var now = {};
+    Array.prototype.forEach.call(document.querySelectorAll('.fit-dropped'), function(el){
+      if(el.id === 'activityHeatmapRow'){ now.activity = true; now.heatmap = true; }
+      var id = el.getAttribute('data-part');
+      if(id) now[id] = true;
+    });
+    Object.keys(was).forEach(function(id){ if(!now[id]) rerenderFitPart(id); });
+    window.__bdevFit = fit;
     // The chart canvas was drawn at the height it had before this pass;
-    // redraw it when the grow (or its undo) changed that height.
-    var histAfter = document.querySelector('.histwrap');
-    if(histAfter && Math.abs(histAfter.getBoundingClientRect().height - histHBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
+    // redraw it when the grow, the floor or their undo changed that height.
+    if(hist && Math.abs(fit.histH - histHBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
   }
 
   // resize (and F11, which is itself a resize of the window's client area):
@@ -3512,59 +3589,28 @@ body.plain #mapOverlay{font-size:13.5px}
     set(document.getElementById('activityHeatmapRow'), !secPartOn('activity') && !secPartOn('heatmap'));
     document.getElementById('activityHeatmapRow').classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
     document.getElementById('secHost').classList.toggle('sec-fill', hideLegacy);
-    document.body.classList.toggle('sec-standard', !plain);
+    document.body.classList.toggle('scroll-on', !!secState.scrollbar);
     document.body.classList.toggle('plain', plain);
     secSizeLegacy();
     // The charts were drawn at a size they no longer have; the resize handler redraws them.
-    var sig = [plain, showBurn, showSys, Object.keys(secState.parts).filter(secPartOn).join('|')].join();
+    var sig = [plain, secState.scrollbar, showBurn, showSys, Object.keys(secState.parts).filter(secPartOn).join('|')].join();
     if(sig !== secLastSig){ secLastSig = sig; window.dispatchEvent(new Event('resize')); }
   }
-  // In Standard the older zones get exactly the height of the scroll area, the
-  // same room they had before R8, so they fit as they always did. The sections
-  // host sits above them and the page scrolls.
+  // Scrollbar on (body.scroll-on): the older zones get exactly the height of
+  // the scroll area, the same room they had before R8, so they fit as they
+  // always did. The sections host sits above them and the page scrolls. With
+  // it off the older block takes what the host leaves (CSS flex), nothing here.
+  // applyPanelFit adds and removes body.scroll-on while it measures, so this
+  // reads the class and not secState.
   function secSizeLegacy(){
     var lg = document.getElementById('legacy'), ps = document.getElementById('pageScroll'), main = document.querySelector('main');
     if(!lg || !ps) return;
-    lg.style.height = (secState.plain || !main || main.classList.contains('sec-off')) ? '' : ps.clientHeight + 'px';
+    var on = document.body.classList.contains('scroll-on');
+    lg.style.height = (!on || !main || main.classList.contains('sec-off')) ? '' : ps.clientHeight + 'px';
   }
 
-  // Plain fits the window. The older zones are hidden, so secFit only has the
-  // host to size: panels come back in order until the host would overflow,
-  // and the rest stay dropped with a line that says how many. Standard drops
-  // nothing. applyPanelFit calls secCutAll first and secFit last.
-  function secCutAll(){
-    Array.prototype.forEach.call(document.querySelectorAll('#secPanels .secpanel'), function(p){
-      p.classList.toggle('sec-cut', secState.plain);
-    });
-  }
-  function secFit(){
-    var host = document.getElementById('secHost'), note = document.getElementById('secCutNote');
-    if(!host) return;
-    var panels = Array.prototype.slice.call(host.querySelectorAll('.secpanel')), shown = panels.length;
-    if(secState.plain){
-      secCutAll();
-      shown = 0;
-      for(var i = 0; i < panels.length; i++){
-        panels[i].classList.remove('sec-cut');
-        if(host.scrollHeight > host.clientHeight + 1){ panels[i].classList.add('sec-cut'); break; }
-        shown++;
-      }
-    } else {
-      panels.forEach(function(p){ p.classList.remove('sec-cut'); });
-    }
-    // The note takes a line of its own, so once something is dropped, drop
-    // more until the host fits with the note in it.
-    function say(){
-      var cut = panels.length - shown;
-      if(note) note.textContent = cut ? cut + (cut === 1 ? ' section' : ' sections') + ' hidden, the window is too small' : '';
-    }
-    say();
-    while(secState.plain && shown > 0 && host.scrollHeight > host.clientHeight + 1){
-      shown--;
-      panels[shown].classList.add('sec-cut');
-      say();
-    }
-  }
+  // secRender draws first, then asks for one fit pass.
+  function secFit(){ applyPanelFit(); }
 
   function secApplyPayload(p){
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},

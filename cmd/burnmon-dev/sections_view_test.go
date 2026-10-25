@@ -191,3 +191,19 @@ func TestPageTagsEveryPart(t *testing.T) {
 		}
 	}
 }
+
+func TestPageHasScrollbarFitPass(t *testing.T) {
+	for _, want := range []string{
+		`var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn'];`,
+		`window.__bdevFit = `,
+		`body.scroll-on #pageScroll`,
+		`classList.toggle('scroll-on'`,
+	} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	if strings.Contains(pageHTML, "sec-standard") {
+		t.Errorf("page still uses the body.sec-standard class")
+	}
+}

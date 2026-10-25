@@ -165,7 +165,7 @@ const d29ReadJS = `(function(){
     todoOn: !document.getElementById('todoPanel').classList.contains('sec-off'),
     plain: !!window.__bdevSections.state().plain,
     toggle: tg.textContent, toggleOn: tg.classList.contains('on'),
-    bodyStandard: document.body.classList.contains('sec-standard'),
+    bodyStandard: document.body.classList.contains('scroll-on'),
     burnZone: disp(q('.zone.burn')), systemZone: disp(q('.zone.system')), mainShown: disp(q('main')),
     header: document.getElementById('hdrSnapAge').textContent,
     notice: document.getElementById('secNotice').textContent,
