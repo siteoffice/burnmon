@@ -383,6 +383,13 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bdevSetSections:", err)
 	}
+	// bdevOpenItemFile (R9): opens a spec or result file only when the current
+	// snapshot lists that exact path (item_files.go). The page input is untrusted.
+	if err := w.Bind("bdevOpenItemFile", func(path string) error {
+		return bdevOpenItemFile(snapPath, path)
+	}); err != nil {
+		log.Println("could not bind bdevOpenItemFile:", err)
+	}
 	// bdevAgentMap (R7): the full agent map as boxes and lines, live from the
 	// snapshot file or for the last N hours from the store. The small overview
 	// rides in bdevSections. Read-only, no port.
