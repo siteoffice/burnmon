@@ -182,7 +182,7 @@ tr.totalrow td{font-weight:700; color:var(--strong); border-bottom:1px solid var
    11_ticker_broken.png bug: cropToFit's own scrollHeight<=clientHeight check never
    trips because flex children shrink to fit instead of overflowing), and the box
    scrolls vertically with a thin scrollbar in the house style instead. */
-.ticker{display:flex; flex-direction:column; gap:2px; flex:1; min-height:0; overflow-y:auto; overflow-x:hidden;
+.ticker{display:flex; flex-direction:column; gap:2px; flex:0 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden;
   padding:4px 10px; scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
 .ticker::-webkit-scrollbar{width:8px}
 .ticker::-webkit-scrollbar-track{background:var(--panel2)}
@@ -241,6 +241,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .splitrow{display:flex; gap:4px; flex:0 0 auto}
 .splitrow > .panel:first-child{flex:0 0 auto; min-width:0}
 .splitrow > .panel:last-child{flex:1; min-width:0}
+/* One of the two shown (secApplyParts sets split-one): it takes the whole row. */
+.splitrow.split-one > .panel{flex:1 1 auto; min-width:0}
 @media (max-width: 899px){
   .splitrow{flex-direction:column}
   .splitrow > .panel:first-child{flex:0 0 auto}
@@ -572,7 +574,7 @@ body.plain #mapOverlay{font-size:13.5px}
           <div class="heatmapwrap"><div id="harnessHeatmap"></div></div>
         </div>
       </div>
-      <div class="panel" id="turnTickerPanel" data-part="turn_ticker" style="flex:1; min-height:80px">
+      <div class="panel" id="turnTickerPanel" data-part="turn_ticker" style="flex:0 1 auto; min-height:80px">
         <div class="panelhead">Turn ticker</div>
         <div class="ticker" id="turnTicker"></div>
       </div>
@@ -3508,6 +3510,7 @@ body.plain #mapOverlay{font-size:13.5px}
     var hideLegacy = !showBurn && !showSys && !showTodo;
     set(document.getElementById('legacy'), hideLegacy);
     set(document.getElementById('activityHeatmapRow'), !secPartOn('activity') && !secPartOn('heatmap'));
+    document.getElementById('activityHeatmapRow').classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
     document.getElementById('secHost').classList.toggle('sec-fill', hideLegacy);
     document.body.classList.toggle('sec-standard', !plain);
     document.body.classList.toggle('plain', plain);
