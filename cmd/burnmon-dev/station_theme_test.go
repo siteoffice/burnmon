@@ -4,8 +4,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -65,8 +67,8 @@ func TestSaveStationThemeRefusesUnknown(t *testing.T) {
 	const body = `{"retention_days": 3}`
 	dir := writeDevJSON(t, body)
 	for _, theme := range []string{"moon", "Space", ""} {
-		if err := saveStationTheme(dir, theme); err == nil {
-			t.Errorf("theme %q: want an error", theme)
+		if err := saveStationTheme(dir, theme); err == nil || !strings.Contains(err.Error(), "is not space or site") {
+			t.Errorf("theme %q: err = %v, want the not-space-or-site refusal", theme, err)
 		}
 	}
 	b, _ := os.ReadFile(devJSONPath(dir))
@@ -78,13 +80,56 @@ func TestSaveStationThemeRefusesUnknown(t *testing.T) {
 func TestSaveStationThemeRefusesUnparsableFile(t *testing.T) {
 	const body = `{"retention_days": `
 	dir := writeDevJSON(t, body)
-	if err := saveStationTheme(dir, "site"); err == nil {
-		t.Fatal("want an error for an unparsable file")
+	if err := saveStationTheme(dir, "site"); err == nil || !strings.Contains(err.Error(), "is not valid JSON") {
+		t.Fatalf("err = %v, want the not-valid-JSON refusal", err)
+	}
+	noTempLeft(t, dir)
+	b, _ := os.ReadFile(devJSONPath(dir))
+	if string(b) != body {
+		t.Fatalf("file changed: %s", b)
+	}
+}
+
+func noTempLeft(t *testing.T, dir string) {
+	t.Helper()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range ents {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+}
+
+// TestSaveStationThemeFailedRenameKeepsOriginal: when the final rename fails
+// the user's file is byte for byte as it was and no temp file stays.
+func TestSaveStationThemeFailedRenameKeepsOriginal(t *testing.T) {
+	const body = `{
+  "retention_days": 3
+}`
+	dir := writeDevJSON(t, body)
+	boom := errors.New("rename refused")
+	old := renameFile
+	renameFile = func(string, string) error { return boom }
+	defer func() { renameFile = old }()
+	if err := saveStationTheme(dir, "site"); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the rename error", err)
 	}
 	b, _ := os.ReadFile(devJSONPath(dir))
 	if string(b) != body {
 		t.Fatalf("file changed: %s", b)
 	}
+	noTempLeft(t, dir)
+}
+
+func TestSaveStationThemeLeavesNoTempOnSuccess(t *testing.T) {
+	dir := writeDevJSON(t, `{"retention_days": 3}`)
+	if err := saveStationTheme(dir, "site"); err != nil {
+		t.Fatal(err)
+	}
+	noTempLeft(t, dir)
 }
 
 func TestSectionsPayloadCarriesStationTheme(t *testing.T) {

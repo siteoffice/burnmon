@@ -63,7 +63,7 @@ const stationMarker = "<!--BM_STATION-->"
 // assemblePage returns page.html with the Station scripts at its marker:
 // both atlases, window.BM_STATION_THEME, then station.js. The theme lands
 // in a script string, so only the two known names pass and anything else
-// becomes "site". The page keeps working without the scripts
+// becomes "space". The page keeps working without the scripts
 // (window.BMStation is checked before use), so a missing marker only costs
 // the secret screen.
 func assemblePage(theme, uiTheme string) string {

@@ -27,7 +27,7 @@ import (
 // d34-plain-scroll-on, d34-plain-scroll-off.
 
 // d34Order is FIT_OFF_ORDER without todo, which uicheck never shows.
-var d34Order = []string{"process_groups", "processes", "heatmap", "activity", "sessions", "git", "outcomes", "waits", "agents_map", "burn"}
+var d34Order = []string{"process_groups", "processes", "heatmap", "activity", "sessions", "git", "outcomes", "waits", "agents_map", "burn", "turn_ticker", "vendor_strip", "system", "burn_30min"}
 
 type d34Page struct {
 	OverflowY string   `json:"overflowY"`

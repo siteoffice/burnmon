@@ -13,6 +13,9 @@ import (
 	"path/filepath"
 )
 
+// renameFile is os.Rename; a test swaps it to prove a failed save leaves the file alone.
+var renameFile = os.Rename
+
 func saveStationTheme(dataDir, theme string) error {
 	if theme != "space" && theme != "site" {
 		return fmt.Errorf("station theme %q is not space or site", theme)
@@ -38,5 +41,24 @@ func saveStationTheme(dataDir, theme string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, out, 0o644)
+	// Write a temp file in the same directory, then rename it over the target, so a
+	// crash mid-write never leaves a half-written burnmon-dev.json.
+	tmp, err := os.CreateTemp(dataDir, "burnmon-dev.json.*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	_, werr := tmp.Write(out)
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		os.Remove(tmpName)
+		return werr
+	}
+	if err := renameFile(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return nil
 }

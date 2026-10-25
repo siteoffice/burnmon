@@ -194,8 +194,11 @@ func TestPageTagsEveryPart(t *testing.T) {
 
 func TestPageHasScrollbarFitPass(t *testing.T) {
 	for _, want := range []string{
-		`var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn'];`,
+		`var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min'];`,
 		`window.__bdevFit = `,
+		`bdevSetStationTheme:', e);`,
+		`r.checked = r.value === secState.stationTheme`,
+		`arow.classList.toggle('split-one'`,
 		`body.scroll-on #pageScroll`,
 		`classList.toggle('scroll-on'`,
 	} {

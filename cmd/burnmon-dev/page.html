@@ -3220,9 +3220,10 @@ body.plain #mapOverlay{font-size:13.5px}
   //   to FIT_FLOOR of its natural height (the height it has with the switch
   //   on, measured by running that layout first); while the page still
   //   overflows, parts are hidden in FIT_OFF_ORDER and #secCutNote counts them.
-  //   Never hidden: burn_30min, vendor_strip, turn_ticker, system.
+  //   Last resort, after every other part is hidden and the chart is at its floor:
+  //   turn_ticker, vendor_strip, system, burn_30min, so every part can be hidden and counted.
   // Every pass starts from show-all, so hidden parts come back when there is room.
-  var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn'];
+  var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min'];
   var FIT_FLOOR = 0.6;
   // __bdevFit is tools\uicheck's own read (check_d34.go).
   window.__bdevFit = { scroll: true, histNatural: 0, histFloor: 0, histH: 0, histAtHide: 0, hidden: [] };
@@ -3239,6 +3240,8 @@ body.plain #mapOverlay{font-size:13.5px}
       if(id) was[id] = true;
       el.classList.remove('fit-dropped');
     });
+    var arow = document.getElementById('activityHeatmapRow');
+    if(arow) arow.classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
     return was;
   }
   // The scrollbar-on layout; returns the System chart height before the To Do grow.
@@ -3275,7 +3278,12 @@ body.plain #mapOverlay{font-size:13.5px}
     fit.hidden = hidden;
     // Both halves of the Activity and Heatmap row gone: the row goes too.
     var row = document.getElementById('activityHeatmapRow');
-    if(row && hidden.indexOf('activity') >= 0 && hidden.indexOf('heatmap') >= 0) row.classList.add('fit-dropped');
+    // A part the switch turned off counts as gone too. One half gone: the other takes the row.
+    var aGone = !secPartOn('activity') || hidden.indexOf('activity') >= 0, hGone = !secPartOn('heatmap') || hidden.indexOf('heatmap') >= 0;
+    if(row && hidden.some(function(id){ return id === 'activity' || id === 'heatmap'; })){
+      if(aGone && hGone) row.classList.add('fit-dropped');
+      else row.classList.add('split-one');
+    }
   }
   function rerenderFitPart(id){
     if(id === 'activity') renderHeatmap(lastHeatmapPayload);
@@ -3662,7 +3670,13 @@ body.plain #mapOverlay{font-size:13.5px}
       // Saved for the next start only; the Station that is open keeps its theme.
       if(typeof window.bdevSetStationTheme === 'function'){
         Promise.resolve(window.bdevSetStationTheme(t.value)).then(function(){ secLastJSON = 'x'; return secPoll(); })
-          .catch(function(e){ console.log('bdevSetStationTheme:', e); });
+          .catch(function(e){
+            console.log('bdevSetStationTheme:', e);
+            // Not saved: put the radio back on the last value the payload gave and re-poll.
+            Array.prototype.forEach.call(document.querySelectorAll('input[name="secStationStart"]'), function(r){ r.checked = r.value === secState.stationTheme; });
+            secLastJSON = 'x';
+            return secPoll();
+          });
       }
     }
   });
