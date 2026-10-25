@@ -25,6 +25,9 @@ func ClaudeAgentView(claudePath string) func(ctx context.Context) ([]byte, error
 	return func(ctx context.Context) ([]byte, error) {
 		cmd := exec.CommandContext(ctx, claudePath, "agents", "--json")
 		hideWindow(cmd)
+		// Without a wait delay, a supervisor that inherits stdout keeps Output
+		// blocked after the timeout kills claude, and no later poll would run.
+		cmd.WaitDelay = 2 * time.Second
 		out, err := cmd.Output()
 		if err != nil {
 			var ee *exec.ExitError
