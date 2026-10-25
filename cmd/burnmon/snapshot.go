@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"time"
 
 	"burnmon/internal/snapshot"
 	"burnmon/internal/snapshotwriter"
@@ -35,23 +34,21 @@ func (a *app) newSnapshotWriter(st *store.Store, path string) *snapshotwriter.Wr
 	return w
 }
 
-// startSnapshotWriter rewrites %USERPROFILE%\.burnmon\snapshot.json every
-// snapshotwriter.Tick. It opens no port and makes no model call.
+// startSnapshotWriter keeps %USERPROFILE%\.burnmon\snapshot.json fresh every
+// snapshotwriter.Tick while this process holds the single-writer lock; when
+// another process holds it, this one tries again each tick and takes over
+// when the owner dies. It opens no port and makes no model call.
 func (a *app) startSnapshotWriter(st *store.Store) {
 	path, err := snapshot.DefaultPath()
 	if err != nil {
 		log.Println("snapshot: could not resolve the path:", err)
 		return
 	}
+	lockPath, err := snapshotwriter.DefaultLockPath()
+	if err != nil {
+		log.Println("snapshot: could not resolve the lock path:", err)
+		return
+	}
 	w := a.newSnapshotWriter(st, path)
-	go func() {
-		ticker := time.NewTicker(snapshotwriter.Tick)
-		defer ticker.Stop()
-		for {
-			if err := w.Once(); err != nil {
-				log.Println("snapshot: write failed:", err)
-			}
-			<-ticker.C
-		}
-	}()
+	go w.Run(snapshotwriter.NewLock(lockPath), "burnmon.exe", nil)
 }

@@ -4,6 +4,7 @@
 package snapshotwriter
 
 import (
+	"log"
 	"path/filepath"
 	"time"
 
@@ -139,6 +140,36 @@ type Writer struct {
 	Procs  func() ([]sysmon.ProcessGroupSample, error)
 	Graph  *GraphReaders    // nil: device node only
 	Now    func() time.Time // nil: time.Now
+}
+
+// Run is the writer loop. Every w.Tick, a process that does not hold lock
+// tries to take it; the one that holds it writes with Once and logs a write
+// error. A dead owner's lock is free at the next tick, so another process
+// takes over there. Run returns when stop closes (a nil stop never does),
+// releasing the lock.
+func (w *Writer) Run(lock *Lock, exe string, stop <-chan struct{}) {
+	defer lock.Release()
+	ticker := time.NewTicker(w.Tick)
+	defer ticker.Stop()
+	for {
+		if !lock.Held() {
+			if ok, err := lock.TryAcquire(exe); err != nil {
+				log.Println("snapshot: lock failed:", err)
+			} else if ok {
+				log.Println("snapshot: this process writes the snapshot")
+			}
+		}
+		if lock.Held() {
+			if err := w.Once(); err != nil {
+				log.Println("snapshot: write failed:", err)
+			}
+		}
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // Once builds one tick's snapshot from the store and the process sampler and
