@@ -16,6 +16,7 @@ import (
 	"burnmon/internal/graph"
 	"burnmon/internal/live"
 	"burnmon/internal/sysmon"
+	"burnmon/internal/waits"
 )
 
 // SchemaVersion is bumped on any change a reader could trip over. Version 1
@@ -116,6 +117,11 @@ type Snapshot struct {
 	// R6, added to version 1 as new fields only: the live relation graph.
 	Nodes []graph.Node `json:"nodes"`
 	Edges []graph.Edge `json:"edges"`
+
+	// R9, added to version 1 as new fields only: gates, sprints, questions,
+	// prompts and checks that wait on the person, and what finished or failed.
+	WaitItems    []waits.Item `json:"wait_items"`
+	OutcomeItems []waits.Item `json:"outcome_items"`
 }
 
 // Input is everything Build needs, already collected by the caller.
@@ -129,6 +135,10 @@ type Input struct {
 	Sources   []Source
 	Processes []sysmon.ProcessGroupSample
 	Graph     graph.Graph
+
+	// R9: built by the caller with waits.Build, already sorted.
+	WaitItems    []waits.Item
+	OutcomeItems []waits.Item
 }
 
 func cost(usd, fx float64) Cost {
@@ -157,6 +167,8 @@ func Build(in Input) Snapshot {
 		WaitsOnYou:    []Wait{},
 		Nodes:         append([]graph.Node{}, in.Graph.Nodes...),
 		Edges:         append([]graph.Edge{}, in.Graph.Edges...),
+		WaitItems:     append([]waits.Item{}, in.WaitItems...),
+		OutcomeItems:  append([]waits.Item{}, in.OutcomeItems...),
 	}
 
 	var walk func(ls *live.Session, parent string)

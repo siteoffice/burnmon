@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"burnmon/internal/graph"
 	"burnmon/internal/live"
 	"burnmon/internal/sysmon"
+	"burnmon/internal/waits"
 )
 
 var t0 = time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)
@@ -39,6 +41,16 @@ func liveFixture() live.Snapshot {
 	}
 }
 
+func itemsFixture() []waits.Item {
+	return []waits.Item{
+		{Kind: waits.KindSprint, ID: "sprint:example__s__1", Title: "sprint-example", Project: "example", Detail: "2 tasks parked",
+			Since: t0.Add(-10 * time.Minute).Format(time.RFC3339), AgeSeconds: 600, SpecPath: `C:\example\specs\a.md`, Source: "foreman",
+			Parked: []waits.Parked{{N: 1, Title: "one", Reason: "needs a decision"}, {N: 3, Title: "three"}}},
+		{Kind: waits.KindFinished, ID: "sprint:example__d__1", Title: "done-example", Detail: "test pass, verify pass",
+			Since: t0.Add(-5 * time.Hour).Format(time.RFC3339), AgeSeconds: 18000, Source: "foreman"},
+	}
+}
+
 func buildFixture() Snapshot {
 	return Build(Input{
 		Now:         t0,
@@ -47,6 +59,8 @@ func buildFixture() Snapshot {
 		Live:        liveFixture(),
 		Sources:     []Source{{Name: "store", OK: true, ReadAt: t0.Format(time.RFC3339)}, {Name: "sysmon", OK: false, ReadAt: t0.Format(time.RFC3339), Error: "boom"}},
 		Processes:   []sysmon.ProcessGroupSample{{Ts: t0.Add(-2 * time.Second), Harness: sysmon.HarnessClaude, CPUPct: 12.5, MemMB: 300, IOBps: 10}},
+		WaitItems:   itemsFixture()[:1],
+		OutcomeItems: itemsFixture()[1:],
 	})
 }
 
@@ -125,7 +139,7 @@ func TestEmptyListsEncodeAsArraysNotNull(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"sources", "sessions", "processes", "waits_on_you", "nodes", "edges"} {
+	for _, k := range []string{"sources", "sessions", "processes", "waits_on_you", "nodes", "edges", "wait_items", "outcome_items"} {
 		if string(m[k]) != "[]" {
 			t.Fatalf("%s should be [], got %s", k, m[k])
 		}
@@ -221,4 +235,67 @@ func TestBuildCarriesGraph(t *testing.T) {
 	if s.SchemaVersion != 1 {
 		t.Fatalf("the graph is additive; schema_version must stay 1, got %d", s.SchemaVersion)
 	}
+}
+
+func TestBuildCarriesItems(t *testing.T) {
+	it := itemsFixture()
+	s := Build(Input{Now: t0, TickSeconds: 5, WaitItems: it[:1], OutcomeItems: it[1:]})
+	if len(s.WaitItems) != 1 || len(s.OutcomeItems) != 1 {
+		t.Fatalf("items not carried: %+v %+v", s.WaitItems, s.OutcomeItems)
+	}
+	a, _ := json.Marshal(it[0])
+	b, _ := json.Marshal(s.WaitItems[0])
+	if string(a) != string(b) || len(s.WaitItems[0].Parked) != 2 {
+		t.Fatalf("wait item changed:\n%s\n%s", a, b)
+	}
+	if s.OutcomeItems[0].ID != "sprint:example__d__1" {
+		t.Fatalf("outcome wrong: %+v", s.OutcomeItems[0])
+	}
+	if s.SchemaVersion != 1 {
+		t.Fatalf("items are additive; schema_version must stay 1, got %d", s.SchemaVersion)
+	}
+}
+
+func TestFixtureHasItemsOfEveryKind(t *testing.T) {
+	got, err := Read(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	written, _ := time.Parse(time.RFC3339, got.WrittenAt)
+	check := func(name string, items []waits.Item, kinds []string) {
+		seen := map[string]bool{}
+		var prevAge int64 = -1
+		prevID := ""
+		for _, it := range items {
+			seen[it.Kind] = true
+			if it.Kind == "" || it.ID == "" || it.Title == "" || it.Since == "" || it.Source == "" {
+				t.Fatalf("%s item lacks a required field: %+v", name, it)
+			}
+			since, err := time.Parse(time.RFC3339, it.Since)
+			if err != nil {
+				t.Fatalf("%s item since: %v", name, err)
+			}
+			if it.AgeSeconds != int64(written.Sub(since)/time.Second) {
+				t.Fatalf("%s item %s age %d does not match written_at minus since", name, it.ID, it.AgeSeconds)
+			}
+			if it.AgeSeconds < prevAge || (it.AgeSeconds == prevAge && it.ID < prevID) {
+				t.Fatalf("%s not sorted newest first at %s", name, it.ID)
+			}
+			prevAge, prevID = it.AgeSeconds, it.ID
+			for _, s := range []string{it.Title, it.Detail, it.SpecPath, it.ResultPath, it.ID} {
+				for _, bad := range []string{"ZND", "10_holding", "Valona"} {
+					if strings.Contains(s, bad) {
+						t.Fatalf("%s item %s holds %q", name, it.ID, bad)
+					}
+				}
+			}
+		}
+		for _, k := range kinds {
+			if !seen[k] {
+				t.Fatalf("%s lacks kind %s", name, k)
+			}
+		}
+	}
+	check("wait_items", got.WaitItems, []string{"gate", "sprint", "failed_check", "question", "prompt", "session"})
+	check("outcome_items", got.OutcomeItems, []string{"finished", "failed_check"})
 }
