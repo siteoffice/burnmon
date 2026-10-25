@@ -22,6 +22,7 @@ type cloudRow struct {
 	RequestID     string `json:"request_id"`
 	MessageID     string `json:"message_id"`
 	Model         string `json:"model"`
+	Agent         string `json:"agent"` // "main", or "agent-<id>" for a subagent's request
 	InputTokens   int64  `json:"input_tokens"`
 	OutputTokens  int64  `json:"output_tokens"`
 	CacheCreation int64  `json:"cache_creation_input_tokens"`
@@ -65,6 +66,13 @@ func parseCloudDrop(path string) ([]schema.Event, []schema.ToolCall, int64, erro
 			Vendor: "anthropic", Agent: "cowork-cloud", Surface: "cloud",
 			SessionID: r.SessionID, RequestID: key, Model: r.Model,
 			Input: r.InputTokens, Output: r.OutputTokens,
+		}
+		// A subagent's request becomes its own session under its parent,
+		// named as a local subagent trail is (agent-<id>), so the Station
+		// draws it as a subagent. A row without an agent (older plugin) or
+		// with "main" stays on its session.
+		if r.Agent != "" && r.Agent != "main" && r.Agent != r.SessionID {
+			e.SessionID, e.ParentID = r.Agent, r.SessionID
 		}
 		if r.CacheCreation > 0 {
 			v := r.CacheCreation

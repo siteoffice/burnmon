@@ -200,7 +200,24 @@ WHERE excluded.output > events.output
 	}
 	defer stmt.Close()
 
+	// Before 2026-10-25 the Cowork (Cloud) parser stored a subagent's
+	// request under its parent session. When that request comes in again as
+	// a subagent row, the folded copy goes, so its tokens count once. Only
+	// a cowork-cloud row without a parent of its own is removed: other
+	// harnesses can share a request id across sessions (mirror sessions).
+	unfold, err := tx.Prepare(`DELETE FROM events WHERE vendor = ? AND agent = 'cowork-cloud'
+	AND session_id = ? AND request_id = ? AND parent_id = ''`)
+	if err != nil {
+		return err
+	}
+	defer unfold.Close()
+
 	for _, e := range events {
+		if e.Agent == "cowork-cloud" && e.ParentID != "" {
+			if _, err := unfold.Exec(e.Vendor, e.ParentID, e.RequestID); err != nil {
+				return fmt.Errorf("store: unfold %s/%s: %w", e.Vendor, e.RequestID, err)
+			}
+		}
 		toolsJSON, err := json.Marshal(e.Tools)
 		if err != nil {
 			return fmt.Errorf("store: marshal tools for %s/%s: %w", e.Vendor, e.RequestID, err)
