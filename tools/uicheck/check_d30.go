@@ -62,6 +62,7 @@ type d30Page struct {
 	Words      string   `json:"words"`
 	Heads      string   `json:"heads"`
 	Panel      string   `json:"panel"`
+	PanelOn    bool     `json:"panelOn"`
 	Src        string   `json:"src"`
 	Count      string   `json:"count"`
 	Note       string   `json:"note"`
@@ -104,6 +105,7 @@ const d30ReadJS = `(function(){
     hlLines: st.querySelectorAll('svg .mapline.hl').length, dimBoxes: st.querySelectorAll('.mapbox.dim').length,
     words: text('.mapword'), heads: text('.mapcolh'),
     panel: document.getElementById('mapPanel').textContent,
+    panelOn: document.getElementById('mapPanel').classList.contains('on'),
     src: document.getElementById('mapSrc').textContent, count: document.getElementById('mapCount').textContent,
     note: document.getElementById('mapNote').textContent,
     tabsOn: tabs, folded: st.querySelectorAll('.mapbox.folded').length,
@@ -288,6 +290,9 @@ func init() {
 				return d30Fail("no box shows %q: %q", id, all)
 			}
 		}
+		if p.PanelOn {
+			return d30Fail("the evidence panel is open before any box was clicked")
+		}
 		if len(p.TabsOn) != 1 || p.TabsOn[0] != "live" || !strings.Contains(p.Src, "snapshot 7 s old") || !strings.Contains(p.Count, "1 session, 1 subagent") {
 			return d30Fail("live strip: tab %v, source %q, count %q", p.TabsOn, p.Src, p.Count)
 		}
@@ -301,6 +306,9 @@ func init() {
 		// A box click opens its evidence and highlights its own lines.
 		if p, err = click(`.mapbox.session`); err != nil {
 			return err
+		}
+		if !p.PanelOn {
+			return d30Fail("a box click did not open the evidence panel")
 		}
 		if err := d30Has("session evidence", p.Panel, "Tokens", "1,200", "API price equivalent", "€2.30", "claude-opus-5-5", "Last active", "store, 20 s old", "matched by BurnMon from the folder", "sprint/example"); err != nil {
 			return err
@@ -329,8 +337,8 @@ func init() {
 		if p, err = click(`.mapbox.you`); err != nil {
 			return err
 		}
-		if p.HlLines != 0 || !strings.Contains(p.Panel, "Click a box") {
-			return d30Fail("second click did not let go: %d highlighted lines, panel %q", p.HlLines, p.Panel)
+		if p.HlLines != 0 || p.PanelOn {
+			return d30Fail("second click did not let go: %d highlighted lines, panel open %v", p.HlLines, p.PanelOn)
 		}
 
 		// Above 40 boxes whole groups fold; a click asks Go to open that frame.

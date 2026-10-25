@@ -448,7 +448,8 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapmk.you{fill:var(--amber)}
 .mapword{fill:var(--dim); font-size:11px; paint-order:stroke; stroke:var(--bg); stroke-width:4px; text-anchor:middle}
 .mapword.you{fill:var(--amber)}
-.mappanel{flex:0 0 300px; box-sizing:border-box; border-left:1px solid var(--bd); background:var(--panel); padding:12px 14px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+.mappanel{display:none; flex:0 0 300px; box-sizing:border-box; border-left:1px solid var(--bd); background:var(--panel); padding:12px 14px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+.mappanel.on{display:block}
 .mappanel h3{margin:0 0 2px; color:var(--strong); font-size:14px; overflow-wrap:anywhere}
 .mappanel .sub{color:var(--dim); margin-bottom:10px}
 .mappanel dl{margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 12px}
@@ -3586,10 +3587,11 @@ body.plain #mapOverlay{font-size:13.5px}
     (L.frames || []).forEach(function(f){
       if(f.kind !== 'none' && !f.folded) gap[f.first_row] = (gap[f.first_row] || 0) + MAP.FRAMEHEAD;
     });
-    var rowY = [], y = MAP.HEAD;
+    var hasYou = (L.boxes || []).some(function(b){ return b.kind === 'you'; });
+    var rowY = [], y = MAP.HEAD + (hasYou ? MAP.ROWH : 0);
     for(var r = 0; r <= maxRow; r++){ y += gap[r] || 0; rowY[r] = y; y += MAP.ROWH; }
     var cols = (L.columns || []).length;
-    return { rowY: rowY, width: MAP.PADX * 2 + cols * MAP.COLW, height: y + 24,
+    return { rowY: rowY, youY: MAP.HEAD, width: MAP.PADX * 2 + cols * MAP.COLW, height: y + 24,
       x: function(c){ return MAP.PADX + c * MAP.COLW; } };
   }
 
@@ -3636,7 +3638,7 @@ body.plain #mapOverlay{font-size:13.5px}
         '<div class="mapframehead" title="' + esc(f.explain) + '"><b>' + esc(f.label) + '</b><span>' + esc(f.status || '') + '</span><span class="ex">' + esc(f.explain) + '</span></div></div>';
     });
     // Lines are drawn first (the svg sits under the boxes in the DOM order of the stage).
-    boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column), y: g.rowY[b.row] }; });
+    boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column), y: b.kind === 'you' ? g.youY : g.rowY[b.row] }; });
     var related = {};
     (L.lines || []).forEach(function(ln){
       if(ln.from === mapSel || ln.to === mapSel){ related[ln.from] = true; related[ln.to] = true; }
@@ -3697,10 +3699,11 @@ body.plain #mapOverlay{font-size:13.5px}
   function mapRenderPanel(b, L){
     var el = document.getElementById('mapPanel');
     if(!b){
-      el.innerHTML = '<div class="sub">' + esc(secState.plain ? 'Click a box to see what BurnMon knows about it.' :
-        'Click a box for its evidence.') + '</div>';
+      el.classList.remove('on');
+      el.innerHTML = '';
       return;
     }
+    el.classList.add('on');
     var h = '<h3>' + esc(b.title) + '</h3><div class="sub">' + esc(b.pill || '') + '</div><dl>';
     (b.facts || []).forEach(function(f){ h += '<dt>' + esc(f.label) + '</dt><dd>' + esc(f.value) + '</dd>'; });
     h += '</dl>';
