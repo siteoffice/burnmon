@@ -2,6 +2,7 @@ package agentmap
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -49,11 +50,14 @@ type Fact struct {
 // Box is one box. Kind is harness, session, sub, tool, programs, folded or
 // you. Line is the one short line of numbers under the title.
 type Box struct {
-	ID         string `json:"id"`
-	Kind       string `json:"kind"`
-	Title      string `json:"title"`
-	Pill       string `json:"pill,omitempty"`
-	Line       string `json:"line,omitempty"`
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+	Pill  string `json:"pill,omitempty"`
+	Line  string `json:"line,omitempty"`
+	// Tool is the name of the tool a live session is running, as shown: the
+	// name only, and an MCP tool as "MCP tool" so a server's name stays out.
+	Tool       string `json:"tool,omitempty"`
 	Column     int    `json:"column"`
 	Row        int    `json:"row"`
 	Group      string `json:"group,omitempty"`
@@ -136,6 +140,28 @@ func (w wording) cardState(c Card) string {
 		return "done"
 	}
 	return w.state(c.State)
+}
+
+var toolNameOK = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,24}$`)
+
+// toolLabel is what the map shows for a tool name. An MCP tool's raw name holds
+// its server's name, so it reads "MCP tool"; a name that is not a plain short
+// identifier reads "tool". Arguments are never in the name, and never read.
+func toolLabel(name string, plain bool) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(name), "mcp__") {
+		if plain {
+			return "tool server call"
+		}
+		return "MCP tool"
+	}
+	if !toolNameOK.MatchString(name) {
+		return "tool"
+	}
+	return name
 }
 
 func (w wording) state(s string) string {
@@ -423,6 +449,9 @@ func (b *builder) cardFacts(c Card, g Group) []Fact {
 		{"Kind", kind}, {"Agent", val(agent)}, {"Model", val(model)}, {"State", b.w.cardState(c)},
 		{"Tokens", tokens}, {label, price}, {"Last active", fmtDur(c.AgeSeconds) + " ago"}, {"Source", source},
 	}
+	if tl := toolLabel(c.Tool, b.w.plain); tl != "" {
+		f = append(f, Fact{"Current tool", tl})
+	}
 	if g.Kind == "sprint" || g.Kind == "flow" {
 		f = append(f, Fact{"Works for", b.worksFor(g, c)})
 	}
@@ -474,7 +503,7 @@ func (b *builder) place(c Card, g Group, fid string, col, row int) int {
 		kind = "sub"
 	}
 	b.l.Boxes = append(b.l.Boxes, Box{ID: c.ID, Kind: kind, Title: b.cardTitle(c), Pill: pill, Line: b.cardLine(c),
-		Column: col, Row: row, Group: fid, WaitsOnYou: c.WaitsOnYou, Facts: b.cardFacts(c, g)})
+		Tool: toolLabel(c.Tool, b.w.plain), Column: col, Row: row, Group: fid, WaitsOnYou: c.WaitsOnYou, Facts: b.cardFacts(c, g)})
 	r := row
 	if len(c.MCP) > maxMCPBoxes {
 		id := "mcp:all@" + c.ID

@@ -15,6 +15,7 @@
           "vendor": "anthropic",
           "agent": "claude-code",
           "state": "waiting",
+          "tool": "Bash",
           "subagent": false,
           "waits_on_you": true,
           "basis": "inferred",

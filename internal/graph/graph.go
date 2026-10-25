@@ -119,6 +119,9 @@ type Session struct {
 	// not say; the link to a sprint then rests on LastActivity alone.
 	FirstActivity time.Time
 	LastActivity  time.Time
+	// Tool is the name of the tool the session is running now ("" when none),
+	// from the stage the core works out. The name only, never its arguments.
+	Tool string
 }
 
 // Proc is one process from the process walk. Cmdline is used for matching
@@ -351,6 +354,9 @@ func (b *builder) session(s Session) {
 	attrs := map[string]string{"agent": s.Agent}
 	if s.State != "" {
 		attrs["state"] = s.State
+	}
+	if s.Tool != "" {
+		attrs["tool"] = s.Tool
 	}
 	if s.ParentID != "" {
 		kind = KindSubagent

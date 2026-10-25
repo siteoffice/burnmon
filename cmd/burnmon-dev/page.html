@@ -435,6 +435,8 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapbox.you{border-color:var(--amber); background:var(--panel2)}
 .mapbox .t{color:var(--strong); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapbox .l{color:var(--dim); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.mapbox .pr{display:flex; align-items:center; gap:6px; min-width:0}
+.mapbox .tl{color:var(--dim); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapbox .p{align-self:flex-start; font-size:10.5px; padding:0 6px; border:1px solid var(--bd); border-radius:8px; color:var(--dim); white-space:nowrap}
 .mapbox .p.busy{color:var(--grn); border-color:var(--grn)}
 .mapbox .p.wait{color:var(--amber); border-color:var(--amber)}
@@ -3671,7 +3673,8 @@ body.plain #mapOverlay{font-size:13.5px}
       var cls = 'mapbox ' + b.kind + (b.waits_on_you ? ' wait' : '') + (b.id === mapSel ? ' sel' : '') + (mapSel && b.id !== mapSel && !related[b.id] ? ' dim' : '');
       html += '<button type="button" class="' + cls + '" data-box="' + esc(b.id) + '" aria-pressed="' + (b.id === mapSel ? 'true' : 'false') + '" ' +
         'style="left:' + pos[b.id].x + 'px;top:' + pos[b.id].y + 'px;width:' + MAP.BOXW + 'px;height:' + MAP.BOXH + 'px">' +
-        '<span class="t">' + esc(b.title) + '</span>' + (b.pill ? '<span class="p ' + mapPillClass(b) + '">' + esc(b.pill) + '</span>' : '') +
+        '<span class="t">' + esc(b.title) + '</span>' + '<span class="pr">' + (b.pill ? '<span class="p ' + mapPillClass(b) + '">' + esc(b.pill) + '</span>' : '') +
+        (b.tool ? '<span class="tl" title="' + esc(secState.plain ? 'what it is running now' : 'tool running now') + '">' + esc(b.tool) + '</span>' : '') + '</span>' +
         (b.line ? '<span class="l">' + esc(b.line) + '</span>' : '') + '</button>';
     });
     var top = document.getElementById('mapScroll').scrollTop, left = document.getElementById('mapScroll').scrollLeft;

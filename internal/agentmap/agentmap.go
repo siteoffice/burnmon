@@ -42,6 +42,7 @@ type Card struct {
 	AgentType  string `json:"agent_type,omitempty"`
 	Model      string `json:"model,omitempty"`
 	State      string `json:"state,omitempty"`
+	Tool       string `json:"tool,omitempty"`
 	Subagent   bool   `json:"subagent"`
 	WaitsOnYou bool   `json:"waits_on_you"`
 	Basis      string `json:"basis,omitempty"`
@@ -301,7 +302,7 @@ func (m *model) card(id string) Card {
 	m.visited[id] = true
 	n := m.nodes[id]
 	c := Card{ID: id, Label: n.Label, Vendor: n.Vendor, Agent: n.Attrs["agent"], AgentType: n.Attrs["agent_type"],
-		Model: n.Attrs["model"], State: n.Attrs["state"], Subagent: n.Kind == graph.KindSubagent,
+		Model: n.Attrs["model"], State: n.Attrs["state"], Tool: n.Attrs["tool"], Subagent: n.Kind == graph.KindSubagent,
 		WaitsOnYou: m.waiters[id], MCP: []MCP{}, AgeSeconds: n.AgeSeconds, Children: []Card{}}
 	for _, e := range m.out[id] {
 		switch e.Kind {

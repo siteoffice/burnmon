@@ -57,6 +57,7 @@ func askingExample(t *testing.T) ([]graph.Node, []graph.Edge) {
 				attrs[k] = v
 			}
 			attrs["state"] = "waiting"
+			attrs["tool"] = "Bash"
 			nodes[i].Attrs = attrs
 		}
 	}

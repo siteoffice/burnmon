@@ -281,7 +281,7 @@ func init() {
 		if !ok || !strings.Contains(you.Text, "1 waiting on you") {
 			return d30Fail("no You box saying who waits: %+v", you)
 		}
-		for _, id := range []string{"Claude Code", "example-server", "port 8765", "2 programs", "Explore", "done", "waits on you"} {
+		for _, id := range []string{"Claude Code", "example-server", "port 8765", "2 programs", "Explore", "done", "waits on you", "Bash"} {
 			all := ""
 			for _, b := range p.Boxes {
 				all += b.Text + "|"
@@ -310,7 +310,7 @@ func init() {
 		if !p.PanelOn {
 			return d30Fail("a box click did not open the evidence panel")
 		}
-		if err := d30Has("session evidence", p.Panel, "Tokens", "1,200", "API price equivalent", "€2.30", "claude-opus-5-5", "Last active", "store, 20 s old", "matched by BurnMon from the folder", "sprint/example"); err != nil {
+		if err := d30Has("session evidence", p.Panel, "Tokens", "1,200", "API price equivalent", "€2.30", "claude-opus-5-5", "Last active", "Current tool", "store, 20 s old", "matched by BurnMon from the folder", "sprint/example"); err != nil {
 			return err
 		}
 		if p.HlLines != 5 || p.DimBoxes != 0 {

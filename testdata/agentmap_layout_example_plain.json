@@ -37,6 +37,7 @@
       "title": "project",
       "pill": "waiting for you",
       "line": "1,200 tokens - 20 s ago",
+      "tool": "Bash",
       "column": 1,
       "row": 0,
       "group": "frame:sprint:example__sprint__1",
@@ -73,6 +74,10 @@
         {
           "label": "Source",
           "value": "store, 20 s old"
+        },
+        {
+          "label": "Current tool",
+          "value": "Bash"
         },
         {
           "label": "Works for",
