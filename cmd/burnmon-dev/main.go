@@ -32,6 +32,7 @@ import (
 	"burnmon/internal/adapter/codex"
 	"burnmon/internal/devexport"
 	"burnmon/internal/history"
+	"burnmon/internal/historyadmin"
 	"burnmon/internal/live"
 	"burnmon/internal/scan"
 	"burnmon/internal/snapshot"
@@ -659,6 +660,34 @@ func main() {
 		}()
 	}); err != nil {
 		log.Println("could not bind bdevExport:", err)
+	}
+
+	// bdevDeleteHistory, bdevExportHistory and bdevHistoryInfo (B1): the gear
+	// dialog's History block. Delete is quick and returns its counts (a
+	// Promise); export reads the whole store, so it returns at once and
+	// resolves through bdevAsyncResolveJS. The rules (confirm, absolute folder)
+	// live in a.deleteHistory and a.exportHistory, not in the page.
+	if err := w.Bind("bdevDeleteHistory", func(req historyadmin.DeleteRequest) (historyadmin.DeleteResult, error) {
+		return a.deleteHistory(st, req)
+	}); err != nil {
+		log.Println("could not bind bdevDeleteHistory:", err)
+	}
+	if err := w.Bind("bdevExportHistory", func(req historyadmin.ExportRequest) {
+		go func() {
+			js, err := bdevAsyncResolveJS("__bdevExportHistoryResolve", a.historyExportOutcome(st, req))
+			if err != nil {
+				log.Println("bdevExportHistory: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+	}); err != nil {
+		log.Println("could not bind bdevExportHistory:", err)
+	}
+	if err := w.Bind("bdevHistoryInfo", func() historyInfoPayload {
+		return a.historyInfo()
+	}); err != nil {
+		log.Println("could not bind bdevHistoryInfo:", err)
 	}
 
 	// Microsoft To Do panel (section 9), off unless burnmon-dev.json sets
