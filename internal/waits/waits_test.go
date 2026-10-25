@@ -1,0 +1,238 @@
+package waits
+
+import (
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+	"unicode/utf8"
+
+	"burnmon/internal/graph"
+)
+
+var now = time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)
+
+func openFlow() graph.Flow {
+	return graph.Flow{ID: "f1", Slug: "example-flow", Gate: "G4", GatePending: true, Project: "example",
+		GateOpenedAt: now.Add(-2 * time.Hour), SpecPath: `C:\example\specs\a.md`}
+}
+
+func TestOpenGateIsAWait(t *testing.T) {
+	decided := graph.Flow{ID: "f2", Slug: "done-flow", Gate: "G3", GatePending: false}
+	w, _ := Build(Input{Now: now, Flows: []graph.Flow{openFlow(), decided}})
+	want := []Item{{Kind: "gate", ID: "gate:f1:G4", Title: "example-flow", Project: "example", Detail: "G4",
+		Since: "2026-10-23T08:00:00Z", AgeSeconds: 7200, SpecPath: `C:\example\specs\a.md`, Source: "foreman"}}
+	if !reflect.DeepEqual(w, want) {
+		t.Fatalf("got %+v", w)
+	}
+}
+
+func TestGateResultFromSprintWithSameSpec(t *testing.T) {
+	sp := []graph.Sprint{
+		{ID: "s1", SpecPath: `c:\EXAMPLE\specs\a.md`, ResultPath: "r-old", UpdatedAt: now.Add(-5 * time.Hour)},
+		{ID: "s2", SpecPath: `c:\EXAMPLE\specs\a.md`, ResultPath: "r-new", UpdatedAt: now.Add(-time.Hour)},
+		{ID: "s3", SpecPath: `C:\example\specs\other.md`, ResultPath: "r-other", UpdatedAt: now},
+	}
+	w, _ := Build(Input{Now: now, Flows: []graph.Flow{openFlow()}, Sprints: sp})
+	if len(w) != 1 || w[0].ResultPath != "r-new" {
+		t.Fatalf("got %+v", w)
+	}
+	w, _ = Build(Input{Now: now, Flows: []graph.Flow{openFlow()}})
+	if w[0].ResultPath != "" {
+		t.Fatalf("got %+v", w)
+	}
+}
+
+func TestWaitingSprintWithParkedTasks(t *testing.T) {
+	sp := graph.Sprint{ID: "sp1", Slug: "sprint-example", Project: "example", Status: "waiting-on-you",
+		SpecPath: `C:\example\specs\s.md`, ResultPath: `C:\example\r.md`,
+		UpdatedAt:    now.Add(-3 * time.Hour),
+		LastParkedAt: now.Add(-10 * time.Minute),
+		Parked:       []graph.ParkedTask{{N: 1, Title: "one", Reason: "needs a key"}, {N: 3, Title: "three"}}}
+	w, _ := Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if len(w) != 1 {
+		t.Fatalf("got %+v", w)
+	}
+	it := w[0]
+	if it.Kind != "sprint" || it.ID != "sprint:sp1" || it.Detail != "2 tasks parked" || it.AgeSeconds != 600 ||
+		it.SpecPath != sp.SpecPath || it.ResultPath != sp.ResultPath || it.Source != "foreman" || it.Project != "example" {
+		t.Fatalf("item = %+v", it)
+	}
+	if !reflect.DeepEqual(it.Parked, []Parked{{1, "one", "needs a key"}, {3, "three", ""}}) {
+		t.Fatalf("parked = %+v", it.Parked)
+	}
+	sp.Parked = sp.Parked[:1]
+	w, _ = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if w[0].Detail != "1 task parked" {
+		t.Fatalf("detail = %q", w[0].Detail)
+	}
+	sp.LastParkedAt = time.Time{}
+	w, _ = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if w[0].AgeSeconds != 3*3600 {
+		t.Fatalf("age = %d", w[0].AgeSeconds)
+	}
+}
+
+func TestFailedVerifyOnStoppedSprintWaits(t *testing.T) {
+	sp := graph.Sprint{ID: "sp2", Slug: "capped-example", Status: "capped", UpdatedAt: now.Add(-time.Hour),
+		Verify: &graph.Check{Failed: true, Label: "verify fail", Summary: "verify broke", At: now.Add(-3 * time.Hour)}}
+	w, o := Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if len(w) != 1 || w[0].Kind != "failed_check" || w[0].ID != "check:sp2:verify" || w[0].Detail != "verify fail: verify broke" {
+		t.Fatalf("wait = %+v", w)
+	}
+	if len(o) != 1 || o[0].ID != "check:sp2:verify" {
+		t.Fatalf("outcomes = %+v", o)
+	}
+	sp.Status = "running"
+	w, o = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if len(w) != 0 || len(o) != 1 {
+		t.Fatalf("running: %+v %+v", w, o)
+	}
+	sp.Status = "failed"
+	sp.Verify = nil
+	sp.Test = &graph.Check{Failed: true, Label: "test exit 1", Summary: "two failed", At: now.Add(-time.Hour)}
+	w, _ = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if len(w) != 1 || w[0].ID != "check:sp2:test" || w[0].Detail != "test exit 1: two failed" {
+		t.Fatalf("test check = %+v", w)
+	}
+	sp.Test = &graph.Check{Failed: false, Label: "test exit 0"}
+	w, o = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if len(w) != 0 || len(o) != 0 {
+		t.Fatalf("passing check listed: %+v %+v", w, o)
+	}
+}
+
+func TestOutcomesKeepOnlyLast24Hours(t *testing.T) {
+	pass := &graph.Check{Label: "test exit 0"}
+	sps := []graph.Sprint{
+		{ID: "a", Slug: "a", Phase: "done", Status: "passing", UpdatedAt: now.Add(-23 * time.Hour), Test: pass},
+		{ID: "b", Slug: "b", Phase: "done", Status: "passing", UpdatedAt: now.Add(-25 * time.Hour), Test: pass},
+		{ID: "c", Slug: "c", Status: "failed", UpdatedAt: now,
+			Test: &graph.Check{Failed: true, Label: "test exit 2", At: now.Add(-25 * time.Hour)}},
+	}
+	_, o := Build(Input{Now: now, Sprints: sps})
+	if len(o) != 1 || o[0].ID != "sprint:a" || o[0].Kind != "finished" || o[0].Detail != "test pass, verify -" {
+		t.Fatalf("outcomes = %+v", o)
+	}
+	sps[0].Verify = &graph.Check{Failed: true, Label: "verify fail"}
+	sps[0].Test = nil
+	_, o = Build(Input{Now: now, Sprints: sps[:1]})
+	found := false
+	for _, it := range o {
+		if it.Kind == "finished" && it.Detail == "test -, verify fail" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("outcomes = %+v", o)
+	}
+}
+
+func sessionGraph() graph.Graph {
+	return graph.Graph{
+		Nodes: []graph.Node{
+			{ID: "session:anthropic:s1", Kind: graph.KindSession, Label: "proj"},
+			{ID: "sprint:sp1", Kind: graph.KindSprint, Label: "sp1"},
+			{ID: "person:you", Kind: graph.KindPerson, Label: "You"},
+		},
+		Edges: []graph.Edge{
+			{From: "session:anthropic:s1", To: "person:you", Kind: graph.KindWaitsOn, Source: "claude_pids", AgeSeconds: 40},
+			{From: "session:anthropic:s1", To: "sprint:sp1", Kind: graph.KindWorksFor, Source: "store"},
+			{From: "sprint:sp1", To: "person:you", Kind: graph.KindWaitsOn, Source: "foreman", AgeSeconds: 5},
+		},
+	}
+}
+
+func sp1() graph.Sprint {
+	return graph.Sprint{ID: "sp1", Slug: "sp1", Status: "running", SpecPath: `C:\example\specs\s.md`, ResultPath: `C:\example\r.md`, UpdatedAt: now}
+}
+
+func TestSessionWaitFromGraphEdge(t *testing.T) {
+	w, _ := Build(Input{Now: now, Graph: sessionGraph(), Sprints: []graph.Sprint{sp1()}})
+	if len(w) != 1 {
+		t.Fatalf("got %+v", w)
+	}
+	it := w[0]
+	if it.Kind != "session" || it.ID != "session:anthropic:s1" || it.Title != "proj" || it.AgeSeconds != 40 ||
+		it.Source != "claude_pids" || it.SpecPath != `C:\example\specs\s.md` || it.ResultPath != `C:\example\r.md` ||
+		it.Since != "2026-10-23T09:59:20Z" {
+		t.Fatalf("item = %+v", it)
+	}
+}
+
+func TestAgentEntryReplacesSessionItem(t *testing.T) {
+	in := Input{Now: now, Graph: sessionGraph(), Sprints: []graph.Sprint{sp1()}}
+	e := AgentEntry{SessionID: "s1", Status: "waiting", WaitingFor: "permission prompt", Cwd: `C:\example\proj`, Since: now.Add(-15 * time.Second)}
+	in.Agents = []AgentEntry{e}
+	w, _ := Build(in)
+	if len(w) != 1 {
+		t.Fatalf("got %+v", w)
+	}
+	it := w[0]
+	if it.Kind != "prompt" || it.ID != "session:anthropic:s1" || it.Detail != "permission prompt" || it.Source != "agent_view" ||
+		it.AgeSeconds != 15 || it.SpecPath != `C:\example\specs\s.md` || it.ResultPath != `C:\example\r.md` {
+		t.Fatalf("item = %+v", it)
+	}
+	in.Agents[0].WaitingFor = "input needed"
+	w, _ = Build(in)
+	if w[0].Kind != "question" || w[0].Detail != "input needed" {
+		t.Fatalf("question = %+v", w[0])
+	}
+	blocked := []AgentEntry{{ID: "ab12", State: "blocked", Cwd: `C:\example\proj`, Since: now.Add(-9 * time.Second)}}
+	w, _ = Build(Input{Now: now, Agents: blocked})
+	if len(w) != 1 || w[0].Kind != "session" || w[0].ID != "agentview:ab12" || w[0].Detail != "blocked" || w[0].Title != "proj" {
+		t.Fatalf("blocked = %+v", w)
+	}
+	in.Agents = []AgentEntry{{SessionID: "s1", Status: "busy", Cwd: `C:\example\proj`}}
+	w, _ = Build(in)
+	if len(w) != 1 || w[0].Source != "claude_pids" {
+		t.Fatalf("busy entry should leave the graph item: %+v", w)
+	}
+	w, _ = Build(Input{Now: now, Agents: []AgentEntry{{PID: 3, Status: "busy"}}})
+	if len(w) != 0 {
+		t.Fatalf("busy alone: %+v", w)
+	}
+}
+
+func TestItemsNewestFirst(t *testing.T) {
+	mk := func(id string, age time.Duration) graph.Sprint {
+		return graph.Sprint{ID: id, Slug: id, Status: "waiting-on-you", UpdatedAt: now.Add(-age)}
+	}
+	w, _ := Build(Input{Now: now, Sprints: []graph.Sprint{mk("c", time.Hour), mk("b", time.Minute), mk("a", time.Minute)}})
+	var ids []string
+	for _, it := range w {
+		ids = append(ids, it.ID)
+	}
+	if !reflect.DeepEqual(ids, []string{"sprint:a", "sprint:b", "sprint:c"}) {
+		t.Fatalf("ids = %v", ids)
+	}
+	fin := func(id string, age time.Duration) graph.Sprint {
+		return graph.Sprint{ID: id, Slug: id, Phase: "done", UpdatedAt: now.Add(-age)}
+	}
+	_, o := Build(Input{Now: now, Sprints: []graph.Sprint{fin("y", 2*time.Hour), fin("x", time.Hour), fin("z", time.Hour)}})
+	ids = nil
+	for _, it := range o {
+		ids = append(ids, it.ID)
+	}
+	if !reflect.DeepEqual(ids, []string{"sprint:x", "sprint:z", "sprint:y"}) {
+		t.Fatalf("outcome ids = %v", ids)
+	}
+}
+
+func TestDetailCutAt120Runes(t *testing.T) {
+	sum := strings.Repeat("\u00e9\u4e2d", 150)
+	sp := graph.Sprint{ID: "x", Slug: "x", Status: "capped", UpdatedAt: now,
+		Verify: &graph.Check{Failed: true, Label: "verify fail", Summary: sum, At: now}}
+	w, _ := Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	d := w[0].Detail
+	if !utf8.ValidString(d) || utf8.RuneCountInString(d) > DetailMax+3 || !strings.HasSuffix(d, "...") {
+		t.Fatalf("detail = %q (%d runes)", d, utf8.RuneCountInString(d))
+	}
+}
+
+func TestEmptyInputGivesEmptyLists(t *testing.T) {
+	w, o := Build(Input{Now: now})
+	if w == nil || o == nil || len(w) != 0 || len(o) != 0 {
+		t.Fatalf("got %#v %#v", w, o)
+	}
+}

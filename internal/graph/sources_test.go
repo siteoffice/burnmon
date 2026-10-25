@@ -281,7 +281,7 @@ func TestReadForemanParkedReasonSurvivesBadLines(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "sprints", "p", "x")
 	write(t, filepath.Join(dir, "sprint.json"), `{"sprint_id":"p__x__1","slug":"x","tasks":[{"n":2,"title":"two","state":"parked"}]}`)
-	log := strings.Repeat("a", 300000) + "\n" + "not json\n" +
+	log := strings.Repeat("a", 300000) + "\n" + strings.Repeat("b", 1100000) + "\n" + "not json\n" +
 		`{"ts":"2026-10-23T09:40:00Z","action":"task_parked","task":2,"detail":"newer"}` + "\n" +
 		`{"ts":"2026-10-23T09:30:00Z","action":"task_parked","task":2,"detail":"older"}` + "\n"
 	write(t, filepath.Join(dir, "action-log.ndjson"), log)
