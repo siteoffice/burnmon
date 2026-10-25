@@ -4,6 +4,8 @@
 package snapshotwriter
 
 import (
+	"context"
+	"errors"
 	"log"
 	"path/filepath"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
+	"burnmon/internal/waits"
 )
 
 // Tick is how often the snapshot file is rewritten (R4, agent control
@@ -33,7 +36,13 @@ type GraphReaders struct {
 	ForemanRoot string
 	Rows        func() ([]sysmon.ProcRow, time.Time)
 	Listen      func() ([]graph.Listen, error)
+	// AgentView runs "claude agents --json" (see ClaudeAgentView); nil means
+	// no poller and no agent_view source. Now is the poller's clock (nil:
+	// time.Now).
+	AgentView func(ctx context.Context) ([]byte, error)
+	Now       func() time.Time
 
+	poll  agentPoll
 	mcp   *graph.MCPConfig
 	meta  *graph.SubagentMeta
 	repos *graph.RepoLocator
@@ -96,7 +105,7 @@ func FlatSessions(ss []*live.Session) []graph.Session {
 // its live-only edges in the store and returns the graph plus one source
 // entry per input. A failing source drops its own edges and is reported;
 // it never stops the tick.
-func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, now time.Time, stamp string) (graph.Graph, []snapshot.Source, error) {
+func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, now time.Time, stamp string) (graph.Graph, []snapshot.Source, []waits.Item, []waits.Item, error) {
 	in := graph.Input{Now: now, Sessions: sessions, MCPFor: gr.mcp.For, RepoFor: gr.repos.For, SubagentFor: gr.meta.Lookup}
 	if gr.Rows != nil {
 		rows, at := gr.Rows()
@@ -123,12 +132,25 @@ func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, no
 	sources = append(sources, source(graph.SourceMCPConfig, stamp, gr.mcp.Err()),
 		source(graph.SourceNetTables, stamp, netErr), source(graph.SourceGit, stamp, nil))
 
+	wi := waits.Input{Now: now, Sprints: in.Sprints, Flows: in.Flows, Graph: g}
+	if gr.AgentView != nil {
+		gr.startAgentViewIfDue(now)
+		entries, at, done, aerr := gr.agentViewState()
+		wi.Agents = entries
+		if !done {
+			sources = append(sources, source(waits.SourceAgentView, stamp, errors.New("no poll has finished yet")))
+		} else {
+			sources = append(sources, source(waits.SourceAgentView, at.UTC().Format(time.RFC3339), aerr))
+		}
+	}
+	waitItems, outcomeItems := waits.Build(wi)
+
 	nodes, edges := g.Recorded()
 	first, err := st.RecordGraph(nodes, edges, now)
 	if err == nil {
 		g.Stamp(first)
 	}
-	return g, sources, err
+	return g, sources, waitItems, outcomeItems, err
 }
 
 // Writer rewrites the snapshot file from its inputs.
@@ -211,10 +233,11 @@ func (w *Writer) Once() error {
 
 	sources := []snapshot.Source{storeSrc, sysSrc}
 	g := graph.Build(graph.Input{Now: now})
+	waitItems, outcomeItems := []waits.Item{}, []waits.Item{}
 	if gr != nil {
 		var more []snapshot.Source
 		var rerr error
-		g, more, rerr = gr.buildGraph(st, FlatSessions(snap.Sessions), now, stamp)
+		g, more, waitItems, outcomeItems, rerr = gr.buildGraph(st, FlatSessions(snap.Sessions), now, stamp)
 		if rerr != nil && sources[0].OK {
 			sources[0].OK, sources[0].Error = false, "record graph: "+rerr.Error()
 		}
@@ -229,5 +252,8 @@ func (w *Writer) Once() error {
 		Sources:     sources,
 		Processes:   groups,
 		Graph:       g,
+
+		WaitItems:    waitItems,
+		OutcomeItems: outcomeItems,
 	}))
 }

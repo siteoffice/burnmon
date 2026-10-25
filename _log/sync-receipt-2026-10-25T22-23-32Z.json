@@ -1,0 +1,1 @@
+{"sha": "6b3b73f", "message": "fix(snapshot): restore fixture newline, gofmt test literal\n\n internal/snapshot/snapshot_test.go | 14 +++++++-------\n testdata/snapshot_example.json     |  2 +-\n 2 files changed, 8 insertions(+), 8 deletions(-)", "node": "git-flow", "clone": "Wilco de Tree", "committedAt": "2026-10-25T22:23:32Z"}

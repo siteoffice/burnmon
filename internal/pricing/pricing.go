@@ -246,6 +246,12 @@ type Config struct {
 	// Empty (the default) means no Foreman: the graph has no Foreman links
 	// and the snapshot lists no foreman source.
 	ForemanRoot string `json:"foreman_root,omitempty"`
+
+	// AgentView is opt-in (default false): when true, BurnMon polls the
+	// documented "claude agents --json" for questions and permission prompts
+	// that wait on you. Off by default because the next "claude agents" call
+	// can start a Claude Code supervisor process.
+	AgentView bool `json:"agent_view,omitempty"`
 }
 
 // DefaultClaudeCodeCacheTTLMinutes is the compiled-in cache-lifetime

@@ -255,3 +255,71 @@ func TestOnceIsDeterministicForFixedInputs(t *testing.T) {
 		t.Fatalf("snapshot bytes differ between two runs:\n%s\n%s", a, b)
 	}
 }
+
+func TestSnapshotOnceWritesForemanItems(t *testing.T) {
+	st := snapshotTestStore(t)
+	gr, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
+	root := gr.ForemanRoot
+	writeForemanGate(t, root)
+	files := map[string]string{
+		filepath.Join(root, "sprints", "p", "waiting", "sprint.json"): `{"sprint_id":"p__waiting__1","slug":"waiting","project":"example","status":"waiting-on-you",` +
+			`"updated_at":"2026-10-25T09:00:00Z","tasks":[{"n":2,"title":"two","state":"parked"}]}`,
+		filepath.Join(root, "sprints", "p", "waiting", "action-log.ndjson"): `{"ts":"2026-10-25T11:30:00Z","action":"task_parked","task":2,"detail":"needs a key"}` + "\n",
+		filepath.Join(root, "sprints", "p", "done", "sprint.json"): `{"sprint_id":"p__done__1","slug":"done","project":"example","phase":"done","status":"passing",` +
+			`"updated_at":"2026-10-25T11:00:00Z"}`,
+	}
+	for p, body := range files {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr)
+	w.Now = func() time.Time { return time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC) }
+	if err := w.Once(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := snapshot.Read(w.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.WaitItems) != 2 || got.WaitItems[0].ID != "sprint:p__waiting__1" || got.WaitItems[1].ID != "gate:p__f__1:G4" {
+		t.Fatalf("wait items: %+v", got.WaitItems)
+	}
+	if p := got.WaitItems[0].Parked; len(p) != 1 || p[0].Reason != "needs a key" {
+		t.Fatalf("parked: %+v", got.WaitItems[0])
+	}
+	if len(got.OutcomeItems) != 1 || got.OutcomeItems[0].ID != "sprint:p__done__1" {
+		t.Fatalf("outcome items: %+v", got.OutcomeItems)
+	}
+	if sourceNamed(got, "agent_view") != nil {
+		t.Fatalf("agent_view source without a runner")
+	}
+}
+
+func TestSnapshotOnceForemanErrorKeepsOtherItems(t *testing.T) {
+	st := snapshotTestStore(t)
+	gr, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
+	gr.ForemanRoot = filepath.Join(t.TempDir(), "missing")
+	path := filepath.Join(t.TempDir(), "snapshot.json")
+	if err := newWriter(st, path, noProcesses, gr).Once(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := snapshot.Read(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := sourceNamed(got, "foreman"); s == nil || s.OK {
+		t.Fatalf("foreman source should be not ok: %+v", s)
+	}
+	if got.WaitItems == nil || got.OutcomeItems == nil || len(got.OutcomeItems) != 0 {
+		t.Fatalf("items should be arrays, outcomes empty: %+v %+v", got.WaitItems, got.OutcomeItems)
+	}
+	for _, it := range got.WaitItems {
+		if it.Source == "foreman" {
+			t.Fatalf("foreman item from a failed foreman source: %+v", it)
+		}
+	}
+}

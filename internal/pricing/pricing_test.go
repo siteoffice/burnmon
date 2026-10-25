@@ -299,3 +299,33 @@ func TestLoadKeepHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentViewKey(t *testing.T) {
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AgentView {
+		t.Fatal("Load(\"\").AgentView = true, want false")
+	}
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		name, body string
+		want       bool
+	}{
+		{"absent", `{"fx_usd_eur": 0.9}`, false},
+		{"true", `{"agent_view": true}`, true},
+	} {
+		p := filepath.Join(dir, tc.name+".json")
+		if err := os.WriteFile(p, []byte(tc.body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := Load(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.AgentView != tc.want {
+			t.Errorf("%s: AgentView = %v, want %v", tc.name, got.AgentView, tc.want)
+		}
+	}
+}
