@@ -3227,9 +3227,10 @@ body.plain #mapOverlay{font-size:13.5px}
   //   on, measured by running that layout first); while the page still
   //   overflows, parts are hidden in FIT_OFF_ORDER and #secCutNote counts them.
   //   Last resort, after every other part is hidden and the chart is at its floor:
-  //   turn_ticker, vendor_strip, system, burn_30min, so every part can be hidden and counted.
+  //   turn_ticker, vendor_strip, system, burn_30min, then waits last of all (the panel holding the
+  //   person's actions), so every part can be hidden and counted.
   // Every pass starts from show-all, so hidden parts come back when there is room.
-  var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min'];
+  var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min','waits'];
   var FIT_FLOOR = 0.6;
   // __bdevFit is tools\uicheck's own read (check_d34.go).
   window.__bdevFit = { scroll: true, histNatural: 0, histFloor: 0, histH: 0, histAtHide: 0, hidden: [] };
@@ -3474,9 +3475,10 @@ body.plain #mapOverlay{font-size:13.5px}
     var detail = '';
     if(plain){
       if(it.kind === 'sprint' && it.parked && it.parked.length) detail = it.parked.length + (it.parked.length === 1 ? ' task needs you' : ' tasks need you');
-    } else if(it.kind !== 'gate') detail = it.detail || '';
+    } else if(it.kind !== 'gate' && !(it.detail && String(it.detail).toLowerCase() === k[0].toLowerCase())) detail = it.detail || '';
     var age = secDur((it.age_seconds || 0) + (secReading.age_seconds || 0));
-    var full = word + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age);
+    var shown = plain ? word : txt;
+    var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age);
     var html = '<div class="secrow secitem" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
       '<span class="secitemtxt"><span class="dim">' + esc(txt) + '</span> <b>' + esc(it.title) + '</b>' +
       (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') + '</span>' +
@@ -3485,10 +3487,17 @@ body.plain #mapOverlay{font-size:13.5px}
       link(it.result_path, 'result', 'no result yet') + '</span></div>';
     return html;
   }
+  // Each list shows its first SEC_ROWS_CAP items and one dim line for the rest,
+  // so a long list cannot grow the panel until the fit pass drops it.
+  var SEC_ROWS_CAP = 5;
+  function secMoreLine(n){
+    return '<div class="dim secmore">' + esc(secState.plain ? 'and ' + n + ' more' : '+' + n + ' more') + '</div>';
+  }
   function secBodyWaits(snap){
     var w = snap.wait_items || [], html = secAged(snap) ? secAgedLine() : '';
     if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'Nothing waits on you.') + '</div>';
-    w.forEach(function(it){ html += secItemRow(it, false); });
+    w.slice(0, SEC_ROWS_CAP).forEach(function(it){ html += secItemRow(it, false); });
+    if(w.length > SEC_ROWS_CAP) html += secMoreLine(w.length - SEC_ROWS_CAP);
     return html;
   }
   function secBodyOutcomes(snap){
@@ -3497,7 +3506,8 @@ body.plain #mapOverlay{font-size:13.5px}
     var html = (secAged(snap) ? secAgedLine() : '') + '<div><b>' + s.length + '</b> ' + esc(s.length === 1 ? 'session' : 'sessions') + ' running, ' +
       '<b>' + busy + '</b> at work, <b>' + waiting + '</b> ' + esc(secState.plain ? 'waiting for you' : 'waiting') + '</div>';
     if(!o.length) html += '<div>' + esc(secState.plain ? 'Nothing finished in the last 24 hours.' : 'Nothing finished or failed in the last 24 hours.') + '</div>';
-    o.forEach(function(it){ html += secItemRow(it, true); });
+    o.slice(0, SEC_ROWS_CAP).forEach(function(it){ html += secItemRow(it, true); });
+    if(o.length > SEC_ROWS_CAP) html += secMoreLine(o.length - SEC_ROWS_CAP);
     return html;
   }
   // Burn leads with tokens, then plan limits, then the price figure.

@@ -194,7 +194,7 @@ func TestPageTagsEveryPart(t *testing.T) {
 
 func TestPageHasScrollbarFitPass(t *testing.T) {
 	for _, want := range []string{
-		`var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min'];`,
+		`var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min','waits'];`,
 		`window.__bdevFit = `,
 		`bdevSetStationTheme:', e);`,
 		`r.checked = r.value === secState.stationTheme`,
@@ -271,6 +271,26 @@ func TestPageHasNoItemControls(t *testing.T) {
 	for _, bad := range []string{"bdevApprove", "bdevStop", "bdevReply"} {
 		if strings.Contains(pageHTML, bad) {
 			t.Errorf("page has %q (B4 is out of scope)", bad)
+		}
+	}
+}
+
+// Review findings of Task 7: the person's actions panel is not the one the fit
+// pass drops first, each list shows at most 5 rows, the tooltip carries what
+// the row shows, and a prompt row does not say its kind twice.
+func TestPageCapsItemRowsAndFixesWording(t *testing.T) {
+	for _, want := range []string{
+		`var SEC_ROWS_CAP = 5;`,
+		`function secMoreLine(`,
+		`'+' + n + ' more'`,
+		`'and ' + n + ' more'`,
+		`.slice(0, SEC_ROWS_CAP)`,
+		`var shown = plain ? word : txt;`,
+		`var full = shown + ' ' + (it.title || '')`,
+		`String(it.detail).toLowerCase() === k[0].toLowerCase()`,
+	} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %s", want)
 		}
 	}
 }

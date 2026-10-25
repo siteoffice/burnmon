@@ -85,6 +85,27 @@ func init() {
 			return err
 		}
 		fail := func(format string, a ...any) error { return fmt.Errorf("d36: "+format, a...) }
+		// The page shows the first 5 wait items. Put the gate first so the
+		// gate checks below still see its row (the example lists it last).
+		var rawMap map[string]json.RawMessage
+		var rawWait []json.RawMessage
+		if err := json.Unmarshal(raw, &rawMap); err != nil {
+			return err
+		}
+		if err := json.Unmarshal(rawMap["wait_items"], &rawWait); err != nil || len(rawWait) != len(ex.Wait) {
+			return fmt.Errorf("d36: wait_items do not parse: %v", err)
+		}
+		for i := range ex.Wait {
+			if ex.Wait[i].Kind == "gate" {
+				ex.Wait = append([]d36Item{ex.Wait[i]}, append(append([]d36Item{}, ex.Wait[:i]...), ex.Wait[i+1:]...)...)
+				rawWait = append([]json.RawMessage{rawWait[i]}, append(append([]json.RawMessage{}, rawWait[:i]...), rawWait[i+1:]...)...)
+				break
+			}
+		}
+		rawMap["wait_items"], _ = json.Marshal(rawWait)
+		if raw, err = json.Marshal(rawMap); err != nil {
+			return err
+		}
 		if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
 			return err
 		}
@@ -98,7 +119,15 @@ func init() {
 			err := evalInto(d36ReadJS, &p)
 			return p, err
 		}
+		const rowCap = 5 // SEC_ROWS_CAP in page.html
+		capItems := func(items []d36Item) []d36Item {
+			if len(items) > rowCap {
+				return items[:rowCap]
+			}
+			return items
+		}
 		sameRows := func(label string, rows []d36Row, items []d36Item) error {
+			items = capItems(items)
 			if len(rows) != len(items) {
 				return fail("%s: %d rows, want %d", label, len(rows), len(items))
 			}
@@ -132,6 +161,12 @@ func init() {
 		}
 		if err := sameRows("standard outcomes", p.Outcomes, ex.Outcome); err != nil {
 			return err
+		}
+		if more := len(ex.Wait) - rowCap; more > 0 && !strings.Contains(p.WaitsTxt, fmt.Sprintf("+%d more", more)) {
+			return fail("standard Waits lacks the +%d more line", more)
+		}
+		if strings.Contains(p.WaitsTxt, "permission prompt project permission prompt") {
+			return fail("standard prompt row repeats its kind word")
 		}
 		for _, want := range []string{"gate G4", "permission prompt", "2 tasks parked", "no result yet"} {
 			if !strings.Contains(p.WaitsTxt, want) {
