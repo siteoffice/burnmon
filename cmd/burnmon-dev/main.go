@@ -368,19 +368,20 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bdevSetSections:", err)
 	}
-	// bdevAgentMapHistory (R7): the agent map for the last N hours, from the
-	// store. The live map rides in bdevSections. Read-only, no port.
-	if err := w.Bind("bdevAgentMapHistory", func(hours int) (agentMapPayload, error) {
+	// bdevAgentMap (R7): the full agent map as boxes and lines, live from the
+	// snapshot file or for the last N hours from the store. The small overview
+	// rides in bdevSections. Read-only, no port.
+	if err := w.Bind("bdevAgentMap", func(req agentMapRequest) (agentMapPayload, error) {
 		a.mu.Lock()
 		root := a.cfg.ForemanRoot
 		a.mu.Unlock()
-		p, err := agentMapHistory(st, root, hours, time.Now())
+		p, err := agentMapFor(agentMapEnv{DataDir: dataDir, SnapPath: snapPath, St: st, ForemanRoot: root}, req, time.Now())
 		if err != nil {
-			log.Println("bdevAgentMapHistory:", err)
+			log.Println("bdevAgentMap:", err)
 		}
 		return p, err
 	}); err != nil {
-		log.Println("could not bind bdevAgentMapHistory:", err)
+		log.Println("could not bind bdevAgentMap:", err)
 	}
 
 	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon

@@ -1,0 +1,287 @@
+{
+  "columns": [
+    "Tool",
+    "Session",
+    "Helper",
+    "Programs and tool servers",
+    "You"
+  ],
+  "boxes": [
+    {
+      "id": "harness:claude",
+      "kind": "harness",
+      "title": "Claude Code",
+      "pill": "running",
+      "line": "1 session",
+      "column": 0,
+      "row": 0,
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "tool"
+        },
+        {
+          "label": "Name",
+          "value": "Claude Code"
+        },
+        {
+          "label": "Source",
+          "value": "sysmon"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:example-parent",
+      "kind": "session",
+      "title": "project",
+      "pill": "writing code",
+      "line": "1,200 tokens - 20 s ago",
+      "column": 1,
+      "row": 0,
+      "group": "frame:sprint:example__sprint__1",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "claude-opus-5-5"
+        },
+        {
+          "label": "State",
+          "value": "writing code"
+        },
+        {
+          "label": "Tokens",
+          "value": "1,200"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "€2.30"
+        },
+        {
+          "label": "Last active",
+          "value": "20 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "store, 20 s old"
+        },
+        {
+          "label": "Works for",
+          "value": "sprint-example (matched by BurnMon from the folder)"
+        },
+        {
+          "label": "Repo",
+          "value": "project"
+        },
+        {
+          "label": "Worktree",
+          "value": "sprint-example"
+        },
+        {
+          "label": "Branch",
+          "value": "sprint/example"
+        }
+      ]
+    },
+    {
+      "id": "mcp:example-server@session:anthropic:example-parent",
+      "kind": "tool",
+      "title": "example-server",
+      "pill": "tool server",
+      "line": "port 8765",
+      "column": 3,
+      "row": 0,
+      "group": "frame:sprint:example__sprint__1",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "tool server"
+        },
+        {
+          "label": "Name",
+          "value": "example-server"
+        },
+        {
+          "label": "Source",
+          "value": "mcp_config"
+        },
+        {
+          "label": "Listens on",
+          "value": "8765"
+        }
+      ]
+    },
+    {
+      "id": "programs:session:anthropic:example-parent",
+      "kind": "programs",
+      "title": "2 programs",
+      "pill": "programs",
+      "line": "started here",
+      "column": 3,
+      "row": 1,
+      "group": "frame:sprint:example__sprint__1",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "programs started by this session"
+        },
+        {
+          "label": "Source",
+          "value": "sysmon"
+        },
+        {
+          "label": "bash.exe",
+          "value": "1"
+        },
+        {
+          "label": "node.exe",
+          "value": "1"
+        },
+        {
+          "label": "Command lines",
+          "value": "never recorded"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:example-sub",
+      "kind": "sub",
+      "title": "Explore",
+      "pill": "waiting for you",
+      "line": "300 tokens - 5 s ago",
+      "column": 2,
+      "row": 2,
+      "group": "frame:sprint:example__sprint__1",
+      "waits_on_you": true,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "helper"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code (Explore)"
+        },
+        {
+          "label": "Model",
+          "value": "sonnet"
+        },
+        {
+          "label": "State",
+          "value": "waiting for you"
+        },
+        {
+          "label": "Tokens",
+          "value": "300"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "€0.46"
+        },
+        {
+          "label": "Last active",
+          "value": "5 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "store, 5 s old"
+        },
+        {
+          "label": "Works for",
+          "value": "sprint-example (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "you",
+      "kind": "you",
+      "title": "You",
+      "pill": "waiting for you",
+      "line": "1 waiting for you",
+      "column": 4,
+      "row": 2,
+      "waits_on_you": true,
+      "facts": [
+        {
+          "label": "agent",
+          "value": "Explore (5 s old)"
+        }
+      ]
+    }
+  ],
+  "lines": [
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "mcp:example-server@session:anthropic:example-parent",
+      "word": "uses",
+      "basis": "inferred",
+      "you": false
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "programs:session:anthropic:example-parent",
+      "word": "started",
+      "basis": "vendor",
+      "you": false
+    },
+    {
+      "from": "session:anthropic:example-parent",
+      "to": "session:anthropic:example-sub",
+      "word": "started",
+      "basis": "vendor",
+      "you": false
+    },
+    {
+      "from": "harness:claude",
+      "to": "session:anthropic:example-parent",
+      "word": "runs",
+      "basis": "vendor",
+      "you": false
+    },
+    {
+      "from": "session:anthropic:example-sub",
+      "to": "you",
+      "word": "waiting for",
+      "basis": "vendor",
+      "you": true
+    }
+  ],
+  "frames": [
+    {
+      "id": "frame:sprint:example__sprint__1",
+      "kind": "sprint",
+      "label": "sprint-example",
+      "status": "running",
+      "explain": "These agents are doing the Foreman job \"sprint-example\" (running, build). BurnMon guessed the link from the folder.",
+      "waits_on_you": false,
+      "folded": false,
+      "count": 4,
+      "first_row": 0,
+      "last_row": 2,
+      "first_col": 1,
+      "last_col": 3
+    }
+  ],
+  "idle": [],
+  "counts": {
+    "sessions": 1,
+    "subagents": 1,
+    "waiting": 1,
+    "sprints": 1,
+    "flows": 0
+  },
+  "notes": [
+    "Not shown: messages between agents. No tool's local files record who sent what to whom."
+  ]
+}

@@ -103,9 +103,9 @@ type model struct {
 
 func isAgent(n graph.Node) bool { return n.Kind == graph.KindSession || n.Kind == graph.KindSubagent }
 
-// Build turns a node list and an edge list into the view. Edges whose ends are
-// not both in nodes are ignored, and so are repeats of the same edge.
-func Build(nodes []graph.Node, edges []graph.Edge) View {
+// newModel indexes a node list and an edge list. Edges whose ends are not both
+// in nodes are ignored, and so are repeats of the same edge.
+func newModel(nodes []graph.Node, edges []graph.Edge) *model {
 	m := &model{nodes: map[string]graph.Node{}, out: map[string][]graph.Edge{}, spawned: map[string][]string{},
 		hasPar: map[string]bool{}, gateOf: map[string]string{}, waiters: map[string]bool{},
 		visited: map[string]bool{}, groupFor: map[string]bool{}}
@@ -159,7 +159,12 @@ func Build(nodes []graph.Node, edges []graph.Edge) View {
 			m.waiters[id] = true
 		}
 	}
+	return m
+}
 
+// Build turns a node list and an edge list into the view.
+func Build(nodes []graph.Node, edges []graph.Edge) View {
+	m := newModel(nodes, edges)
 	v := View{Groups: []Group{}, Idle: []Idle{}, Notes: []string{
 		"Not shown: messages between agents. No tool's local files record who sent what to whom.",
 	}}
