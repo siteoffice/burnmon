@@ -349,9 +349,9 @@ func main() {
 		log.Println("could not bind bdevSetUITheme:", err)
 	}
 
-	// bdevSections (R8): the section switches, the preset they make, and the
+	// bdevSections (B2): the part switches per mode, the overall scrollbar flag, and the
 	// newest snapshot reading. bdevSetSections saves one change from the page
-	// (a preset, one switch, or Plain Mode). Both read and write files only.
+	// (Plain Mode, the scrollbar flag, or one part switch). Both read and write files only.
 	snapPath, snapPathErr := snapshot.DefaultPath()
 	if snapPathErr != nil {
 		log.Println("snapshot path:", snapPathErr)

@@ -42,8 +42,14 @@ func TestSectionsPayloadFromFrozenExample(t *testing.T) {
 	if p.Mode != "standard" || p.Plain {
 		t.Errorf("first run mode %q, want standard", p.Mode)
 	}
-	if len(p.Sections) != 7 || !p.Sections["git"] {
-		t.Errorf("current list %v: standard shows every section", p.Sections)
+	if len(p.Parts) != 15 || !p.Parts["git"] {
+		t.Errorf("current list %v: standard shows every part", p.Parts)
+	}
+	if len(p.Groups) != 4 {
+		t.Errorf("%d groups, want 4", len(p.Groups))
+	}
+	if !p.Scrollbar {
+		t.Error("the overall scrollbar is on by default")
 	}
 	if p.Reading.Status != snapshot.StatusOK || p.Reading.AgeSeconds != 7 {
 		t.Errorf("reading %+v", p.Reading)
@@ -56,17 +62,22 @@ func TestSectionsPayloadFromFrozenExample(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"mode", "plain_mode", "sections", "sections_standard", "sections_plain", "reading", "order"} {
+	for _, k := range []string{"mode", "plain_mode", "overall_scrollbar", "parts", "parts_standard", "parts_plain", "groups", "reading"} {
 		if _, ok := m[k]; !ok {
 			t.Errorf("payload has no %q", k)
+		}
+	}
+	for _, k := range []string{"sections", "order", "sections_standard", "sections_plain"} {
+		if _, ok := m[k]; ok {
+			t.Errorf("payload still has %q", k)
 		}
 	}
 	// In Plain the page's current list is the Plain one.
 	if err := saveSections(dir, sections.Default().WithPlain(true)); err != nil {
 		t.Fatal(err)
 	}
-	if q := sectionsPayloadFor(dir, snapPath, now); q.Mode != "plain" || q.Sections["git"] {
-		t.Errorf("plain payload: mode %q, git %v", q.Mode, q.Sections["git"])
+	if q := sectionsPayloadFor(dir, snapPath, now); q.Mode != "plain" || q.Parts["git"] {
+		t.Errorf("plain payload: mode %q, git %v", q.Mode, q.Parts["git"])
 	}
 }
 
@@ -82,18 +93,32 @@ func TestSetSectionsFromPage(t *testing.T) {
 		t.Errorf("after toggle on: %+v", got)
 	}
 	// One switch in one mode leaves the other mode alone.
-	if err := applySectionsChange(dir, sectionsChange{Mode: "plain", Section: "git", On: &on}); err != nil {
+	if err := applySectionsChange(dir, sectionsChange{Mode: "plain", Section: "turn_ticker", On: &on}); err != nil {
 		t.Fatal(err)
 	}
 	if err := applySectionsChange(dir, sectionsChange{Mode: "standard", Section: "burn", On: &off}); err != nil {
 		t.Fatal(err)
 	}
 	got := loadSections(dir)
-	if !got.OnIn("plain", "git") || got.OnIn("standard", "burn") || !got.OnIn("standard", "git") || !got.OnIn("plain", "burn") {
+	if !got.OnIn("plain", "turn_ticker") || got.OnIn("standard", "burn") || !got.OnIn("standard", "turn_ticker") || !got.OnIn("plain", "burn") {
 		t.Errorf("per-mode switches wrong: %+v", got)
 	}
 	if got.Mode() != "plain" {
 		t.Error("a switch changed the mode")
+	}
+	// The scrollbar switch leaves the mode and the lists alone.
+	if err := applySectionsChange(dir, sectionsChange{Scrollbar: &off}); err != nil {
+		t.Fatal(err)
+	}
+	sb := loadSections(dir)
+	if sb.Scrollbar || sb.Mode() != "plain" || !sb.OnIn("plain", "turn_ticker") || sb.OnIn("standard", "burn") {
+		t.Errorf("scrollbar off changed more than the flag: %+v", sb)
+	}
+	if err := applySectionsChange(dir, sectionsChange{Scrollbar: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if !loadSections(dir).Scrollbar {
+		t.Error("scrollbar back on not saved")
 	}
 	// The toggle back.
 	if err := applySectionsChange(dir, sectionsChange{Plain: &off}); err != nil {
@@ -107,13 +132,16 @@ func TestSetSectionsFromPage(t *testing.T) {
 	for _, bad := range []sectionsChange{
 		{Mode: "wild", Section: "git", On: &on}, {Mode: "plain", Section: "nope", On: &on},
 		{Mode: "plain", Section: "git"}, {Section: "git", On: &on}, {},
+		{Scrollbar: &on, Plain: &on},
+		{Scrollbar: &on, Mode: "plain", Section: "git", On: &on},
 	} {
 		if err := applySectionsChange(dir, bad); err == nil {
 			t.Errorf("%+v: want an error", bad)
 		}
 	}
 	after := loadSections(dir)
-	if after.Mode() != before.Mode() || after.OnIn("plain", "git") != before.OnIn("plain", "git") || after.OnIn("standard", "burn") != before.OnIn("standard", "burn") {
+	if after.Mode() != before.Mode() || after.Scrollbar != before.Scrollbar ||
+		after.OnIn("plain", "git") != before.OnIn("plain", "git") || after.OnIn("standard", "burn") != before.OnIn("standard", "burn") {
 		t.Errorf("a refused change altered the file: %+v", after)
 	}
 }
