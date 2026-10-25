@@ -287,3 +287,33 @@ func TestProbeBridge(t *testing.T) {
 		t.Error("probe took another program for BurnMon")
 	}
 }
+
+func TestBrowserBridgeHistoryRoutes(t *testing.T) {
+	_, srv := newTestBridge(t)
+
+	code, body := post(t, srv, "bmDeleteHistory", `[{"scope":"all"}]`)
+	if code != http.StatusInternalServerError || !strings.Contains(body, "not confirmed") {
+		t.Fatalf("unconfirmed delete: code %d body %q, want 500 and not confirmed", code, body)
+	}
+
+	dir := t.TempDir()
+	reqJSON, _ := json.Marshal([]any{map[string]string{"dir": dir}})
+	code, body = post(t, srv, "bmExportHistory", string(reqJSON))
+	if code != http.StatusOK {
+		t.Fatalf("export: code %d body %q", code, body)
+	}
+	var res struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(body), &res); err != nil || res.Path == "" {
+		t.Fatalf("export body %q: %v", body, err)
+	}
+	if _, err := os.Stat(res.Path); err != nil {
+		t.Fatalf("exported file missing: %v", err)
+	}
+
+	reqJSON, _ = json.Marshal([]any{map[string]string{"dir": "relative"}})
+	if code, body = post(t, srv, "bmExportHistory", string(reqJSON)); code != http.StatusInternalServerError || !strings.Contains(body, "absolute") {
+		t.Fatalf("relative export: code %d body %q, want 500 and absolute", code, body)
+	}
+}

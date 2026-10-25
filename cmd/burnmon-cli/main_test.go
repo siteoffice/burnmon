@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
 	"time"
 
+	"burnmon/internal/export"
+	"burnmon/internal/export/exporttest"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
@@ -128,5 +133,47 @@ func TestLiveQueryPathStaysBoundedOnLargeStore(t *testing.T) {
 	if grew > memLimit {
 		t.Fatalf("live query path grew heap by %d bytes, want under %d (50 MB) on a %d-event store",
 			grew, memLimit, oldEventCount+len(recent))
+	}
+}
+
+// TestWriteExportMatchesGolden pins the CLI's export bytes to the shared
+// export path: the file writeExport leaves is exactly Encode(Build(Select())).
+func TestWriteExportMatchesGolden(t *testing.T) {
+	st := exporttest.Store(t)
+	cfg := pricing.Defaults()
+	f := export.Filter{Owners: []string{"wilco"}}
+	out := filepath.Join(t.TempDir(), "export.json")
+	if _, err := writeExport(st, &cfg, f, "dev-1", out, exporttest.FixedNow); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := exporttest.Golden(t, st, &cfg, f, "dev-1"); !bytes.Equal(got, want) {
+		t.Fatalf("export file differs from the golden bytes")
+	}
+}
+
+// TestExportValidateText pins the CLI's missing-owner words, which scripts and
+// docs quote: the shared export.ErrOwnerRequired text is for the apps.
+func TestExportValidateText(t *testing.T) {
+	want := "export: owner rules are configured; --owner is required " +
+		"(repeat --owner for more than one), so a ClientA row never leaves by accident"
+	if got := exportValidateText(export.ErrOwnerRequired); got != want {
+		t.Fatalf("missing-owner text = %q, want %q", got, want)
+	}
+}
+
+// TestExportFailureText pins the prefixes the CLI printed before the export
+// refactor: "could not write" only for the file write, "internal error:" for
+// reading events and encoding.
+func TestExportFailureText(t *testing.T) {
+	boom := errors.New("boom")
+	if got, want := exportFailureText(&exportWriteError{boom}, "x.json"), "could not write x.json : boom"; got != want {
+		t.Fatalf("write failure = %q, want %q", got, want)
+	}
+	if got, want := exportFailureText(boom, "x.json"), "internal error: boom"; got != want {
+		t.Fatalf("other failure = %q, want %q", got, want)
 	}
 }

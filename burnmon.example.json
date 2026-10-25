@@ -37,5 +37,7 @@
   "_comment_wsl": "wsl_scan, extra_sources and wsl_interval_hours are new in v0.7.0. The three values below are shown at their defaults (auto-scan, nothing extra, 4-hour WSL cadence), so leaving this block out entirely is equivalent. Set wsl_scan to \"off\" if you do not want the app touching a WSL distro at all.",
   "wsl_scan": "auto",
   "extra_sources": [],
-  "wsl_interval_hours": 4
+  "wsl_interval_hours": 4,
+  "_comment_history": "B1. keep_history (default true): a transcript deleted from disk keeps its events in the store and only its read position is forgotten. Set false to drop a vanished transcript's events on the next scan.",
+  "keep_history": true
 }

@@ -6,6 +6,11 @@
 package export
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -157,4 +162,81 @@ func Build(events []schema.Event, cfg *pricing.Config, label string, exportedAt 
 		PriceBookDates: PriceBookDates(cfg),
 		Rows:           rows,
 	}
+}
+
+// Filter picks which events an export covers. Since and Until are local
+// calendar days (YYYY-MM-DD), both inclusive, empty meaning unbounded; Owners
+// keeps only those owners, empty meaning every owner.
+type Filter struct {
+	Since, Until string
+	Owners       []string
+}
+
+// Select returns the events f lets through, in their original order: the same
+// rules the CLI's export loop has always applied.
+func Select(events []schema.Event, f Filter) []schema.Event {
+	ownerSet := map[string]bool{}
+	for _, o := range f.Owners {
+		ownerSet[o] = true
+	}
+	var out []schema.Event
+	for _, e := range events {
+		day := e.At.In(time.Local).Format("2006-01-02")
+		if f.Since != "" && day < f.Since {
+			continue
+		}
+		if f.Until != "" && day > f.Until {
+			continue
+		}
+		if len(ownerSet) > 0 && !ownerSet[e.Owner] {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// ErrOwnerRequired is the wall rule's refusal (P6): with owner rules
+// configured, an export without an owner never starts.
+var ErrOwnerRequired = errors.New("owner rules are configured; at least one owner is required, so a ClientA row never leaves by accident")
+
+// Validate refuses a filter the wall rule forbids: owner rules exist in cfg
+// and f names no owner.
+func Validate(cfg *pricing.Config, f Filter) error {
+	if len(cfg.Owners) > 0 && len(f.Owners) == 0 {
+		return ErrOwnerRequired
+	}
+	return nil
+}
+
+// Encode renders doc as the export file's bytes: indented by one space, no
+// trailing newline, exactly what `burnmon-cli export` writes.
+func Encode(doc Doc) ([]byte, error) {
+	return json.MarshalIndent(doc, "", " ")
+}
+
+// FileName is the name an app gives an export it saves into a folder.
+func FileName(label string, now time.Time) string {
+	return "burnmon-export-" + label + "-" + now.Local().Format("20060102-150405") + ".json"
+}
+
+// WriteToDir saves doc as FileName(doc.Label, now) inside dir and returns the
+// full path. dir must already exist: nothing here creates folders.
+func WriteToDir(dir string, doc Doc, now time.Time) (string, error) {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%s is not a folder", dir)
+	}
+	b, err := Encode(doc)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, FileName(doc.Label, now))
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
 }

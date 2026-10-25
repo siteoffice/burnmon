@@ -267,3 +267,35 @@ func TestLoadModeAndCopilotPlan(t *testing.T) {
 		t.Errorf("CopilotPlan = %q, want %q", cfg.CopilotPlan, "Pro")
 	}
 }
+
+// TestLoadKeepHistory guards B1's default: keep_history is on unless
+// burnmon.json says false.
+func TestLoadKeepHistory(t *testing.T) {
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.KeepHistory {
+		t.Fatal("Load(\"\").KeepHistory = false, want true")
+	}
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		name, body string
+		want       bool
+	}{
+		{"absent", `{"fx_usd_eur": 0.9}`, true},
+		{"false", `{"keep_history": false}`, false},
+	} {
+		p := filepath.Join(dir, tc.name+".json")
+		if err := os.WriteFile(p, []byte(tc.body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := Load(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.KeepHistory != tc.want {
+			t.Errorf("%s: KeepHistory = %v, want %v", tc.name, got.KeepHistory, tc.want)
+		}
+	}
+}

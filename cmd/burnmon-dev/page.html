@@ -479,6 +479,12 @@ body.plain #mapOverlay{font-size:13.5px}
 #secSettings h4{margin:0 0 2px; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase}
 #secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
 #secSettings input{margin:0; accent-color:var(--amber)}
+#histAdmin{display:flex; flex-direction:column; gap:6px; margin-top:6px; padding-top:8px; border-top:1px solid var(--bd)}
+#histAdmin .histrow{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+#histAdmin input[type=text], #histAdmin input[type=number]{background:var(--bg); color:inherit; border:1px solid var(--bd); padding:2px 4px; font:inherit}
+#histAdmin .histbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
+#histAdmin .histbtn.del{border-color:var(--red); color:var(--red)}
+#histAdmin .histbtn:disabled{opacity:.5; cursor:default}
 </style>
 </head>
 <body>
@@ -620,6 +626,32 @@ body.plain #mapOverlay{font-size:13.5px}
 <div id="secSettings" role="dialog" aria-label="Sections each mode shows">
   <h4>Sections each mode shows</h4>
   <div class="setcols" id="secSettingsCols"></div>
+  <div id="histAdmin">
+    <h4>History</h4>
+    <div class="sechint" id="hist_keep"></div>
+    <div class="histrow">
+      <label>Delete older than (days) <input id="hist_days" type="number" step="1" min="1" value="90" style="width:70px"></label>
+      <button id="hist_delete_older" class="histbtn del" type="button">Delete older than N days</button>
+    </div>
+    <div class="histrow">
+      <label>Session <input id="hist_session" type="text" placeholder="session id" style="width:160px"></label>
+      <button id="hist_delete_session" class="histbtn del" type="button">Delete one session</button>
+    </div>
+    <div class="histrow">
+      <button id="hist_delete_all" class="histbtn del" type="button">Delete all history</button>
+    </div>
+    <div class="sechint" id="hist_delete_result"></div>
+    <h4>Export history</h4>
+    <div class="histrow"><label>Folder (absolute path) <input id="hist_dir" type="text" style="width:260px"></label></div>
+    <div class="histrow">
+      <label>Since <input id="hist_since" type="text" placeholder="YYYY-MM-DD" style="width:96px"></label>
+      <label>Until <input id="hist_until" type="text" placeholder="YYYY-MM-DD" style="width:96px"></label>
+      <label>Label <input id="hist_label" type="text" value="dev-1" style="width:70px"></label>
+    </div>
+    <div class="histrow" id="hist_owners"></div>
+    <div class="histrow"><button id="hist_export" class="histbtn" type="button">Export</button></div>
+    <div class="sechint" id="hist_export_result" style="word-break:break-all"></div>
+  </div>
   <div class="sechint">Esc closes this list</div>
 </div>
 <div id="turnPopupOverlay" class="hidden">
@@ -3534,6 +3566,7 @@ body.plain #mapOverlay{font-size:13.5px}
       var r = secGearEl.getBoundingClientRect();
       secSettingsEl.style.top = Math.round(r.bottom + 6) + 'px';
     }
+    if(open) histLoadInfo();
     secSettingsEl.classList.toggle('open', open);
     secGearEl.classList.toggle('on', open);
     secGearEl.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -3550,6 +3583,87 @@ body.plain #mapOverlay{font-size:13.5px}
     if(t.hasAttribute('data-sw')) secSend({ mode: t.getAttribute('data-mode'), section: t.getAttribute('data-sw'), on: t.checked });
   });
   document.addEventListener('click', function(){ if(secSettingsEl.classList.contains('open')) secSettingsOpen(false); });
+  // ---- B1 History block (delete, export) inside the gear dialog ----------
+  // Delete is two-step: the first press validates the field, locks the value
+  // into the request and arms the button for 5 seconds with a label naming
+  // what will go; the second press sends that locked request. If the field
+  // changed in between, the second press re-arms with the new value instead
+  // of sending. The Go side refuses a delete without confirm: true anyway.
+  function histEl(id){ return document.getElementById(id); }
+  function histTwoStep(btn, build){
+    var timer = null, armed = null, text = btn.textContent;
+    function disarm(){ if(timer){ clearTimeout(timer); timer = null; } armed = null; btn.textContent = text; }
+    btn.addEventListener('click', function(){
+      var cur = build();
+      if(!cur){ disarm(); return; }
+      if(armed && armed.key === cur.key){ var req = armed.req; disarm(); histSendDelete(req); return; }
+      disarm();
+      armed = cur;
+      btn.textContent = 'Confirm: ' + cur.label;
+      timer = setTimeout(disarm, 5000);
+    });
+  }
+  function histSendDelete(req){
+    var out = histEl('hist_delete_result');
+    out.textContent = 'Deleting...';
+    window.bdevDeleteHistory(req).then(function(r){
+      out.textContent = 'Deleted ' + r.events + ' events and ' + r.tool_calls + ' tool calls.';
+    }).catch(function(e){ out.textContent = 'Delete failed: ' + String((e && e.message) || e); });
+  }
+  histTwoStep(histEl('hist_delete_older'), function(){
+    var raw = histEl('hist_days').value.trim();
+    var days = Number(raw);
+    if(raw === '' || !Number.isInteger(days) || days < 1){
+      histEl('hist_delete_result').textContent = 'Enter a whole number of days, 1 or more.';
+      return null;
+    }
+    return { key: 'older:' + days, label: 'delete older than ' + days + ' days',
+      req: { scope: 'older_than', days: days, session_id: '', confirm: true } };
+  });
+  histTwoStep(histEl('hist_delete_session'), function(){
+    var id = histEl('hist_session').value.trim();
+    if(!id){ histEl('hist_delete_result').textContent = 'Enter a session id.'; return null; }
+    return { key: 'session:' + id, label: 'delete session ' + id,
+      req: { scope: 'session', days: 0, session_id: id, confirm: true } };
+  });
+  histTwoStep(histEl('hist_delete_all'), function(){
+    return { key: 'all', label: 'delete all history', req: { scope: 'all', days: 0, session_id: '', confirm: true } };
+  });
+  window.__bdevExportHistoryResolve = function(d){
+    histEl('hist_export').disabled = false;
+    var out = histEl('hist_export_result');
+    if(!d || d.error){ out.textContent = 'Export failed: ' + ((d && d.error) || 'no answer'); return; }
+    out.textContent = 'Wrote ' + d.rows + ' rows to ' + d.path;
+  };
+  histEl('hist_export').addEventListener('click', function(){
+    var owners = [], boxes = histEl('hist_owners').querySelectorAll('input[type=checkbox]');
+    for(var i = 0; i < boxes.length; i++){ if(boxes[i].checked) owners.push(boxes[i].value); }
+    histEl('hist_export').disabled = true;
+    histEl('hist_export_result').textContent = 'Exporting...';
+    window.bdevExportHistory({ dir: histEl('hist_dir').value.trim(), since: histEl('hist_since').value.trim(),
+      until: histEl('hist_until').value.trim(), label: histEl('hist_label').value.trim(), owners: owners });
+  });
+  // First paint of the block, each time the dialog opens: keep_history, the
+  // default folder (only while the field is empty) and the owner checkboxes.
+  function histLoadInfo(){
+    if(!window.bdevHistoryInfo) return;
+    window.bdevHistoryInfo().then(function(info){
+      histEl('hist_keep').textContent = 'Keep history: ' + (info.keep_history ? 'on' : 'off') + ' (keep_history in burnmon.json)';
+      var dir = histEl('hist_dir');
+      if(!dir.value) dir.value = info.export_dir || '';
+      var box = histEl('hist_owners'), owners = info.owners || [];
+      if(box.getAttribute('data-n') === String(owners.length)) return;
+      box.textContent = '';
+      box.setAttribute('data-n', String(owners.length));
+      if(!owners.length){ box.textContent = 'No owner rules in burnmon.json, so no owner is needed.'; return; }
+      owners.forEach(function(o){
+        var l = document.createElement('label'), c = document.createElement('input');
+        c.type = 'checkbox'; c.value = o;
+        l.appendChild(c); l.appendChild(document.createTextNode(' ' + o));
+        box.appendChild(l);
+      });
+    }).catch(function(e){ console.log('bdevHistoryInfo:', e); });
+  }
   // Esc closes the list first, before the Station or fullscreen handlers see it.
   document.addEventListener('keydown', function(e){
     if((e.key === 'Escape' || e.key === 'Esc') && secSettingsEl.classList.contains('open')){

@@ -973,6 +973,166 @@ func (s *Store) DeleteEventsForOtherPaths(keepPaths []string) error {
 	return tx.Commit()
 }
 
+// rowsAffected reads a delete's row count and returns the driver's error when
+// it cannot report one, so the caller rolls back instead of reporting zero.
+func rowsAffected(res sql.Result) (int, error) {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+// DeleteEventsBefore removes events and tool calls recorded before cutoff.
+// It compares instants with julianday, not text: RFC3339Nano strings with and
+// without a fractional second do not sort as the instants they name. Cursors
+// are left alone, so transcripts still on disk are not read back in.
+func (s *Store) DeleteEventsBefore(cutoff time.Time) (events, toolCalls int, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	at := cutoff.UTC().Format(time.RFC3339Nano)
+	res, err := tx.Exec(`DELETE FROM tool_calls WHERE julianday(at) < julianday(?)`, at)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: delete tool calls before %s: %w", at, err)
+	}
+	if toolCalls, err = rowsAffected(res); err != nil {
+		return 0, 0, fmt.Errorf("store: count deleted tool calls before %s: %w", at, err)
+	}
+	res, err = tx.Exec(`DELETE FROM events WHERE julianday(at) < julianday(?)`, at)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: delete events before %s: %w", at, err)
+	}
+	if events, err = rowsAffected(res); err != nil {
+		return 0, 0, fmt.Errorf("store: count deleted events before %s: %w", at, err)
+	}
+	return events, toolCalls, tx.Commit()
+}
+
+// DeleteSession removes one session's events and tool calls, and those of its
+// subagents (events whose parent_id is the session). Cursors are left alone.
+func (s *Store) DeleteSession(sessionID string) (events, toolCalls int, err error) {
+	if sessionID == "" {
+		return 0, 0, fmt.Errorf("store: delete session: empty session id")
+	}
+	rows, err := s.db.Query(`SELECT DISTINCT session_id FROM events WHERE session_id = ? OR parent_id = ?`, sessionID, sessionID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: list sessions to delete: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, 0, fmt.Errorf("store: scan session id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, 0, fmt.Errorf("store: list sessions to delete: %w", err)
+	}
+	rows.Close()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	for _, id := range ids {
+		res, err := tx.Exec(`DELETE FROM tool_calls WHERE session_id = ?`, id)
+		if err != nil {
+			return 0, 0, fmt.Errorf("store: delete tool calls of %s: %w", id, err)
+		}
+		n, err := rowsAffected(res)
+		if err != nil {
+			return 0, 0, fmt.Errorf("store: count deleted tool calls of %s: %w", id, err)
+		}
+		toolCalls += n
+		res, err = tx.Exec(`DELETE FROM events WHERE session_id = ?`, id)
+		if err != nil {
+			return 0, 0, fmt.Errorf("store: delete events of %s: %w", id, err)
+		}
+		n, err = rowsAffected(res)
+		if err != nil {
+			return 0, 0, fmt.Errorf("store: count deleted events of %s: %w", id, err)
+		}
+		events += n
+	}
+	return events, toolCalls, tx.Commit()
+}
+
+// DeleteAllEvents empties events and tool_calls. Cursors, meta, forecast and
+// the graph tables stay, so a delete is not undone by the next scan.
+func (s *Store) DeleteAllEvents() (events, toolCalls int, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`DELETE FROM tool_calls`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: delete all tool calls: %w", err)
+	}
+	if toolCalls, err = rowsAffected(res); err != nil {
+		return 0, 0, fmt.Errorf("store: count deleted tool calls: %w", err)
+	}
+	res, err = tx.Exec(`DELETE FROM events`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: delete all events: %w", err)
+	}
+	if events, err = rowsAffected(res); err != nil {
+		return 0, 0, fmt.Errorf("store: count deleted events: %w", err)
+	}
+	return events, toolCalls, tx.Commit()
+}
+
+// ForgetCursorsForOtherPaths deletes only the cursor rows whose path is not in
+// keepPaths and returns how many. Events stay: this is keep_history's prune,
+// where a vanished transcript stops being tracked but keeps its history.
+func (s *Store) ForgetCursorsForOtherPaths(keepPaths []string) (int, error) {
+	rows, err := s.db.Query(`SELECT path FROM cursors`)
+	if err != nil {
+		return 0, fmt.Errorf("store: list cursor paths: %w", err)
+	}
+	keep := make(map[string]bool, len(keepPaths))
+	for _, p := range keepPaths {
+		keep[p] = true
+	}
+	var stale []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("store: scan cursor path: %w", err)
+		}
+		if !keep[p] {
+			stale = append(stale, p)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, fmt.Errorf("store: list cursor paths: %w", err)
+	}
+	rows.Close()
+	if len(stale) == 0 {
+		return 0, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	for _, p := range stale {
+		if _, err := tx.Exec(`DELETE FROM cursors WHERE path = ?`, p); err != nil {
+			return 0, fmt.Errorf("store: forget cursor for %s: %w", p, err)
+		}
+	}
+	return len(stale), tx.Commit()
+}
+
 // ResetCollapsedCodexSessions undoes the Codex ":0" collapse (WS2
 // follow-up, 2026-09-29, item 0): a rollout whose token_count lines carry
 // no top-level "ordinal" used to key every turn as sessionID+":0", so the

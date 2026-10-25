@@ -711,14 +711,24 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 			return Payload{}, fmt.Errorf("dataset: set %s: %w", toolCallsBackfillMetaKey, err)
 		}
 	}
-	// A transcript that no longer exists on disk (deleted, renamed, moved)
-	// must not keep contributing its session to every future report; v0.0.1's
-	// gob cache pruned the same way on every save.
+	// A transcript that no longer exists on disk (deleted, renamed, moved):
+	// with keep_history (the default) its events stay and only its cursor is
+	// forgotten, so a restored file is re-read from byte 0 and the upsert keys
+	// keep its totals unchanged. Without it the events go too, so the session
+	// stops contributing to every future report, as v0.0.1's gob cache pruned
+	// on every save.
 	deleteStart := time.Now()
-	if err := c.Store.DeleteEventsForOtherPaths(files); err != nil {
-		return Payload{}, err
+	if cfg.KeepHistory {
+		if _, err := c.Store.ForgetCursorsForOtherPaths(files); err != nil {
+			return Payload{}, err
+		}
+		log.Printf("stage ForgetCursorsForOtherPaths: %v", time.Since(deleteStart))
+	} else {
+		if err := c.Store.DeleteEventsForOtherPaths(files); err != nil {
+			return Payload{}, err
+		}
+		log.Printf("stage DeleteEventsForOtherPaths: %v", time.Since(deleteStart))
 	}
-	log.Printf("stage DeleteEventsForOtherPaths: %v", time.Since(deleteStart))
 
 	allEventsStart := time.Now()
 	events, err := c.Store.AllEvents()

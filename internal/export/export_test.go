@@ -1,7 +1,11 @@
 package export
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
@@ -117,5 +121,124 @@ func TestPriceBookDates(t *testing.T) {
 		if dates[key] == "" {
 			t.Fatalf("PriceBookDates()[%q] is empty, want the compiled-in book date", key)
 		}
+	}
+}
+
+func selectEvents() []schema.Event {
+	at := func(day int) time.Time { return time.Date(2026, 10, day, 12, 0, 0, 0, time.Local) }
+	return []schema.Event{
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r1", At: at(18), Model: "m", Owner: "wilco", Input: 1, Output: 1},
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r2", At: at(19), Model: "m", Owner: "other", Input: 1, Output: 1},
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r3", At: at(20), Model: "m", Owner: "wilco", Input: 1, Output: 1},
+	}
+}
+
+func TestSelectMatchesCLIRules(t *testing.T) {
+	events := selectEvents()
+	if got := Select(events, Filter{}); len(got) != 3 {
+		t.Fatalf("empty filter kept %d events, want 3", len(got))
+	}
+	// Since and until are both inclusive local days.
+	got := Select(events, Filter{Since: "2026-10-19", Until: "2026-10-19"})
+	if len(got) != 1 || got[0].RequestID != "r2" {
+		t.Fatalf("since=until=19th kept %+v, want only r2", got)
+	}
+	got = Select(events, Filter{Since: "2026-10-19"})
+	if len(got) != 2 {
+		t.Fatalf("since 19th kept %d events, want 2", len(got))
+	}
+	got = Select(events, Filter{Until: "2026-10-18"})
+	if len(got) != 1 || got[0].RequestID != "r1" {
+		t.Fatalf("until 18th kept %+v, want only r1", got)
+	}
+	got = Select(events, Filter{Owners: []string{"wilco"}})
+	if len(got) != 2 {
+		t.Fatalf("owner wilco kept %d events, want 2", len(got))
+	}
+}
+
+func TestValidateRequiresOwnerWithRules(t *testing.T) {
+	cfg := testConfig(t)
+	if err := Validate(&cfg, Filter{}); err != nil {
+		t.Fatalf("no owner rules: Validate = %v, want nil", err)
+	}
+	cfg.Owners = []pricing.OwnerRule{{Match: `C:\x\*`, Owner: "wilco"}}
+	if err := Validate(&cfg, Filter{}); !errors.Is(err, ErrOwnerRequired) {
+		t.Fatalf("owner rules, no owner: Validate = %v, want ErrOwnerRequired", err)
+	}
+	if err := Validate(&cfg, Filter{Owners: []string{"wilco"}}); err != nil {
+		t.Fatalf("owner rules, owner given: Validate = %v, want nil", err)
+	}
+}
+
+func TestEncodeIsCLIIndent(t *testing.T) {
+	cfg := testConfig(t)
+	doc := Build(selectEvents(), &cfg, "dev-1", time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC))
+	want, err := json.MarshalIndent(doc, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Encode(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("Encode bytes differ from json.MarshalIndent(doc, \"\", \" \")")
+	}
+}
+
+func TestWriteToDirRefusesMissingFolder(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	if _, err := WriteToDir(filepath.Join(dir, "nope"), Doc{Label: "dev-1"}, now); err == nil {
+		t.Fatal("missing folder: err = nil, want one")
+	}
+	file := filepath.Join(dir, "afile")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteToDir(file, Doc{Label: "dev-1"}, now); err == nil {
+		t.Fatal("a file instead of a folder: err = nil, want one")
+	}
+}
+
+func TestWriteToDirWritesNamedFile(t *testing.T) {
+	cfg := testConfig(t)
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	doc := Build(selectEvents(), &cfg, "dev-1", now)
+	dir := t.TempDir()
+	path, err := WriteToDir(dir, doc, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, FileName("dev-1", now)); path != want {
+		t.Fatalf("path = %q, want %q", path, want)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := Encode(doc)
+	if !bytes.Equal(got, want) {
+		t.Fatal("file content differs from Encode(doc)")
+	}
+}
+func TestSelectSinceWithOwners(t *testing.T) {
+	events := selectEvents()
+	got := Select(events, Filter{Since: "2026-10-19", Owners: []string{"wilco"}})
+	if len(got) != 1 || got[0].RequestID != "r3" {
+		t.Fatalf("since 19th + owner wilco kept %+v, want only r3", got)
+	}
+}
+
+func TestSelectUntilDayBoundary(t *testing.T) {
+	at := func(day, h, m int) time.Time { return time.Date(2026, 10, day, h, m, 0, 0, time.Local) }
+	events := []schema.Event{
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "late", At: at(19, 23, 30), Model: "m", Input: 1, Output: 1},
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "next", At: at(20, 0, 30), Model: "m", Input: 1, Output: 1},
+	}
+	got := Select(events, Filter{Until: "2026-10-19"})
+	if len(got) != 1 || got[0].RequestID != "late" {
+		t.Fatalf("until 19th kept %+v, want only the 23:30 event", got)
 	}
 }
