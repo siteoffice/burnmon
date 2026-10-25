@@ -160,6 +160,11 @@ type Config struct {
 	// error caught at load time.
 	WSLScan string `json:"wsl_scan"`
 
+	// KeepHistory (default true) decides what a vanished transcript costs:
+	// true keeps its events and forgets only its cursor, so a restored file is
+	// read again without doubling; false deletes its events as v0.x did.
+	KeepHistory bool `json:"keep_history"`
+
 	// ExtraSources is appended to whatever auto-detection (or an explicit
 	// -source override) already found, deduplicated afterwards. Unlike
 	// -source, which replaces auto-detection, this is additive: the escape
@@ -385,6 +390,7 @@ func Defaults() Config {
 		CacheWriteMult: 1.25,
 		CacheReadMult:  0.10,
 		FallbackFamily: "sonnet",
+		KeepHistory:    true,
 		Prices: map[string]ModelPrice{
 			"opus":   {Label: "Opus", In: 5.0, Out: 25.0},
 			"sonnet": {Label: "Sonnet", In: 3.0, Out: 15.0},
