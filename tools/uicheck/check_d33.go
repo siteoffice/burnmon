@@ -192,7 +192,7 @@ func init() {
 			}
 		}
 
-		// Turn ticker: as tall as its rows, at most the room left in the burn zone.
+		// Turn ticker: as tall as its rows, at most the room left in the burn zone, but never below the 80 px min-height floor.
 		for _, size := range [][2]int32{{1920, 1080}, {1152, 2048}} {
 			w, h := size[0], size[1]
 			if err := ensureWindowSizeWH(hwnd, w, h); err != nil {
@@ -208,8 +208,8 @@ func init() {
 			}
 			need := p.Tick.Head + p.Tick.Scroll
 			room := p.Tick.Bottom - p.Tick.Top
-			if p.Tick.Height > math.Min(need, room)+6 {
-				return d33Fail("%dx%d turn ticker is %.0f px tall, rows need %.0f, room %.0f", w, h, p.Tick.Height, need, room)
+			if p.Tick.Height > math.Max(80, math.Min(need, room))+6 {
+				return d33Fail("%dx%d turn ticker is %.0f px tall, rows need %.0f, room %.0f, 80 px min-height floor", w, h, p.Tick.Height, need, room)
 			}
 			if _, err := screenshot(hwnd, fmt.Sprintf("d33-ticker-noproc-%d", w)); err != nil {
 				return err
