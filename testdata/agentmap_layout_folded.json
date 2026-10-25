@@ -1,0 +1,1638 @@
+{
+  "columns": [
+    "Tool",
+    "Session",
+    "Programs and servers",
+    "You"
+  ],
+  "boxes": [
+    {
+      "id": "session:anthropic:s0-0",
+      "kind": "session",
+      "title": "a0-0",
+      "pill": "waits on you",
+      "line": "0 s ago",
+      "column": 1,
+      "row": 0,
+      "group": "frame:sprint:s0",
+      "waits_on_you": true,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "0 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-1",
+      "kind": "session",
+      "title": "a0-1",
+      "pill": "coding",
+      "line": "1 s ago",
+      "column": 1,
+      "row": 1,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "1 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-2",
+      "kind": "session",
+      "title": "a0-2",
+      "pill": "coding",
+      "line": "2 s ago",
+      "column": 1,
+      "row": 2,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "2 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-3",
+      "kind": "session",
+      "title": "a0-3",
+      "pill": "coding",
+      "line": "3 s ago",
+      "column": 1,
+      "row": 3,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "3 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-4",
+      "kind": "session",
+      "title": "a0-4",
+      "pill": "coding",
+      "line": "4 s ago",
+      "column": 1,
+      "row": 4,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "4 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-5",
+      "kind": "session",
+      "title": "a0-5",
+      "pill": "coding",
+      "line": "5 s ago",
+      "column": 1,
+      "row": 5,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-6",
+      "kind": "session",
+      "title": "a0-6",
+      "pill": "coding",
+      "line": "6 s ago",
+      "column": 1,
+      "row": 6,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-7",
+      "kind": "session",
+      "title": "a0-7",
+      "pill": "coding",
+      "line": "7 s ago",
+      "column": 1,
+      "row": 7,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "7 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-8",
+      "kind": "session",
+      "title": "a0-8",
+      "pill": "coding",
+      "line": "8 s ago",
+      "column": 1,
+      "row": 8,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "8 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s0-9",
+      "kind": "session",
+      "title": "a0-9",
+      "pill": "coding",
+      "line": "9 s ago",
+      "column": 1,
+      "row": 9,
+      "group": "frame:sprint:s0",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "9 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s0 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "fold:frame:sprint:s1",
+      "kind": "folded",
+      "title": "s1",
+      "pill": "closed",
+      "line": "10 agents - click to open",
+      "column": 1,
+      "row": 10,
+      "group": "frame:sprint:s1",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "closed group"
+        },
+        {
+          "label": "Contains",
+          "value": "10 agents, 10 boxes"
+        },
+        {
+          "label": "What it is",
+          "value": "Agents here work for the Foreman sprint \"s1\" (running). Foreman names these agents."
+        }
+      ]
+    },
+    {
+      "id": "fold:frame:sprint:s2",
+      "kind": "folded",
+      "title": "s2",
+      "pill": "closed",
+      "line": "10 agents - click to open",
+      "column": 1,
+      "row": 11,
+      "group": "frame:sprint:s2",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "closed group"
+        },
+        {
+          "label": "Contains",
+          "value": "10 agents, 10 boxes"
+        },
+        {
+          "label": "What it is",
+          "value": "Agents here work for the Foreman sprint \"s2\" (running). Foreman names these agents."
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-0",
+      "kind": "session",
+      "title": "a3-0",
+      "pill": "coding",
+      "line": "5 min ago",
+      "column": 1,
+      "row": 12,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-1",
+      "kind": "session",
+      "title": "a3-1",
+      "pill": "coding",
+      "line": "5 min 1 s ago",
+      "column": 1,
+      "row": 13,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 1 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-2",
+      "kind": "session",
+      "title": "a3-2",
+      "pill": "coding",
+      "line": "5 min 2 s ago",
+      "column": 1,
+      "row": 14,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 2 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-3",
+      "kind": "session",
+      "title": "a3-3",
+      "pill": "coding",
+      "line": "5 min 3 s ago",
+      "column": 1,
+      "row": 15,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 3 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-4",
+      "kind": "session",
+      "title": "a3-4",
+      "pill": "coding",
+      "line": "5 min 4 s ago",
+      "column": 1,
+      "row": 16,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 4 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-5",
+      "kind": "session",
+      "title": "a3-5",
+      "pill": "coding",
+      "line": "5 min 5 s ago",
+      "column": 1,
+      "row": 17,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 5 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-6",
+      "kind": "session",
+      "title": "a3-6",
+      "pill": "coding",
+      "line": "5 min 6 s ago",
+      "column": 1,
+      "row": 18,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 6 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-7",
+      "kind": "session",
+      "title": "a3-7",
+      "pill": "coding",
+      "line": "5 min 7 s ago",
+      "column": 1,
+      "row": 19,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 7 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-8",
+      "kind": "session",
+      "title": "a3-8",
+      "pill": "coding",
+      "line": "5 min 8 s ago",
+      "column": 1,
+      "row": 20,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 8 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s3-9",
+      "kind": "session",
+      "title": "a3-9",
+      "pill": "coding",
+      "line": "5 min 9 s ago",
+      "column": 1,
+      "row": 21,
+      "group": "frame:sprint:s3",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "5 min 9 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s3 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-0",
+      "kind": "session",
+      "title": "a4-0",
+      "pill": "coding",
+      "line": "6 min 40 s ago",
+      "column": 1,
+      "row": 22,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 40 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-1",
+      "kind": "session",
+      "title": "a4-1",
+      "pill": "coding",
+      "line": "6 min 41 s ago",
+      "column": 1,
+      "row": 23,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 41 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-2",
+      "kind": "session",
+      "title": "a4-2",
+      "pill": "coding",
+      "line": "6 min 42 s ago",
+      "column": 1,
+      "row": 24,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 42 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-3",
+      "kind": "session",
+      "title": "a4-3",
+      "pill": "coding",
+      "line": "6 min 43 s ago",
+      "column": 1,
+      "row": 25,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 43 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-4",
+      "kind": "session",
+      "title": "a4-4",
+      "pill": "coding",
+      "line": "6 min 44 s ago",
+      "column": 1,
+      "row": 26,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 44 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-5",
+      "kind": "session",
+      "title": "a4-5",
+      "pill": "coding",
+      "line": "6 min 45 s ago",
+      "column": 1,
+      "row": 27,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 45 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-6",
+      "kind": "session",
+      "title": "a4-6",
+      "pill": "coding",
+      "line": "6 min 46 s ago",
+      "column": 1,
+      "row": 28,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 46 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-7",
+      "kind": "session",
+      "title": "a4-7",
+      "pill": "coding",
+      "line": "6 min 47 s ago",
+      "column": 1,
+      "row": 29,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 47 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-8",
+      "kind": "session",
+      "title": "a4-8",
+      "pill": "coding",
+      "line": "6 min 48 s ago",
+      "column": 1,
+      "row": 30,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 48 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "session:anthropic:s4-9",
+      "kind": "session",
+      "title": "a4-9",
+      "pill": "coding",
+      "line": "6 min 49 s ago",
+      "column": 1,
+      "row": 31,
+      "group": "frame:sprint:s4",
+      "waits_on_you": false,
+      "facts": [
+        {
+          "label": "Kind",
+          "value": "session"
+        },
+        {
+          "label": "Agent",
+          "value": "claude-code"
+        },
+        {
+          "label": "Model",
+          "value": "unknown"
+        },
+        {
+          "label": "State",
+          "value": "coding"
+        },
+        {
+          "label": "Tokens",
+          "value": "unknown"
+        },
+        {
+          "label": "API price equivalent",
+          "value": "unknown"
+        },
+        {
+          "label": "Last active",
+          "value": "6 min 49 s ago"
+        },
+        {
+          "label": "Source",
+          "value": "unknown"
+        },
+        {
+          "label": "Works for",
+          "value": "s4 (named by Foreman)"
+        }
+      ]
+    },
+    {
+      "id": "you",
+      "kind": "you",
+      "title": "You",
+      "pill": "waits on you",
+      "line": "1 waiting on you",
+      "column": 3,
+      "row": 0,
+      "waits_on_you": true,
+      "facts": [
+        {
+          "label": "agent",
+          "value": "a0-0 (0 s old)"
+        }
+      ]
+    }
+  ],
+  "lines": [
+    {
+      "from": "session:anthropic:s0-0",
+      "to": "you",
+      "word": "waits on",
+      "basis": "vendor",
+      "you": true
+    }
+  ],
+  "frames": [
+    {
+      "id": "frame:sprint:s0",
+      "kind": "sprint",
+      "label": "s0",
+      "status": "running",
+      "explain": "Agents here work for the Foreman sprint \"s0\" (running). Foreman names these agents.",
+      "waits_on_you": false,
+      "folded": false,
+      "count": 10,
+      "first_row": 0,
+      "last_row": 9,
+      "first_col": 1,
+      "last_col": 2
+    },
+    {
+      "id": "frame:sprint:s1",
+      "kind": "sprint",
+      "label": "s1",
+      "status": "running",
+      "explain": "Agents here work for the Foreman sprint \"s1\" (running). Foreman names these agents.",
+      "waits_on_you": false,
+      "folded": true,
+      "count": 10,
+      "first_row": 10,
+      "last_row": 10,
+      "first_col": 1,
+      "last_col": 1
+    },
+    {
+      "id": "frame:sprint:s2",
+      "kind": "sprint",
+      "label": "s2",
+      "status": "running",
+      "explain": "Agents here work for the Foreman sprint \"s2\" (running). Foreman names these agents.",
+      "waits_on_you": false,
+      "folded": true,
+      "count": 10,
+      "first_row": 11,
+      "last_row": 11,
+      "first_col": 1,
+      "last_col": 1
+    },
+    {
+      "id": "frame:sprint:s3",
+      "kind": "sprint",
+      "label": "s3",
+      "status": "running",
+      "explain": "Agents here work for the Foreman sprint \"s3\" (running). Foreman names these agents.",
+      "waits_on_you": false,
+      "folded": false,
+      "count": 10,
+      "first_row": 12,
+      "last_row": 21,
+      "first_col": 1,
+      "last_col": 2
+    },
+    {
+      "id": "frame:sprint:s4",
+      "kind": "sprint",
+      "label": "s4",
+      "status": "running",
+      "explain": "Agents here work for the Foreman sprint \"s4\" (running). Foreman names these agents.",
+      "waits_on_you": false,
+      "folded": false,
+      "count": 10,
+      "first_row": 22,
+      "last_row": 31,
+      "first_col": 1,
+      "last_col": 2
+    }
+  ],
+  "idle": [],
+  "counts": {
+    "sessions": 50,
+    "subagents": 0,
+    "waiting": 1,
+    "sprints": 5,
+    "flows": 0
+  },
+  "notes": [
+    "Not shown: messages between agents. No tool's local files record who sent what to whom."
+  ]
+}

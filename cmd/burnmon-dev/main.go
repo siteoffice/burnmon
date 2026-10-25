@@ -368,6 +368,21 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bdevSetSections:", err)
 	}
+	// bdevAgentMap (R7): the full agent map as boxes and lines, live from the
+	// snapshot file or for the last N hours from the store. The small overview
+	// rides in bdevSections. Read-only, no port.
+	if err := w.Bind("bdevAgentMap", func(req agentMapRequest) (agentMapPayload, error) {
+		a.mu.Lock()
+		root := a.cfg.ForemanRoot
+		a.mu.Unlock()
+		p, err := agentMapFor(agentMapEnv{DataDir: dataDir, SnapPath: snapPath, St: st, ForemanRoot: root}, req, time.Now())
+		if err != nil {
+			log.Println("bdevAgentMap:", err)
+		}
+		return p, err
+	}); err != nil {
+		log.Println("could not bind bdevAgentMap:", err)
+	}
 
 	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon
 	// .PressureScore, phase 3) and the CPU box's static base clock (UI review

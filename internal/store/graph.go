@@ -125,14 +125,14 @@ FROM graph_edges WHERE last_seen >= ? AND first_seen <= ?`, sec(from), sec(to))
 // HistorySession is one session as the events table remembers it.
 type HistorySession struct {
 	Vendor, Agent, SessionID, ParentID, Project string
-	Last                                        time.Time
+	First, Last                                 time.Time
 }
 
 // SessionsBetween returns one row per session with a turn in [from, to]:
 // its parent, project and last turn. It reads the events table, so it
 // outlives a deleted transcript.
 func (s *Store) SessionsBetween(from, to time.Time) ([]HistorySession, error) {
-	rows, err := s.readDB.Query(`SELECT vendor, MAX(agent), session_id, MAX(parent_id), MAX(project), MAX(at)
+	rows, err := s.readDB.Query(`SELECT vendor, MAX(agent), session_id, MAX(parent_id), MAX(project), MIN(at), MAX(at)
 FROM events WHERE at >= ? AND at <= ? GROUP BY vendor, session_id`,
 		from.UTC().Format(time.RFC3339Nano), to.UTC().Format(time.RFC3339Nano))
 	if err != nil {
@@ -142,10 +142,11 @@ FROM events WHERE at >= ? AND at <= ? GROUP BY vendor, session_id`,
 	out := []HistorySession{}
 	for rows.Next() {
 		var h HistorySession
-		var last string
-		if err := rows.Scan(&h.Vendor, &h.Agent, &h.SessionID, &h.ParentID, &h.Project, &last); err != nil {
+		var first, last string
+		if err := rows.Scan(&h.Vendor, &h.Agent, &h.SessionID, &h.ParentID, &h.Project, &first, &last); err != nil {
 			return nil, err
 		}
+		h.First, _ = time.Parse(time.RFC3339Nano, first)
 		h.Last, _ = time.Parse(time.RFC3339Nano, last)
 		out = append(out, h)
 	}

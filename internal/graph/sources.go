@@ -1,11 +1,13 @@
 package graph
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -272,7 +274,8 @@ func ReadForeman(root string) ([]Sprint, []Flow, error) {
 			continue
 		}
 		sprints = append(sprints, Sprint{ID: raw.ID, Slug: raw.Slug, WorktreePath: raw.WorktreePath, Branch: raw.WorktreeBranch,
-			Phase: raw.Phase, Status: raw.Status, UpdatedAt: parseTime(raw.UpdatedAt)})
+			Phase: raw.Phase, Status: raw.Status, UpdatedAt: parseTime(raw.UpdatedAt),
+			LogTimes: readLogTimes(filepath.Join(filepath.Dir(p), "action-log.ndjson"))})
 	}
 	flows := []Flow{}
 	paths, _ = filepath.Glob(filepath.Join(root, "flows", "*", "*", "flow.json"))
@@ -300,6 +303,36 @@ func ReadForeman(root string) ([]Sprint, []Flow, error) {
 		flows = append(flows, f)
 	}
 	return sprints, flows, nil
+}
+
+// maxLogTimes bounds how many action log entries one sprint can contribute.
+const maxLogTimes = 20000
+
+// readLogTimes reads the "ts" of every line of a sprint's action-log.ndjson
+// and returns them in time order. A missing file, a line it cannot read and a
+// line with no time are skipped: the log only says when the sprint was busy.
+func readLogTimes(path string) []time.Time {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var out []time.Time
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for sc.Scan() && len(out) < maxLogTimes {
+		var l struct {
+			TS string `json:"ts"`
+		}
+		if json.Unmarshal(sc.Bytes(), &l) != nil || l.TS == "" {
+			continue
+		}
+		if t := parseTime(l.TS); !t.IsZero() {
+			out = append(out, t)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Before(out[j]) })
+	return out
 }
 
 func underscore(root, p string) bool {

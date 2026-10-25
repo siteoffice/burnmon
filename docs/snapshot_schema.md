@@ -80,7 +80,7 @@ specific), `source`, `age_seconds`.
 |---|---|---|
 | `device` | `device:local` | label `This PC`; no host name |
 | `harness` | `harness:<name>` | `claude`, `claude-desktop`, `codex`, `copilot-cli`, `copilot-vscode`, `hermes`, `cowork-cloud` |
-| `session` | `session:<vendor>:<id>` | `<id>` is `sessions[].id`; attrs `agent`, `state` |
+| `session` | `session:<vendor>:<id>` | `<id>` is `sessions[].id`; attrs `agent`, `state`, and `tool` while the session runs one (the tool's name only, never its arguments; an MCP tool's name carries its server's name, so a reader that shows it should not show it as is) |
 | `subagent` | `session:<vendor>:<id>` | attrs `agent_type`, `model` when the harness records them |
 | `process` | `process:<pid>:<start time>` | label is the image name; attrs `pid`, `harness`. The start time keeps a reused pid apart. Command lines are never written |
 | `mcp` | `mcp:<name>` | the server name from the MCP config |

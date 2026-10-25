@@ -117,3 +117,29 @@ func TestSetSectionsFromPage(t *testing.T) {
 		t.Errorf("a refused change altered the file: %+v", after)
 	}
 }
+
+// The live agent map rides along in the sections payload so the small
+// overview redraws with the same 5 second poll, and it is absent when there is
+// no current snapshot (a stale file is never drawn as current).
+func TestSectionsPayloadCarriesAgentMap(t *testing.T) {
+	dir := t.TempDir()
+	snapPath := filepath.Join("..", "..", "testdata", "snapshot_example.json")
+	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
+
+	p := sectionsPayloadFor(dir, snapPath, now)
+	if p.AgentMap == nil || len(p.AgentMap.Groups) != 1 || p.AgentMap.Groups[0].Label != "sprint-example" {
+		t.Fatalf("agent map from the frozen example: %+v", p.AgentMap)
+	}
+	if p.AgentMap.Counts.Subagents != 1 {
+		t.Errorf("counts %+v", p.AgentMap.Counts)
+	}
+
+	stale := sectionsPayloadFor(dir, snapPath, now.Add(time.Hour))
+	if stale.Reading.Status == snapshot.StatusOK || stale.AgentMap != nil {
+		t.Errorf("stale reading %q still carries a map", stale.Reading.Status)
+	}
+	missing := sectionsPayloadFor(dir, filepath.Join(dir, "none.json"), now)
+	if missing.AgentMap != nil {
+		t.Error("missing file still carries a map")
+	}
+}

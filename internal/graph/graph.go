@@ -115,7 +115,13 @@ func (g Graph) Stamp(firstSeen map[string]time.Time) {
 // Session is one session or subagent from the store.
 type Session struct {
 	Vendor, Agent, ID, ParentID, Project, State string
-	LastActivity                                time.Time
+	// FirstActivity is the session's first turn, zero when the source does
+	// not say; the link to a sprint then rests on LastActivity alone.
+	FirstActivity time.Time
+	LastActivity  time.Time
+	// Tool is the name of the tool the session is running now ("" when none),
+	// from the stage the core works out. The name only, never its arguments.
+	Tool string
 }
 
 // Proc is one process from the process walk. Cmdline is used for matching
@@ -161,6 +167,42 @@ type Repo struct {
 type Sprint struct {
 	ID, Slug, WorktreePath, Branch, Phase, Status string
 	UpdatedAt                                     time.Time
+	// LogTimes are the times of the entries in the sprint's own
+	// action-log.ndjson, in order. They say when the sprint was busy.
+	LogTimes []time.Time
+}
+
+// linkGrace is how far from a session's activity a sprint log entry may fall
+// and still count as written while the session was active.
+const linkGrace = 10 * time.Minute
+
+// sprintMainRepo is the repo a sprint's worktree hangs off: the folder before
+// ".worktrees". It is "" for a path that is not under one.
+func sprintMainRepo(worktree string) string {
+	p := strings.TrimRight(worktree, `\/`)
+	low := strings.ToLower(strings.ReplaceAll(p, "/", `\`))
+	i := strings.Index(low, `\.worktrees\`)
+	if i <= 0 {
+		return ""
+	}
+	return p[:i]
+}
+
+// activeWhileLogged reports whether a sprint log entry falls inside the time
+// the session was active (first turn to last turn, ten minutes either side).
+// A session with no known first turn counts at its last turn alone.
+func activeWhileLogged(s Session, logTimes []time.Time) bool {
+	first, last := s.FirstActivity, s.LastActivity
+	if first.IsZero() || first.After(last) {
+		first = last
+	}
+	from, to := first.Add(-linkGrace), last.Add(linkGrace)
+	for _, t := range logTimes {
+		if !t.Before(from) && !t.After(to) {
+			return true
+		}
+	}
+	return false
 }
 
 // Flow is one Foreman flow.
@@ -313,6 +355,9 @@ func (b *builder) session(s Session) {
 	if s.State != "" {
 		attrs["state"] = s.State
 	}
+	if s.Tool != "" {
+		attrs["tool"] = s.Tool
+	}
 	if s.ParentID != "" {
 		kind = KindSubagent
 		label = "subagent"
@@ -437,7 +482,8 @@ func Build(in Input) Graph {
 		if pf, ok := idle[id]; ok {
 			b.person()
 			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceClaudePids, AgeSeconds: b.age(pf.UpdatedAt)})
-		} else if s.State == "waiting" {
+		} else if s.State == "waiting" && s.ParentID == "" {
+			// A subagent whose turn ended has finished; it asks no one anything.
 			b.person()
 			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisInferred, Source: SourceStore, AgeSeconds: b.age(s.LastActivity)})
 		}
@@ -488,9 +534,22 @@ func Build(in Input) Graph {
 	for _, sp := range in.Sprints {
 		sid := "sprint:" + sp.ID
 		waiting := sp.Status == "waiting-on-you"
+		// A session links to a sprint when its folder is the sprint's worktree
+		// or its main repo and it was active while the sprint's own action log
+		// was being written. An attended sprint's agents run in the main repo.
+		// With no log to say when, only the worktree folder links, as before.
 		var linked []string
+		main := sprintMainRepo(sp.WorktreePath)
 		for _, id := range sessionIDs {
-			if sp.WorktreePath != "" && pathKey(byID[id].Project) == pathKey(sp.WorktreePath) {
+			s := byID[id]
+			inWT := sp.WorktreePath != "" && pathKey(s.Project) == pathKey(sp.WorktreePath)
+			inRepo := main != "" && pathKey(s.Project) == pathKey(main)
+			switch {
+			case len(sp.LogTimes) == 0:
+				if inWT {
+					linked = append(linked, id)
+				}
+			case (inWT || inRepo) && activeWhileLogged(s, sp.LogTimes):
 				linked = append(linked, id)
 			}
 		}

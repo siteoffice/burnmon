@@ -75,8 +75,9 @@ func flatSessions(ss []*live.Session) []graph.Session {
 	var walk func(ls *live.Session, parent string)
 	walk = func(ls *live.Session, parent string) {
 		last, _ := time.Parse(time.RFC3339, ls.LastTurn)
+		first, _ := time.Parse(time.RFC3339, ls.Start)
 		out = append(out, graph.Session{Vendor: ls.Vendor, Agent: ls.Agent, ID: ls.SessionID, ParentID: parent,
-			Project: ls.Project, State: ls.Stage, LastActivity: last})
+			Project: ls.Project, State: ls.Stage, Tool: ls.StageTool, FirstActivity: first, LastActivity: last})
 		for _, sub := range ls.Subagents {
 			walk(sub, ls.SessionID)
 		}
