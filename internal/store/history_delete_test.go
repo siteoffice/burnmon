@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -196,5 +197,21 @@ func TestForgetCursorsForOtherPathsKeepsEvents(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Fatalf("%d events remain, want 2 (events must stay)", len(got))
+	}
+}
+
+type failingResult struct{ err error }
+
+func (failingResult) LastInsertId() (int64, error) { return 0, nil }
+func (f failingResult) RowsAffected() (int64, error) { return 0, f.err }
+
+func TestRowsAffectedPropagatesError(t *testing.T) {
+	want := errors.New("driver cannot report rows")
+	n, err := rowsAffected(failingResult{err: want})
+	if !errors.Is(err, want) {
+		t.Fatalf("rowsAffected error = %v, want %v", err, want)
+	}
+	if n != 0 {
+		t.Fatalf("rowsAffected count = %d, want 0 on error", n)
 	}
 }

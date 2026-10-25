@@ -973,14 +973,14 @@ func (s *Store) DeleteEventsForOtherPaths(keepPaths []string) error {
 	return tx.Commit()
 }
 
-// rowsAffected reads a delete's row count; a driver that cannot report it
-// counts as zero rather than failing a delete that already happened.
-func rowsAffected(res sql.Result) int {
+// rowsAffected reads a delete's row count and returns the driver's error when
+// it cannot report one, so the caller rolls back instead of reporting zero.
+func rowsAffected(res sql.Result) (int, error) {
 	n, err := res.RowsAffected()
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	return int(n)
+	return int(n), nil
 }
 
 // DeleteEventsBefore removes events and tool calls recorded before cutoff.
@@ -998,12 +998,16 @@ func (s *Store) DeleteEventsBefore(cutoff time.Time) (events, toolCalls int, err
 	if err != nil {
 		return 0, 0, fmt.Errorf("store: delete tool calls before %s: %w", at, err)
 	}
-	toolCalls = rowsAffected(res)
+	if toolCalls, err = rowsAffected(res); err != nil {
+		return 0, 0, fmt.Errorf("store: count deleted tool calls before %s: %w", at, err)
+	}
 	res, err = tx.Exec(`DELETE FROM events WHERE julianday(at) < julianday(?)`, at)
 	if err != nil {
 		return 0, 0, fmt.Errorf("store: delete events before %s: %w", at, err)
 	}
-	events = rowsAffected(res)
+	if events, err = rowsAffected(res); err != nil {
+		return 0, 0, fmt.Errorf("store: count deleted events before %s: %w", at, err)
+	}
 	return events, toolCalls, tx.Commit()
 }
 
@@ -1042,12 +1046,20 @@ func (s *Store) DeleteSession(sessionID string) (events, toolCalls int, err erro
 		if err != nil {
 			return 0, 0, fmt.Errorf("store: delete tool calls of %s: %w", id, err)
 		}
-		toolCalls += rowsAffected(res)
+		n, err := rowsAffected(res)
+		if err != nil {
+			return 0, 0, fmt.Errorf("store: count deleted tool calls of %s: %w", id, err)
+		}
+		toolCalls += n
 		res, err = tx.Exec(`DELETE FROM events WHERE session_id = ?`, id)
 		if err != nil {
 			return 0, 0, fmt.Errorf("store: delete events of %s: %w", id, err)
 		}
-		events += rowsAffected(res)
+		n, err = rowsAffected(res)
+		if err != nil {
+			return 0, 0, fmt.Errorf("store: count deleted events of %s: %w", id, err)
+		}
+		events += n
 	}
 	return events, toolCalls, tx.Commit()
 }
@@ -1064,12 +1076,16 @@ func (s *Store) DeleteAllEvents() (events, toolCalls int, err error) {
 	if err != nil {
 		return 0, 0, fmt.Errorf("store: delete all tool calls: %w", err)
 	}
-	toolCalls = rowsAffected(res)
+	if toolCalls, err = rowsAffected(res); err != nil {
+		return 0, 0, fmt.Errorf("store: count deleted tool calls: %w", err)
+	}
 	res, err = tx.Exec(`DELETE FROM events`)
 	if err != nil {
 		return 0, 0, fmt.Errorf("store: delete all events: %w", err)
 	}
-	events = rowsAffected(res)
+	if events, err = rowsAffected(res); err != nil {
+		return 0, 0, fmt.Errorf("store: count deleted events: %w", err)
+	}
 	return events, toolCalls, tx.Commit()
 }
 
