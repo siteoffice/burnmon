@@ -3338,6 +3338,7 @@ body.plain #mapOverlay{font-size:13.5px}
       renderHeatmap(lastHeatmapPayload);
       renderHarnessHeatmap(lastProcessGroupsHistory);
       renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
+      if(mapOpen) mapRender();
     });
   });
 
@@ -3780,7 +3781,13 @@ body.plain #mapOverlay{font-size:13.5px}
   }
 
   // Cells to pixels. A frame gets room above its first row for its header.
-  function mapGeometry(L){
+  // Column pitch: 222 px, or wider when the scroll area has room, so the map
+  // spreads over the window. The last box then ends PADX from the right edge.
+  function mapColW(cols, availW){
+    if(cols <= 1) return MAP.COLW;
+    return Math.max(MAP.COLW, (availW - 2 * MAP.PADX - MAP.BOXW) / (cols - 1));
+  }
+  function mapGeometry(L, availW){
     var maxRow = 0, gap = {};
     (L.boxes || []).forEach(function(b){ if(b.row > maxRow) maxRow = b.row; });
     (L.frames || []).forEach(function(f){
@@ -3789,9 +3796,10 @@ body.plain #mapOverlay{font-size:13.5px}
     var hasYou = (L.boxes || []).some(function(b){ return b.kind === 'you'; });
     var rowY = [], y = MAP.HEAD + (hasYou ? MAP.ROWH : 0);
     for(var r = 0; r <= maxRow; r++){ y += gap[r] || 0; rowY[r] = y; y += MAP.ROWH; }
-    var cols = (L.columns || []).length;
-    return { rowY: rowY, youY: MAP.HEAD, width: MAP.PADX * 2 + cols * MAP.COLW, height: y + 24,
-      x: function(c){ return MAP.PADX + c * MAP.COLW; } };
+    var cols = (L.columns || []).length, colW = mapColW(cols, availW);
+    var width = colW > MAP.COLW ? Math.max(availW, MAP.PADX * 2 + (cols - 1) * colW + MAP.BOXW) : MAP.PADX * 2 + cols * MAP.COLW;
+    return { rowY: rowY, youY: MAP.HEAD, width: width, height: y + 24, colW: colW,
+      x: function(c){ return MAP.PADX + c * colW; } };
   }
 
   function mapRender(){
@@ -3822,8 +3830,19 @@ body.plain #mapOverlay{font-size:13.5px}
       mapRenderPanel(null, L);
       return;
     }
-    var g = mapGeometry(L), pos = {}, html = '', boxes = L.boxes || [];
+    var boxes = L.boxes || [], sel = null;
+    boxes.forEach(function(b){ if(b.id === mapSel) sel = b; });
+    // The side panel changes the scroll area's width, so it is drawn first.
+    mapRenderPanel(sel, L);
+    var scrollEl = document.getElementById('mapScroll');
+    var g = mapGeometry(L, scrollEl.clientWidth), pos = {}, html = '';
     stage.style.width = g.width + 'px'; stage.style.height = g.height + 'px';
+    // A vertical scrollbar that the new height brings narrows the area: spread again.
+    var aw = scrollEl.clientWidth;
+    if(aw !== Math.round(g.width) && g.colW > MAP.COLW){
+      g = mapGeometry(L, aw);
+      stage.style.width = g.width + 'px';
+    }
     (L.columns || []).forEach(function(name, i){
       html += '<div class="mapcolh" style="left:' + g.x(i) + 'px">' + esc(name) + '</div>';
     });
@@ -3831,7 +3850,7 @@ body.plain #mapOverlay{font-size:13.5px}
     (L.frames || []).forEach(function(f){
       if(f.kind === 'none' || f.folded) return;
       var x = g.x(f.first_col) - 12, top = g.rowY[f.first_row] - MAP.FRAMEHEAD + 8;
-      var w = (f.last_col - f.first_col) * MAP.COLW + MAP.BOXW + 24, h = g.rowY[f.last_row] + MAP.BOXH + 12 - top;
+      var w = (f.last_col - f.first_col) * g.colW + MAP.BOXW + 24, h = g.rowY[f.last_row] + MAP.BOXH + 12 - top;
       framePos[f.id] = { x: x + w, y: top + h / 2 };
       html += '<div class="mapframe' + (f.waits_on_you ? ' wait' : '') + '" style="left:' + x + 'px;top:' + top + 'px;width:' + w + 'px;height:' + h + 'px">' +
         '<div class="mapframehead" title="' + esc(f.explain) + '"><b>' + esc(f.label) + '</b><span>' + esc(f.status || '') + '</span><span class="ex">' + esc(f.explain) + '</span></div></div>';
@@ -3877,9 +3896,6 @@ body.plain #mapOverlay{font-size:13.5px}
     var top = document.getElementById('mapScroll').scrollTop, left = document.getElementById('mapScroll').scrollLeft;
     stage.innerHTML = html + mapIdleHTML(L);
     document.getElementById('mapScroll').scrollTop = top; document.getElementById('mapScroll').scrollLeft = left;
-    var sel = null;
-    boxes.forEach(function(b){ if(b.id === mapSel) sel = b; });
-    mapRenderPanel(sel, L);
   }
 
   // Sprints and flows that wait with no agent running are not boxes (a handful
