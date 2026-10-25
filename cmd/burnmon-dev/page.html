@@ -423,7 +423,7 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapframehead{position:absolute; left:10px; right:10px; top:6px; line-height:14px; overflow:hidden}
 .mapframehead b{color:var(--strong); font-size:13px; margin-right:8px}
 .mapframehead span{color:var(--dim)}
-.mapframehead .ex{display:block; font-size:11px; max-height:28px; overflow:hidden}
+.mapframehead .ex{display:block; font-size:11px; max-height:42px; overflow:hidden}
 .mapbox{all:unset; box-sizing:border-box; position:absolute; display:flex; flex-direction:column; justify-content:center; gap:3px; padding:6px 10px;
   border:1px solid var(--bd); background:var(--panel); cursor:pointer; border-radius:3px}
 .mapbox:hover, .mapbox:focus-visible, .mapbox.sel{border-color:var(--amber)}
@@ -3567,7 +3567,7 @@ body.plain #mapOverlay{font-size:13.5px}
   var mapOpen = false, mapSource = 'live', mapData = null, mapErr = '', mapToken = 0, mapSel = '';
   var mapOpenFrames = {};
   var MAP_TABS = [['live', 'LIVE'], ['24', 'Last 24 hours'], ['168', 'Last 7 days']];
-  var MAP = { COLW: 222, BOXW: 170, BOXH: 66, ROWH: 84, PADX: 24, HEAD: 34, FRAMEHEAD: 66 };
+  var MAP = { COLW: 222, BOXW: 170, BOXH: 66, ROWH: 84, PADX: 24, HEAD: 34, FRAMEHEAD: 76 };
 
   // session:<vendor>:<id> to the id the turn popup knows.
   function mapSid(nodeId){

@@ -505,7 +505,7 @@ func init() {
 		for _, b := range p.Boxes {
 			all += "|" + b.Text
 		}
-		if err := d30Has("plain map", all, "Helper", "Programs and tool servers", "Foreman job", "waiting for", "tool server", "writing code"); err != nil {
+		if err := d30Has("plain map", all, "Helper", "Programs and tool servers", "Foreman job", "waiting for", "tool server", "finished"); err != nil {
 			return err
 		}
 		for _, jargon := range []string{"MCP", "subagent", "Subagent", "waits on"} {
