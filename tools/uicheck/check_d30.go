@@ -196,7 +196,7 @@ func init() {
 			if withSnap {
 				s = snap
 			}
-			if err := json.Unmarshal([]byte(d29Payload(plain, nil, false, status, s)), &m); err != nil {
+			if err := json.Unmarshal([]byte(d29Payload(d29Opts{Plain: plain, Scrollbar: !plain, Status: status, Snap: s})), &m); err != nil {
 				return "", err
 			}
 			if withSnap {

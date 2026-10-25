@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,5 +170,24 @@ func TestSectionsPayloadCarriesAgentMap(t *testing.T) {
 	missing := sectionsPayloadFor(dir, filepath.Join(dir, "none.json"), now)
 	if missing.AgentMap != nil {
 		t.Error("missing file still carries a map")
+	}
+}
+
+// The page must tag every part so the gear can switch it, and carry the gear
+// controls for the scrollbar and the Station start theme.
+func TestPageTagsEveryPart(t *testing.T) {
+	for _, id := range []string{"burn_30min", "vendor_strip", "activity", "heatmap", "turn_ticker", "system", "process_groups", "todo"} {
+		if !strings.Contains(pageHTML, `data-part="`+id+`"`) {
+			t.Errorf("page lacks data-part=%q", id)
+		}
+	}
+	for _, want := range []string{
+		`var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions','processes'];`,
+		`id="secScrollbar"`,
+		`name="secStationStart"`,
+	} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %s", want)
+		}
 	}
 }

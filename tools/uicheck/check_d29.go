@@ -5,92 +5,149 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 )
 
-// d29: the sections frame (agent control plan, row R8) and its follow-up, the
-// mode toggle. Fed lane A's frozen example (testdata\snapshot_example.json,
-// the file docs\snapshot_schema.md describes) it proves:
-//   - Standard shows all seven sections, drops none at any size, and the page
-//     scrolls at the window the screen grants (1152x1301 on this laptop);
-//   - Plain keeps the fit: no scrollbar, and at 1024x480 with all seven
-//     sections on it drops whole sections and says how many;
+// d29: the sections frame (agent control plan, row R8) with B2's parts: four
+// groups of 15 parts, one tick per part per mode, and the Overall scrollbar
+// switch. Fed lane A's frozen example (testdata\snapshot_example.json, the
+// file docs\snapshot_schema.md describes) it proves:
+//   - Standard with every part on shows all of them, drops none and the page
+//     scrolls at the window the screen grants (1152x2048 here);
+//   - each part switched off alone hides only that part; the older zones follow
+//     their parts; with all 15 off the host is empty and nothing breaks;
+//   - Plain shows its own list (the five R8 panels), in plain words, and fits
+//     the window; its list can take a burn-zone part; at 1024x480 with all
+//     on it drops whole sections and says how many;
 //   - the Plain toggle's text flips between "Plain: off" and "Plain: on";
-//   - each switch removes its panel, and a stale or missing snapshot says
-//     BurnMon is not running and draws no old numbers;
-//   - the gear lists one column per mode, and a tick saved through it, and
-//     through the real bdevSetSections, lands in that mode only. Survival of
-//     a restart is the Go test of internal\sections (a fresh Load of the
-//     saved file), not a real restart of the exe.
+//   - the gear lists four groups of parts, Overall scrollbar on top, the
+//     "Station starts as" pair below; choosing a Station theme calls the
+//     binding and does not switch the Station that is open;
+//   - a stale or missing snapshot says BurnMon is not running and draws no old
+//     numbers;
+//   - the toggle, the scrollbar and a tick saved through the real bindings land
+//     where they belong. Survival of a restart is the Go test of
+//     internal\sections, not a real restart of the exe.
 //
 // The page is driven through window.__bdevSections.apply, which draws without
 // saving. The persistence step at the end uses the real bindings and puts back
 // what it found. Screenshots: d29-standard, d29-plain, d29-plain-small,
 // d29-gear, d29-not-running.
-var d29Order = []string{"waits", "outcomes", "burn", "agents_map", "sessions", "processes", "git"}
+var d29Parts = []string{
+	"waits", "outcomes", "burn", "git", "agents_map", "sessions",
+	"burn_30min", "vendor_strip", "activity", "heatmap", "turn_ticker",
+	"system", "process_groups", "processes",
+	"todo",
+}
 
-func d29Payload(plain bool, standardOff map[string]bool, plainAll bool, status string, snap json.RawMessage) string {
+var d29PlainDefault = map[string]bool{"waits": true, "outcomes": true, "burn": true, "agents_map": true, "sessions": true}
+
+type d29Opts struct {
+	Plain, Scrollbar bool
+	StandardOff      map[string]bool
+	PlainOn          map[string]bool
+	PlainAll         bool
+	Status           string
+	Snap             json.RawMessage
+	StationTheme     string
+}
+
+func d29Payload(o d29Opts) string {
 	standard, plainSet := map[string]bool{}, map[string]bool{}
-	for _, id := range d29Order {
-		standard[id] = !standardOff[id]
-		plainSet[id] = plainAll || (id != "processes" && id != "git")
+	for _, id := range d29Parts {
+		standard[id] = !o.StandardOff[id]
+		plainSet[id] = o.PlainAll || d29PlainDefault[id] || o.PlainOn[id]
 	}
 	current := standard
-	if plain {
+	if o.Plain {
 		current = plainSet
 	}
-	reading := map[string]any{"status": status, "age_seconds": 7}
-	if snap != nil {
-		reading["snapshot"] = snap
+	reading := map[string]any{"status": o.Status, "age_seconds": 7}
+	if o.Snap != nil {
+		reading["snapshot"] = o.Snap
+	}
+	theme := o.StationTheme
+	if theme == "" {
+		theme = "space"
+	}
+	part := func(id, label string) map[string]string { return map[string]string{"id": id, "label": label} }
+	groups := []map[string]any{
+		{"id": "status", "label": "Status", "parts": []map[string]string{
+			part("waits", "Waits on you"), part("outcomes", "Outcomes"), part("burn", "Burn"),
+			part("git", "Git"), part("agents_map", "Agents map"), part("sessions", "Sessions")}},
+		{"id": "sessions_30min", "label": "Sessions last 30 min", "parts": []map[string]string{
+			part("burn_30min", "Burn last 30 min"), part("vendor_strip", "Vendor strip"),
+			part("activity", "Activity"), part("heatmap", "Heatmap harness x minute"),
+			part("turn_ticker", "Turn ticker")}},
+		{"id": "processes_30min", "label": "Processes last 30 min", "parts": []map[string]string{
+			part("system", "System"), part("process_groups", "Process groups (with memory, disks and network)"),
+			part("processes", "Processes")}},
+		{"id": "todo", "label": "Microsoft To Do", "parts": []map[string]string{part("todo", "To Do")}},
 	}
 	b, _ := json.Marshal(map[string]any{
-		"plain_mode": plain, "mode": map[bool]string{true: "plain", false: "standard"}[plain],
-		"sections": current, "sections_standard": standard, "sections_plain": plainSet,
-		"order": d29Order, "reading": reading,
+		"plain_mode": o.Plain, "overall_scrollbar": o.Scrollbar,
+		"mode":  map[bool]string{true: "plain", false: "standard"}[o.Plain],
+		"parts": current, "parts_standard": standard, "parts_plain": plainSet,
+		"groups": groups, "station_theme": theme, "reading": reading,
 	})
 	return string(b)
 }
 
-type d29Panel struct {
-	ID    string `json:"id"`
-	Shown bool   `json:"shown"`
-}
-
 type d29Page struct {
-	Panels       []d29Panel `json:"panels"`
-	Plain        bool       `json:"plain"`
-	Toggle       string     `json:"toggle"`
-	ToggleOn     bool       `json:"toggleOn"`
-	BodyStandard bool       `json:"bodyStandard"`
-	BurnZone     bool       `json:"burnZone"`
-	SystemZone   bool       `json:"systemZone"`
-	Header       string     `json:"header"`
-	Notice       string     `json:"notice"`
-	Text         string     `json:"text"`
-	Note         string     `json:"note"`
-	Scrolls      bool       `json:"scrolls"`
-	OverflowY    string     `json:"overflowY"`
-	HostOver     float64    `json:"hostOver"`
-	BodyOver     float64    `json:"bodyOver"`
-	AgentsSlot   bool       `json:"agentsSlot"`
-	StripClip    float64    `json:"stripClip"`
-	GearOpen     bool       `json:"gearOpen"`
-	Ticks        []string   `json:"ticks"`
+	Parts        []string `json:"parts"`
+	TodoOn       bool     `json:"todoOn"`
+	Plain        bool     `json:"plain"`
+	Toggle       string   `json:"toggle"`
+	ToggleOn     bool     `json:"toggleOn"`
+	BodyStandard bool     `json:"bodyStandard"`
+	BurnZone     bool     `json:"burnZone"`
+	SystemZone   bool     `json:"systemZone"`
+	MainShown    bool     `json:"mainShown"`
+	Header       string   `json:"header"`
+	Notice       string   `json:"notice"`
+	Text         string   `json:"text"`
+	Note         string   `json:"note"`
+	Scrolls      bool     `json:"scrolls"`
+	OverflowY    string   `json:"overflowY"`
+	HostOver     float64  `json:"hostOver"`
+	BodyOver     float64  `json:"bodyOver"`
+	AgentsSlot   bool     `json:"agentsSlot"`
+	StripClip    float64  `json:"stripClip"`
+	GearOpen     bool     `json:"gearOpen"`
+	Ticks        []string `json:"ticks"`
+	Headings     []string `json:"headings"`
+	LabelRows    int      `json:"labelRows"`
+	Checkboxes   int      `json:"checkboxes"`
+	ScrollFirst  bool     `json:"scrollFirst"`
+	ScrollTick   bool     `json:"scrollTick"`
+	Radio        string   `json:"radio"`
 }
 
+// shown lists the parts on the page, in d29Parts order. To Do counts when its
+// panel lacks .sec-off, since uicheck runs with To Do disabled.
 func (p d29Page) shown() []string {
 	var ids []string
-	for _, x := range p.Panels {
-		if x.Shown {
-			ids = append(ids, x.ID)
+	for _, id := range d29Parts {
+		if id == "todo" {
+			if p.TodoOn {
+				ids = append(ids, id)
+			}
+			continue
+		}
+		for _, s := range p.Parts {
+			if s == id {
+				ids = append(ids, id)
+				break
+			}
 		}
 	}
 	return ids
 }
 
 const d29ReadJS = `(function(){
-  var disp = function(e){ return !!e && getComputedStyle(e).display !== 'none'; };
+  var disp = function(e){ return !!e && e.getClientRects().length > 0; };
   var q = function(s){ return document.querySelector(s); };
   var ps = document.getElementById('pageScroll'), host = document.getElementById('secHost');
   var strip = document.getElementById('vendorStripPanel'), tg = document.getElementById('plainToggle');
@@ -98,12 +155,18 @@ const d29ReadJS = `(function(){
   Array.prototype.forEach.call(document.querySelectorAll('#secSettingsCols input[data-sw]'), function(i){
     if(i.checked) ticks.push(i.getAttribute('data-mode') + ':' + i.getAttribute('data-sw'));
   });
+  var seen = {};
+  Array.prototype.forEach.call(document.querySelectorAll('[data-part]'), function(e){
+    if(disp(e)) seen[e.getAttribute('data-part')] = true;
+  });
+  var sb = document.getElementById('secScrollbar'), firstH = q('#secSettingsCols h4'), radio = q('input[name="secStationStart"]:checked');
   return {
-    panels: Array.prototype.map.call(document.querySelectorAll('#secPanels [data-sec]'), function(e){ return { id: e.getAttribute('data-sec'), shown: disp(e) }; }),
+    parts: Object.keys(seen),
+    todoOn: !document.getElementById('todoPanel').classList.contains('sec-off'),
     plain: !!window.__bdevSections.state().plain,
     toggle: tg.textContent, toggleOn: tg.classList.contains('on'),
     bodyStandard: document.body.classList.contains('sec-standard'),
-    burnZone: disp(q('.zone.burn')), systemZone: disp(q('.zone.system')),
+    burnZone: disp(q('.zone.burn')), systemZone: disp(q('.zone.system')), mainShown: disp(q('main')),
     header: document.getElementById('hdrSnapAge').textContent,
     notice: document.getElementById('secNotice').textContent,
     text: document.getElementById('secPanels').textContent,
@@ -113,7 +176,13 @@ const d29ReadJS = `(function(){
     agentsSlot: !!document.getElementById('secAgentsSlot'),
     stripClip: strip ? strip.scrollHeight - strip.clientHeight : 0,
     gearOpen: document.getElementById('secSettings').classList.contains('open'),
-    ticks: ticks
+    ticks: ticks,
+    headings: Array.prototype.map.call(document.querySelectorAll('#secSettingsCols h4'), function(h){ return h.textContent; }),
+    labelRows: document.querySelectorAll('#secSettingsCols .setlbl').length,
+    checkboxes: document.querySelectorAll('#secSettingsCols input[data-sw]').length,
+    scrollFirst: !!sb && !!firstH && !!(sb.compareDocumentPosition(firstH) & Node.DOCUMENT_POSITION_FOLLOWING),
+    scrollTick: !!sb && sb.checked,
+    radio: radio ? radio.value : ''
   };
 })()`
 
@@ -150,15 +219,18 @@ func init() {
 			return err
 		}
 		time.Sleep(500 * time.Millisecond)
-		all := strings.Join(d29Order, ",")
+		std := func(off map[string]bool) d29Opts {
+			return d29Opts{Scrollbar: true, StandardOff: off, Status: "ok", Snap: snap}
+		}
+		wantAll := strings.Join(d29Parts, ",")
 
-		// Standard: every section shown, none dropped, the page scrolls, no hidden note.
-		p, err := d29Apply(d29Payload(false, nil, false, "ok", snap))
+		// Standard, every part on, scrollbar on: all shown, none dropped, the page scrolls, no note.
+		p, err := d29Apply(d29Payload(std(nil)))
 		if err != nil {
 			return err
 		}
-		if strings.Join(p.shown(), ",") != all {
-			return d29Fail("standard shows %v, want all seven", p.shown())
+		if got := strings.Join(p.shown(), ","); got != wantAll {
+			return d29Fail("standard shows %v, want all 15", p.shown())
 		}
 		if p.Plain || p.Toggle != "Plain: off" || p.ToggleOn || !p.BodyStandard || !p.BurnZone || !p.SystemZone {
 			return d29Fail("standard shape wrong: %+v", p)
@@ -190,31 +262,59 @@ func init() {
 			return err
 		}
 
-		// One switch at a time: that panel goes, the other six stay, nothing is dropped for room.
-		for _, id := range d29Order {
-			p, err := d29Apply(d29Payload(false, map[string]bool{id: true}, false, "ok", snap))
+		// One part off at a time: only that part goes.
+		for _, id := range d29Parts {
+			p, err := d29Apply(d29Payload(std(map[string]bool{id: true})))
 			if err != nil {
 				return err
 			}
-			if len(p.shown()) != 6 || strings.Contains(strings.Join(p.shown(), ","), id) {
-				return d29Fail("switching %s off left panels %v", id, p.shown())
+			var want []string
+			for _, x := range d29Parts {
+				if x != id {
+					want = append(want, x)
+				}
+			}
+			if got := strings.Join(p.shown(), ","); got != strings.Join(want, ",") {
+				return d29Fail("switching %s off left parts %v", id, p.shown())
 			}
 		}
-		// The older zones follow Burn and Processes.
-		p, err = d29Apply(d29Payload(false, map[string]bool{"burn": true, "processes": true}, false, "ok", snap))
-		if err != nil {
+		// The older zones follow their parts.
+		burnOff := map[string]bool{"burn_30min": true, "vendor_strip": true, "activity": true, "heatmap": true, "turn_ticker": true}
+		if p, err = d29Apply(d29Payload(std(burnOff))); err != nil {
 			return err
 		}
-		if p.BurnZone || p.SystemZone {
-			return d29Fail("burn and processes off: burn zone %v, system zone %v", p.BurnZone, p.SystemZone)
+		if p.BurnZone || !p.SystemZone {
+			return d29Fail("five burn-zone parts off: burn zone %v, system zone %v", p.BurnZone, p.SystemZone)
+		}
+		sysOff := map[string]bool{"system": true, "process_groups": true}
+		if p, err = d29Apply(d29Payload(std(sysOff))); err != nil {
+			return err
+		}
+		if p.SystemZone || !p.BurnZone {
+			return d29Fail("system and process_groups off: burn zone %v, system zone %v", p.BurnZone, p.SystemZone)
 		}
 
-		// Plain: the Plain list, plain words, the older zones gone, fits the window.
-		p, err = d29Apply(d29Payload(true, nil, false, "ok", snap))
-		if err != nil {
+		// Every part off: an empty host, no zones, no note, no error.
+		allOff := map[string]bool{}
+		for _, id := range d29Parts {
+			allOff[id] = true
+		}
+		if p, err = d29Apply(d29Payload(std(allOff))); err != nil {
+			return d29Fail("all 15 parts off raised: %v", err)
+		}
+		if len(p.shown()) != 0 || p.MainShown || p.BurnZone || p.SystemZone || p.Note != "" {
+			return d29Fail("all parts off: shown %v, main %v, note %q", p.shown(), p.MainShown, p.Note)
+		}
+
+		// Plain, scrollbar off: the Plain list, plain words, no older zones, fits the window.
+		plain := func(o d29Opts) d29Opts {
+			o.Plain, o.Status, o.Snap = true, "ok", snap
+			return o
+		}
+		if p, err = d29Apply(d29Payload(plain(d29Opts{}))); err != nil {
 			return err
 		}
-		if strings.Join(p.shown(), ",") != "waits,outcomes,burn,agents_map,sessions" {
+		if got := strings.Join(p.shown(), ","); got != "waits,outcomes,burn,agents_map,sessions" {
 			return d29Fail("plain shows %v", p.shown())
 		}
 		if !p.Plain || p.Toggle != "Plain: on" || !p.ToggleOn || p.BodyStandard || p.BurnZone || p.SystemZone {
@@ -238,17 +338,24 @@ func init() {
 			return err
 		}
 
-		// Plain keeps the fit: all seven on in a small window drops whole sections and says so.
+		// A burn-zone part in the Plain list shows the zone with only those parts.
+		if p, err = d29Apply(d29Payload(plain(d29Opts{PlainOn: map[string]bool{"burn_30min": true, "turn_ticker": true}}))); err != nil {
+			return err
+		}
+		if got := strings.Join(p.shown(), ","); got != "waits,outcomes,burn,agents_map,sessions,burn_30min,turn_ticker" || !p.BurnZone || p.SystemZone {
+			return d29Fail("plain with two burn parts: shown %v, burn zone %v, system zone %v", p.shown(), p.BurnZone, p.SystemZone)
+		}
+
+		// Plain keeps the fit: everything on in a small window drops whole sections and says so.
 		if err := ensureWindowSizeWH(hwnd, 1024, 480); err != nil {
 			return err
 		}
 		time.Sleep(500 * time.Millisecond)
-		p, err = d29Apply(d29Payload(true, nil, true, "ok", snap))
-		if err != nil {
+		if p, err = d29Apply(d29Payload(plain(d29Opts{PlainAll: true}))); err != nil {
 			return err
 		}
-		if len(p.shown()) >= 7 || !strings.Contains(p.Note, "hidden, the window is too small") {
-			return d29Fail("plain at 1024x480 with seven sections: shown %v, note %q", p.shown(), p.Note)
+		if len(p.shown()) >= len(d29Parts) || !strings.Contains(p.Note, "hidden, the window is too small") {
+			return d29Fail("plain at 1024x480 with all parts: shown %v, note %q", p.shown(), p.Note)
 		}
 		if p.HostOver > 1 || p.BodyOver > 1 || p.OverflowY != "hidden" {
 			return d29Fail("plain at 1024x480 overflows: host %.0f px, body %.0f px, overflow-y %s", p.HostOver, p.BodyOver, p.OverflowY)
@@ -257,11 +364,10 @@ func init() {
 			return err
 		}
 		// Standard at the same size drops nothing and has no note: it scrolls instead.
-		p, err = d29Apply(d29Payload(false, nil, false, "ok", snap))
-		if err != nil {
+		if p, err = d29Apply(d29Payload(std(nil))); err != nil {
 			return err
 		}
-		if strings.Join(p.shown(), ",") != all || p.Note != "" || !p.Scrolls {
+		if strings.Join(p.shown(), ",") != wantAll || p.Note != "" || !p.Scrolls {
 			return d29Fail("standard at 1024x480: shown %v, note %q, scrolls %v", p.shown(), p.Note, p.Scrolls)
 		}
 		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
@@ -270,7 +376,7 @@ func init() {
 		time.Sleep(500 * time.Millisecond)
 
 		// The toggle's text flips with each press.
-		if _, err = d29Apply(d29Payload(false, nil, false, "ok", snap)); err != nil {
+		if _, err = d29Apply(d29Payload(std(nil))); err != nil {
 			return err
 		}
 		for i, want := range []string{"Plain: on", "Plain: off", "Plain: on"} {
@@ -285,8 +391,8 @@ func init() {
 			}
 		}
 
-		// The gear lists one column per mode, ticked from the saved lists.
-		if p, err = d29Apply(d29Payload(false, map[string]bool{"git": true}, false, "ok", snap)); err != nil {
+		// The gear: four groups, Overall scrollbar on top, ticks from the payload, the Station pair.
+		if p, err = d29Apply(d29Payload(std(map[string]bool{"git": true}))); err != nil {
 			return err
 		}
 		if err := d29Eval(`document.getElementById('secGear').click()`); err != nil {
@@ -295,16 +401,58 @@ func init() {
 		if p, err = d29Read(); err != nil {
 			return err
 		}
-		if !p.GearOpen || len(p.Ticks) != 11 {
-			return d29Fail("gear: open %v, %d ticks, want 11 (6 standard without git, 5 plain)", p.GearOpen, len(p.Ticks))
+		wantHeads := "Status,Sessions last 30 min,Processes last 30 min,Microsoft To Do"
+		if !p.GearOpen || strings.Join(p.Headings, ",") != wantHeads {
+			return d29Fail("gear: open %v, group headings %v", p.GearOpen, p.Headings)
+		}
+		if p.LabelRows != 15 || p.Checkboxes != 30 {
+			return d29Fail("gear: %d part rows and %d checkboxes, want 15 and 30", p.LabelRows, p.Checkboxes)
+		}
+		if !p.ScrollFirst || !p.ScrollTick {
+			return d29Fail("gear: Overall scrollbar first %v, ticked %v", p.ScrollFirst, p.ScrollTick)
+		}
+		if len(p.Ticks) != 19 {
+			return d29Fail("gear: %d ticks, want 19 (14 standard without git, 5 plain)", len(p.Ticks))
 		}
 		for _, t := range p.Ticks {
 			if t == "standard:git" || t == "plain:git" || t == "plain:processes" {
 				return d29Fail("gear ticked %s, which is off in the payload", t)
 			}
 		}
+		if p.Radio != "space" {
+			return d29Fail("gear: Station starts as %q, want space", p.Radio)
+		}
+		siteOpts := std(nil)
+		siteOpts.StationTheme = "site"
+		if p, err = d29Apply(d29Payload(siteOpts)); err != nil {
+			return err
+		}
+		if p.Radio != "site" {
+			return d29Fail("gear: payload says site, radio reads %q", p.Radio)
+		}
 		if _, err := screenshot(hwnd, "d29-gear"); err != nil {
 			return err
+		}
+		// Choosing a Station theme calls the binding and leaves the open Station alone.
+		if _, err = d29Apply(d29Payload(std(nil))); err != nil {
+			return err
+		}
+		if err := d29Eval(`(function(){
+  window.__d29Real = window.bdevSetStationTheme; window.__d29Calls = []; window.__d29Start = window.BM_STATION_THEME;
+  window.bdevSetStationTheme = function(v){ window.__d29Calls.push(v); return Promise.resolve(); };
+  document.querySelector('input[name="secStationStart"][value="site"]').click();
+  return 1;
+})()`); err != nil {
+			return err
+		}
+		calls, cerr := evalString(`JSON.stringify(window.__d29Calls)`)
+		same, serr := evalString(`String(window.BM_STATION_THEME === window.__d29Start)`)
+		_ = d29Eval(`(window.bdevSetStationTheme = window.__d29Real, 1)`)
+		if cerr != nil || serr != nil {
+			return d29Fail("radio step could not read back: %v %v", cerr, serr)
+		}
+		if calls != `["site"]` || same != "true" {
+			return d29Fail("radio: binding calls %s, Station theme unchanged %s, want [\"site\"] and true", calls, same)
 		}
 		if err := d29Eval(`document.getElementById('secGear').click()`); err != nil {
 			return err
@@ -312,7 +460,7 @@ func init() {
 
 		// Stale and missing: say so, draw no old numbers.
 		for _, status := range []string{"stale", "missing"} {
-			p, err = d29Apply(d29Payload(true, nil, false, status, nil))
+			p, err = d29Apply(d29Payload(d29Opts{Plain: true, Status: status}))
 			if err != nil {
 				return err
 			}
@@ -332,15 +480,16 @@ func init() {
 }
 
 type d29Saved struct {
-	Plain    bool            `json:"plain_mode"`
-	Standard map[string]bool `json:"sections_standard"`
-	PlainSet map[string]bool `json:"sections_plain"`
-	Sections map[string]bool `json:"sections"`
+	Plain     bool            `json:"plain_mode"`
+	Scrollbar bool            `json:"overall_scrollbar"`
+	Standard  map[string]bool `json:"parts_standard"`
+	PlainSet  map[string]bool `json:"parts_plain"`
+	Parts     map[string]bool `json:"parts"`
 }
 
-// d29Persist drives the real Go side: the toggle, one switch in each mode
-// through bdevSetSections, and one tick through the gear's own checkbox. Each
-// must land in its own mode only. It puts back every value it found.
+// d29Persist drives the real Go side: the toggle, one part in each mode and the
+// scrollbar through the bindings, and one tick through the gear's own checkbox.
+// Each must land where it belongs only. It puts back every value it found.
 func d29Persist() error {
 	read := func() (d29Saved, error) {
 		var st d29Saved
@@ -369,22 +518,25 @@ func d29Persist() error {
 		return err
 	}
 	defer func() {
-		for _, id := range d29Order {
+		for _, id := range d29Parts {
 			_ = send(fmt.Sprintf(`{mode:'standard',section:%s,on:%t}`, jsString(id), orig.Standard[id]))
 			_ = send(fmt.Sprintf(`{mode:'plain',section:%s,on:%t}`, jsString(id), orig.PlainSet[id]))
 		}
+		_ = send(fmt.Sprintf(`{scrollbar:%t}`, orig.Scrollbar))
 		_ = send(fmt.Sprintf(`{plain:%t}`, orig.Plain))
 	}()
 
-	// Start from Standard, git on in Standard, off in Plain.
-	if err := send(`{plain:false}`); err != nil {
-		return err
-	}
-	if err := send(`{mode:'standard',section:'git',on:true}`); err != nil {
-		return err
-	}
-	if err := send(`{mode:'plain',section:'git',on:false}`); err != nil {
-		return err
+	// Start from Standard: git on in Standard and off in Plain, turn_ticker on in Standard and off in Plain.
+	for _, c := range []string{
+		`{plain:false}`,
+		`{mode:'standard',section:'git',on:true}`, `{mode:'plain',section:'git',on:false}`,
+		`{mode:'standard',section:'turn_ticker',on:true}`, `{mode:'plain',section:'turn_ticker',on:false}`,
+		`{mode:'standard',section:'burn',on:true}`, `{mode:'plain',section:'burn',on:true}`,
+		`{scrollbar:true}`,
+	} {
+		if err := send(c); err != nil {
+			return err
+		}
 	}
 	// The toggle.
 	if err := send(`{plain:true}`); err != nil {
@@ -394,28 +546,39 @@ func d29Persist() error {
 	if err != nil {
 		return err
 	}
-	if !st.Plain || st.Sections["git"] || !st.Standard["git"] {
+	if !st.Plain || st.Parts["git"] || !st.Standard["git"] {
 		return d29Fail("toggle saved wrong: %+v", st)
 	}
-	// One switch in Plain only.
-	if err := send(`{mode:'plain',section:'git',on:true}`); err != nil {
+	// One part in Plain only.
+	if err := send(`{mode:'plain',section:'turn_ticker',on:true}`); err != nil {
 		return err
 	}
 	if st, err = read(); err != nil {
 		return err
 	}
-	if !st.PlainSet["git"] || !st.Standard["git"] || !st.Sections["git"] {
-		return d29Fail("plain git switch saved wrong: %+v", st)
+	if !st.PlainSet["turn_ticker"] || !st.Standard["turn_ticker"] || !st.Parts["turn_ticker"] {
+		return d29Fail("plain turn_ticker switch saved wrong: %+v", st)
 	}
-	// One switch in Standard only, with the page in Plain: the current list does not move.
+	// One part in Standard only, with the page in Plain: the current list does not move.
 	if err := send(`{mode:'standard',section:'burn',on:false}`); err != nil {
 		return err
 	}
 	if st, err = read(); err != nil {
 		return err
 	}
-	if st.Standard["burn"] || !st.PlainSet["burn"] || !st.Sections["burn"] {
+	if st.Standard["burn"] || !st.PlainSet["burn"] || !st.Parts["burn"] {
 		return d29Fail("standard burn switch saved wrong: %+v", st)
+	}
+	// The scrollbar switch saves alone.
+	before := st
+	if err := send(`{scrollbar:false}`); err != nil {
+		return err
+	}
+	if st, err = read(); err != nil {
+		return err
+	}
+	if st.Scrollbar || !st.Plain || !reflect.DeepEqual(st.Standard, before.Standard) || !reflect.DeepEqual(st.PlainSet, before.PlainSet) {
+		return d29Fail("scrollbar switch saved wrong: %+v", st)
 	}
 	// The gear's own checkbox saves through the same path, to its own mode.
 	if err := d29Eval(`(function(){ var i = document.querySelector('#secSettingsCols input[data-mode="plain"][data-sw="sessions"]'); i.checked = false; i.dispatchEvent(new Event('change', {bubbles: true})); })()`); err != nil {

@@ -381,6 +381,8 @@ body.sec-standard #legacy{flex:0 0 auto}
 .secnotice{padding:6px 8px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font-size:12px}
 .secnotice.warn{border-color:var(--amber)}
 .secpanels{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:4px}
+.secrow1{grid-column:1 / -1; display:flex; gap:4px}
+.secrow1 > .secpanel{flex:1 1 0; min-width:0}
 .secpanel .secbody{padding:6px 8px; display:flex; flex-direction:column; gap:3px; font-size:12px; overflow:hidden}
 body.plain .secpanel .secbody{font-size:13.5px}
 .secpanel.secwide{grid-column:1 / -1}
@@ -474,8 +476,13 @@ body.plain #mapOverlay{font-size:13.5px}
   border-top:2px solid var(--amber); padding:10px 14px; display:none; flex-direction:column; gap:8px; font-size:12px;
   box-shadow:0 6px 24px var(--scrim)}
 #secSettings.open{display:flex}
-#secSettings .setcols{display:flex; gap:28px}
-#secSettings .setcol{display:flex; flex-direction:column; gap:5px}
+#secSettings{max-height:calc(100vh - 80px); overflow-y:auto}
+#secSettings .setgrid{display:grid; grid-template-columns:1fr auto auto; column-gap:18px; row-gap:4px; align-items:center}
+#secSettings .setgrid h4{grid-column:1 / -1; margin-top:6px}
+#secSettings .setgrid .sethead{color:var(--dim); font-size:11px; text-align:center}
+#secSettings .setgrid .setlbl{white-space:nowrap}
+#secSettings .setgrid input{justify-self:center}
+#secSettings .setstation{display:flex; gap:14px; align-items:center}
 #secSettings h4{margin:0 0 2px; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase}
 #secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
 #secSettings input{margin:0; accent-color:var(--amber)}
@@ -524,14 +531,14 @@ body.plain #mapOverlay{font-size:13.5px}
 <div id="legacy">
 <main>
   <section class="zone burn">
-    <div class="zonelabel">Burn, last 30 min</div>
+    <div class="zonelabel">Sessions, last 30 min</div>
     <div class="zonebody">
-      <div class="burnchart panel">
+      <div class="burnchart panel" data-part="burn_30min">
         <div class="bars" id="burnBars"></div>
         <div class="burnaxis" id="burnAxis"></div>
       </div>
-      <div class="burnlegend" id="burnLegend"></div>
-      <div class="cards" id="sessionCards"></div>
+      <div class="burnlegend" id="burnLegend" data-part="burn_30min"></div>
+      <div class="cards" id="sessionCards" data-part="burn_30min"></div>
       <!-- max-height (no-scroll patch section 4 fix, found by real-window
            testing at the app's own default 1280x860 launch size): this
            table's own row count is unbounded (one row per vendor ever
@@ -548,7 +555,7 @@ body.plain #mapOverlay{font-size:13.5px}
            them again later, ensureVendorRow's own doc comment) - accepted
            as a lesser problem than an "always stay" panel disappearing
            outright. -->
-      <div class="panel" id="vendorStripPanel" style="flex:0 0 auto; max-height:clamp(180px, calc(100vh - 780px), 260px)">
+      <div class="panel" id="vendorStripPanel" data-part="vendor_strip" style="flex:0 0 auto; max-height:clamp(180px, calc(100vh - 780px), 260px)">
         <div class="panelhead">Vendor strip</div>
         <table>
           <thead><tr><th></th><th>Today</th><th>Week</th><th>Month</th></tr></thead>
@@ -556,36 +563,36 @@ body.plain #mapOverlay{font-size:13.5px}
         </table>
       </div>
       <div class="splitrow" id="activityHeatmapRow">
-        <div class="panel">
+        <div class="panel" id="activityPanel" data-part="activity">
           <div class="panelhead">Activity <span id="heatmapActiveDays" class="phead-sub"></span></div>
           <div class="heatmapwrap"><div id="heatmapGrid"></div></div>
         </div>
-        <div class="panel">
+        <div class="panel" id="harnessHeatmapPanel" data-part="heatmap">
           <div class="panelhead">Heatmap, harness &times; minute (CPU-weighted)</div>
           <div class="heatmapwrap"><div id="harnessHeatmap"></div></div>
         </div>
       </div>
-      <div class="panel" style="flex:1; min-height:80px">
+      <div class="panel" id="turnTickerPanel" data-part="turn_ticker" style="flex:1; min-height:80px">
         <div class="panelhead">Turn ticker</div>
         <div class="ticker" id="turnTicker"></div>
       </div>
     </div>
   </section>
   <section class="zone system">
-    <div class="zonelabel">System</div>
+    <div class="zonelabel">Processes, last 30 min</div>
     <div class="zonebody">
-      <div class="panel cpubox">
+      <div class="panel cpubox" data-part="system">
         <h4>CPU, <span id="cpuThreads">-</span> threads</h4>
         <div class="cpubar"><i id="cpuTotalBar" style="width:0%"></i><span id="cpuTotal">-</span></div>
         <div class="cpumeta" id="cpuBaseClock"></div>
         <div class="coregrid" id="coreGrid"></div>
       </div>
-      <div class="panel histwrap">
+      <div class="panel histwrap" data-part="system">
         <div class="histlegend" id="histLegend"></div>
         <div class="histcanvaswrap"><canvas id="histCanvas"></canvas></div>
         <div class="histaxis" id="histAxis"></div>
       </div>
-      <div class="panel" id="processGroupsPanel" style="flex:0 0 auto">
+      <div class="panel" id="processGroupsPanel" data-part="process_groups" style="flex:0 0 auto">
         <div class="panelhead" id="processGroupsHead">Process groups</div>
         <div id="processGroupsWrap">
           <table>
@@ -595,7 +602,7 @@ body.plain #mapOverlay{font-size:13.5px}
           </table>
         </div>
       </div>
-      <div class="sysbottom">
+      <div class="sysbottom" data-part="process_groups">
         <div class="sysbox" id="boxMemory">
           <h4>Memory</h4>
           <div class="sysrows">
@@ -617,7 +624,7 @@ body.plain #mapOverlay{font-size:13.5px}
     </div>
   </section>
 </main>
-<section class="panel todopanel" id="todoPanel">
+<section class="panel todopanel" id="todoPanel" data-part="todo">
   <div class="panelhead">Microsoft To Do</div>
   <div class="todobody" id="todoBody"></div>
 </section>
@@ -625,7 +632,12 @@ body.plain #mapOverlay{font-size:13.5px}
 </div>
 <div id="secSettings" role="dialog" aria-label="Sections each mode shows">
   <h4>Sections each mode shows</h4>
-  <div class="setcols" id="secSettingsCols"></div>
+  <label class="setrow"><input type="checkbox" id="secScrollbar"> Overall scrollbar</label>
+  <div class="setgrid" id="secSettingsCols"></div>
+  <div class="setrow setstation">Station starts as
+    <label><input type="radio" name="secStationStart" value="space"> space</label>
+    <label><input type="radio" name="secStationStart" value="site"> site</label>
+  </div>
   <div id="histAdmin">
     <h4>History</h4>
     <div class="sechint" id="hist_keep"></div>
@@ -3258,7 +3270,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // port. A stale or missing file is shown as "BurnMon is not running" and
   // its old numbers are not drawn. Plain Mode means plain words, a page that
   // fits the window and the Plain list of sections; it makes no model call.
-  var SEC_ORDER = ['waits','outcomes','burn','agents_map','sessions','processes','git'];
+  var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions','processes'];
   var SEC_TITLE = {
     waits:['Waits on you','Needs you'], outcomes:['Outcomes','Results'], burn:['Burn','Token use'],
     agents_map:['Agents map','Who works with whom'], sessions:['Sessions','Running sessions'],
@@ -3269,7 +3281,7 @@ body.plain #mapOverlay{font-size:13.5px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, sections:{}, standard:{}, plainSet:{}, order:SEC_ORDER };
+  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space' };
   var secReading = { status:'missing', age_seconds:0 };
   var secAgentMap = null; // the live agent map from the payload; null unless the snapshot is current
   var secLastJSON = '';
@@ -3293,7 +3305,7 @@ body.plain #mapOverlay{font-size:13.5px}
   function secWord(state){ return secState.plain ? (SEC_STATE_PLAIN[state] || state) : state; }
   function secStub(text){ return '<div class="secstub">' + esc(text) + '</div>'; }
   function secPanel(id, body, wide){
-    return '<section class="panel secpanel' + (wide ? ' secwide' : '') + '" data-sec="' + id + '">' +
+    return '<section class="panel secpanel' + (wide ? ' secwide' : '') + '" data-sec="' + id + '" data-part="' + id + '">' +
       '<div class="panelhead">' + esc(secTitle(id)) + '</div><div class="secbody">' + body + '</div></section>';
   }
 
@@ -3409,7 +3421,7 @@ body.plain #mapOverlay{font-size:13.5px}
       '</tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
-  function secVisible(id){ return !!secState.sections[id]; }
+  function secPartOn(id){ return !!secState.parts[id]; }
   var SEC_NEEDS_SNAPSHOT = { waits:1, outcomes:1, burn:1, sessions:1, processes:1 };
   var SEC_BODY = { waits:secBodyWaits, outcomes:secBodyOutcomes, burn:secBodyBurn, agents_map:secBodyAgents,
     sessions:secBodySessions, processes:secBodyProcesses, git:secBodyGit };
@@ -3424,19 +3436,23 @@ body.plain #mapOverlay{font-size:13.5px}
     t.setAttribute('aria-pressed', secState.plain ? 'true' : 'false');
   }
 
-  // The gear's list: one column of switches per mode. Built once, then only
-  // the ticks are synced, so a poll never replaces a box under the pointer.
+  // The gear's list: one row per part, grouped, with a Standard and a Plain
+  // tick each. Built once from the payload's groups, then only the ticks, the
+  // scrollbar box and the radio are synced, so a poll never replaces a box
+  // under the pointer.
   function secRenderSettings(){
     var box = document.getElementById('secSettingsCols');
     if(!box) return;
-    if(!box.firstChild){
+    if(!box.firstChild && secState.groups.length){
       var html = '';
-      [['standard','Standard',0],['plain','Plain',1]].forEach(function(m){
-        html += '<div class="setcol"><h4>' + m[1] + '</h4>';
-        SEC_ORDER.forEach(function(id){
-          html += '<label><input type="checkbox" data-mode="' + m[0] + '" data-sw="' + id + '"> ' + esc(SEC_TITLE[id][m[2]]) + '</label>';
+      secState.groups.forEach(function(g, gi){
+        html += '<h4>' + esc(g.label) + '</h4>';
+        if(gi === 0) html += '<span></span><span class="sethead">Standard</span><span class="sethead">Plain</span>';
+        (g.parts || []).forEach(function(p){
+          html += '<span class="setlbl">' + esc(p.label) + '</span>' +
+            '<input type="checkbox" data-mode="standard" data-sw="' + p.id + '" aria-label="' + esc(p.label) + ', Standard">' +
+            '<input type="checkbox" data-mode="plain" data-sw="' + p.id + '" aria-label="' + esc(p.label) + ', Plain">';
         });
-        html += '</div>';
       });
       box.innerHTML = html;
     }
@@ -3444,8 +3460,12 @@ body.plain #mapOverlay{font-size:13.5px}
       var list = i.getAttribute('data-mode') === 'plain' ? secState.plainSet : secState.standard;
       i.checked = !!list[i.getAttribute('data-sw')];
     });
+    var sb = document.getElementById('secScrollbar');
+    if(sb) sb.checked = !!secState.scrollbar;
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="secStationStart"]'), function(r){
+      r.checked = r.value === secState.stationTheme;
+    });
   }
-
   function secRender(){
     var host = document.getElementById('secHost');
     if(!host) return;
@@ -3456,40 +3476,46 @@ body.plain #mapOverlay{font-size:13.5px}
     secRenderSettings();
     var notice = document.getElementById('secNotice');
     notice.innerHTML = head.down ? '<div class="secnotice warn">' + esc(head.text + '. No current numbers are shown.') + '</div>' : '';
-    var html = '', ids = secState.order || SEC_ORDER;
-    ids.forEach(function(id){
-      if(!secVisible(id)) return;
+    var row1 = '', rest = '';
+    SEC_ORDER.forEach(function(id, n){
+      if(!secPartOn(id)) return;
       var body;
       if(SEC_NEEDS_SNAPSHOT[id] && !snap) body = secStub(secState.plain ? 'No current numbers. Start BurnMon to see them.' : 'No current snapshot.');
       else body = SEC_BODY[id](snap);
-      html += secPanel(id, body, id === 'sessions' || id === 'processes');
+      var p = secPanel(id, body, id === 'sessions' || id === 'processes');
+      if(n < 5) row1 += p; else rest += p;
     });
-    document.getElementById('secPanels').innerHTML = html;
-    secApplyLegacy();
+    document.getElementById('secPanels').innerHTML = (row1 ? '<div class="secrow1" id="secRow1">' + row1 + '</div>' : '') + rest;
+    secApplyParts();
     secFit();
   }
 
-  // Standard shows the older Burn and System zones and the To Do panel, each
-  // zone with its section switch. Plain hides all of them and the host fills
-  // the window.
-  function secApplyLegacy(){
-    var plain = secState.plain, s = secState.sections;
-    var showBurn = !plain && !!s.burn, showSys = !plain && !!s.processes;
+  // Every part is one switch per mode. A part that is off gets .sec-off, the
+  // older zones follow their parts, and the whole older block goes when
+  // nothing in it is on. Without any part on the host is simply empty.
+  var SEC_BURN_PARTS = ['burn_30min','vendor_strip','activity','heatmap','turn_ticker'];
+  var SEC_SYSTEM_PARTS = ['system','process_groups'];
+  function secApplyParts(){
+    var plain = secState.plain;
     function set(el, hide){ if(el) el.classList.toggle('sec-off', hide); }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-part]'), function(el){
+      set(el, !secPartOn(el.getAttribute('data-part')));
+    });
+    var showBurn = SEC_BURN_PARTS.some(secPartOn), showSys = SEC_SYSTEM_PARTS.some(secPartOn), showTodo = secPartOn('todo');
     set(document.querySelector('.zone.burn'), !showBurn);
     set(document.querySelector('.zone.system'), !showSys);
     set(document.querySelector('main'), !showBurn && !showSys);
-    set(document.getElementById('todoPanel'), plain);
-    set(document.getElementById('legacy'), plain);
-    document.getElementById('secHost').classList.toggle('sec-fill', plain);
+    var hideLegacy = !showBurn && !showSys && !showTodo;
+    set(document.getElementById('legacy'), hideLegacy);
+    set(document.getElementById('activityHeatmapRow'), !secPartOn('activity') && !secPartOn('heatmap'));
+    document.getElementById('secHost').classList.toggle('sec-fill', hideLegacy);
     document.body.classList.toggle('sec-standard', !plain);
     document.body.classList.toggle('plain', plain);
     secSizeLegacy();
     // The charts were drawn at a size they no longer have; the resize handler redraws them.
-    var sig = [plain, showBurn, showSys].join();
+    var sig = [plain, showBurn, showSys, Object.keys(secState.parts).filter(secPartOn).join('|')].join();
     if(sig !== secLastSig){ secLastSig = sig; window.dispatchEvent(new Event('resize')); }
   }
-
   // In Standard the older zones get exactly the height of the scroll area, the
   // same room they had before R8, so they fit as they always did. The sections
   // host sits above them and the page scrolls.
@@ -3538,8 +3564,8 @@ body.plain #mapOverlay{font-size:13.5px}
   }
 
   function secApplyPayload(p){
-    secState = { plain:!!p.plain_mode, sections:p.sections || {}, standard:p.sections_standard || {},
-      plainSet:p.sections_plain || {}, order:p.order || SEC_ORDER };
+    secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
+      plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space' };
     secReading = p.reading || { status:'missing', age_seconds:0 };
     secAgentMap = p.agent_map || null;
     secRender();
@@ -3581,6 +3607,14 @@ body.plain #mapOverlay{font-size:13.5px}
   secSettingsEl.addEventListener('change', function(e){
     var t = e.target;
     if(t.hasAttribute('data-sw')) secSend({ mode: t.getAttribute('data-mode'), section: t.getAttribute('data-sw'), on: t.checked });
+    else if(t.id === 'secScrollbar') secSend({ scrollbar: t.checked });
+    else if(t.name === 'secStationStart' && t.checked){
+      // Saved for the next start only; the Station that is open keeps its theme.
+      if(typeof window.bdevSetStationTheme === 'function'){
+        Promise.resolve(window.bdevSetStationTheme(t.value)).then(function(){ secLastJSON = 'x'; return secPoll(); })
+          .catch(function(e){ console.log('bdevSetStationTheme:', e); });
+      }
+    }
   });
   document.addEventListener('click', function(){ if(secSettingsEl.classList.contains('open')) secSettingsOpen(false); });
   // ---- B1 History block (delete, export) inside the gear dialog ----------
@@ -3912,7 +3946,10 @@ body.plain #mapOverlay{font-size:13.5px}
     frames: function(){ return Object.keys(mapOpenFrames); } };
 
   // The page can be driven without Go (uicheck d29 feeds the frozen example).
-  window.__bdevSections = { apply: function(p){ secFrozen = true; secApplyPayload(p); }, state: function(){ return secState; } };
+  window.__bdevSections = { apply: function(p){ secFrozen = true; secApplyPayload(p); }, state: function(){
+    return { plain:secState.plain, scrollbar:secState.scrollbar, parts:secState.parts, standard:secState.standard,
+      plainSet:secState.plainSet, groups:secState.groups, stationTheme:secState.stationTheme };
+  } };
   secPoll();
   setInterval(secPoll, 5000);
   setupExportButton();
