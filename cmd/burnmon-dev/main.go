@@ -63,12 +63,12 @@ const stationMarker = "<!--BM_STATION-->"
 // assemblePage returns page.html with the Station scripts at its marker:
 // both atlases, window.BM_STATION_THEME, then station.js. The theme lands
 // in a script string, so only the two known names pass and anything else
-// becomes "site". The page keeps working without the scripts
+// becomes "space". The page keeps working without the scripts
 // (window.BMStation is checked before use), so a missing marker only costs
 // the secret screen.
 func assemblePage(theme, uiTheme string) string {
-	if theme != "space" {
-		theme = "site"
+	if theme != "site" {
+		theme = "space"
 	}
 	page := pageHTML
 	if uiTheme == "light" {
@@ -349,9 +349,22 @@ func main() {
 		log.Println("could not bind bdevSetUITheme:", err)
 	}
 
-	// bdevSections (R8): the section switches, the preset they make, and the
+	// bdevSetStationTheme: the "Station starts as" setting, saved to
+	// burnmon-dev.json (station_theme.go) and used at the next start. It does
+	// not touch devCfg or the Station that is open now.
+	if err := w.Bind("bdevSetStationTheme", func(theme string) error {
+		err := saveStationTheme(dataDir, theme)
+		if err != nil {
+			log.Println("bdevSetStationTheme:", err)
+		}
+		return err
+	}); err != nil {
+		log.Println("could not bind bdevSetStationTheme:", err)
+	}
+
+	// bdevSections (B2): the part switches per mode, the overall scrollbar flag, and the
 	// newest snapshot reading. bdevSetSections saves one change from the page
-	// (a preset, one switch, or Plain Mode). Both read and write files only.
+	// (Plain Mode, the scrollbar flag, or one part switch). Both read and write files only.
 	snapPath, snapPathErr := snapshot.DefaultPath()
 	if snapPathErr != nil {
 		log.Println("snapshot path:", snapPathErr)

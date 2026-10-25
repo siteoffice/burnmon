@@ -184,6 +184,12 @@ func init() {
 
 		key("p")
 		time.Sleep(900 * time.Millisecond)
+		// The Station starts in the saved theme (space by default); the sky
+		// being measured is the site one, so one T reaches it.
+		if read().Theme == "space" {
+			key("t")
+			time.Sleep(400 * time.Millisecond)
+		}
 		a := measure("P-site-1600", true, true)
 
 		// Seeded: a rebuild at the same size is the same sky.

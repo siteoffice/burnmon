@@ -3,7 +3,8 @@
 // viewstate.go remembers the one view preference the page has: light or dark
 // (the L key); sections_view.go keeps the section switches in the same file. It lives in burnmon-dev-view.json next to burnmon-dev.db and
 // is written by the app, never by hand and never into burnmon-dev.json, which
-// is the user's own config and is never rewritten. The page is loaded with
+// is the user's own config. That file is written only for station_theme, by
+// station_theme.go, key by key. The page is loaded with
 // NavigateToString, whose origin is opaque, so localStorage cannot hold it.
 package main
 

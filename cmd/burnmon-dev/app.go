@@ -420,14 +420,14 @@ type devConfig struct {
 	// worse than the old default, so the design doc's own flip condition
 	// made 1000 the new default.
 	RefreshMs int `json:"refresh_ms"`
-	// StationTheme is the startup theme of the Station: "site" (default)
-	// or "space". Anything else falls back to "site". It reaches the page
+	// StationTheme is the startup theme of the Station: "space" (default)
+	// or "site". Anything else falls back to "space". It reaches the page
 	// as a spliced script string, so only these two values may pass.
 	StationTheme string `json:"station_theme"`
 }
 
 func loadDevConfig(dataDir string) devConfig {
-	cfg := devConfig{RetentionDays: 7, RefreshMs: 1000, StationTheme: "site"}
+	cfg := devConfig{RetentionDays: 7, RefreshMs: 1000, StationTheme: "space"}
 	path := filepath.Join(dataDir, "burnmon-dev.json")
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -453,7 +453,7 @@ func loadDevConfig(dataDir string) devConfig {
 		cfg.StationTheme = loaded.StationTheme
 	case "":
 	default:
-		log.Printf("burnmon-dev.json: unknown station_theme %q, using site", loaded.StationTheme)
+		log.Printf("burnmon-dev.json: unknown station_theme %q, using space", loaded.StationTheme)
 	}
 	return cfg
 }
