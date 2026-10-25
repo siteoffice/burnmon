@@ -97,8 +97,8 @@ func TestFailedVerifyOnStoppedSprintWaits(t *testing.T) {
 	}
 	sp.Test = &graph.Check{Failed: false, Label: "test exit 0"}
 	w, o = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
-	if len(w) != 0 || len(o) != 0 {
-		t.Fatalf("passing check listed: %+v %+v", w, o)
+	if len(w) != 0 || len(o) != 1 || o[0].Kind != "finished" || o[0].Detail != "failed, test pass, verify -" {
+		t.Fatalf("passing check listed as failed: %+v %+v", w, o)
 	}
 }
 
@@ -111,7 +111,9 @@ func TestOutcomesKeepOnlyLast24Hours(t *testing.T) {
 			Test: &graph.Check{Failed: true, Label: "test exit 2", At: now.Add(-25 * time.Hour)}},
 	}
 	_, o := Build(Input{Now: now, Sprints: sps})
-	if len(o) != 1 || o[0].ID != "sprint:a" || o[0].Kind != "finished" || o[0].Detail != "test pass, verify -" {
+	// c failed with a check older than the window, but the sprint itself ended inside it.
+	if len(o) != 2 || o[0].ID != "sprint:c" || o[0].Detail != "failed, test fail, verify -" ||
+		o[1].ID != "sprint:a" || o[1].Kind != "finished" || o[1].Detail != "test pass, verify -" {
 		t.Fatalf("outcomes = %+v", o)
 	}
 	sps[0].Verify = &graph.Check{Failed: true, Label: "verify fail"}
@@ -234,5 +236,80 @@ func TestEmptyInputGivesEmptyLists(t *testing.T) {
 	w, o := Build(Input{Now: now})
 	if w == nil || o == nil || len(w) != 0 || len(o) != 0 {
 		t.Fatalf("got %#v %#v", w, o)
+	}
+}
+
+func TestStoppedSprintsAreOutcomesWithStatusFirst(t *testing.T) {
+	chk := func(failed bool) *graph.Check {
+		return &graph.Check{Failed: failed, Label: "x", At: now.Add(-time.Hour)}
+	}
+	for _, status := range []string{"capped", "failed", "escalated"} {
+		sp := graph.Sprint{ID: "s-" + status, Slug: status, Status: status, UpdatedAt: now.Add(-2 * time.Hour)}
+		_, o := Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+		if len(o) != 1 || o[0].Kind != "finished" || o[0].ID != "sprint:s-"+status || o[0].Detail != status+", test -, verify -" {
+			t.Fatalf("%s without check: %+v", status, o)
+		}
+		sp.Test = chk(false)
+		sp.Verify = chk(false)
+		_, o = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+		if len(o) != 1 || o[0].Detail != status+", test pass, verify pass" {
+			t.Fatalf("%s passing checks: %+v", status, o)
+		}
+		// A failing check inside the window keeps its failed_check item only.
+		sp.Verify = chk(true)
+		_, o = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+		if len(o) != 1 || o[0].Kind != "failed_check" || o[0].ID != "check:s-"+status+":verify" {
+			t.Fatalf("%s failing check: %+v", status, o)
+		}
+		// A failing check older than the window gives no failed_check item, so the sprint shows as finished.
+		sp.Verify = &graph.Check{Failed: true, Label: "x", At: now.Add(-30 * time.Hour)}
+		_, o = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+		if len(o) != 1 || o[0].Kind != "finished" || o[0].Detail != status+", test pass, verify fail" {
+			t.Fatalf("%s old failing check: %+v", status, o)
+		}
+	}
+}
+
+func TestPassingAndDoneStatusAreFinishedWithin24Hours(t *testing.T) {
+	for _, status := range []string{"passing", "done"} {
+		in := func(age time.Duration) Input {
+			return Input{Now: now, Sprints: []graph.Sprint{{ID: "p", Slug: "p", Status: status, UpdatedAt: now.Add(-age)}}}
+		}
+		_, o := Build(in(OutcomeWindow))
+		if len(o) != 1 || o[0].Kind != "finished" || o[0].Detail != "test -, verify -" {
+			t.Fatalf("%s at the boundary: %+v", status, o)
+		}
+		_, o = Build(in(OutcomeWindow + time.Second))
+		if len(o) != 0 {
+			t.Fatalf("%s past the boundary: %+v", status, o)
+		}
+	}
+	// Stopped sprint boundary.
+	sp := graph.Sprint{ID: "c", Slug: "c", Status: "capped", UpdatedAt: now.Add(-OutcomeWindow)}
+	_, o := Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if len(o) != 1 {
+		t.Fatalf("capped at boundary: %+v", o)
+	}
+	sp.UpdatedAt = now.Add(-OutcomeWindow - time.Second)
+	_, o = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
+	if len(o) != 0 {
+		t.Fatalf("capped past boundary: %+v", o)
+	}
+}
+
+func TestWaitingForMapping(t *testing.T) {
+	cases := []struct{ waitingFor, kind string }{
+		{"permission prompt", "prompt"},
+		{"input needed", "question"},
+		{"sandbox request", "session"},
+		{"worker request", "session"},
+		{"dialog open", "session"},
+	}
+	for _, c := range cases {
+		a := AgentEntry{SessionID: "s9", Status: "waiting", WaitingFor: c.waitingFor, Cwd: `C:\example\proj`}
+		w, _ := Build(Input{Now: now, Agents: []AgentEntry{a}})
+		if len(w) != 1 || w[0].Kind != c.kind || w[0].Detail != c.waitingFor {
+			t.Fatalf("%s: %+v", c.waitingFor, w)
+		}
 	}
 }

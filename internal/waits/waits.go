@@ -154,6 +154,7 @@ func Build(in Input) (wait, outcomes []Item) {
 			wait = append(wait, it)
 		}
 
+		failedOutcome := false
 		for _, c := range []struct {
 			name string
 			chk  *graph.Check
@@ -176,11 +177,20 @@ func Build(in Input) (wait, outcomes []Item) {
 			}
 			if now.Sub(at) <= OutcomeWindow {
 				outcomes = append(outcomes, it)
+				failedOutcome = true
 			}
 		}
 
-		if s.Phase == "done" && now.Sub(s.UpdatedAt) <= OutcomeWindow {
+		// A sprint that ended (done, passing, or stopped as capped, failed or
+		// escalated) within the window is a finished outcome. A stopped sprint
+		// that already shows a failed_check outcome is not listed a second time.
+		stopped := sprintStopped(s.Status)
+		ended := stopped || s.Phase == "done" || s.Status == "passing" || s.Status == "done"
+		if ended && !(stopped && failedOutcome) && now.Sub(s.UpdatedAt) <= OutcomeWindow {
 			detail := "test " + checkWord(s.Test) + ", verify " + checkWord(s.Verify)
+			if stopped {
+				detail = s.Status + ", " + detail
+			}
 			outcomes = append(outcomes, mk(KindFinished, "sprint:"+s.ID, s.Slug, s.Project, detail, s.UpdatedAt,
 				s.SpecPath, s.ResultPath, graph.SourceForeman))
 		}
@@ -252,8 +262,10 @@ func Build(in Input) (wait, outcomes []Item) {
 		kind, detail := KindSession, "blocked"
 		if a.Status == "waiting" && a.WaitingFor != "" {
 			detail = a.WaitingFor
-			kind = KindPrompt
-			if a.WaitingFor == "input needed" {
+			switch a.WaitingFor {
+			case "permission prompt":
+				kind = KindPrompt
+			case "input needed":
 				kind = KindQuestion
 			}
 		}

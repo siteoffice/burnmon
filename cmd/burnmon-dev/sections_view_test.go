@@ -300,3 +300,13 @@ func TestPageListsEveryItemInBoundedScrollArea(t *testing.T) {
 		}
 	}
 }
+
+// A finished item whose detail starts with a stopped status must not read as
+// plain "Done" in the plain wording.
+func TestPageNamesStoppedOutcomeStatus(t *testing.T) {
+	for _, want := range []string{`/^(capped|failed|escalated),/`, `'Stopped, '`} {
+		if !strings.Contains(pageHTML, want) {
+			t.Fatalf("page lacks %q", want)
+		}
+	}
+}

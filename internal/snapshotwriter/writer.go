@@ -71,12 +71,12 @@ func NewGraphReaders(home, foremanRoot string) *GraphReaders {
 	}
 }
 
-func (gr *GraphReaders) foreman(now time.Time) ([]graph.Sprint, []graph.Flow, error) {
+func (gr *GraphReaders) foreman(now time.Time) ([]graph.Sprint, []graph.Flow, time.Time, error) {
 	if now.Sub(gr.foremanAt) >= foremanEvery {
 		gr.sprints, gr.flows, gr.foremanErr = graph.ReadForeman(gr.ForemanRoot)
 		gr.foremanAt = now
 	}
-	return gr.sprints, gr.flows, gr.foremanErr
+	return gr.sprints, gr.flows, gr.foremanAt, gr.foremanErr
 }
 
 func source(name, stamp string, err error) snapshot.Source {
@@ -126,11 +126,11 @@ func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, no
 	in.Listens = listens
 	sources := []snapshot.Source{source(graph.SourceClaudePids, stamp, pidErr)}
 	if gr.ForemanRoot != "" {
-		sprints, flows, ferr := gr.foreman(now)
+		sprints, flows, readAt, ferr := gr.foreman(now)
 		if ferr == nil {
 			in.Sprints, in.Flows = sprints, flows
 		}
-		sources = append(sources, source(graph.SourceForeman, stamp, ferr))
+		sources = append(sources, source(graph.SourceForeman, readAt.UTC().Format(time.RFC3339), ferr))
 	}
 
 	g := graph.Build(in)

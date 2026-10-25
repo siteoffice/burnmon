@@ -3478,6 +3478,8 @@ body.plain #mapOverlay{font-size:13.5px}
     }
     var plain = secState.plain, k = SEC_KIND[it.kind] || [it.kind, it.kind], word = k[plain ? 1 : 0], txt = word;
     if(!plain && it.kind === 'gate') txt = word + ' ' + (it.detail || '');
+    var stoppedM = it.kind === 'finished' && /^(capped|failed|escalated),/.exec(it.detail || '');
+    if(plain && stoppedM) word = txt = 'Stopped, ' + stoppedM[1];
     var detail = '';
     if(plain){
       if(it.kind === 'sprint' && it.parked && it.parked.length) detail = it.parked.length + (it.parked.length === 1 ? ' task needs you' : ' tasks need you');

@@ -323,3 +323,33 @@ func TestSnapshotOnceForemanErrorKeepsOtherItems(t *testing.T) {
 		}
 	}
 }
+
+// A cached Foreman read keeps the time of the real read in its source entry.
+func TestForemanReadAtIsTheTimeOfTheRead(t *testing.T) {
+	st := snapshotTestStore(t)
+	gr, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
+	w := newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr)
+	t0 := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	clock := t0
+	w.Now = func() time.Time { return clock }
+	for i, c := range []struct{ at time.Time; want string }{
+		{t0, "2026-10-25T12:00:00Z"},
+		{t0.Add(snapshotwriter.Tick), "2026-10-25T12:00:00Z"}, // cached read
+	} {
+		clock = c.at
+		if err := w.Once(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := snapshot.Read(w.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := sourceNamed(got, "foreman")
+		if s == nil || s.ReadAt != c.want {
+			t.Fatalf("tick %d: foreman source %+v, want read_at %s", i, s, c.want)
+		}
+		if g := sourceNamed(got, "claude_pids"); g.ReadAt != c.at.UTC().Format(time.RFC3339) {
+			t.Fatalf("tick %d: claude_pids read_at %s", i, g.ReadAt)
+		}
+	}
+}
