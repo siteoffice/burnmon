@@ -1,1 +1,0 @@
-{"sha": "7b32544", "message": "fix(controls): restore final newlines\n\n internal/pricing/pricing_test.go        | 2 +-\n internal/snapshotwriter/resolve.go      | 2 +-\n internal/snapshotwriter/resolve_test.go | 2 +-\n 3 files changed, 3 insertions(+), 3 deletions(-)", "node": "git-flow", "clone": "Wilco de Tree", "committedAt": "2026-10-26T00:31:19Z"}

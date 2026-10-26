@@ -1,4 +1,0 @@
-[minimized-5min] Go process 20020 is gone; stopping early at 20s
-=== minimized-5min (3 CPU sample(s), 4 RAM sample(s)) ===
-Go process: 0.08% avg / 0.20% peak CPU, 112.7 MB avg / 115.7 MB peak RAM
-WebView2 tree: 0.24% avg / 0.73% peak CPU, 383.9 MB avg / 402.8 MB peak RAM, 6 process(es) peak

@@ -1,1 +1,0 @@
-{"sha": "743a5f3", "message": "feat(doccheck): check documented claims against the code\n\n internal/doccheck/doccheck.go | new file\n internal/doccheck/doccheck_test.go | new file", "node": "git-flow", "clone": "Wilco de Tree", "committedAt": "2026-10-26T03:23:32Z"}

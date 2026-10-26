@@ -1,1 +1,0 @@
-{"sha": "e5e00c8", "message": "docs(readme): README describes B1 to B4, doccheck allowlist\n\n README.md                          | 169 +++++++++++++++++++++++++++--\n internal/doccheck/doccheck_test.go |  17 ++-\n 2 files changed, 173 insertions(+), 13 deletions(-)", "node": "git-flow", "clone": "Wilco de Tree", "committedAt": "2026-10-26T03:30:39Z"}

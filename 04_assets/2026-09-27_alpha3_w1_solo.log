@@ -1,4 +1,0 @@
-uicheck: saved ..\..\testdata\uicheck\out\w1-startup-after.png
-uicheck: title at 1.5s = "BurnMon", blank=true
-uicheck: check "w1" failed: window looked blank/unpainted 1.5s after launch (title "BurnMon")
-exit status 1

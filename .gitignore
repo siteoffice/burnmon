@@ -22,3 +22,7 @@ tools/station_atlas/kits/
 .burnmon/
 tools/burnmon-cloud/dist/
 03_logs/blackbox/
+
+# Private working files: receipts and briefs stay local (2026-10-26)
+_log/
+04_assets/

@@ -1,1 +1,0 @@
-{"sha": "11a16e3", "message": "feat(burnmon-dev): bdevOpenItemFile opens listed spec or result\n\n cmd/burnmon-dev/main.go | 7 +++++++\n 1 file changed, 7 insertions(+)\n cmd/burnmon-dev/item_files.go | new file\n cmd/burnmon-dev/item_files_test.go | new file", "node": "git-flow", "clone": "Wilco de Tree", "committedAt": "2026-10-25T22:46:15Z"}

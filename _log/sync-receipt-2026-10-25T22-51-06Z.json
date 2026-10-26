@@ -1,1 +1,0 @@
-{"sha": "a362988", "message": "fix(burnmon-dev): harden item file open: ASCII fold, fail closed\n\n cmd/burnmon-dev/item_files.go      | 75 +++++++++++++++---------\n cmd/burnmon-dev/item_files_test.go | 94 ++++++++++++++++++++++++++++--\n 2 files changed, 137 insertions(+), 32 deletions(-)", "node": "git-flow", "clone": "Wilco de Tree", "committedAt": "2026-10-25T22:51:06Z"}
