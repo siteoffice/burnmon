@@ -30,6 +30,7 @@ import (
 	webview2 "github.com/jchv/go-webview2"
 
 	"burnmon/internal/adapter/codex"
+	"burnmon/internal/controls"
 	"burnmon/internal/devexport"
 	"burnmon/internal/history"
 	"burnmon/internal/historyadmin"
@@ -369,8 +370,9 @@ func main() {
 	if snapPathErr != nil {
 		log.Println("snapshot path:", snapPathErr)
 	}
+	ctlSvc := newControlService(cfg, dataDir, snapPath, storePath)
 	if err := w.Bind("bdevSections", func() sectionsPayload {
-		return sectionsPayloadFor(dataDir, snapPath, time.Now())
+		return sectionsPayloadWith(dataDir, snapPath, time.Now(), ctlSvc.Availability)
 	}); err != nil {
 		log.Println("could not bind bdevSections:", err)
 	}
@@ -382,6 +384,19 @@ func main() {
 		return err
 	}); err != nil {
 		log.Println("could not bind bdevSetSections:", err)
+	}
+	// bdevControlPreview and bdevControlRun (R10): the page sends a control name
+	// plus a target id, then only the preview token. Everything else (argv,
+	// checks, audit) stays in internal/controls. The page input is untrusted.
+	if err := w.Bind("bdevControlPreview", func(req controls.PreviewRequest) (controls.PreviewResult, error) {
+		return bdevControlPreview(ctlSvc, req)
+	}); err != nil {
+		log.Println("could not bind bdevControlPreview:", err)
+	}
+	if err := w.Bind("bdevControlRun", func(token string) (controls.RunResult, error) {
+		return bdevControlRun(ctlSvc, token)
+	}); err != nil {
+		log.Println("could not bind bdevControlRun:", err)
 	}
 	// bdevOpenItemFile (R9): opens a spec or result file only when the current
 	// snapshot lists that exact path (item_files.go). The page input is untrusted.
