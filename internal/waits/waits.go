@@ -182,11 +182,12 @@ func Build(in Input) (wait, outcomes []Item) {
 		}
 
 		// A sprint that ended (done, passing, or stopped as capped, failed or
-		// escalated) within the window is a finished outcome. A stopped sprint
-		// that already shows a failed_check outcome is not listed a second time.
+		// escalated) within the window is a finished outcome. A sprint that
+		// already shows a failed_check outcome is not listed a second time:
+		// one outcome row per sprint.
 		stopped := sprintStopped(s.Status)
 		ended := stopped || s.Phase == "done" || s.Status == "passing" || s.Status == "done"
-		if ended && !(stopped && failedOutcome) && now.Sub(s.UpdatedAt) <= OutcomeWindow {
+		if ended && !failedOutcome && now.Sub(s.UpdatedAt) <= OutcomeWindow {
 			detail := "test " + checkWord(s.Test) + ", verify " + checkWord(s.Verify)
 			if stopped {
 				detail = s.Status + ", " + detail

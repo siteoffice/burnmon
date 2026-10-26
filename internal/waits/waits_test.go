@@ -119,14 +119,10 @@ func TestOutcomesKeepOnlyLast24Hours(t *testing.T) {
 	sps[0].Verify = &graph.Check{Failed: true, Label: "verify fail"}
 	sps[0].Test = nil
 	_, o = Build(Input{Now: now, Sprints: sps[:1]})
-	found := false
-	for _, it := range o {
-		if it.Kind == "finished" && it.Detail == "test -, verify fail" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("outcomes = %+v", o)
+	// A done sprint with a failing check inside the window is one outcome row,
+	// the failed_check; it is not listed a second time as finished.
+	if len(o) != 1 || o[0].Kind != KindFailedCheck || o[0].ID != "check:a:verify" {
+		t.Fatalf("done sprint with a failing check listed twice or not at all: %+v", o)
 	}
 }
 
