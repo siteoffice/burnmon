@@ -238,6 +238,7 @@ type Flow struct {
 	UpdatedAt                         time.Time
 	Project, SpecPath, Dir            string
 	GateOpenedAt                      time.Time
+	GateToken                         string // gate.token when a string, else empty
 }
 
 // SubagentInfo is what a Claude subagent's meta file says about it.

@@ -139,7 +139,7 @@ func TestEmptyListsEncodeAsArraysNotNull(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"sources", "sessions", "processes", "waits_on_you", "nodes", "edges", "wait_items", "outcome_items"} {
+	for _, k := range []string{"sources", "sessions", "processes", "waits_on_you", "nodes", "edges", "wait_items", "outcome_items", "agent_sessions"} {
 		if string(m[k]) != "[]" {
 			t.Fatalf("%s should be [], got %s", k, m[k])
 		}
@@ -298,4 +298,82 @@ func TestFixtureHasItemsOfEveryKind(t *testing.T) {
 	}
 	check("wait_items", got.WaitItems, []string{"gate", "sprint", "failed_check", "question", "prompt", "session"})
 	check("outcome_items", got.OutcomeItems, []string{"finished", "failed_check"})
+}
+
+func TestBuildCarriesAgentSessions(t *testing.T) {
+	in := []AgentSession{{Kind: "background", ID: "ab12", PID: 1, StartedAt: 5}, {Kind: "interactive", SessionID: "example-parent", StartedAt: 6}}
+	s := Build(Input{Now: t0, TickSeconds: 5, AgentSessions: in})
+	if len(s.AgentSessions) != 2 || s.AgentSessions[0].ID != "ab12" || s.AgentSessions[1].SessionID != "example-parent" {
+		t.Fatalf("agent sessions not carried: %+v", s.AgentSessions)
+	}
+	if s.SchemaVersion != 1 {
+		t.Fatalf("agent_sessions is additive; schema_version must stay 1, got %d", s.SchemaVersion)
+	}
+}
+
+func TestFixtureHasAgentSessions(t *testing.T) {
+	got, err := Read(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.AgentSessions) != 3 {
+		t.Fatalf("agent_sessions = %+v", got.AgentSessions)
+	}
+	a, b, c := got.AgentSessions[0], got.AgentSessions[1], got.AgentSessions[2]
+	if a.Kind != "background" || a.ID != "ab12" || a.SessionID != "" {
+		t.Errorf("first entry: %+v", a)
+	}
+	if b.Kind != "background" || b.ID != "cd34" || b.SessionID != "example-sub" {
+		t.Errorf("second entry: %+v", b)
+	}
+	if c.Kind != "interactive" || c.ID != "" || c.SessionID != "example-parent" {
+		t.Errorf("third entry: %+v", c)
+	}
+	waitIDs := map[string]bool{}
+	for _, it := range got.WaitItems {
+		waitIDs[it.ID] = true
+	}
+	for _, e := range got.AgentSessions {
+		if e.Kind == "background" && e.Status == "waiting" {
+			id := "agentview:" + e.ID
+			if e.SessionID != "" {
+				id = "session:anthropic:" + e.SessionID
+			}
+			if !waitIDs[id] {
+				t.Errorf("waiting agent session %s has no wait item %s", e.ID, id)
+			}
+		}
+	}
+	for _, g := range []string{"gate:example__flow__1:G4", "gate:example__flow__2:G2"} {
+		if !waitIDs[g] {
+			t.Errorf("wait_items lacks %s", g)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		t.Fatal(err)
+	}
+	var entries []map[string]json.RawMessage
+	if err := json.Unmarshal(top["agent_sessions"], &entries); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if _, bad := e["cwd"]; bad {
+			t.Errorf("agent_sessions entry carries cwd: %v", e)
+		}
+		if _, bad := e["name"]; bad {
+			t.Errorf("agent_sessions entry carries name: %v", e)
+		}
+		for k, v := range e {
+			for _, bad := range []string{"ZND", "10_holding", "Valona"} {
+				if strings.Contains(string(v), bad) {
+					t.Errorf("agent_sessions %s holds %q", k, bad)
+				}
+			}
+		}
+	}
 }

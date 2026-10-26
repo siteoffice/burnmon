@@ -293,3 +293,28 @@ func TestReadForemanParkedReasonSurvivesBadLines(t *testing.T) {
 		t.Fatalf("sprints = %+v", sprints)
 	}
 }
+
+func TestReadForemanGateToken(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "flows", "p", "a", "flow.json"), `{"flow_id":"f-a","slug":"a","gate":{"id":"G2","status":"awaiting-owner","token":"t1"}}`)
+	write(t, filepath.Join(root, "flows", "p", "b", "flow.json"), `{"flow_id":"f-b","slug":"b","gate":{"id":"G2","status":"awaiting-owner","token":5}}`)
+	_, flows, err := ReadForeman(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(flows) != 2 {
+		t.Fatalf("flows = %+v", flows)
+	}
+	for _, f := range flows {
+		switch f.ID {
+		case "f-a":
+			if f.GateToken != "t1" || !f.GatePending {
+				t.Errorf("f-a = %+v", f)
+			}
+		case "f-b":
+			if f.GateToken != "" || f.Gate != "G2" {
+				t.Errorf("f-b = %+v", f)
+			}
+		}
+	}
+}

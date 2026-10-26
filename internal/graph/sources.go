@@ -338,6 +338,7 @@ func ReadForeman(root string) ([]Sprint, []Flow, error) {
 		var g map[string]json.RawMessage
 		if json.Unmarshal(m["gate"], &g) == nil {
 			f.GateOpenedAt = parseTime(rawString(g, "opened_at"))
+			f.GateToken = rawString(g, "token")
 		}
 		var fm struct {
 			SessionID string `json:"session_id"`

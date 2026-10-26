@@ -122,6 +122,24 @@ type Snapshot struct {
 	// prompts and checks that wait on the person, and what finished or failed.
 	WaitItems    []waits.Item `json:"wait_items"`
 	OutcomeItems []waits.Item `json:"outcome_items"`
+
+	// R10, added to version 1 as new fields only: the entries of the last
+	// finished "claude agents --json" poll. BurnMon Dev uses them to decide
+	// which control buttons show; cwd and name are never written.
+	AgentSessions []AgentSession `json:"agent_sessions"`
+}
+
+// AgentSession is one session from the last agent view poll.
+type AgentSession struct {
+	Kind       string `json:"kind"`         // "background" or "interactive"
+	ID         string `json:"id,omitempty"` // agent view short id, background only
+	State      string `json:"state,omitempty"`
+	Status     string `json:"status,omitempty"`
+	WaitingFor string `json:"waiting_for,omitempty"`
+	SessionID  string `json:"session_id,omitempty"`
+	PID        int    `json:"pid,omitempty"`
+	StartedAt  int64  `json:"started_at"`        // Unix ms
+	Project    string `json:"project,omitempty"` // last folder name of cwd; cwd itself is not written
 }
 
 // Input is everything Build needs, already collected by the caller.
@@ -139,6 +157,9 @@ type Input struct {
 	// R9: built by the caller with waits.Build, already sorted.
 	WaitItems    []waits.Item
 	OutcomeItems []waits.Item
+
+	// R10: the last agent view poll, in the order claude gave it.
+	AgentSessions []AgentSession
 }
 
 func cost(usd, fx float64) Cost {
@@ -169,6 +190,7 @@ func Build(in Input) Snapshot {
 		Edges:         append([]graph.Edge{}, in.Graph.Edges...),
 		WaitItems:     append([]waits.Item{}, in.WaitItems...),
 		OutcomeItems:  append([]waits.Item{}, in.OutcomeItems...),
+		AgentSessions: append([]AgentSession{}, in.AgentSessions...),
 	}
 
 	var walk func(ls *live.Session, parent string)

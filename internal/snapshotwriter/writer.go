@@ -263,5 +263,7 @@ func (w *Writer) Once() error {
 
 		WaitItems:    waitItems,
 		OutcomeItems: outcomeItems,
+
+		AgentSessions: gr.agentSessions(),
 	}))
 }
