@@ -22,7 +22,7 @@ func TestRefuses(t *testing.T) {
 			t.Errorf("Refuses(%d, %q) = %v, want %q", c.pid, c.cwd, err, c.want)
 		}
 	}
-	for _, cwd := range []string{`C:\example\burnmon-other`, `C:\example`, `C:\example\burnmon\..\other`, `D:\example\burnmon`} {
+	for _, cwd := range []string{`C:\example\burnmon-other`, `C:\example`, `C:\example\burnmon\..\other`, `C:\example2\burnmon`} {
 		if err := s.Refuses(40, cwd); err != nil {
 			t.Errorf("Refuses(40, %q) = %v, want nil", cwd, err)
 		}

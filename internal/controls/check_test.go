@@ -38,7 +38,8 @@ func TestCheckAgent(t *testing.T) {
 		{"pid", mod(func(e *waits.AgentEntry) { e.PID = 43 }), "the session changed since the preview, press again"},
 		{"started", mod(func(e *waits.AgentEntry) { e.StartedAt = 2 }), "the session changed since the preview, press again"},
 		{"stopped", mod(func(e *waits.AgentEntry) { e.State = "stopped" }), ended},
-		{"done", mod(func(e *waits.AgentEntry) { e.State = "done" }), ended},
+		{"unknown", mod(func(e *waits.AgentEntry) { e.State = "paused" }), ended},
+		{"empty state", mod(func(e *waits.AgentEntry) { e.State = "" }), ended},
 		{"failed", mod(func(e *waits.AgentEntry) { e.State = "failed" }), ended},
 		{"ancestor", mod(func(e *waits.AgentEntry) { e.PID = 50 }), "this session started BurnMon Dev"},
 		{"own folder", mod(func(e *waits.AgentEntry) { e.Cwd = `C:\example\burnmon\x` }), "this session works in BurnMon Dev's own folder"},
@@ -53,10 +54,18 @@ func TestCheckAgent(t *testing.T) {
 			t.Errorf("%s: got %v, want %q", c.name, err, c.want)
 		}
 	}
-	// Attach never restarts a session: an ended one is refused like Stop.
-	for _, st := range []string{"stopped", "done", "failed"} {
-		if _, err := CheckAgent(agentTarget(Attach), mod(func(e *waits.AgentEntry) { e.State = st }), self); err == nil || err.Error() != ended {
-			t.Errorf("attach on %s: %v", st, err)
+	// Allowlist: working, blocked and done (a live process) pass both controls.
+	// Attach would restart a stopped session, so it is refused by decision.
+	for _, c := range []string{Stop, Attach} {
+		for _, st := range []string{"working", "blocked", "done"} {
+			if _, err := CheckAgent(agentTarget(c), mod(func(e *waits.AgentEntry) { e.State = st }), self); err != nil {
+				t.Errorf("%s on %s: %v", c, st, err)
+			}
+		}
+		for _, st := range []string{"stopped", "failed", "", "paused"} {
+			if _, err := CheckAgent(agentTarget(c), mod(func(e *waits.AgentEntry) { e.State = st }), self); err == nil || err.Error() != ended {
+				t.Errorf("%s on %q: %v", c, st, err)
+			}
 		}
 	}
 	// Never-self applies to attach too.

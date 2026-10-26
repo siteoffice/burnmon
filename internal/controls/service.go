@@ -301,8 +301,10 @@ func (s *Service) previewAgent(req PreviewRequest, snap *snapshot.Snapshot, self
 	if !s.previewMu.TryLock() {
 		return Target{}, nil, errors.New("another preview is running, try again")
 	}
-	fresh, err := s.freshAgents()
-	s.previewMu.Unlock()
+	fresh, err := func() ([]waits.AgentEntry, error) {
+		defer s.previewMu.Unlock()
+		return s.freshAgents()
+	}()
 	if err != nil {
 		return Target{}, nil, err
 	}

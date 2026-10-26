@@ -49,11 +49,13 @@ func CheckAgent(t Target, fresh []waits.AgentEntry, self Self) (waits.AgentEntry
 	if e.Kind != "background" {
 		return waits.AgentEntry{}, errors.New("only background sessions have controls")
 	}
-	// Attach never restarts a session: `claude attach` only opens a live one,
-	// and a pid exists only while the process is alive. An ended session is
-	// refused for both controls, with a reason that says what to do.
+	// Allowlist, per the agent-view JSON states: working, blocked and done all
+	// mean a live process (done is ready for the next prompt). Attach would
+	// restart a stopped session, so the control is refused for it by decision,
+	// as are failed and any state this build does not know.
 	switch e.State {
-	case "stopped", "done", "failed":
+	case "working", "blocked", "done":
+	default:
 		return waits.AgentEntry{}, errors.New("the session has ended, restart it from a terminal")
 	}
 	if e.PID <= 0 || t.PID <= 0 {

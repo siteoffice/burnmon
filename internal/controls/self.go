@@ -61,6 +61,10 @@ func (s Self) Refuses(pid int, cwd string) error {
 		// A UNC spelling may name the same folder through a share we
 		// cannot map. It cannot be proven different, so refuse.
 		return errors.New(errCwdUnsure)
+	case dir.unc != root.unc && localHost(root.parts[0]):
+		// The exe folder is on a loopback share that is not an admin-share
+		// mapping, so it may be the same folder as a drive path. Refuse.
+		return errors.New(errCwdUnsure)
 	case dir.unc != root.unc:
 		return nil
 	}
@@ -174,6 +178,8 @@ func (c cpath) String() string {
 // that exists on disk with its resolved form (symlinks, junctions, subst and
 // mapped drives, 8.3 short names expanded). The part that does not exist
 // stays lexical, with the lexical checks already applied. It fails closed:
+// when no prefix exists at all it returns not-ok, since only a path whose
+// existing part was resolved may be judged lexically for the rest;
 // when the longest existing prefix cannot be resolved (a dangling junction,
 // no access, an unexpected error) it returns not-ok and never the lexical
 // path, because the lexical path may hide a link into BurnMon Dev's folder.
@@ -206,7 +212,10 @@ func canonical(p string) (cpath, bool) {
 		rl.parts = append(rl.parts, lex.parts[n:]...)
 		return rl, true
 	}
-	return lex, true
+	// No prefix exists in this process's namespace (a drive letter from subst
+	// or a mapped drive in another logon session or token, or an unknown UNC
+	// host). Nothing was resolved, so the path cannot be judged.
+	return cpath{}, false
 }
 
 // adminShareToDrive rewrites \\localhost\C$\x as C:\x. Any other UNC path is
@@ -223,7 +232,7 @@ func adminShareToDrive(c cpath) cpath {
 }
 
 func localHost(h string) bool {
-	if h == "." || strings.EqualFold(h, "localhost") || h == "127.0.0.1" {
+	if h == "." || strings.EqualFold(h, "localhost") || h == "127.0.0.1" || h == "::1" {
 		return true
 	}
 	if n, err := os.Hostname(); err == nil && strings.EqualFold(h, n) {

@@ -915,7 +915,7 @@ func TestDuplicateFlowIDIsRefused(t *testing.T) {
 }
 
 func TestAttachAndStopRefuseEndedSession(t *testing.T) {
-	for _, state := range []string{"stopped", "done", "failed"} {
+	for _, state := range []string{"stopped", "failed", "paused"} {
 		for _, c := range []string{Stop, Attach} {
 			r := newRig(t)
 			r.agent = agentJSON("ab12", 4242, state, `C:\example\other`)
@@ -930,6 +930,9 @@ func TestOnePreviewReadsTheAgentViewAtATime(t *testing.T) {
 	r := newRig(t)
 	entered := make(chan struct{}, 4)
 	release := make(chan struct{})
+	var once sync.Once
+	closeRelease := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(closeRelease)
 	var reads atomic.Int32
 	r.env.AgentView = func(ctx context.Context) ([]byte, error) {
 		reads.Add(1)
@@ -947,11 +950,30 @@ func TestOnePreviewReadsTheAgentViewAtATime(t *testing.T) {
 	if n := reads.Load(); n != 1 {
 		t.Fatalf("agent view read %d times", n)
 	}
-	close(release)
+	closeRelease()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.preview(Stop, "ab12"); err != nil {
 		t.Fatalf("after release: %v", err)
+	}
+}
+
+func TestPanickingAgentViewDoesNotLeavePreviewLocked(t *testing.T) {
+	r := newRig(t)
+	var calls atomic.Int32
+	r.env.AgentView = func(ctx context.Context) ([]byte, error) {
+		if calls.Add(1) == 1 {
+			panic("boom")
+		}
+		return []byte(r.agent), nil
+	}
+	r.rebuild()
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = r.preview(Stop, "ab12")
+	}()
+	if _, err := r.preview(Stop, "ab12"); err != nil {
+		t.Fatalf("preview after a panic: %v", err)
 	}
 }
