@@ -2,7 +2,11 @@
 // command for each control, holds the short-lived preview tokens, re-checks
 // the target against a fresh read right before it runs, and writes one audit
 // line per run. Rules: never a shell (no cmd /c, WMI, CIM or PSExec) and never
-// a kill by pid; stopping a session is "claude stop <id>" only.
+// a kill by pid; stopping a session is "claude stop <id>" only. Never-self: a
+// control never targets the session or process that runs BurnMon Dev, and it
+// refuses a session that works inside BurnMon Dev's folder or in a folder that
+// contains it. The second direction implements "the session that asked for the
+// build" conservatively, because nothing identifies that session.
 package controls
 
 import (

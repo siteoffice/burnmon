@@ -315,3 +315,70 @@ func TestCurrentSelfFailsClosed(t *testing.T) {
 		}
 	}
 }
+
+// --- cwd that contains BurnMon Dev's folder --------------------------------
+
+func mustRefuseContains(t *testing.T, s Self, cwd string) {
+	t.Helper()
+	if err := s.Refuses(40, cwd); err == nil || err.Error() != containsFolder {
+		t.Errorf("Refuses(40, %q) = %v, want containing-folder refusal", cwd, err)
+	}
+}
+
+// containTree makes <temp>\parent\burnmon and <temp>\parent\burnmon-other.
+func containTree(t *testing.T) (parent, exe string) {
+	t.Helper()
+	r, ok := resolveReal(t.TempDir())
+	if !ok {
+		t.Fatal("cannot resolve temp dir")
+	}
+	parent = filepath.Join(r, "parent")
+	exe = filepath.Join(parent, "burnmon")
+	for _, d := range []string{exe, filepath.Join(parent, "burnmon-other"), filepath.Join(r, "unrelated")} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return parent, exe
+}
+
+func TestRefusesCwdThatContainsExeFolder(t *testing.T) {
+	parent, exe := containTree(t)
+	s := Self{PID: 10, ExeDir: exe}
+	mustRefuse(t, s, exe)
+	mustRefuseContains(t, s, parent)
+	mustRefuseContains(t, s, filepath.Dir(parent))
+	mustRefuseContains(t, s, filepath.VolumeName(parent)+`\`)
+	mustRefuseContains(t, s, parent+".")
+	mustRefuseContains(t, s, strings.ToUpper(parent))
+	for _, cwd := range []string{
+		filepath.Join(parent, "burnmon-other"),
+		filepath.Join(filepath.Dir(parent), "unrelated"),
+	} {
+		if err := s.Refuses(40, cwd); err != nil {
+			t.Errorf("Refuses(40, %q) = %v, want allowed", cwd, err)
+		}
+	}
+}
+
+func TestRefusesCwdThroughJunctionToParent(t *testing.T) {
+	parent, exe := containTree(t)
+	junc := filepath.Join(filepath.Dir(parent), "juncparent")
+	mkJunction(t, junc, parent)
+	mustRefuseContains(t, Self{PID: 10, ExeDir: exe}, junc)
+}
+
+func TestRefusesShortNameOfParent(t *testing.T) {
+	parent, exe := containTree(t)
+	long, _ := windows.UTF16PtrFromString(parent)
+	buf := make([]uint16, 1024)
+	n, err := windows.GetShortPathName(long, &buf[0], uint32(len(buf)))
+	if err != nil || n == 0 {
+		t.Skipf("GetShortPathName failed: %v", err)
+	}
+	short := windows.UTF16ToString(buf[:n])
+	if strings.EqualFold(short, parent) {
+		t.Skip("8.3 short names are disabled on this volume")
+	}
+	mustRefuseContains(t, Self{PID: 10, ExeDir: exe}, short)
+}

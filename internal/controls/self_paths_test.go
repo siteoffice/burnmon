@@ -53,7 +53,7 @@ func TestRefusesCwdForms(t *testing.T) {
 			t.Errorf("Refuses(40, %q) = %v, want %q", c.cwd, err, c.want)
 		}
 	}
-	for _, cwd := range []string{`C:\example\burnmon-other`, `C:\example\burnmon...x`, `C:\example2\burnmon`, `C:\`} {
+	for _, cwd := range []string{`C:\example\burnmon-other`, `C:\example\burnmon...x`, `C:\example2\burnmon`, `C:\example\burnmon2`} {
 		if err := s.Refuses(40, cwd); err != nil {
 			t.Errorf("Refuses(40, %q) = %v, want nil", cwd, err)
 		}

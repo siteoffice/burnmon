@@ -32,6 +32,15 @@ const (
 // folder must not get a control. It fails closed: a pid below 1, and a
 // working folder that is empty, not absolute or cannot be proven different
 // from BurnMon Dev's own folder, are all refused.
+//
+// Never-self works in both directions on the working folder. A session is
+// refused when it works inside BurnMon Dev's folder, and also when it works in
+// a folder that contains it (a parent, a grandparent or a drive root). Nothing
+// identifies the session that asked for the build, but that session usually
+// works in the project root or the folder that holds the build output, so
+// refusing every session that contains BurnMon Dev implements "the session
+// that asked for the build" conservatively. Both rules use the same canonical,
+// component-wise comparison.
 func (s Self) Refuses(pid int, cwd string) error {
 	if pid <= 0 {
 		return errors.New(errNoPID)
@@ -70,6 +79,9 @@ func (s Self) Refuses(pid int, cwd string) error {
 	}
 	if within(dir, root) {
 		return errors.New("this session works in BurnMon Dev's own folder")
+	}
+	if within(root, dir) {
+		return errors.New("this session works in a folder that contains BurnMon Dev")
 	}
 	return nil
 }
