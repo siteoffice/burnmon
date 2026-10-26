@@ -8,7 +8,7 @@ everything stays on this device. On Windows there is also no server and no open 
 macOS and Linux, `burnmon` runs one web server that only this computer can reach
 (127.0.0.1); see "macOS and Linux".
 
-BurnMon is the successor of [claudecost](https://github.com/wilcodetree/claudecost),
+BurnMon is the successor of [claudecost](https://github.com/siteoffice/claudecost),
 renamed and extended from v0.2 onward. Repo:
 [siteoffice/burnmon](https://github.com/siteoffice/burnmon). Plan:
 `02_roadmap\2026-09-22_burnmon_plan.md`; the spec building the current release:
@@ -84,7 +84,7 @@ Set it up once:
 
 1. Start BurnMon once. It creates `~\.burnmon\cloud`.
 2. Install the plugin "BurnMon cloud" from the ZND Skills Public marketplace (GitHub
-   `wilcodetree/znd-skills-public`). Updates arrive through the marketplace. Without the
+   `zero-nonsense-dev/znd-skills-public`). Updates arrive through the marketplace. Without the
    marketplace, build it yourself (`tools\burnmon-cloud\build.ps1`, no arguments) and add
    `dist\burnmon-cloud-<version>.plugin` under Customize > Plugins > Add.
 3. Connect the folder `~\.burnmon` to the cloud sessions you want counted. In a Cowork
