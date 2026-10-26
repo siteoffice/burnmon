@@ -229,13 +229,6 @@ var allowlist = map[string]string{
 	`~/.copilot/session-store.db`:          "Copilot CLI data file on the user's computer, outside the repo",
 }
 
-func requireDoccheck(t *testing.T) {
-	t.Helper()
-	if os.Getenv("BURNMON_DOCCHECK") != "1" {
-		t.Skip("enabled in Task 5 (set BURNMON_DOCCHECK=1); stays red until the documents are updated")
-	}
-}
-
 func repoDocs(t *testing.T, root string) map[string]string {
 	t.Helper()
 	docs := map[string]string{}
@@ -265,7 +258,6 @@ func report(t *testing.T, fs []Finding) {
 }
 
 func TestDocCheckPassesOnRepoDocs(t *testing.T) {
-	requireDoccheck(t)
 	root, c := realRoot(t)
 	docs := repoDocs(t, root)
 	for name, doc := range docs {
@@ -288,22 +280,18 @@ func reverseOf(t *testing.T, kind string) []Finding {
 }
 
 func TestEveryKeydownKeyIsInReadme(t *testing.T) {
-	requireDoccheck(t)
 	report(t, reverseOf(t, "hotkey"))
 }
 
 func TestEveryCliSubcommandIsInReadme(t *testing.T) {
-	requireDoccheck(t)
 	report(t, reverseOf(t, "subcommand"))
 }
 
 func TestEveryPartIDIsInReadme(t *testing.T) {
-	requireDoccheck(t)
 	report(t, reverseOf(t, "section"))
 }
 
 func TestNewConfigKeysAreInReadme(t *testing.T) {
-	requireDoccheck(t)
 	report(t, reverseOf(t, "key"))
 }
 

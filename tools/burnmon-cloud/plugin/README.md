@@ -58,7 +58,7 @@ count once:
   name such as `agent-<id>` (`tools\burnmon-cloud\plugin\scripts\extract.py`, function usage_row).
 - BurnMon reads a row whose agent is not `main` as session `agent-<id>` with the parent
   session as its parent id (`internal\adapter\claude\cloud.go`). A row without an agent
-  field (an older plugin) stays on its session.
+  field (an older plugin), or whose agent equals its session id, stays on its session.
 - When the same request arrives again as a subagent row, the copy that an earlier version
   folded into the parent is removed (`internal\store\store.go`, `UpsertEvents`). Only a
   Cowork (Cloud) row with no parent of its own is removed.
@@ -66,11 +66,12 @@ count once:
   `internal\adapter\claude\cloud_subagent_test.go` and
   `TestUpsertCloudSubagentMovesFoldedRow` in `internal\store\cloud_subagent_test.go`; on the
   plugin side test_extract_includes_subagents in `tools\burnmon-cloud\tests\test_extract.py`.
-- BurnMon Dev nests a session under its parent by that parent id (`cmd\burnmon-dev\page.html`).
+- BurnMon Dev's snapshot builder nests a running subagent under its running parent by that
+  parent id when the parent is also present (`internal\live\live.go`, `BuildSnapshot`).
   Not run live for a cloud session in this documentation pass. The row carries no agent type,
   so a cloud subagent is not labelled by type.
-- Earlier cloud sessions stay as they were stored: only the latest session file reaches your
-  computer, so BurnMon cannot re-read them.
+- Rows stored before this change stay as they were stored, except when the same request
+  arrives again as a subagent row: only then does the store remove the folded copy.
 
 ## What it does not cover
 

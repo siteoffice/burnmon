@@ -248,8 +248,9 @@ can set since, until and a label. When `owners` rules exist, tick at least one o
   sprints when a Foreman folder is set). `-foreman <dir>` overrides `foreman_root`.
 - `burnmon-cli waits -json`: list what waits on you and the outcomes of the last 24 hours
   from Foreman's state, read only. It needs `foreman_root` or `-foreman <dir>`, and
-  prints a message and exits 1 without one. The same items are the Waits on you and
-  Outcomes sections of BurnMon Dev.
+  prints a message and exits 1 without one. Its Foreman items are the same as in the
+  Waits on you and Outcomes sections of BurnMon Dev; session and agent view items are not
+  in its output.
 - `burnmon-cli backfill-parents`: set the parent session on Claude subagent rows stored
   before the adapter read it. A dry run that only counts rows; `-apply` writes. Copy the
   store file first.
@@ -485,7 +486,7 @@ Each item has one of these kinds in the snapshot:
 |---|---|
 | `gate` | a Foreman flow with an open gate |
 | `sprint` | a waiting sprint |
-| `failed_check` | a stopped or finished sprint whose last check failed |
+| `failed_check` | a sprint whose test or verify check failed: a wait while the sprint is stopped, an outcome when it failed in the last 24 hours |
 | `question` | an agent view session that asks a question |
 | `prompt` | an agent view session that waits on a permission prompt |
 | `session` | a session the graph shows as waiting on you |
@@ -508,9 +509,13 @@ and `d34` cover the layout, but none of them was run in B1 to B4 because the app
 ### Controls
 
 BurnMon Dev can run four controls: `stop` and `attach` on an agent view session, and
-`approve` and `send_back` on a Foreman gate. Every control is off by default. To use one
-you need both `claude_path` and `agent_view` in `burnmon.json` (see "Foreman and Claude
-Code settings"), and then its own switch in the gear dialog.
+`approve` and `send_back` on a Foreman gate. Every control is off by default and has its
+own switch in the gear dialog. Besides the switch, `stop` and `attach` need `agent_view`
+on and a `claude.exe` that BurnMon can start directly: `claude_path`, else the first
+`claude` on `PATH` (see "Foreman and Claude Code settings"). `approve` and `send_back`
+need `foreman_root`, the file `flow_transition.py` in its `flows` folder, subfolder `_lib`,
+and a `python.exe` on `PATH` (the Microsoft Store alias is refused); they do not start `claude`. A control
+that cannot be used shows its reason in the gear dialog.
 
 - `stop` runs `claude stop <id>` and `attach` runs `claude attach <id>`. Both are refused for a
   session that has ended, because attach would restart a stopped session.
@@ -574,7 +579,7 @@ Three more keys go in `burnmon.json`. `burnmon.example.json` does not list them 
 - `agent_view`: `true` turns on the agent view poller. Default off.
 - `claude_path`: an absolute path to `claude.exe`. It must be an existing file and a
   `.exe` on Windows; a `.cmd` shim is refused. Empty means a `claude.exe` on `PATH`, which
-  is enough for the poller but not for the controls.
+  the poller and the controls accept too.
 
 ## WSL
 
@@ -610,10 +615,12 @@ usage is simply not on your disk.
 Costs shown for Claude are allocated shares of a flat monthly invoice, not money owed by
 anyone.
 
-Two optional features start `claude` on this computer, and only after you switch them on:
+Two optional features start programs on this computer, and only after you switch them on:
 the agent view poller (`agent_view`) and the controls. The poller runs only
-`claude agents --json` (`internal\snapshotwriter\agentview.go`). Neither reads Claude
-Code's own files or uses an undocumented endpoint.
+`claude agents --json` (`internal\snapshotwriter\agentview.go`). `stop` and `attach` run
+`claude stop <id>` and `claude attach <id>`; `approve` and `send_back` run `python` on a
+script that calls Foreman's own gate command. All of them use documented commands, no
+undocumented endpoint.
 
 ## Build
 
