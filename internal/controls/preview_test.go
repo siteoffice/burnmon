@@ -170,7 +170,7 @@ func TestKey(t *testing.T) {
 		t.Fatal(got)
 	}
 	g := Target{Control: Approve, FlowID: "f1", Gate: "G2"}
-	if got := g.Key(); got != "approve|gate:f1:G2" {
+	if got := g.Key(); got != "approve|gate:2:f1:G2" {
 		t.Fatal(got)
 	}
 }

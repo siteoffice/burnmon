@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -39,7 +40,9 @@ func (t Target) Key() string {
 	if t.AgentID != "" {
 		return t.Control + "|" + t.AgentID
 	}
-	return t.Control + "|gate:" + t.FlowID + ":" + t.Gate
+	// Flow ids and gates are not validated in this package, so the flow id is
+	// length-prefixed: no id or gate containing ":" can collide with another.
+	return t.Control + "|gate:" + strconv.Itoa(len(t.FlowID)) + ":" + t.FlowID + ":" + t.Gate
 }
 
 // Label is the human name of the target.
@@ -99,6 +102,8 @@ func (p *Previews) Add(t Target, argv []string) Pending {
 		Created: now,
 	}
 	p.byToken[pe.Token] = pe
+	// Return a copy so the caller's Argv is never the stored slice.
+	pe.Argv = append([]string(nil), pe.Argv...)
 	return pe
 }
 
@@ -121,5 +126,6 @@ func (p *Previews) Take(token string) (Pending, error) {
 		return Pending{}, ErrTooSoon
 	}
 	delete(p.byToken, token)
+	pe.Argv = append([]string(nil), pe.Argv...)
 	return pe, nil
 }
