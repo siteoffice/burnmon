@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
+	"burnmon/internal/snapshot"
 	"burnmon/internal/waits"
 )
 
@@ -131,6 +133,33 @@ func (gr *GraphReaders) startAgentViewIfDue(now time.Time) {
 	p.running, p.started = true, now
 	p.mu.Unlock()
 	go gr.runAgentView(context.Background())
+}
+
+// agentSessions is the last finished poll as snapshot entries, in the order
+// claude gave them; empty when the runner is off or the last poll failed. The
+// working folder is reduced to its last name and nothing else is kept.
+func (gr *GraphReaders) agentSessions() []snapshot.AgentSession {
+	out := []snapshot.AgentSession{}
+	if gr == nil || gr.AgentView == nil {
+		return out
+	}
+	entries, _, _, _ := gr.agentViewState()
+	for _, e := range entries {
+		out = append(out, snapshot.AgentSession{
+			Kind: e.Kind, ID: e.ID, State: e.State, Status: e.Status, WaitingFor: e.WaitingFor,
+			SessionID: e.SessionID, PID: e.PID, StartedAt: e.StartedAt, Project: lastFolder(e.Cwd),
+		})
+	}
+	return out
+}
+
+// lastFolder is the last element of a Windows or slash path, "" for none.
+func lastFolder(p string) string {
+	p = strings.TrimRight(p, `\/`)
+	if i := strings.LastIndexAny(p, `\/`); i >= 0 {
+		p = p[i+1:]
+	}
+	return p
 }
 
 // agentViewState is the last finished poll: its entries, read time and error.

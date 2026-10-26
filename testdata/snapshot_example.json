@@ -465,6 +465,17 @@
       "spec_path": "C:\\example\\specs\\2026-10-20-example-spec.md",
       "result_path": "C:\\example\\sprints\\sprint-example\\report.md",
       "source": "foreman"
+    },
+    {
+      "kind": "gate",
+      "id": "gate:example__flow__2:G2",
+      "title": "flow-review",
+      "project": "example",
+      "detail": "G2",
+      "since": "2026-10-23T07:30:00Z",
+      "age_seconds": 9000,
+      "spec_path": "C:\\example\\specs\\2026-10-21-example-review.md",
+      "source": "foreman"
     }
   ],
   "outcome_items": [
@@ -491,6 +502,37 @@
       "spec_path": "C:\\example\\specs\\2026-10-18-done-spec.md",
       "result_path": "C:\\example\\sprints\\done-example\\report.md",
       "source": "foreman"
+    }
+  ],
+  "agent_sessions": [
+    {
+      "kind": "background",
+      "id": "ab12",
+      "state": "blocked",
+      "status": "waiting",
+      "waiting_for": "input needed",
+      "pid": 4242,
+      "started_at": 1761213600000,
+      "project": "other"
+    },
+    {
+      "kind": "background",
+      "id": "cd34",
+      "state": "blocked",
+      "status": "waiting",
+      "waiting_for": "permission prompt",
+      "session_id": "example-sub",
+      "pid": 4343,
+      "started_at": 1761213600000,
+      "project": "project"
+    },
+    {
+      "kind": "interactive",
+      "status": "busy",
+      "session_id": "example-parent",
+      "pid": 4444,
+      "started_at": 1761213600000,
+      "project": "project"
     }
   ]
 }

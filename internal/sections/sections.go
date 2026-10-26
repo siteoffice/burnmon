@@ -89,6 +89,21 @@ type State struct {
 	Scrollbar bool            `json:"overall_scrollbar"`
 	Standard  map[string]bool `json:"parts_standard"`
 	PlainSet  map[string]bool `json:"parts_plain"`
+	// Controls holds one switch per control (ControlIDs). Every control is off
+	// until the person turns it on; a missing key is off.
+	Controls map[string]bool `json:"controls"`
+}
+
+// ControlIDs are the control switch ids, the same list as controls.All (a test
+// keeps them equal; this package does not import controls).
+var ControlIDs = []string{"stop", "attach", "approve", "send_back"}
+
+func controlsOf(on func(id string) bool) map[string]bool {
+	m := make(map[string]bool, len(ControlIDs))
+	for _, id := range ControlIDs {
+		m[id] = on(id)
+	}
+	return m
 }
 
 func listOf(on func(id string) bool) map[string]bool {
@@ -107,6 +122,7 @@ func Default() State {
 		Scrollbar: true,
 		Standard:  listOf(func(string) bool { return true }),
 		PlainSet:  listOf(func(id string) bool { return plain[id] }),
+		Controls:  controlsOf(func(string) bool { return false }),
 	}
 }
 
@@ -156,6 +172,16 @@ func (s State) WithPlain(plain bool) State {
 	return out
 }
 
+// WithControl returns a copy with one control switched. An unknown id changes
+// nothing.
+func (s State) WithControl(id string, on bool) State {
+	out := s.Normalize()
+	if _, ok := out.Controls[id]; ok {
+		out.Controls[id] = on
+	}
+	return out
+}
+
 // WithScrollbar returns a copy with the Overall scrollbar switched.
 func (s State) WithScrollbar(on bool) State {
 	out := s.Normalize()
@@ -175,7 +201,8 @@ func (s State) Normalize() State {
 			return def[id]
 		})
 	}
-	return State{Plain: s.Plain, Scrollbar: s.Scrollbar, Standard: pick(s.Standard, d.Standard), PlainSet: pick(s.PlainSet, d.PlainSet)}
+	ctl := controlsOf(func(id string) bool { return s.Controls[id] })
+	return State{Plain: s.Plain, Scrollbar: s.Scrollbar, Standard: pick(s.Standard, d.Standard), PlainSet: pick(s.PlainSet, d.PlainSet), Controls: ctl}
 }
 
 // r8Fill completes an R8 list (seven sections) with its R8 defaults.
@@ -215,7 +242,7 @@ func migrateR8(plain bool, standard, plainSet map[string]bool) State {
 	std[Todo] = true
 	pl[Burn] = plainSet[Burn]
 	pl[Processes] = plainSet[Processes]
-	return State{Plain: plain, Scrollbar: true, Standard: std, PlainSet: pl}
+	return State{Plain: plain, Scrollbar: true, Standard: std, PlainSet: pl, Controls: controlsOf(func(string) bool { return false })}
 }
 
 // Load reads the state from the view file at path. A missing or unparsable
@@ -234,6 +261,7 @@ func Load(path string) State {
 		PlainSet  map[string]bool `json:"parts_plain"`
 		R8Std     map[string]bool `json:"sections_standard"`
 		R8Plain   map[string]bool `json:"sections_plain"`
+		Controls  map[string]bool `json:"controls"`
 	}
 	if json.Unmarshal(b, &f) != nil {
 		return Default()
@@ -248,6 +276,7 @@ func Load(path string) State {
 	if f.Scrollbar != nil {
 		st.Scrollbar = *f.Scrollbar
 	}
+	st.Controls = f.Controls
 	return st.Normalize()
 }
 
@@ -276,6 +305,9 @@ func Save(path string, s State) error {
 		return err
 	}
 	if rest["parts_plain"], err = json.Marshal(s.PlainSet); err != nil {
+		return err
+	}
+	if rest["controls"], err = json.Marshal(s.Controls); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(rest, "", "  ")

@@ -61,3 +61,35 @@ func (gr *GraphReaders) EnableAgentViewFor(look func(string) (string, error), go
 	}
 	gr.AgentView, gr.agentViewRefused = ClaudeAgentView(p), nil
 }
+
+// ResolveClaudeConfigured returns the claude binary named by claude_path in
+// burnmon.json, or, when configured is empty, what ResolveClaudeFor finds.
+// A configured path must be absolute, a .exe on Windows, and a regular file
+// (not a link).
+func ResolveClaudeConfigured(configured string, look func(string) (string, error), goos string) (string, error) {
+	if configured == "" {
+		return ResolveClaudeFor(look, goos)
+	}
+	if !filepath.IsAbs(configured) {
+		return "", errors.New("claude_path is not absolute")
+	}
+	if goos == "windows" && strings.ToLower(filepath.Ext(configured)) != ".exe" {
+		return "", errors.New("claude_path is not a .exe")
+	}
+	fi, err := os.Lstat(configured)
+	if err != nil || !fi.Mode().IsRegular() {
+		return "", errors.New("claude_path is not a file")
+	}
+	return configured, nil
+}
+
+// EnableAgentViewWith is EnableAgentView with the configured claude_path
+// taken into account (see ResolveClaudeConfigured).
+func (gr *GraphReaders) EnableAgentViewWith(configured string, look func(string) (string, error)) {
+	p, err := ResolveClaudeConfigured(configured, look, runtime.GOOS)
+	if err != nil {
+		gr.AgentView, gr.agentViewRefused = nil, err
+		return
+	}
+	gr.AgentView, gr.agentViewRefused = ClaudeAgentView(p), nil
+}

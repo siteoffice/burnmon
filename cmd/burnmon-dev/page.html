@@ -399,6 +399,14 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .seclist > .secitem{flex:0 0 auto}
 .secitemtxt{min-width:0; overflow:hidden; text-overflow:ellipsis}
 .secitemmeta{flex:0 0 auto}
+.ctl{font:inherit; font-size:.85em; padding:0 .4em; margin-left:.3em; border:1px solid var(--amber); background:none; color:var(--amber); cursor:pointer}
+.ctl:focus-visible{outline:2px solid var(--amber2); outline-offset:1px}
+.ctl[disabled]{opacity:.5; cursor:default}
+.ctlprev{white-space:pre-wrap; word-break:break-all; max-height:6.5em; overflow:auto}
+.ctlcmd{font-family:monospace}
+.ctlres.bad{color:var(--amber)}
+.seclist > .ctlprev, .seclist > .ctlres{flex:0 0 auto}
+.ctlwhy{font-size:11px; white-space:normal; max-width:320px}
 .secpanel.sec-aged .secbody{opacity:.55}
 .secaged{color:var(--amber); font-size:11px}
 .secfile{color:var(--amber)}
@@ -642,6 +650,14 @@ body.plain #mapOverlay{font-size:13.5px}
   <h4>Sections each mode shows</h4>
   <label class="setrow"><input type="checkbox" id="secScrollbar"> Overall scrollbar</label>
   <div class="setgrid" id="secSettingsCols"></div>
+  <div id="secControls">
+    <h4>Controls</h4>
+    <div class="sechint ctlwhy">Off until you tick them. Stop a session and Attach to a session need claude_path and agent_view in burnmon.json. Approve a gate and Send a gate back need python on PATH and foreman_root. Each press first shows the exact command; a second press on Confirm runs it within 5 seconds.</div>
+    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="stop"> Stop a session</label><div class="dim ctlwhy" data-ctl-why="stop"></div></div>
+    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="attach"> Attach to a session</label><div class="dim ctlwhy" data-ctl-why="attach"></div></div>
+    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="approve"> Approve a gate</label><div class="dim ctlwhy" data-ctl-why="approve"></div></div>
+    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
+  </div>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
@@ -3465,6 +3481,159 @@ body.plain #mapOverlay{font-size:13.5px}
     failed_check:['failed check','A check failed'], question:['question','Question for you'],
     prompt:['permission prompt','Approval needed'], session:['session waiting','Session waiting for you'],
     finished:['finished','Done'] };
+  // ---- B4 controls: chips, preview line, result ---------------------------
+  // The page decides nothing about what runs. A chip press asks Go for a
+  // preview (a control name and a target id, nothing else) and shows the exact
+  // command Go returns, as text. A separate Confirm button sends only the
+  // token Go gave. Go checks the target again, refuses a second press under
+  // 400 ms and lets the token live 5 s; the page mirrors both so a double
+  // click sends at most one run.
+  var CTL_WORD = { stop:['stop','Stop'], attach:['attach','Open'], approve:['approve','Approve'], send_back:['send back','Send back'] };
+  var CTL_ORDER = ['stop','attach','approve','send_back'];
+  var CTL_GAP = 400;
+  var CTL_TTL = 5000;
+  var CTL_RESULT_MS = 10000;
+  var ctlState = { ready:{}, on:{}, why:{}, verdicts:{} };
+  var ctlPending = {};
+  var ctlResult = {};
+  var ctlAsking = {};
+  var ctlRunning = false;
+  var ctlLastRun = 0;
+  function ctlKey(c, target){ return c + '|' + target; }
+  function ctlWord(c){ return CTL_WORD[c][secState.plain ? 1 : 0]; }
+  // Only a background session with an agent view id has controls.
+  function ctlAgentFor(key){
+    var list = (secReading.snapshot && secReading.snapshot.agent_sessions) || [], k = String(key || ''), i, a;
+    for(i = 0; i < list.length; i++){
+      a = list[i];
+      if(a.kind !== 'background' || !a.id) continue;
+      if(k === 'agentview:' + a.id) return a;
+      if(a.session_id && k === 'session:anthropic:' + a.session_id) return a;
+    }
+    return null;
+  }
+  // A chip shows only when its switch is on AND Go says it is ready. A gate
+  // control shows only where Go's verdict table has an entry for that gate.
+  function ctlChips(kind, target, gate){
+    var html = '';
+    CTL_ORDER.forEach(function(c){
+      if(!(ctlState.on[c] && ctlState.ready[c])) return;
+      var applies = kind === 'agent' ? (c === 'stop' || c === 'attach') :
+        ((c === 'approve' || c === 'send_back') && !!ctlState.verdicts[c] && Object.prototype.hasOwnProperty.call(ctlState.verdicts[c], gate));
+      if(!applies) return;
+      html += '<button type="button" class="ctl" data-ctl="' + esc(c) + '" data-target="' + esc(target) + '">' + esc(ctlWord(c)) + '</button>';
+    });
+    return html;
+  }
+  // The command, the hint and the result text are never put in markup: ctlFill
+  // sets them with textContent after the render.
+  function ctlLines(target){
+    var html = '';
+    CTL_ORDER.forEach(function(c){
+      var key = ctlKey(c, target), p = ctlPending[key], r = ctlResult[key];
+      if(p) html += '<div class="ctlprev" data-ctlid="' + esc(key) + '"><code class="ctlcmd" data-ctlfill="cmd"></code> <span data-ctlfill="hint"></span> ' +
+        '<button type="button" class="ctl ctlgo" data-ctlgo="' + esc(c) + '" data-target="' + esc(target) + '"' + (Date.now() - p.at < CTL_GAP ? ' disabled' : '') + '>Confirm</button></div>';
+      if(r) html += '<div class="ctlres ' + (r.ok ? 'ok' : 'bad') + '" role="status" data-ctlid="' + esc(key) + '" data-ctlfill="res"></div>';
+    });
+    return html;
+  }
+  function ctlHint(p){
+    return secState.plain ? 'Press Confirm again within 5 seconds to do this.' :
+      'target ' + p.label + ', press Confirm again within 5 s';
+  }
+  function ctlFill(){
+    Array.prototype.forEach.call(document.querySelectorAll('#secPanels [data-ctlfill]'), function(el){
+      var key = el.getAttribute('data-ctlid') || (el.parentNode && el.parentNode.getAttribute('data-ctlid')), f = el.getAttribute('data-ctlfill');
+      var p = ctlPending[key], r = ctlResult[key];
+      if(f === 'cmd' && p) el.textContent = p.command;
+      else if(f === 'hint' && p) el.textContent = ctlHint(p);
+      else if(f === 'res' && r) el.textContent = r.text;
+    });
+  }
+  function ctlShowResult(key, c, res){
+    var plain = secState.plain, reason = res && res.refused ? String(res.refused) : '';
+    var line = Array.from(String((res && res.line) || '')).slice(0, 120).join('');
+    var ok = !reason && !!res && res.exit_code === 0, text;
+    if(plain) text = ok ? 'Done.' : 'Did not work: ' + (reason || line || 'it stopped with an error');
+    else if(reason) text = CTL_WORD[c][0] + ' refused: ' + reason;
+    else text = CTL_WORD[c][0] + ': exit ' + (res ? res.exit_code : '?') + (line ? ', ' + line : '');
+    ctlResult[key] = { text:text, ok:ok, until:Date.now() + CTL_RESULT_MS };
+  }
+  function ctlErr(err){ return Array.from(String(err && err.message ? err.message : err)).slice(0, 200).join(''); }
+  // An expired preview loses its Confirm button and says so; old results go.
+  function ctlPrune(){
+    var now = Date.now();
+    Object.keys(ctlPending).forEach(function(key){
+      var p = ctlPending[key];
+      if(now <= p.until) return;
+      delete ctlPending[key];
+      var w = ctlWord(p.control);
+      ctlResult[key] = { text: secState.plain ? 'Took too long. Press ' + w + ' to start over.' :
+        CTL_WORD[p.control][0] + ': preview expired, press ' + w + ' to preview again', ok:false, until:now + CTL_RESULT_MS };
+      setTimeout(secRender, CTL_RESULT_MS + 50);
+    });
+    Object.keys(ctlResult).forEach(function(key){ if(now > ctlResult[key].until) delete ctlResult[key]; });
+  }
+  function ctlPreview(c, t){
+    var key = ctlKey(c, t), r;
+    if(ctlAsking[key]) return;
+    if(typeof window.bdevControlPreview !== 'function'){ console.log('bdevControlPreview: not bound'); return; }
+    ctlAsking[key] = true;
+    delete ctlResult[key];
+    try { r = window.bdevControlPreview({control: c, target: t}); } catch(err){ r = Promise.reject(err); }
+    Promise.resolve(r).then(function(res){
+      if(!res || !res.token){ ctlShowResult(key, c, { refused:'no preview came back' }); setTimeout(secRender, CTL_RESULT_MS + 50); return; }
+      var now = Date.now();
+      ctlPending[key] = { control:c, token:String(res.token), command:String(res.command), label:String(res.label), at:now,
+        until:now + Math.min(CTL_TTL, res.expires_in_ms || CTL_TTL) };
+      setTimeout(secRender, CTL_GAP + 20);
+      setTimeout(secRender, CTL_TTL + 50);
+    }, function(err){
+      ctlShowResult(key, c, { refused:ctlErr(err) });
+      setTimeout(secRender, CTL_RESULT_MS + 50);
+    }).then(function(){ delete ctlAsking[key]; secRender(); });
+  }
+  // The only place the run binding is called; the argument is the stored token.
+  function ctlRun(key, c, p){
+    var r;
+    if(typeof window.bdevControlRun !== 'function'){ console.log('bdevControlRun: not bound'); return; }
+    delete ctlPending[key];
+    ctlRunning = true;
+    ctlLastRun = Date.now();
+    try { r = window.bdevControlRun(p.token); } catch(err){ r = Promise.reject(err); }
+    Promise.resolve(r).then(function(res){ ctlShowResult(key, c, res); },
+      function(err){ ctlShowResult(key, c, { refused:ctlErr(err) }); })
+      .then(function(){ ctlRunning = false; ctlLastRun = Date.now(); secRender(); setTimeout(secRender, CTL_RESULT_MS + 50); });
+  }
+  function ctlConfirm(c, t){
+    var key = ctlKey(c, t), p = ctlPending[key];
+    if(!p) return;
+    if(Date.now() > p.until){ ctlPrune(); return; }
+    if(Date.now() - p.at < CTL_GAP) return;
+    if(ctlRunning || Date.now() - ctlLastRun < CTL_GAP) return;
+    ctlRun(key, c, p);
+  }
+  // A chip only previews. Only the Confirm button (data-ctlgo) can run.
+  function ctlClick(e){
+    var el = e.target.closest ? e.target.closest('.ctl') : null;
+    if(!el) return false;
+    var go = el.hasAttribute('data-ctlgo'), c = el.getAttribute(go ? 'data-ctlgo' : 'data-ctl'), t = el.getAttribute('data-target');
+    if(!Object.prototype.hasOwnProperty.call(CTL_WORD, c) || t == null) return true;
+    if(go) ctlConfirm(c, t); else ctlPreview(c, t);
+    return true;
+  }
+  // The gear block: switch states and the reason a control is not usable.
+  function secControlsSync(){
+    var box = document.getElementById('secControls');
+    if(!box) return;
+    Array.prototype.forEach.call(box.querySelectorAll('input[data-ctl-sw]'), function(i){
+      i.checked = !!ctlState.on[i.getAttribute('data-ctl-sw')];
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-ctl-why]'), function(s){
+      var c = s.getAttribute('data-ctl-why');
+      s.textContent = ctlState.ready[c] ? '' : (ctlState.why[c] || '');
+    });
+  }
   function secAged(snap){ return secReading.age_seconds > 2 * ((snap && snap.tick_seconds) || 5); }
   function secAgedLine(){
     var n = Math.round(secReading.age_seconds || 0);
@@ -3487,12 +3656,19 @@ body.plain #mapOverlay{font-size:13.5px}
     var age = secDur((it.age_seconds || 0) + (secReading.age_seconds || 0));
     var shown = plain ? word : txt;
     var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age);
+    var chips = '', lines = '';
+    if(!outcome){
+      var tg = null, gid = '';
+      if(it.kind === 'gate'){ tg = it.id; gid = String(it.id).slice(String(it.id).lastIndexOf(':') + 1); chips = ctlChips('gate', tg, gid); }
+      else { var ag = ctlAgentFor(it.id); if(ag){ tg = ag.id; chips = ctlChips('agent', tg, ''); } }
+      if(tg !== null) lines = ctlLines(tg);
+    }
     var html = '<div class="secrow secitem" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
       '<span class="secitemtxt"><span class="dim">' + esc(txt) + '</span> <b>' + esc(it.title) + '</b>' +
       (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') + '</span>' +
       '<span class="secitemmeta">' + esc(outcome ? age + ' ago' : 'waiting ' + age) + ' ' +
       link(it.spec_path, plain ? 'request' : 'spec', plain ? 'no request' : 'no spec') + ' ' +
-      link(it.result_path, 'result', 'no result yet') + '</span></div>';
+      link(it.result_path, 'result', 'no result yet') + chips + '</span></div>' + lines;
     return html;
   }
   // Every item is a row, never cut off: the list sits in .seclist, which is
@@ -3573,16 +3749,25 @@ body.plain #mapOverlay{font-size:13.5px}
       else tops.push(x);
     });
     if(!all.length) return '<div>' + esc(secState.plain ? 'No sessions are running.' : 'No running sessions.') + '</div>';
+    function sessCtl(x){
+      var ag = ctlAgentFor('session:' + x.vendor + ':' + x.id);
+      return ag ? { chips: ctlChips('agent', ag.id, ''), lines: ctlLines(ag.id) } : { chips: '', lines: '' };
+    }
+    var withCtl = all.some(function(x){ var cc = sessCtl(x); return !!(cc.chips || cc.lines); });
     function row(x, sub){
+      var cc = sessCtl(x);
       return '<tr' + (sub ? ' class="sesub"' : '') + '><td>' + esc(x.agent) + '</td><td>' + esc(secBase(x.project)) + '</td><td>' +
         esc(secWord(x.state)) + '</td><td class="num">' + esc(fmtTokens(x.tokens)) + '</td><td class="num">' +
-        esc(secEuro(x.cost)) + '</td><td class="num">' + esc(secDur(x.age_seconds)) + '</td></tr>';
+        esc(secEuro(x.cost)) + '</td><td class="num">' + esc(secDur(x.age_seconds)) + '</td>' +
+        (withCtl ? '<td class="ctlcell">' + cc.chips + '</td>' : '') + '</tr>' +
+        (cc.lines ? '<tr class="ctlrow"><td colspan="7">' + cc.lines + '</td></tr>' : '');
     }
     var rows = '';
     tops.forEach(function(x){ rows += row(x, false); (kids[x.id] || []).forEach(function(k){ rows += row(k, true); }); });
     var head = secState.plain ?
       ['Tool','Project','Doing now','Tokens','Price at list','Last active'] :
       ['Agent','Project','State','Tokens','API price equiv.','Idle'];
+    if(withCtl) head = head.concat(['']);
     return '<table><thead><tr>' + head.map(function(h, i){ return '<th' + (i < 3 ? ' style="text-align:left"' : '') + '>' + esc(h) + '</th>'; }).join('') +
       '</tr></thead><tbody>' + rows + '</tbody></table>';
   }
@@ -3650,8 +3835,10 @@ body.plain #mapOverlay{font-size:13.5px}
     var r = secReading, head = secHeadline(r), snap = r.status === 'ok' ? r.snapshot : null;
     var age = document.getElementById('hdrSnapAge');
     if(age){ age.textContent = head.text; age.style.color = head.down ? 'var(--amber)' : ''; }
+    ctlPrune();
     secRenderToggle();
     secRenderSettings();
+    secControlsSync();
     var notice = document.getElementById('secNotice');
     notice.innerHTML = head.down ? '<div class="secnotice warn">' + esc(head.text + '. No current numbers are shown.') + '</div>' : '';
     var row1 = '', rest = '';
@@ -3664,6 +3851,7 @@ body.plain #mapOverlay{font-size:13.5px}
       if(n < 5) row1 += p; else rest += p;
     });
     document.getElementById('secPanels').innerHTML = (row1 ? '<div class="secrow1" id="secRow1">' + row1 + '</div>' : '') + rest;
+    ctlFill();
     secApplyParts();
     secFit();
   }
@@ -3724,6 +3912,8 @@ body.plain #mapOverlay{font-size:13.5px}
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space' };
     secReading = p.reading || { status:'missing', age_seconds:0 };
+    var cp = p.controls || {};
+    ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {} };
     secAgentMap = p.agent_map || null;
     secRender();
     if(mapOpen && mapSource === 'live') mapFetch();
@@ -3764,6 +3954,7 @@ body.plain #mapOverlay{font-size:13.5px}
   secSettingsEl.addEventListener('change', function(e){
     var t = e.target;
     if(t.hasAttribute('data-sw')) secSend({ mode: t.getAttribute('data-mode'), section: t.getAttribute('data-sw'), on: t.checked });
+    else if(t.hasAttribute('data-ctl-sw')) secSend({ control: t.getAttribute('data-ctl-sw'), on: t.checked });
     else if(t.id === 'secScrollbar') secSend({ scrollbar: t.checked });
     else if(t.name === 'secStationStart' && t.checked){
       // Saved for the next start only; the Station that is open keeps its theme.
@@ -4113,6 +4304,7 @@ body.plain #mapOverlay{font-size:13.5px}
     openTurnPopup(sid, turn);
   });
   document.getElementById('secPanels').addEventListener('click', function(e){
+    if(ctlClick(e)){ secRender(); return; }
     var b = e.target.closest ? e.target.closest('.mapopen') : null;
     if(b) mapOpenView(b.getAttribute('data-src'));
     var f = e.target.closest ? e.target.closest('.secfile') : null;

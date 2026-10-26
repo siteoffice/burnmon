@@ -173,3 +173,31 @@ func TestAgentViewOffWithoutRunner(t *testing.T) {
 		t.Fatalf("agent_view listed without a runner: %+v", got.Sources)
 	}
 }
+
+func TestAgentSessionsInSnapshot(t *testing.T) {
+	st := snapshotTestStore(t)
+	gr, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
+	gr.AgentView = runnerOf(twoEntries, nil)
+	gr.PollAgentViewNow(context.Background())
+	w := newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr)
+	got := onceRead(t, w)
+	if len(got.AgentSessions) != 2 {
+		t.Fatalf("agent sessions = %+v", got.AgentSessions)
+	}
+	want := snapshot.AgentSession{Kind: "background", ID: "ab12", State: "blocked", Status: "waiting", WaitingFor: "permission prompt", SessionID: "s1", PID: 42, StartedAt: 1761213600000, Project: "a"}
+	if got.AgentSessions[0] != want {
+		t.Fatalf("first = %+v, want %+v", got.AgentSessions[0], want)
+	}
+	if got.AgentSessions[1].Kind != "interactive" || got.AgentSessions[1].ID != "" || got.AgentSessions[1].Project != "b" {
+		t.Fatalf("second = %+v", got.AgentSessions[1])
+	}
+
+	gr2, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
+	gr2.AgentView = runnerOf("boom", nil)
+	gr2.PollAgentViewNow(context.Background())
+	w2 := newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr2)
+	got2 := onceRead(t, w2)
+	if got2.AgentSessions == nil || len(got2.AgentSessions) != 0 {
+		t.Fatalf("a failed poll should give an empty array: %+v", got2.AgentSessions)
+	}
+}

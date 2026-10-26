@@ -329,3 +329,30 @@ func TestAgentViewKey(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudePathKey(t *testing.T) {
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ClaudePath != "" {
+		t.Fatalf("Load(\"\").ClaudePath = %q, want empty", cfg.ClaudePath)
+	}
+	dir := t.TempDir()
+	for _, tc := range []struct{ name, body, want string }{
+		{"absent", `{"fx_usd_eur": 0.9}`, ""},
+		{"set", `{"claude_path": "C:\\example\\claude.exe"}`, `C:\example\claude.exe`},
+	} {
+		p := filepath.Join(dir, tc.name+".json")
+		if err := os.WriteFile(p, []byte(tc.body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := Load(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ClaudePath != tc.want {
+			t.Errorf("%s: ClaudePath = %q, want %q", tc.name, got.ClaudePath, tc.want)
+		}
+	}
+}
