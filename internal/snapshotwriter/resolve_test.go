@@ -108,3 +108,66 @@ func TestForemanGateAppearsWithinTwoTicks(t *testing.T) {
 		t.Fatalf("gate missing two ticks after it opened: %+v", got.WaitItems)
 	}
 }
+
+func TestResolveClaudeConfigured(t *testing.T) {
+	dir := t.TempDir()
+	failing := lookOf("", errors.New("look must not be used"))
+	exe := filepath.Join(dir, "claude.exe")
+	if err := os.WriteFile(exe, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := snapshotwriter.ResolveClaudeConfigured(exe, failing, "windows")
+	if err != nil || got != exe {
+		t.Fatalf("configured exe: %q %v", got, err)
+	}
+	cmdFile := filepath.Join(dir, "claude.cmd")
+	if err := os.WriteFile(cmdFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dirExe := filepath.Join(dir, "x.exe")
+	if err := os.Mkdir(dirExe, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ path, want string }{
+		{"claude.exe", "claude_path is not absolute"},
+		{cmdFile, "claude_path is not a .exe"},
+		{filepath.Join(dir, "missing.exe"), "claude_path is not a file"},
+		{dirExe, "claude_path is not a file"},
+	} {
+		if _, err := snapshotwriter.ResolveClaudeConfigured(tc.path, failing, "windows"); err == nil || err.Error() != tc.want {
+			t.Errorf("%s: err %v, want %q", tc.path, err, tc.want)
+		}
+	}
+	got, err = snapshotwriter.ResolveClaudeConfigured("", lookOf(`C:\x\claude.exe`, nil), "windows")
+	if err != nil || got != `C:\x\claude.exe` {
+		t.Fatalf("fallback: %q %v", got, err)
+	}
+	_, err = snapshotwriter.ResolveClaudeConfigured("", lookOf(`C:\x\claude.cmd`, nil), "windows")
+	if err == nil || err.Error() != "claude is a .cmd shim; agent_view needs claude.exe" {
+		t.Fatalf("fallback shim: %v", err)
+	}
+}
+
+func TestEnableAgentViewWithConfiguredPath(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "claude.exe")
+	if err := os.WriteFile(exe, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gr, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
+	gr.EnableAgentViewWith(exe, lookOf("", errors.New("look must not be used")))
+	if gr.AgentView == nil {
+		t.Fatal("no runner for a configured claude.exe")
+	}
+
+	st := snapshotTestStore(t)
+	gr2, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
+	gr2.EnableAgentViewWith("", lookOf(`C:\n\claude.cmd`, nil))
+	if gr2.AgentView != nil {
+		t.Fatal("runner set for a .cmd shim")
+	}
+	w := newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr2)
+	s := sourceNamed(onceRead(t, w), waits.SourceAgentView)
+	if s == nil || s.OK || s.Error != "claude is a .cmd shim; agent_view needs claude.exe" {
+		t.Fatalf("agent_view source: %+v", s)
+	}
+}

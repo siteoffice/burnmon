@@ -252,6 +252,11 @@ type Config struct {
 	// that wait on you. Off by default because the next "claude agents" call
 	// can start a Claude Code supervisor process.
 	AgentView bool `json:"agent_view,omitempty"`
+
+	// ClaudePath is an absolute path to claude.exe. Empty (the default)
+	// means a .exe on PATH. Set it when `claude` on PATH is the npm shim
+	// (claude.cmd), which BurnMon refuses to start.
+	ClaudePath string `json:"claude_path,omitempty"`
 }
 
 // DefaultClaudeCodeCacheTTLMinutes is the compiled-in cache-lifetime
