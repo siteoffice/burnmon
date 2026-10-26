@@ -195,6 +195,8 @@ func TestGateScriptWithFakeLibrary(t *testing.T) {
 		{"other token", "awaiting-owner", "t2", "approve", GateExitChanged},
 		{"verdict not allowed", "awaiting-owner", "t1", "ship", GateExitVerdict},
 		{"already decided", "decided", "t1", "approve", GateExitChanged},
+		{"status neither open nor decided", "weird", "t1", "approve", GateExitChanged},
+		{"empty status", "", "t1", "approve", GateExitChanged},
 	}
 	for _, c := range cases {
 		f := newFlow(c.status, "t1")

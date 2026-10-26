@@ -9,6 +9,8 @@ import (
 	"burnmon/internal/waits"
 )
 
+const errDupFlow = "the flow id is listed more than once"
+
 // Runner starts the previewed argv. Neither method uses a shell, and on
 // Windows both refuse an argv[0] that is not an absolute path ending in .exe,
 // so the exact stored argv never depends on PATH, PATHEXT or a shim.
@@ -47,17 +49,18 @@ func CheckAgent(t Target, fresh []waits.AgentEntry, self Self) (waits.AgentEntry
 	if e.Kind != "background" {
 		return waits.AgentEntry{}, errors.New("only background sessions have controls")
 	}
+	// Attach never restarts a session: `claude attach` only opens a live one,
+	// and a pid exists only while the process is alive. An ended session is
+	// refused for both controls, with a reason that says what to do.
+	switch e.State {
+	case "stopped", "done", "failed":
+		return waits.AgentEntry{}, errors.New("the session has ended, restart it from a terminal")
+	}
 	if e.PID <= 0 || t.PID <= 0 {
 		return waits.AgentEntry{}, errors.New(errNoPID)
 	}
 	if e.PID != t.PID || e.StartedAt != t.StartedAt {
 		return waits.AgentEntry{}, errors.New("the session changed since the preview, press again")
-	}
-	if t.Control == Stop {
-		switch e.State {
-		case "stopped", "done", "failed":
-			return waits.AgentEntry{}, errors.New("the session has already ended")
-		}
 	}
 	if err := self.Refuses(e.PID, e.Cwd); err != nil {
 		return waits.AgentEntry{}, err
@@ -67,6 +70,15 @@ func CheckAgent(t Target, fresh []waits.AgentEntry, self Self) (waits.AgentEntry
 
 // CheckGate compares the preview target with a fresh Foreman read.
 func CheckGate(t Target, flows []graph.Flow) error {
+	matches := 0
+	for _, f := range flows {
+		if f.ID == t.FlowID {
+			matches++
+		}
+	}
+	if matches > 1 {
+		return errors.New(errDupFlow)
+	}
 	for _, f := range flows {
 		if f.ID != t.FlowID {
 			continue

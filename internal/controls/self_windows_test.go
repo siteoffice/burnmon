@@ -95,6 +95,111 @@ func TestRefusesLinkedFolder(t *testing.T) {
 	mustRefuse(t, Self{PID: 10, ExeDir: link}, filepath.Join(dir, "sub"))
 }
 
+// mkJunction always makes the link with mklink /J (never os.Symlink first) and
+// removes only the junction itself at the end, with rmdir, so nothing behind
+// it is touched. Names used with it must not contain spaces.
+func mkJunction(t *testing.T, link, target string) {
+	t.Helper()
+	out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput()
+	if err != nil {
+		t.Skipf("cannot create a junction (%v: %s)", err, out)
+	}
+	t.Cleanup(func() { _ = exec.Command("cmd", "/c", "rmdir", link).Run() })
+}
+
+// junctionTree makes <temp>\exe\sub and <temp>\elsewhere\sub.
+func junctionTree(t *testing.T) (root, exe, elsewhere string) {
+	t.Helper()
+	r, ok := resolveReal(t.TempDir())
+	if !ok {
+		t.Fatal("cannot resolve temp dir")
+	}
+	exe, elsewhere = filepath.Join(r, "exe"), filepath.Join(r, "elsewhere")
+	for _, d := range []string{exe, elsewhere} {
+		if err := os.MkdirAll(filepath.Join(d, "sub"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return r, exe, elsewhere
+}
+
+func TestRefusesCwdThroughJunction(t *testing.T) {
+	root, exe, _ := junctionTree(t)
+	junc := filepath.Join(root, "junc")
+	mkJunction(t, junc, exe)
+	s := Self{PID: 10, ExeDir: exe}
+	mustRefuse(t, s, junc)
+	mustRefuse(t, s, filepath.Join(junc, "sub"))
+	mustRefuse(t, s, filepath.Join(junc, "sub", "not-there-yet"))
+}
+
+func TestRefusesExeFolderReachedThroughJunction(t *testing.T) {
+	root, exe, _ := junctionTree(t)
+	junc := filepath.Join(root, "junc")
+	mkJunction(t, junc, exe)
+	s := Self{PID: 10, ExeDir: filepath.Join(junc, "sub")}
+	mustRefuse(t, s, filepath.Join(exe, "sub"))
+	mustRefuse(t, s, filepath.Join(exe, "sub", "not-there-yet"))
+}
+
+func TestAllowsJunctionToSomewhereElse(t *testing.T) {
+	root, exe, elsewhere := junctionTree(t)
+	junc := filepath.Join(root, "junc2")
+	mkJunction(t, junc, elsewhere)
+	s := Self{PID: 10, ExeDir: exe}
+	for _, cwd := range []string{junc, filepath.Join(junc, "sub"), filepath.Join(junc, "sub", "not-there-yet")} {
+		if err := s.Refuses(40, cwd); err != nil {
+			t.Errorf("Refuses(40, %q) = %v, want allowed", cwd, err)
+		}
+	}
+}
+
+func TestDanglingJunctionIsUnsure(t *testing.T) {
+	root, exe, _ := junctionTree(t)
+	gone := filepath.Join(root, "gone")
+	if err := os.Mkdir(gone, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	junc := filepath.Join(root, "dangling")
+	mkJunction(t, junc, gone)
+	// The empty folder this test made is the junction target; removing it
+	// leaves the junction pointing nowhere.
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	s := Self{PID: 10, ExeDir: exe}
+	for _, cwd := range []string{junc, filepath.Join(junc, "sub")} {
+		if err := s.Refuses(40, cwd); err == nil || err.Error() != errCwdUnsure {
+			t.Errorf("Refuses(40, %q) = %v, want %q", cwd, err, errCwdUnsure)
+		}
+	}
+	// The exe folder that cannot be resolved fails closed too.
+	if err := (Self{PID: 10, ExeDir: junc}).Refuses(40, filepath.Join(exe, "sub")); err == nil || err.Error() != errCwdUnsure {
+		t.Errorf("unresolvable exe folder: %v", err)
+	}
+}
+
+func TestRefusesThroughSubst(t *testing.T) {
+	_, exe, _ := junctionTree(t)
+	letter := ""
+	for c := 'Z'; c >= 'P'; c-- {
+		if _, err := os.Stat(string(c) + `:\`); err != nil {
+			letter = string(c) + ":"
+			break
+		}
+	}
+	if letter == "" {
+		t.Skip("no free drive letter for subst")
+	}
+	if out, err := exec.Command("subst", letter, exe).CombinedOutput(); err != nil {
+		t.Skipf("subst does not work here (%v: %s)", err, out)
+	}
+	defer func() { _ = exec.Command("subst", letter, "/D").Run() }()
+	s := Self{PID: 10, ExeDir: exe}
+	mustRefuse(t, s, letter+`\sub`)
+	mustRefuse(t, s, letter+`\sub\not-there-yet`)
+}
+
 // --- injectable CurrentSelf lookups -------------------------------------
 
 var chainT0 = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

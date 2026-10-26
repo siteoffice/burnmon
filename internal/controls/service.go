@@ -42,6 +42,7 @@ type Service struct {
 	Env       Env
 	previews  Previews
 	runMu     sync.Mutex
+	previewMu sync.Mutex                                // at most one `claude agents --json` at a time
 	openAudit func(path string) (io.WriteCloser, error) // tests replace it
 }
 
@@ -294,14 +295,22 @@ func (s *Service) previewAgent(req PreviewRequest, snap *snapshot.Snapshot, self
 	if err != nil {
 		return Target{}, nil, err
 	}
-	t := Target{Control: req.Control, AgentID: as.ID, PID: as.PID, StartedAt: as.StartedAt, Project: as.Project}
+	// The snapshot is only a pointer: its project name is never shown. The
+	// label comes from the fresh entry.
+	t := Target{Control: req.Control, AgentID: as.ID, PID: as.PID, StartedAt: as.StartedAt}
+	if !s.previewMu.TryLock() {
+		return Target{}, nil, errors.New("another preview is running, try again")
+	}
 	fresh, err := s.freshAgents()
+	s.previewMu.Unlock()
 	if err != nil {
 		return Target{}, nil, err
 	}
-	if _, err := CheckAgent(t, fresh, self); err != nil {
+	e, err := CheckAgent(t, fresh, self)
+	if err != nil {
 		return Target{}, nil, err
 	}
+	t.Project = lastFolder(e.Cwd)
 	return t, argv, nil
 }
 
@@ -330,6 +339,15 @@ func (s *Service) previewGate(req PreviewRequest, snap *snapshot.Snapshot) (Targ
 	if err != nil {
 		return Target{}, nil, err
 	}
+	matches := 0
+	for _, f := range flows {
+		if f.ID == flowID {
+			matches++
+		}
+	}
+	if matches > 1 {
+		return Target{}, nil, errors.New(errDupFlow)
+	}
 	for _, f := range flows {
 		if f.ID != flowID {
 			continue
@@ -340,13 +358,30 @@ func (s *Service) previewGate(req PreviewRequest, snap *snapshot.Snapshot) (Targ
 		if !insideFlows(s.Env.ForemanRoot, f.Dir) {
 			return Target{}, nil, errors.New("the flow folder is outside foreman_root\\flows")
 		}
-		t := Target{Control: req.Control, FlowID: f.ID, Gate: gate, GateToken: f.GateToken, FlowDir: f.Dir, Title: item.Title}
+		t := Target{Control: req.Control, FlowID: f.ID, Gate: gate, GateToken: f.GateToken, FlowDir: f.Dir, Title: flowLabel(f)}
 		if err := CheckGate(t, flows); err != nil {
 			return Target{}, nil, err
 		}
 		return t, GateArgv(s.Env.PythonPath, libDirOf(s.Env.ForemanRoot), f.Dir, verdict, gate, f.GateToken), nil
 	}
 	return Target{}, nil, errors.New("the flow is no longer listed")
+}
+
+// flowLabel names a flow from the fresh read: its slug, else its id.
+func flowLabel(f graph.Flow) string {
+	if f.Slug != "" {
+		return f.Slug
+	}
+	return f.ID
+}
+
+// lastFolder is the last folder name of a Windows or slash path.
+func lastFolder(p string) string {
+	p = strings.TrimRight(strings.ReplaceAll(p, "/", `\`), `\`)
+	if i := strings.LastIndex(p, `\`); i >= 0 {
+		return p[i+1:]
+	}
+	return p
 }
 
 func auditTarget(t Target) string {

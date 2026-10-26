@@ -26,6 +26,7 @@ func TestCheckAgent(t *testing.T) {
 	if err != nil || got.ID != "ab12" || got.PID != 42 {
 		t.Fatalf("matching entry: %+v %v", got, err)
 	}
+	ended := "the session has ended, restart it from a terminal"
 	cases := []struct {
 		name  string
 		fresh []waits.AgentEntry
@@ -36,9 +37,9 @@ func TestCheckAgent(t *testing.T) {
 		{"interactive", mod(func(e *waits.AgentEntry) { e.Kind = "interactive" }), "only background sessions have controls"},
 		{"pid", mod(func(e *waits.AgentEntry) { e.PID = 43 }), "the session changed since the preview, press again"},
 		{"started", mod(func(e *waits.AgentEntry) { e.StartedAt = 2 }), "the session changed since the preview, press again"},
-		{"stopped", mod(func(e *waits.AgentEntry) { e.State = "stopped" }), "the session has already ended"},
-		{"done", mod(func(e *waits.AgentEntry) { e.State = "done" }), "the session has already ended"},
-		{"failed", mod(func(e *waits.AgentEntry) { e.State = "failed" }), "the session has already ended"},
+		{"stopped", mod(func(e *waits.AgentEntry) { e.State = "stopped" }), ended},
+		{"done", mod(func(e *waits.AgentEntry) { e.State = "done" }), ended},
+		{"failed", mod(func(e *waits.AgentEntry) { e.State = "failed" }), ended},
 		{"ancestor", mod(func(e *waits.AgentEntry) { e.PID = 50 }), "this session started BurnMon Dev"},
 		{"own folder", mod(func(e *waits.AgentEntry) { e.Cwd = `C:\example\burnmon\x` }), "this session works in BurnMon Dev's own folder"},
 	}
@@ -52,9 +53,11 @@ func TestCheckAgent(t *testing.T) {
 			t.Errorf("%s: got %v, want %q", c.name, err, c.want)
 		}
 	}
-	// A stopped session may still be attached.
-	if _, err := CheckAgent(agentTarget(Attach), mod(func(e *waits.AgentEntry) { e.State = "stopped" }), self); err != nil {
-		t.Errorf("attach on stopped: %v", err)
+	// Attach never restarts a session: an ended one is refused like Stop.
+	for _, st := range []string{"stopped", "done", "failed"} {
+		if _, err := CheckAgent(agentTarget(Attach), mod(func(e *waits.AgentEntry) { e.State = st }), self); err == nil || err.Error() != ended {
+			t.Errorf("attach on %s: %v", st, err)
+		}
 	}
 	// Never-self applies to attach too.
 	if _, err := CheckAgent(agentTarget(Attach), mod(func(e *waits.AgentEntry) { e.Cwd = `C:\example\burnmon` }), self); err == nil {
@@ -134,6 +137,15 @@ func TestCheckAgentRefusesDuplicateIDs(t *testing.T) {
 	b.PID = 99
 	_, err := CheckAgent(agentTarget(Stop), []waits.AgentEntry{a, b}, self)
 	if err == nil || err.Error() != "the session id is listed more than once" {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCheckGateRefusesDuplicateFlowIDs(t *testing.T) {
+	b := gateFlow()
+	b.Dir = `C:\example2`
+	err := CheckGate(gateTarget(), []graph.Flow{gateFlow(), b})
+	if err == nil || err.Error() != "the flow id is listed more than once" {
 		t.Fatalf("got %v", err)
 	}
 }

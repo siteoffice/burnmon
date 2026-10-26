@@ -5,6 +5,7 @@ package controls
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -214,5 +215,17 @@ func TestExecRunnerRefusesEmptyArgv(t *testing.T) {
 func TestElevatedIsFalseInTests(t *testing.T) {
 	if Elevated() {
 		t.Skip("test shell is elevated")
+	}
+}
+
+func TestElevatedFailsClosed(t *testing.T) {
+	if !elevatedWith(func() (bool, error) { return false, errors.New("token query failed") }) {
+		t.Error("a failed token query must count as elevated")
+	}
+	if !elevatedWith(func() (bool, error) { return true, nil }) {
+		t.Error("an elevated token must count as elevated")
+	}
+	if elevatedWith(func() (bool, error) { return false, nil }) {
+		t.Error("a limited token is not elevated")
 	}
 }

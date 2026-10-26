@@ -128,17 +128,65 @@ func (ExecRunner) Start(argv []string) error {
 	return nil
 }
 
-// Elevated reports whether this process runs with an elevated token.
-func Elevated() bool {
-	return windows.GetCurrentProcessToken().IsElevated()
+// Elevated reports whether this process runs with an elevated token. It
+// fails closed: when the token cannot be queried the answer is true, so the
+// controls stay off.
+func Elevated() bool { return elevatedWith(queryElevation) }
+
+func elevatedWith(query func() (bool, error)) bool {
+	elevated, err := query()
+	return err != nil || elevated
+}
+
+func queryElevation() (bool, error) {
+	var elevation, ret uint32
+	err := windows.GetTokenInformation(windows.GetCurrentProcessToken(), windows.TokenElevation,
+		(*byte)(unsafe.Pointer(&elevation)), uint32(unsafe.Sizeof(elevation)), &ret)
+	if err != nil {
+		return false, err
+	}
+	if ret != uint32(unsafe.Sizeof(elevation)) {
+		return false, errors.New("unexpected token elevation size")
+	}
+	return elevation != 0, nil
 }
 
 // resolveReal resolves links, junctions, subst and mapped drives, and expands
-// 8.3 short names, for a path that exists.
+// 8.3 short names, for a path that exists. filepath.EvalSymlinks does not
+// follow mount points (junctions) since Go 1.23, so the final path comes from
+// an open handle: CreateFile with no access rights, then
+// GetFinalPathNameByHandle. A mapped network drive comes back as a UNC path.
+// Any failure returns false and the caller must fail closed.
 func resolveReal(p string) (string, bool) {
-	r, err := filepath.EvalSymlinks(p)
+	up, err := windows.UTF16PtrFromString(p)
 	if err != nil {
 		return "", false
+	}
+	h, err := windows.CreateFile(up, 0,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return "", false
+	}
+	defer windows.CloseHandle(h)
+	// FILE_NAME_NORMALIZED (0x0) | VOLUME_NAME_DOS (0x0): the Win32 values,
+	// which x/sys/windows does not export.
+	const flags uint32 = 0x0 | 0x0
+	n, err := windows.GetFinalPathNameByHandle(h, nil, 0, flags)
+	if err != nil || n == 0 {
+		return "", false
+	}
+	buf := make([]uint16, n+1)
+	n2, err := windows.GetFinalPathNameByHandle(h, &buf[0], uint32(len(buf)), flags)
+	if err != nil || n2 == 0 || int(n2) >= len(buf) {
+		return "", false
+	}
+	r := windows.UTF16ToString(buf[:n2])
+	switch {
+	case hasPrefixFold(r, `\\?\UNC\`):
+		r = `\\` + r[8:]
+	case hasPrefixFold(r, `\\?\`):
+		r = r[4:]
 	}
 	if up, err := windows.UTF16PtrFromString(r); err == nil {
 		if n, err := windows.GetLongPathName(up, nil, 0); err == nil && n > 0 {

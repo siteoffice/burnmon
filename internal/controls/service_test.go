@@ -104,7 +104,7 @@ func newRig(t *testing.T) *rig {
 		agent:    agentJSON("ab12", 4242, "blocked", `C:\example\other`),
 		switches: map[string]bool{Stop: true, Attach: true, Approve: true, SendBack: true},
 		self:     Self{PID: 1, ExeDir: `C:\example\burnmon`},
-		flows: []graph.Flow{{ID: "example__flow__2", Gate: "G2", GatePending: true, GateToken: "t1",
+		flows: []graph.Flow{{ID: "example__flow__2", Slug: "flow-review", Gate: "G2", GatePending: true, GateToken: "t1",
 			Dir: filepath.Join(root, "flows", "example", "flow-review")}},
 	}
 	r.env = &Env{
@@ -291,7 +291,7 @@ func TestSecondPressTooSoonIsAuditedAndKeepsToken(t *testing.T) {
 func TestRunRefusesChangedSession(t *testing.T) {
 	cases := []struct{ name, agent, want string }{
 		{"new pid", agentJSON("ab12", 99, "blocked", `C:\example\other`), "the session changed since the preview, press again"},
-		{"stopped", agentJSON("ab12", 4242, "stopped", `C:\example\other`), "the session has already ended"},
+		{"stopped", agentJSON("ab12", 4242, "stopped", `C:\example\other`), "the session has ended, restart it from a terminal"},
 		{"gone", agentJSON("zz99", 4242, "blocked", `C:\example\other`), "the session is no longer listed"},
 		{"agent view fails", "boom", "agent view"},
 	}
@@ -863,5 +863,95 @@ func TestTokenForAIsNeverRunForB(t *testing.T) {
 	}
 	if len(r.runner.runs) != 1 || r.runner.runs[0][2] != "ab12" {
 		t.Fatalf("%v", r.runner.runs)
+	}
+}
+
+func TestPreviewLabelComesFromFreshRead(t *testing.T) {
+	r := newRig(t)
+	r.snap = func(s *snapshot.Snapshot) {
+		for i := range s.AgentSessions {
+			if s.AgentSessions[i].ID == "ab12" {
+				s.AgentSessions[i].Project = "target harmless"
+			}
+		}
+		for i := range s.WaitItems {
+			if s.WaitItems[i].ID == "gate:example__flow__2:G2" {
+				s.WaitItems[i].Title = "target harmless"
+			}
+		}
+	}
+	p, err := r.preview(Stop, "ab12")
+	if err != nil || p.Label != "other (ab12)" {
+		t.Fatalf("agent label %+v %v", p, err)
+	}
+	p, err = r.preview(Approve, r.gateTarget())
+	if err != nil || p.Label != "flow-review gate G2 (example__flow__2)" {
+		t.Fatalf("gate label %+v %v", p, err)
+	}
+	// A fresh flow without a slug is labelled by its id.
+	r.flows[0].Slug = ""
+	p, err = r.preview(Approve, r.gateTarget())
+	if err != nil || p.Label != "example__flow__2 gate G2 (example__flow__2)" {
+		t.Fatalf("id label %+v %v", p, err)
+	}
+}
+
+func TestDuplicateFlowIDIsRefused(t *testing.T) {
+	r := newRig(t)
+	p, err := r.preview(Approve, r.gateTarget())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dup := r.flows[0]
+	dup.Dir = filepath.Join(r.root, "flows", "example", "flow-other")
+	r.flows = append(r.flows, dup)
+	if _, err := r.preview(Approve, r.gateTarget()); err == nil || !strings.Contains(err.Error(), "listed more than once") {
+		t.Fatalf("preview: %v", err)
+	}
+	res, err := r.confirm(p.Token)
+	if err == nil || !strings.Contains(res.Refused, "listed more than once") || r.runner.calls() != 0 {
+		t.Fatalf("run: %v %+v calls=%d", err, res, r.runner.calls())
+	}
+}
+
+func TestAttachAndStopRefuseEndedSession(t *testing.T) {
+	for _, state := range []string{"stopped", "done", "failed"} {
+		for _, c := range []string{Stop, Attach} {
+			r := newRig(t)
+			r.agent = agentJSON("ab12", 4242, state, `C:\example\other`)
+			if _, err := r.preview(c, "ab12"); err == nil || err.Error() != "the session has ended, restart it from a terminal" {
+				t.Errorf("%s on %s: %v", c, state, err)
+			}
+		}
+	}
+}
+
+func TestOnePreviewReadsTheAgentViewAtATime(t *testing.T) {
+	r := newRig(t)
+	entered := make(chan struct{}, 4)
+	release := make(chan struct{})
+	var reads atomic.Int32
+	r.env.AgentView = func(ctx context.Context) ([]byte, error) {
+		reads.Add(1)
+		entered <- struct{}{}
+		<-release
+		return []byte(r.agent), nil
+	}
+	r.rebuild()
+	done := make(chan error, 1)
+	go func() { _, err := r.preview(Stop, "ab12"); done <- err }()
+	<-entered
+	if _, err := r.preview(Stop, "ab12"); err == nil || !strings.Contains(err.Error(), "another preview is running, try again") {
+		t.Fatalf("second preview: %v", err)
+	}
+	if n := reads.Load(); n != 1 {
+		t.Fatalf("agent view read %d times", n)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.preview(Stop, "ab12"); err != nil {
+		t.Fatalf("after release: %v", err)
 	}
 }

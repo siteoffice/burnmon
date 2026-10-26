@@ -2,6 +2,7 @@ package controls
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,7 +173,10 @@ func (c cpath) String() string {
 // canonical returns the lexical form, then replaces the part of the path
 // that exists on disk with its resolved form (symlinks, junctions, subst and
 // mapped drives, 8.3 short names expanded). The part that does not exist
-// stays lexical, with the lexical checks already applied.
+// stays lexical, with the lexical checks already applied. It fails closed:
+// when the longest existing prefix cannot be resolved (a dangling junction,
+// no access, an unexpected error) it returns not-ok and never the lexical
+// path, because the lexical path may hide a link into BurnMon Dev's folder.
 func canonical(p string) (cpath, bool) {
 	lex, ok := lexical(p)
 	if !ok {
@@ -186,15 +190,18 @@ func canonical(p string) (cpath, bool) {
 		}
 		prefix := pre.String()
 		if _, err := os.Lstat(prefix); err != nil {
-			continue
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return cpath{}, false
 		}
 		real, ok := resolveReal(prefix)
 		if !ok {
-			return lex, true
+			return cpath{}, false
 		}
 		rl, ok := lexical(real)
 		if !ok {
-			return lex, true
+			return cpath{}, false
 		}
 		rl.parts = append(rl.parts, lex.parts[n:]...)
 		return rl, true
@@ -225,14 +232,17 @@ func localHost(h string) bool {
 	return false
 }
 
-// exeDir is the folder of the running executable, links resolved.
+// exeDir is the folder of the running executable, links and junctions
+// resolved. An executable path that cannot be resolved is an error, so the
+// caller turns controls off.
 func exeDir() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
-	if r, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = r
+	r, ok := resolveReal(exe)
+	if !ok {
+		return "", errors.New("cannot resolve the executable path")
 	}
-	return filepath.Dir(exe), nil
+	return filepath.Dir(r), nil
 }

@@ -43,7 +43,7 @@ const (
 const GateScript = "import sys; sys.path.insert(0, sys.argv[1]); " +
 	"import flow_transition as ft, flow_state as fs; " +
 	"f = ft.load_flow(sys.argv[2]); g = f.get('gate'); g = g if isinstance(g, dict) else {}; " +
-	"sys.exit(3) if (g.get('id') != sys.argv[4] or g.get('token') != sys.argv[5] or g.get('status') == 'decided') else None; " +
+	"sys.exit(3) if (g.get('id') != sys.argv[4] or g.get('token') != sys.argv[5] or g.get('status') != 'awaiting-owner') else None; " +
 	"sys.exit(4) if sys.argv[3] not in fs.valid_verdicts(sys.argv[4]) else None; " +
 	"ft.cmd_gate(sys.argv[2], sys.argv[3], note='', surface='burnmon'); sys.exit(0)"
 
