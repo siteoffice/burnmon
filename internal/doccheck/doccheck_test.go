@@ -227,6 +227,9 @@ var allowlist = map[string]string{
 	`~/.hermes/state.db`:                   "Hermes data file on the user's computer, outside the repo",
 	`%COPILOT_HOME%\session-store.db`:      "Copilot CLI data file on the user's computer, outside the repo",
 	`~/.copilot/session-store.db`:          "Copilot CLI data file on the user's computer, outside the repo",
+	`sprints\<project>\<slug>\sprint.json`: "Foreman state file under foreman_root, outside the repo",
+	`flows\<project>\<flow>\flow.json`:     "Foreman state file under foreman_root, outside the repo",
+	`flows\_lib\flow_transition.py`:        "Foreman script under foreman_root, outside the repo",
 }
 
 func repoDocs(t *testing.T, root string) map[string]string {
@@ -239,15 +242,60 @@ func repoDocs(t *testing.T, root string) map[string]string {
 		}
 		return string(b)
 	}
-	docs["README.md"] = read("README.md")
-	docs["tools/burnmon-cloud/plugin/README.md"] = read("tools/burnmon-cloud/plugin/README.md")
-	docs["STATUS.md (first section)"] = StatusTop(read("STATUS.md"))
-	matches, _ := filepath.Glob(filepath.Join(root, "docs", "*.md"))
-	for _, m := range matches {
-		rel, _ := filepath.Rel(root, m)
-		docs[filepath.ToSlash(rel)] = read(filepath.ToSlash(rel))
+	for _, rel := range trackedDocs(root) {
+		switch rel {
+		case "STATUS.md":
+			docs["STATUS.md (first section)"] = StatusTop(read(rel))
+		case "SESSION_LOG.md":
+			// the log is history, only the em dash test reads it
+		default:
+			docs[rel] = read(rel)
+		}
 	}
 	return docs
+}
+
+// trackedDocNames are the repo docs the checks read: an explicit list, never a
+// glob of docs\*.md, because the working tree of the main checkout holds
+// untracked notes there that are not part of the repo.
+var trackedDocNames = []string{
+	"README.md",
+	"STATUS.md",
+	"SESSION_LOG.md",
+	"tools/burnmon-cloud/plugin/README.md",
+	"docs/snapshot_schema.md",
+}
+
+// trackedDocs returns the listed docs that exist under root.
+func trackedDocs(root string) []string {
+	var out []string
+	for _, rel := range trackedDocNames {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+			out = append(out, rel)
+		}
+	}
+	return out
+}
+
+func TestTrackedDocsSkipsStrayAndMissingFiles(t *testing.T) {
+	root := t.TempDir()
+	for rel, body := range map[string]string{
+		"README.md":              "x\n",
+		"docs/relation_graph.md": "untracked note\n",
+		"docs/old_prompt.md":     "untracked prompt\n",
+	} {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := trackedDocs(root)
+	if len(got) != 1 || got[0] != "README.md" {
+		t.Errorf("trackedDocs = %v, want only README.md (stray docs\\*.md and missing files skipped)", got)
+	}
 }
 
 func report(t *testing.T, fs []Finding) {
@@ -309,13 +357,7 @@ func TestNoEmDashInChangedDocs(t *testing.T) {
 		t.Fatal(err)
 	}
 	dash := string(rune(0x2014))
-	files := []string{"README.md", "STATUS.md", "tools/burnmon-cloud/plugin/README.md"}
-	matches, _ := filepath.Glob(filepath.Join(root, "docs", "*.md"))
-	for _, m := range matches {
-		rel, _ := filepath.Rel(root, m)
-		files = append(files, filepath.ToSlash(rel))
-	}
-	for _, f := range files {
+	for _, f := range trackedDocs(root) {
 		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(f)))
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)

@@ -17,8 +17,9 @@ unverified on WebView2; no control was run against a real session or flow; the a
 poller was never run against the real `claude` (on that laptop `claude` resolves to a `.cmd`
 shim, which BurnMon refuses). Parked by the reports: reply control not built, `GatePending` in the
 graph not yet aligned to the Foreman rule (awaiting-owner), Foreman read latency of up to about
-15.7 s for a new gate, and the schema doc patch for `docs\snapshot_schema.md` (ignored by git,
-so it travels as a patch). Latest tag is `v0.4.0-alpha.10`; version constants are unchanged:
+15.7 s for a new gate, and the schema doc patch for `docs\snapshot_schema.md` (tracked in git, but
+`.gitignore` line 12 (`docs/`) makes the commit launcher refuse to stage it, so the change
+travels as a patch). Latest tag is `v0.4.0-alpha.10`; version constants are unchanged:
 `burnmon.exe` and `burnmon-cli.exe` report `0.3.2`, `burnmon-dev.exe` reports `0.4.0-alpha.10`.
 The paragraph below describes 2026-10-21 and is kept as history.
 

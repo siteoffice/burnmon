@@ -103,7 +103,8 @@ computer (`build.ps1 -Target <that folder>\latest.jsonl`).
 
 A cloud subagent's requests are stored as their own session, `agent-<id>`, with the main
 session as its parent, and the copy folded under the parent is removed so its tokens count
-once (`internal\adapter\claude\cloud.go`, tests in `cloud_subagent_test.go`).
+once (the rows are built in `internal\adapter\claude\cloud.go`, the folded copy is removed in
+`UpsertEvents` in `internal\store\store.go`, tests in `cloud_subagent_test.go`).
 
 What it does not cover:
 
@@ -479,7 +480,9 @@ on the first save.
 Two parts of BurnMon Dev list what needs you and what just ended. Waits on you holds open
 Foreman gates, waiting sprints with parked tasks, stopped sprints with a failing check,
 waiting sessions, and the prompts and questions the agent view reports. Outcomes holds
-finished and stopped sprints and failed checks of the last 24 hours, one row per sprint.
+finished and stopped sprints and failed checks of the last 24 hours. A sprint has at most one
+`finished` row, and none when a failing check of it is within the window: it then has one
+`failed_check` row per failing check, so two when both test and verify failed.
 Each item has one of these kinds in the snapshot:
 
 | kind | what it is |
@@ -508,7 +511,8 @@ and `d34` cover the layout, but none of them was run in B1 to B4 because the app
 
 ### Controls
 
-BurnMon Dev can run four controls: `stop` and `attach` on an agent view session, and
+BurnMon Dev can run four controls: `stop` and `attach` on a background agent view session
+(`internal\controls\check.go` refuses any other kind, so an interactive session has none), and
 `approve` and `send_back` on a Foreman gate. Every control is off by default and has its
 own switch in the gear dialog. Besides the switch, `stop` and `attach` need `agent_view`
 on and a `claude.exe` that BurnMon can start directly: `claude_path`, else the first
@@ -542,8 +546,8 @@ Prices and the subscription calibration are compiled-in illustrative defaults (s
 `internal\pricing\pricing.go`), not a real invoice. Drop a `burnmon.json` next to the exe
 (app and CLI both check there first, then `%LOCALAPPDATA%\burnmon\burnmon.json` for a
 fixed, read-only-share install) with your own numbers; any subset of fields overrides the
-defaults. See `burnmon.example.json` for every key, including `owners` (empty by
-default).
+defaults. `burnmon.example.json` lists these keys, including `owners` (empty by default);
+three newer keys are not in it yet, see "Foreman and Claude Code settings".
 
 If no `burnmon.json` is found, both binaries still read a `claudecost.json` in the same
 two locations: the pre-rename config name, kept working for anyone who has not renamed
@@ -572,7 +576,9 @@ Three more keys go in `burnmon.json`. `burnmon.example.json` does not list them 
 }
 ```
 
-- `foreman_root`: the folder that holds Foreman's flows and sprints folders. Empty (the
+- `foreman_root`: the folder that holds Foreman's `flows` and `sprints` folders. BurnMon reads
+  `sprints\<project>\<slug>\sprint.json` and `flows\<project>\<flow>\flow.json` there, and
+  the controls need `flows\_lib\flow_transition.py`. Empty (the
   default) means no Foreman: no Foreman links in the graph and no Foreman items in Waits on
   you and Outcomes. `burnmon-cli graph` and `burnmon-cli waits` take `-foreman <dir>` to
   override it.
@@ -580,6 +586,12 @@ Three more keys go in `burnmon.json`. `burnmon.example.json` does not list them 
 - `claude_path`: an absolute path to `claude.exe`. It must be an existing file and a
   `.exe` on Windows; a `.cmd` shim is refused. Empty means a `claude.exe` on `PATH`, which
   the poller and the controls accept too.
+
+`claude` on `PATH` is often an npm shim, `claude.cmd`, which BurnMon refuses. For an npm
+install, the shim runs a real `claude.exe` under the npm prefix, in
+`<npm prefix>\node_modules\@anthropic-ai\claude-code\bin\claude.exe`. Open the shim in a text
+editor to see the exact path, and put that path in `claude_path`. On the laptop where this was
+checked (read only) the shim names that file and the file exists.
 
 ## WSL
 
