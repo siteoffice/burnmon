@@ -29,6 +29,8 @@ func TestMain(m *testing.M) {
 		b, _ := json.Marshal(s)
 		fmt.Println(string(b))
 		os.Exit(0)
+	case "mark":
+		markHelper()
 	case "sleep":
 		_ = os.WriteFile(os.Getenv("BURNMON_CONTROLS_PIDFILE"), []byte(strconv.Itoa(os.Getpid())), 0o600)
 		time.Sleep(30 * time.Second)

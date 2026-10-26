@@ -106,3 +106,34 @@ func TestCheckGate(t *testing.T) {
 		t.Errorf("empty token must never pass")
 	}
 }
+
+func TestCheckAgentRefusesMissingPid(t *testing.T) {
+	self := Self{PID: 10, ExeDir: `C:\example\burnmon`}
+	noPID := "the session has no process id"
+	e := agentEntry()
+	e.PID = 0
+	tgt := agentTarget(Stop)
+	tgt.PID = 0
+	if _, err := CheckAgent(tgt, []waits.AgentEntry{e}, self); err == nil || err.Error() != noPID {
+		t.Errorf("both pid 0: %v", err)
+	}
+	tgt.PID = 42
+	if _, err := CheckAgent(tgt, []waits.AgentEntry{e}, self); err == nil || err.Error() != noPID {
+		t.Errorf("fresh pid 0: %v", err)
+	}
+	e.PID = 42
+	tgt.PID = -1
+	if _, err := CheckAgent(tgt, []waits.AgentEntry{e}, self); err == nil || err.Error() != noPID {
+		t.Errorf("preview pid -1: %v", err)
+	}
+}
+
+func TestCheckAgentRefusesDuplicateIDs(t *testing.T) {
+	self := Self{PID: 10, ExeDir: `C:\example\burnmon`}
+	a, b := agentEntry(), agentEntry()
+	b.PID = 99
+	_, err := CheckAgent(agentTarget(Stop), []waits.AgentEntry{a, b}, self)
+	if err == nil || err.Error() != "the session id is listed more than once" {
+		t.Fatalf("got %v", err)
+	}
+}

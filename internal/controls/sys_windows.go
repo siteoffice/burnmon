@@ -6,8 +6,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -31,50 +35,120 @@ func (l *limitBuf) Write(p []byte) (int, error) {
 }
 
 // ExecRunner runs the stored argv directly: no shell, hidden window, bounded
-// output. A timeout ends only the child this runner started.
+// output. A timeout ends only the child this runner started (there is no Job
+// object, so a grandchild can survive; WaitDelay bounds the wait).
 type ExecRunner struct{}
 
-func (ExecRunner) Run(ctx context.Context, argv []string, dir string) (int, string, error) {
+// validateArgv keeps "exact argv" independent of PATH, PATHEXT and shims:
+// argv[0] must be an absolute path to an .exe.
+func validateArgv(argv []string) error {
 	if len(argv) == 0 || argv[0] == "" {
-		return -1, "", errors.New("empty command")
+		return errors.New("empty command")
+	}
+	if !filepath.IsAbs(argv[0]) {
+		return errors.New("the command must be an absolute path")
+	}
+	if !strings.HasSuffix(strings.ToLower(argv[0]), ".exe") {
+		return errors.New("the command must be an .exe")
+	}
+	return nil
+}
+
+// classifyRun turns the outcome of cmd.Run into Run's result. killed is true
+// only when this runner's cancel function really killed the process. A
+// process that exited by itself keeps its real exit code even when the
+// context expired a moment later.
+func classifyRun(err error, killed bool, ctxErr error) (int, error) {
+	if killed {
+		if ctxErr == nil {
+			ctxErr = context.Canceled
+		}
+		return -1, ctxErr
+	}
+	if err == nil || errors.Is(err, exec.ErrWaitDelay) {
+		return 0, nil
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode(), nil
+	}
+	return -1, err
+}
+
+func (ExecRunner) Run(ctx context.Context, argv []string, dir string) (int, string, error) {
+	if err := validateArgv(argv); err != nil {
+		return -1, "", err
 	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.WaitDelay = 2 * time.Second
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+	var killed atomic.Bool
+	cmd.Cancel = func() error {
+		err := cmd.Process.Kill()
+		if err == nil {
+			killed.Store(true)
+		}
+		return err
+	}
 	var out, errb limitBuf
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
 	line := firstLine(out.b.String(), errb.b.String())
-	if ctx.Err() != nil {
-		return -1, line, ctx.Err()
-	}
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
-		return ee.ExitCode(), line, nil
-	}
-	if err != nil {
-		return -1, line, err
-	}
-	return 0, line, nil
+	code, cerr := classifyRun(err, killed.Load(), ctx.Err())
+	return code, line, cerr
 }
 
-// Start opens argv in its own visible console, does not wait, and releases it.
+// Start opens argv in its own new console and does not wait. It calls
+// CreateProcess directly: with CREATE_NEW_CONSOLE, no STARTF_USESTDHANDLES and
+// handle inheritance off, the child gets real console stdio (os/exec would
+// hand it NUL, leaving `claude attach` without a keyboard). The command line
+// is the stored argv through CommandLine, no shell. The process and thread
+// handles are closed at once.
 func (ExecRunner) Start(argv []string) error {
-	if len(argv) == 0 || argv[0] == "" {
-		return errors.New("empty command")
-	}
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
-	if err := cmd.Start(); err != nil {
+	if err := validateArgv(argv); err != nil {
 		return err
 	}
-	return cmd.Process.Release()
+	app, err := windows.UTF16PtrFromString(argv[0])
+	if err != nil {
+		return err
+	}
+	cl, err := windows.UTF16PtrFromString(CommandLine(argv))
+	if err != nil {
+		return err
+	}
+	var si windows.StartupInfo
+	si.Cb = uint32(unsafe.Sizeof(si))
+	var pi windows.ProcessInformation
+	if err := windows.CreateProcess(app, cl, nil, nil, false, windows.CREATE_NEW_CONSOLE, nil, nil, &si, &pi); err != nil {
+		return err
+	}
+	_ = windows.CloseHandle(pi.Thread)
+	_ = windows.CloseHandle(pi.Process)
+	return nil
 }
 
 // Elevated reports whether this process runs with an elevated token.
 func Elevated() bool {
 	return windows.GetCurrentProcessToken().IsElevated()
+}
+
+// resolveReal resolves links, junctions, subst and mapped drives, and expands
+// 8.3 short names, for a path that exists.
+func resolveReal(p string) (string, bool) {
+	r, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return "", false
+	}
+	if up, err := windows.UTF16PtrFromString(r); err == nil {
+		if n, err := windows.GetLongPathName(up, nil, 0); err == nil && n > 0 {
+			buf := make([]uint16, n)
+			if n2, err := windows.GetLongPathName(up, &buf[0], n); err == nil && n2 > 0 && n2 <= n {
+				r = windows.UTF16ToString(buf[:n2])
+			}
+		}
+	}
+	return r, true
 }
 
 func creationTime(pid uint32) (time.Time, bool) {
@@ -90,7 +164,13 @@ func creationTime(pid uint32) (time.Time, bool) {
 	return time.Unix(0, c.Nanoseconds()), true
 }
 
-func parentMap() (map[uint32]uint32, error) {
+// procInfo is one row of the toolhelp process table.
+type procInfo struct {
+	Parent uint32
+	Exe    string
+}
+
+func parentMap() (map[uint32]procInfo, error) {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
 		return nil, err
@@ -98,49 +178,125 @@ func parentMap() (map[uint32]uint32, error) {
 	defer windows.CloseHandle(snap)
 	var pe windows.ProcessEntry32
 	pe.Size = uint32(unsafe.Sizeof(pe))
-	m := map[uint32]uint32{}
+	m := map[uint32]procInfo{}
 	if err := windows.Process32First(snap, &pe); err != nil {
-		return m, err
+		return nil, err
 	}
 	for {
-		m[pe.ProcessID] = pe.ParentProcessID
-		if windows.Process32Next(snap, &pe) != nil {
-			break
+		m[pe.ProcessID] = procInfo{pe.ParentProcessID, windows.UTF16ToString(pe.ExeFile[:])}
+		if err := windows.Process32Next(snap, &pe); err != nil {
+			if errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+				return m, nil
+			}
+			return nil, err
 		}
 	}
-	return m, nil
 }
 
-// CurrentSelf walks the ancestor chain. A parent counts only when it was
-// created before its child, so a reused pid is not taken for a parent.
-func CurrentSelf() (Self, error) {
-	dir, err := exeDir()
+const maxChain = 64
+
+// rootProcs are the login and system processes whose own parent has always
+// exited. Reaching one ends the walk normally.
+var rootProcs = []string{"explorer.exe", "services.exe", "wininit.exe", "winlogon.exe", "smss.exe", "csrss.exe", "system", "system idle process"}
+
+func isRootProc(exe string) bool {
+	for _, r := range rootProcs {
+		if strings.EqualFold(exe, r) {
+			return true
+		}
+	}
+	return false
+}
+
+// walkChain follows parent links from pid through the process table.
+//
+// Decision for exited parents: a parent that has exited is not in the
+// toolhelp table, so its own parent cannot be read and the walk cannot go on.
+// The dead parent's pid is still recorded (a reused pid then refuses, which is
+// the safe direction), and the result is ChainComplete false and unverified.
+// A parent that is alive but was created after its child has a reused pid: it
+// is recorded and the walk continues through the table, marked unverified. A
+// parent whose start time cannot be read is recorded and marked unverified.
+// The walk ends complete at parent pid 0 or at a root process (explorer,
+// services, ...), and ends incomplete on a loop or after maxChain steps.
+func walkChain(pid uint32, procs map[uint32]procInfo, created func(uint32) (time.Time, bool)) (anc []int, complete, verified bool) {
+	curT, ok := created(pid)
+	if !ok {
+		return nil, false, false
+	}
+	verified = true
+	cur := pid
+	seen := map[uint32]bool{cur: true}
+	for i := 0; i < maxChain; i++ {
+		info, ok := procs[cur]
+		if !ok {
+			return anc, false, false
+		}
+		if info.Parent == 0 || isRootProc(info.Exe) {
+			return anc, true, verified
+		}
+		pp := info.Parent
+		if seen[pp] {
+			return anc, false, false
+		}
+		seen[pp] = true
+		anc = append(anc, int(pp))
+		if _, alive := procs[pp]; !alive {
+			return anc, false, false
+		}
+		pt, tok := created(pp)
+		switch {
+		case !tok:
+			verified = false
+		case !pt.Before(curT):
+			verified = false
+			curT = pt
+		default:
+			curT = pt
+		}
+		cur = pp
+	}
+	return anc, false, verified
+}
+
+// selfEnv holds the lookups CurrentSelf needs, so tests can inject failures.
+type selfEnv struct {
+	pid     int
+	exeDir  func() (string, error)
+	procs   func() (map[uint32]procInfo, error)
+	created func(uint32) (time.Time, bool)
+}
+
+func currentSelf(env selfEnv) (Self, error) {
+	dir, err := env.exeDir()
 	if err != nil {
 		return Self{}, err
 	}
-	s := Self{PID: os.Getpid(), ExeDir: dir}
-	parents, err := parentMap()
+	procs, err := env.procs()
 	if err != nil {
-		return s, err
+		return Self{}, fmt.Errorf("process table: %w", err)
 	}
-	cur := uint32(s.PID)
-	curTime, ok := creationTime(cur)
-	if !ok {
-		return s, nil
+	if _, ok := procs[uint32(env.pid)]; !ok {
+		return Self{}, errors.New("own process is not in the process table")
 	}
-	seen := map[uint32]bool{cur: true}
-	for i := 0; i < 64; i++ {
-		pp, has := parents[cur]
-		if !has || pp == 0 || seen[pp] {
-			break
-		}
-		pt, ok := creationTime(pp)
-		if !ok || !pt.Before(curTime) {
-			break
-		}
-		s.Ancestors = append(s.Ancestors, int(pp))
-		seen[pp] = true
-		cur, curTime = pp, pt
+	if _, ok := env.created(uint32(env.pid)); !ok {
+		return Self{}, errors.New("cannot read own start time")
+	}
+	anc, complete, verified := walkChain(uint32(env.pid), procs, env.created)
+	s := Self{PID: env.pid, Ancestors: anc, ExeDir: dir, ChainComplete: complete, ChainVerified: verified}
+	if !complete {
+		return s, errors.New("ancestor chain incomplete")
+	}
+	if !verified {
+		return s, errors.New("ancestor chain unverified")
 	}
 	return s, nil
+}
+
+// CurrentSelf walks the ancestor chain. It fails closed: any lookup that
+// fails, and any chain that is incomplete or unverified, returns a non-nil
+// error. The Self returned with an error must not be used. The Task 6 service
+// must treat any CurrentSelf error as "controls off".
+func CurrentSelf() (Self, error) {
+	return currentSelf(selfEnv{pid: os.Getpid(), exeDir: exeDir, procs: parentMap, created: creationTime})
 }

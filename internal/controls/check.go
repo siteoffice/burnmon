@@ -9,7 +9,17 @@ import (
 	"burnmon/internal/waits"
 )
 
-// Runner starts the previewed argv. Neither method uses a shell.
+// Runner starts the previewed argv. Neither method uses a shell, and on
+// Windows both refuse an argv[0] that is not an absolute path ending in .exe,
+// so the exact stored argv never depends on PATH, PATHEXT or a shim.
+//
+// A nonzero exit is not an error: Run returns (code, firstLine, nil) and the
+// caller must test code != 0. err is non-nil only when the process could not
+// start or was killed by the context (then code is -1).
+//
+// There is no Job object. Run kills the child it started when the context
+// ends, but a grandchild can survive; WaitDelay (2 s) only bounds how long Run
+// waits for the output pipes.
 type Runner interface {
 	// Run starts argv hidden and waits for it.
 	Run(ctx context.Context, argv []string, dir string) (exitCode int, firstLine string, err error)
@@ -21,18 +31,24 @@ type Runner interface {
 // returns the fresh entry when the control may run.
 func CheckAgent(t Target, fresh []waits.AgentEntry, self Self) (waits.AgentEntry, error) {
 	var e waits.AgentEntry
-	found := false
+	matches := 0
 	for _, f := range fresh {
 		if t.AgentID != "" && f.ID == t.AgentID {
-			e, found = f, true
-			break
+			e = f
+			matches++
 		}
 	}
-	if !found {
+	if matches == 0 {
 		return waits.AgentEntry{}, errors.New("the session is no longer listed")
+	}
+	if matches > 1 {
+		return waits.AgentEntry{}, errors.New("the session id is listed more than once")
 	}
 	if e.Kind != "background" {
 		return waits.AgentEntry{}, errors.New("only background sessions have controls")
+	}
+	if e.PID <= 0 || t.PID <= 0 {
+		return waits.AgentEntry{}, errors.New(errNoPID)
 	}
 	if e.PID != t.PID || e.StartedAt != t.StartedAt {
 		return waits.AgentEntry{}, errors.New("the session changed since the preview, press again")
