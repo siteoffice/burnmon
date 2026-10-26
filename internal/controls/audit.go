@@ -16,6 +16,9 @@ type AuditLine struct {
 	Command  string `json:"command"`
 	ExitCode int    `json:"exit_code"`
 	Refused  string `json:"refused,omitempty"`
+	// Phase is "start" on the line written before a control runs, and empty on
+	// the result line and on refusals.
+	Phase string `json:"phase,omitempty"`
 }
 
 // AuditPath is the audit file next to the store file.

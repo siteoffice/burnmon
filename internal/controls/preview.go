@@ -129,3 +129,13 @@ func (p *Previews) Take(token string) (Pending, error) {
 	pe.Argv = append([]string(nil), pe.Argv...)
 	return pe, nil
 }
+
+// Peek returns the preview for token without taking it, so a refused press
+// can be audited with the target it was made for.
+func (p *Previews) Peek(token string) (Pending, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	pe, ok := p.byToken[token]
+	pe.Argv = append([]string(nil), pe.Argv...)
+	return pe, ok
+}
