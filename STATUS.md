@@ -1,5 +1,27 @@
 # BurnMon, status
 
+What is true after B1 to B4 (2026-10-26, branch `sprint/burnmon-b5-docs-pass`, read live with
+`git rev-parse`, `git merge-base --is-ancestor` and `git ls-remote origin refs/heads/main`):
+`main` and `origin/main` are both `4c33094`. B1 (shared snapshot, `keep_history`, history delete
+and export) and B2 (section groups, Overall scrollbar, Station starts as space) are in `main`.
+B3 (Waits on you and Outcomes, `foreman_root`, `agent_view`, `burnmon-cli waits`) exists only on
+`sprint/burnmon-b3-r9-waits-on-you-outcomes` at `afe6cac`, based on `main`. B4 (controls, `claude_path`,
+`agent_sessions[]`) exists only on `sprint/burnmon-b4-r10-first-controls` at `eeb2f26`, stacked on
+B3. This documentation pass (B5) is stacked on B4: its branch held `e5e00c8` when this paragraph
+was written, and the commit that carries this paragraph comes after that. None of B3, B4 or B5 is
+merged, pushed or tagged; merge order is B3, then B4, then B5. Measured by the sprint reports,
+each against its own baseline: B1 438 tests passing (baseline 385), B2 455 (438), B3 505 (455),
+B4 636 (505). Not run in B1 to B4: `.\build.ps1` and `.\scripts\uicheck.ps1` (the apps were open;
+B2 built through its implementers, not by the orchestrator), so every window level claim is
+unverified on WebView2; no control was run against a real session or flow; the agent view
+poller was never run against the real `claude` (on that laptop `claude` resolves to a `.cmd`
+shim, which BurnMon refuses). Parked by the reports: reply control not built, `GatePending` in the
+graph not yet aligned to the Foreman rule (awaiting-owner), Foreman read latency of up to about
+15.7 s for a new gate, and the schema doc patch for `docs\snapshot_schema.md` (ignored by git,
+so it travels as a patch). Latest tag is `v0.4.0-alpha.10`; version constants are unchanged:
+`burnmon.exe` and `burnmon-cli.exe` report `0.3.2`, `burnmon-dev.exe` reports `0.4.0-alpha.10`.
+The paragraph below describes 2026-10-21 and is kept as history.
+
 What is true on 2026-10-21: the repository lives at `github.com/siteoffice/burnmon`
 (moved from `wilcodetree`, confirmed by Wilco 2026-10-21). `origin/main` is `14e96bf`
 (checked by Wilco with `git ls-remote origin refs/heads/main`), the only branch on GitHub.
