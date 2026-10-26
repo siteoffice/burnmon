@@ -1,0 +1,1 @@
+{"sha": "a802bfa", "message": "fix(controls): isolate preview argv, harden tests, safe key\n\n internal/controls/preview.go      | 8 +++++++-\n internal/controls/preview_test.go | 2 +-\n 2 files changed, 8 insertions(+), 2 deletions(-)\n internal/controls/hardening_test.go | new file", "node": "git-flow", "clone": "Wilco de Tree", "committedAt": "2026-10-26T01:03:57Z"}
