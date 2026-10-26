@@ -212,7 +212,22 @@ func TestRealCorpusHasWhatTheSpecNames(t *testing.T) {
 }
 
 // allowlist holds claims that are not repo files or code strings, each with a reason.
-var allowlist = map[string]string{}
+var allowlist = map[string]string{
+	`~\.burnmon`:                           "runtime folder in the user's home, made by BurnMon at start, not a repo file",
+	`~/.burnmon`:                           "runtime folder in the user's home (forward slash spelling), not a repo file",
+	`dist\burnmon-cloud-<version>.plugin`:  "build output of tools\\burnmon-cloud\\build.ps1, not committed; <version> is a placeholder",
+	`%LOCALAPPDATA%\burnmon\burnmon.db`:    "runtime store file, created on first run, not a repo file",
+	`~/.config/burnmon/burnmon.db`:         "runtime store file on Linux, created on first run, not a repo file",
+	`%USERPROFILE%\.burnmon\snapshot.json`: "runtime snapshot file written by the snapshot writer, not a repo file",
+	`%USERPROFILE%\.burnmon\snapshot.lock`: "runtime writer lock file, created by internal\\snapshotwriter at run time, not a repo file",
+	`%LOCALAPPDATA%\burnmon\burnmon.json`:  "optional user config file, never in the repo",
+	`%HERMES_HOME%\state.db`:               "Hermes data file on the user's computer, outside the repo",
+	`%LOCALAPPDATA%\Hermes\state.db`:       "Hermes data file on the user's computer, outside the repo",
+	`$HERMES_HOME/state.db`:                "Hermes data file on the user's computer, outside the repo",
+	`~/.hermes/state.db`:                   "Hermes data file on the user's computer, outside the repo",
+	`%COPILOT_HOME%\session-store.db`:      "Copilot CLI data file on the user's computer, outside the repo",
+	`~/.copilot/session-store.db`:          "Copilot CLI data file on the user's computer, outside the repo",
+}
 
 func requireDoccheck(t *testing.T) {
 	t.Helper()
