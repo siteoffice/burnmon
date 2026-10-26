@@ -24,6 +24,10 @@ BurnMon Dev, the developer build with the station view and system panels:
 
 <img src="assets/screenshots/dev-station.png" alt="BurnMon Dev station view with system panels" width="560">
 
+Both screenshots were last committed on 2026-10-07 (`git log`), before the B-series
+changes described below (sections, Waits on you, Outcomes, controls). New screenshots are
+not made yet.
+
 ## What it reads
 
 - **Claude Code** and **Cowork** (Claude's desktop agent mode): `claude-code-sessions`
@@ -96,6 +100,11 @@ where a delivery delay comes from.
 
 BurnMon still reads `.burnmon\cloud` next to `burnmon.exe` too, for a plugin built for one
 computer (`build.ps1 -Target <that folder>\latest.jsonl`).
+
+A cloud subagent's requests are stored as their own session, `agent-<id>`, with the main
+session as its parent, and the copy folded under the parent is removed so its tokens count
+once (the rows are built in `internal\adapter\claude\cloud.go`, the folded copy is removed in
+`UpsertEvents` in `internal\store\store.go`, tests in `cloud_subagent_test.go`).
 
 What it does not cover:
 
@@ -225,14 +234,27 @@ can set since, until and a label. When `owners` rules exist, tick at least one o
 
 ## The CLI
 
-    burnmon-cli                        build the dashboard and open it in the browser
-    burnmon-cli live -json             one JSON snapshot of the Now page, for scripting
-    burnmon-cli tools -since 30d       tool_calls totals: tool, calls, sessions, bytes
-    burnmon-cli insight <session-id>   findings for one session, table or -json
-    burnmon-cli reown                  re-apply owner and client rules to every event in the store
-    burnmon-cli price-check            print every price book and when it was last checked
-    burnmon-cli export -owner NAME     write a client-safe daily-rows export, see "Export and merge"
-    burnmon-cli merge FILE... -out DIR combine exports into merged.json and an offline report.html
+- `burnmon-cli`: build the dashboard and open it in the browser.
+- `burnmon-cli live -json`: one JSON snapshot of the Now page, for scripting.
+- `burnmon-cli tools -since 30d`: tool_calls totals: tool, calls, sessions, bytes.
+- `burnmon-cli insight -json <session-id>`: findings for one session, table or JSON.
+- `burnmon-cli reown`: re-apply owner and client rules to every event in the store.
+- `burnmon-cli price-check`: print every price book and when it was last checked.
+- `burnmon-cli export -owner NAME`: write a client-safe daily-rows export, see "Export
+  and merge".
+- `burnmon-cli merge FILE... -out DIR`: combine exports into `merged.json` and an offline
+  `report.html`.
+- `burnmon-cli graph -since 24h`: print the relation graph for a past window as JSON
+  (sessions and subagents from the store, the live-only edges it recorded, and Foreman
+  sprints when a Foreman folder is set). `-foreman <dir>` overrides `foreman_root`.
+- `burnmon-cli waits -json`: list what waits on you and the outcomes of the last 24 hours
+  from Foreman's state, read only. It needs `foreman_root` or `-foreman <dir>`, and
+  prints a message and exits 1 without one. Its Foreman items are the same as in the
+  Waits on you and Outcomes sections of BurnMon Dev; session and agent view items are not
+  in its output.
+- `burnmon-cli backfill-parents`: set the parent session on Claude subagent rows stored
+  before the adapter read it. A dry run that only counts rows; `-apply` writes. Copy the
+  store file first.
 
 `burnmon-cli` also keeps every claudecost-era flag: `-months`, `-seat`, `-no-open`,
 `-json data.json`, `-source DIR`, `-no-cache`, `-out DIR`, `-config`, `-version`. See
@@ -304,7 +326,12 @@ stale and they say BurnMon is not running. Groundwork works without BurnMon.
 
 Either exe writes the file. With both running, one writes: the one that holds the lock
 `%USERPROFILE%\.burnmon\snapshot.lock`. The other only reads. If the writer exits, the
-other takes over at its next tick (5 seconds). See `docs\snapshot_schema.md`.
+other takes over at its next tick (5 seconds). The lock is an operating system file lock,
+so a dead writer never blocks the other; the file holds an owner record (process id,
+exe, the time the lock was taken) for diagnosis only. The snapshot also carries `wait_items`,
+`outcome_items` and `agent_sessions`; fields and kinds are in `docs\snapshot_schema.md`.
+Gates, sprints and failed checks in `wait_items` and `outcome_items` come from Foreman
+and need `foreman_root`.
 
 ## BurnMon Dev
 
@@ -327,6 +354,9 @@ responsive down to a single compact column.
   at once, charts included; the choice is remembered for the next start
   (in `burnmon-dev-view.json`, next to `burnmon-dev.db`). Vendor colours
   stay the same families, darkened only where they would be too faint on white.
+- **M** opens the Agents map and **M** again closes it. It opens on its LIVE tab when the
+  snapshot is current and on Last 24 hours otherwise; Last 7 days is a third tab. A box
+  opens the session it stands for; the live map reads through `bdevAgentMap`.
 - **One tick**: every panel repaints from one snapshot a second. The System chart and
   process-group history arrive as deltas (only samples the page does not hold yet), so
   the payload stays the same size however long the window runs. A late snapshot skips
@@ -380,8 +410,9 @@ the same data as the rest of the window. It draws and reads nothing while it is 
 - **O** swaps the whole burn zone (chart, session cards, vendor strip, turn ticker) for a
   flat pixel-art plan view of the same floor. **O** again closes it.
 - **I** mounts the isometric view inside the burn zone, with System still visible below.
-- **T** switches theme while it is open: a construction site (default) or a space station.
-  `"station_theme": "site"` or `"space"` in `burnmon-dev.json` sets the one it starts in.
+- **T** switches theme while it is open: a space station (the default) or a construction
+  site. `"station_theme": "site"` or `"space"` in `burnmon-dev.json` sets the one it
+  starts in; the gear dialog saves the same key under "Station starts as".
 - Drag pans, the wheel zooms, a double-click resets the camera. Hover shows a small card;
   a click opens the session's latest turn as a compact card. **Esc** closes a turn popup
   first, then the Station, then fullscreen. Keys are ignored while you type in a field.
@@ -414,14 +445,109 @@ first token count lands. Art is CC0 (Kenney, Quaternius and others), listed in
 `tools\station_atlas\CREDITS.txt`. Open issue: it costs more CPU than the rest of the
 window, see Known issues.
 
+### Sections, Plain mode and the Overall scrollbar
+
+The window is 15 switchable parts in four groups. The gear dialog has one list of part
+switches per mode. Standard shows every part by default. Plain shows five by default
+(Waits on you, Outcomes, Burn, Agents map, Sessions) and uses plain words; Plain mode makes
+no model call. The Overall scrollbar switch (`overall_scrollbar`, default on) lets the
+page scroll instead of dropping parts that do not fit; a note counts the sections a small
+window hides. The choice is stored in `burnmon-dev-view.json` next to `burnmon-dev.db`
+(`plain_mode`, `overall_scrollbar`, `parts_standard`, `parts_plain`, `controls`). A file
+from the earlier seven-section layout is migrated in memory and written in the new shape
+on the first save.
+
+| id | label | group |
+|---|---|---|
+| `waits` | Waits on you | Status |
+| `outcomes` | Outcomes | Status |
+| `burn` | Burn | Status |
+| `git` | Git | Status |
+| `agents_map` | Agents map | Status |
+| `sessions` | Sessions | Status |
+| `burn_30min` | Burn last 30 min | Sessions last 30 min |
+| `vendor_strip` | Vendor strip | Sessions last 30 min |
+| `activity` | Activity | Sessions last 30 min |
+| `heatmap` | Heatmap harness x minute | Sessions last 30 min |
+| `turn_ticker` | Turn ticker | Sessions last 30 min |
+| `system` | System | Processes last 30 min |
+| `process_groups` | Process groups (with memory, disks and network) | Processes last 30 min |
+| `processes` | Processes | Processes last 30 min |
+| `todo` | To Do | Microsoft To Do |
+
+### Waits on you and Outcomes
+
+Two parts of BurnMon Dev list what needs you and what just ended. Waits on you holds open
+Foreman gates, waiting sprints with parked tasks, stopped sprints with a failing check,
+waiting sessions, and the prompts and questions the agent view reports. Outcomes holds
+finished and stopped sprints and failed checks of the last 24 hours. A sprint has at most one
+`finished` row, and none when a failing check of it is within the window: it then has one
+`failed_check` row per failing check, so two when both test and verify failed.
+Each item has one of these kinds in the snapshot:
+
+| kind | what it is |
+|---|---|
+| `gate` | a Foreman flow with an open gate |
+| `sprint` | a waiting sprint |
+| `failed_check` | a sprint whose test or verify check failed: a wait while the sprint is stopped, an outcome when it failed in the last 24 hours |
+| `question` | an agent view session that asks a question |
+| `prompt` | an agent view session that waits on a permission prompt |
+| `session` | a session the graph shows as waiting on you, or an agent view session that is blocked or waits on a dialog, sandbox or worker request |
+| `finished` | a finished or stopped sprint (Outcomes) |
+
+Both parts show every item in a bounded scroll list with a count. A spec or result link
+opens through `bdevOpenItemFile`, which opens only a file named by the current snapshot
+and only `.md`, `.html` or `.txt` (an `.html` file opens in the default browser). The
+parts turn grey when the snapshot is older than two ticks. Foreman's state files are read
+every 7.5 seconds. The B3 report works out that a new gate can take up to about 15.7
+seconds to reach the page (calculated, not measured).
+
+The agent view is off by default. With `agent_view` on, BurnMon runs `claude agents --json`
+every 30 seconds, each run bounded to 10 seconds, with a hidden window. It starts only a
+`claude.exe` that can be started directly: a `.cmd` shim is refused. It has not been run
+against the real `claude` (B3 report). Window level behaviour of these parts is not
+checked here: uicheck `d36` renders both parts from the example snapshot, and `d29`, `d33`
+and `d34` cover the layout, but none of them was run in B1 to B4 because the apps were open.
+
+### Controls
+
+BurnMon Dev can run four controls: `stop` and `attach` on a background agent view session
+(`internal\controls\check.go` refuses any other kind, so an interactive session has none), and
+`approve` and `send_back` on a Foreman gate. Every control is off by default and has its
+own switch in the gear dialog. Besides the switch, `stop` and `attach` need `agent_view`
+on and a `claude.exe` that BurnMon can start directly: `claude_path`, else the first
+`claude` on `PATH` (see "Foreman and Claude Code settings"). `approve` and `send_back`
+need `foreman_root`, the file `flow_transition.py` in its `flows` folder, subfolder `_lib`,
+and a `python.exe` on `PATH` (the Microsoft Store alias is refused); they do not start `claude`. A control
+that cannot be used shows its reason in the gear dialog.
+
+- `stop` runs `claude stop <id>` and `attach` runs `claude attach <id>`. Both are refused for a
+  session that has ended, because attach would restart a stopped session.
+- `approve` writes the verdict approve at gate G1 and G2 and proceed at G3. `send_back` writes
+  reject at G1 and G2. Send back at G3 and every G4 control are not offered. The verdict
+  goes through Foreman's own gate command.
+- A control first shows a preview of the exact command. A separate Confirm button runs it.
+  The preview token is single use, lives 5 seconds and cannot be confirmed in the first 400
+  ms. The target is checked again just before it runs.
+- Each executed run writes a start line and a result line to `controls-audit.ndjson`, next
+  to the store file, before and after it runs; if the audit cannot be written nothing
+  runs. The file holds no output and no session text.
+- BurnMon Dev refuses a session that is itself, one of its ancestors, one whose folder is
+  its own or contains it, and it turns every control off when it runs as administrator.
+- There is no reply control: Claude Code documents no shell command that replies to a
+  blocked background session.
+
+Not run live: no control was run against a real session, process or flow (B4 report),
+and the audit lines of a live run are not quoted anywhere.
+
 ## Configuration
 
 Prices and the subscription calibration are compiled-in illustrative defaults (see
 `internal\pricing\pricing.go`), not a real invoice. Drop a `burnmon.json` next to the exe
 (app and CLI both check there first, then `%LOCALAPPDATA%\burnmon\burnmon.json` for a
 fixed, read-only-share install) with your own numbers; any subset of fields overrides the
-defaults. See `burnmon.example.json` for every key, including `owners` (empty by
-default).
+defaults. `burnmon.example.json` lists these keys, including `owners` (empty by default);
+three newer keys are not in it yet, see "Foreman and Claude Code settings".
 
 If no `burnmon.json` is found, both binaries still read a `claudecost.json` in the same
 two locations: the pre-rename config name, kept working for anyone who has not renamed
@@ -437,6 +563,35 @@ Settings, `burnmon-dev.exe` in the gear dialog): older than N days, one session,
 Each delete needs two presses, the second on a button that now reads "Confirm: ...". A
 delete keeps the read position, so deleted turns are not read back in from a transcript
 that is still on disk.
+
+### Foreman and Claude Code settings
+
+Three more keys go in `burnmon.json`. `burnmon.example.json` does not list them yet.
+
+```json
+{
+  "foreman_root": "C:\\example\\foreman",
+  "agent_view": true,
+  "claude_path": "C:\\example\\claude.exe"
+}
+```
+
+- `foreman_root`: the folder that holds Foreman's `flows` and `sprints` folders. BurnMon reads
+  `sprints\<project>\<slug>\sprint.json` and `flows\<project>\<flow>\flow.json` there, and
+  the controls need `flows\_lib\flow_transition.py`. Empty (the
+  default) means no Foreman: no Foreman links in the graph and no Foreman items in Waits on
+  you and Outcomes. `burnmon-cli graph` and `burnmon-cli waits` take `-foreman <dir>` to
+  override it.
+- `agent_view`: `true` turns on the agent view poller. Default off.
+- `claude_path`: an absolute path to `claude.exe`. It must be an existing file and a
+  `.exe` on Windows; a `.cmd` shim is refused. Empty means a `claude.exe` on `PATH`, which
+  the poller and the controls accept too.
+
+`claude` on `PATH` is often an npm shim, `claude.cmd`, which BurnMon refuses. For an npm
+install, the shim runs a real `claude.exe` under the npm prefix, in
+`<npm prefix>\node_modules\@anthropic-ai\claude-code\bin\claude.exe`. Open the shim in a text
+editor to see the exact path, and put that path in `claude_path`. On the laptop where this was
+checked (read only) the shim names that file and the file exists.
 
 ## WSL
 
@@ -471,6 +626,13 @@ across people, and refuses no one because there is nothing to refuse: other peop
 usage is simply not on your disk.
 Costs shown for Claude are allocated shares of a flat monthly invoice, not money owed by
 anyone.
+
+Two optional features start programs on this computer, and only after you switch them on:
+the agent view poller (`agent_view`) and the controls. The poller runs only
+`claude agents --json` (`internal\snapshotwriter\agentview.go`). `stop` and `attach` run
+`claude stop <id>` and `claude attach <id>`; `approve` and `send_back` run `python` on a
+script that calls Foreman's own gate command. All of them use documented commands, no
+undocumented endpoint.
 
 ## Build
 
@@ -550,4 +712,6 @@ Linux browser-mode builds), 2026-09-24; `v0.3.1`, a cleanup pass, 2026-09-24; `v
 shared ingest performance and local time everywhere, 2026-09-26. `burnmon-dev.exe` is at
 `v0.4.0-alpha.10` (tag), with further Station work on `main` since. `burnmon.exe` and
 `burnmon-cli.exe` still report `0.3.2`. See `STATUS.md` for what is true at the current
-commit and `SESSION_LOG.md` for the session-by-session record.
+commit and `SESSION_LOG.md` for the session-by-session record. The BurnMon Dev text above
+(sections, Waits on you, Outcomes, controls) is written from the code of the branch this
+README sits on; `STATUS.md` says which of those parts are in `main`.

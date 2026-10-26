@@ -49,6 +49,30 @@ plugin off, but Cowork leaves it off too. In the 3.4.2 test, a cloud session wit
 sent no usage to BurnMon. A watcher test of the folder watch (3.4.1) covered 40% of writes:
 it fires for 0.5 to 2.5 minutes after each session start, then stops.
 
+## Subagents
+
+A subagent's usage rows are stored as their own session under the parent session, so tokens
+count once:
+
+- The plugin labels each row with the transcript it came from: `main`, or the subagent file
+  name such as `agent-<id>` (`tools\burnmon-cloud\plugin\scripts\extract.py`, function usage_row).
+- BurnMon reads a row whose agent is not `main` as session `agent-<id>` with the parent
+  session as its parent id (`internal\adapter\claude\cloud.go`). A row without an agent
+  field (an older plugin), or whose agent equals its session id, stays on its session.
+- When the same request arrives again as a subagent row, the copy that an earlier version
+  folded into the parent is removed (`internal\store\store.go`, `UpsertEvents`). Only a
+  Cowork (Cloud) row with no parent of its own is removed.
+- Verified in code and in tests: `TestParseCloudDropSubagent` in
+  `internal\adapter\claude\cloud_subagent_test.go` and
+  `TestUpsertCloudSubagentMovesFoldedRow` in `internal\store\cloud_subagent_test.go`; on the
+  plugin side test_extract_includes_subagents in `tools\burnmon-cloud\tests\test_extract.py`.
+- BurnMon Dev's snapshot builder nests a running subagent under its running parent by that
+  parent id when the parent is also present (`internal\live\live.go`, `BuildSnapshot`).
+  Not run live for a cloud session in this documentation pass. The row carries no agent type,
+  so a cloud subagent is not labelled by type.
+- Rows stored before this change stay as they were stored, except when the same request
+  arrives again as a subagent row: only then does the store remove the folded copy.
+
 ## What it does not cover
 
 - A session without `~/.burnmon` connected is not counted. Neither is a session started on
