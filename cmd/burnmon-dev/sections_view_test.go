@@ -310,3 +310,134 @@ func TestPageNamesStoppedOutcomeStatus(t *testing.T) {
 		}
 	}
 }
+
+// ---- B4 Task 8: control chips, preview line, result, gear block ----------
+
+// pageFuncBody returns the page script text of one function, up to the next
+// two-space-indented function.
+func pageFuncBody(t *testing.T, name string) string {
+	t.Helper()
+	i := strings.Index(pageHTML, "function "+name+"(")
+	if i < 0 {
+		t.Fatalf("page has no function %s", name)
+	}
+	body := pageHTML[i+1:]
+	if j := strings.Index(body, "\n  function "); j > 0 {
+		body = body[:j]
+	}
+	return body
+}
+
+func TestPageHasControls(t *testing.T) {
+	for _, want := range []string{"bdevControlPreview", "bdevControlRun", "function ctlChips(", "function ctlLines(",
+		"agent_sessions", `class="ctlcmd"`, "again within 5 s", "again within 5 seconds", "'Send back'",
+		"Stop a session", "data-ctl-sw", "Attach to a session", "Approve a gate", "Send a gate back",
+		"claude_path", "agent_view", `class="ctl ctlgo"`, ">Confirm<"} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"bdevReply", "'reply'", `"reply"`, "data-ctl-sw=\"reply\""} {
+		if strings.Contains(pageHTML, bad) {
+			t.Errorf("page has %q: reply is a parked ASK", bad)
+		}
+	}
+}
+
+func TestPageNeverSendsACommand(t *testing.T) {
+	// Every call of the run binding passes the stored token, nothing else.
+	if n := strings.Count(pageHTML, "bdevControlRun("); n != 1 {
+		t.Errorf("%d calls of bdevControlRun(, want exactly 1", n)
+	}
+	if !strings.Contains(pageHTML, "window.bdevControlRun(p.token)") {
+		t.Error("the run call is not window.bdevControlRun(p.token)")
+	}
+	// Every call of the preview binding passes exactly control and target.
+	if n := strings.Count(pageHTML, "bdevControlPreview("); n != 1 {
+		t.Errorf("%d calls of bdevControlPreview(, want exactly 1", n)
+	}
+	if !strings.Contains(pageHTML, "window.bdevControlPreview({control: c, target: t})") {
+		t.Error("the preview call is not {control: c, target: t}")
+	}
+	body := pageFuncBody(t, "ctlChips") + pageFuncBody(t, "ctlLines")
+	for _, bad := range []string{"argv", "data-cmd", "data-pid", "data-path", "data-command"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("control markup carries %q", bad)
+		}
+	}
+}
+
+func TestPageEscapesControlText(t *testing.T) {
+	chips := pageFuncBody(t, "ctlChips")
+	lines := pageFuncBody(t, "ctlLines")
+	fill := pageFuncBody(t, "ctlFill")
+	for _, want := range []string{`data-target="' + esc(`, `data-ctl="' + esc(`} {
+		if !strings.Contains(chips, want) {
+			t.Errorf("ctlChips lacks %s", want)
+		}
+		if strings.Contains(chips, "innerHTML") {
+			t.Error("ctlChips assigns innerHTML")
+		}
+	}
+	for _, want := range []string{`data-ctlid="' + esc(`, `data-target="' + esc(`} {
+		if !strings.Contains(lines, want) {
+			t.Errorf("ctlLines lacks %s", want)
+		}
+	}
+	// The command, label and result text never enter markup: ctlFill sets them as text.
+	for _, bad := range []string{"p.command", "p.label", ".text"} {
+		if strings.Contains(lines, bad) {
+			t.Errorf("ctlLines interpolates %s into markup", bad)
+		}
+	}
+	if !strings.Contains(fill, ".textContent = ") || strings.Contains(fill, "innerHTML") {
+		t.Error("ctlFill must set text with textContent and never innerHTML")
+	}
+}
+
+func TestPageControlsOffUnlessOnAndReady(t *testing.T) {
+	chips := pageFuncBody(t, "ctlChips")
+	for _, want := range []string{"ctlState.on[c] && ctlState.ready[c]", "ctlState.verdicts[c]", "hasOwnProperty", "'background'"} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if !strings.Contains(chips, "ctlState.on[c] && ctlState.ready[c]") {
+		t.Error("ctlChips does not require on AND ready")
+	}
+	// Chips only for waits rows, never for outcome rows.
+	if !strings.Contains(pageHTML, "if(!outcome") {
+		t.Error("secItemRow does not keep outcome rows free of controls")
+	}
+}
+
+func TestPageConfirmIsSeparateDebouncedAndExpires(t *testing.T) {
+	for _, want := range []string{"var CTL_GAP = 400;", "var CTL_TTL = 5000;", "data-ctlgo=", " disabled", "Date.now() - p.at < CTL_GAP",
+		"delete ctlPending[key]", "setTimeout(secRender, CTL_TTL + 50)", "ctlPrune()", "preview expired", "Took too long"} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	// A chip press only previews: the click handler never runs from a chip.
+	h := pageFuncBody(t, "ctlClick")
+	if !strings.Contains(h, "data-ctlgo") {
+		t.Error("ctlClick has no confirm branch")
+	}
+	if strings.Contains(h, "bdevControlRun(") {
+		t.Error("ctlClick calls the run binding directly instead of through ctlRun")
+	}
+}
+
+func TestPageControlWordsAndGear(t *testing.T) {
+	for _, want := range []string{"stop:['stop','Stop']", "attach:['attach','Open']", "approve:['approve','Approve']",
+		"send_back:['send back','Send back']", `id="secControls"`, "secControlsSync(", "{ control: t.getAttribute('data-ctl-sw'), on: t.checked }"} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"data-ctl-sw=\"reply\"", "ctlState.verdicts.send_back.G3"} {
+		if strings.Contains(pageHTML, bad) {
+			t.Errorf("page has %q", bad)
+		}
+	}
+}
