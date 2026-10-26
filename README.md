@@ -328,7 +328,7 @@ Either exe writes the file. With both running, one writes: the one that holds th
 `%USERPROFILE%\.burnmon\snapshot.lock`. The other only reads. If the writer exits, the
 other takes over at its next tick (5 seconds). The lock is an operating system file lock,
 so a dead writer never blocks the other; the file holds an owner record (process id,
-exe, start time) for diagnosis only. The snapshot also carries `wait_items`,
+exe, the time the lock was taken) for diagnosis only. The snapshot also carries `wait_items`,
 `outcome_items` and `agent_sessions`; fields and kinds are in `docs\snapshot_schema.md`.
 Gates, sprints and failed checks in `wait_items` and `outcome_items` come from Foreman
 and need `foreman_root`.
@@ -492,7 +492,7 @@ Each item has one of these kinds in the snapshot:
 | `failed_check` | a sprint whose test or verify check failed: a wait while the sprint is stopped, an outcome when it failed in the last 24 hours |
 | `question` | an agent view session that asks a question |
 | `prompt` | an agent view session that waits on a permission prompt |
-| `session` | a session the graph shows as waiting on you |
+| `session` | a session the graph shows as waiting on you, or an agent view session that is blocked or waits on a dialog, sandbox or worker request |
 | `finished` | a finished or stopped sprint (Outcomes) |
 
 Both parts show every item in a bounded scroll list with a count. A spec or result link
