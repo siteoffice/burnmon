@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
 	"burnmon/internal/store"
+	"burnmon/internal/waits"
 )
 
 // TestParseSinceDuration guards `tools -since`'s day-unit parsing, the one
@@ -175,5 +178,93 @@ func TestExportFailureText(t *testing.T) {
 	}
 	if got, want := exportFailureText(boom, "x.json"), "internal error: boom"; got != want {
 		t.Fatalf("other failure = %q, want %q", got, want)
+	}
+}
+
+// TestWaitsReportCounts: the report lists each item on one line and the last
+// line counts gates, waiting sprints, failed checks (once per id) and
+// finished sprints.
+func TestWaitsReportCounts(t *testing.T) {
+	fc := waits.Item{Kind: waits.KindFailedCheck, ID: "check:s:verify", Title: "capped", Detail: "verify fail: x", AgeSeconds: 3600}
+	wait := []waits.Item{
+		{Kind: waits.KindGate, ID: "gate:a:G4", Title: "one", Detail: "G4", AgeSeconds: 60, SpecPath: `C:\example\a.md`},
+		{Kind: waits.KindGate, ID: "gate:b:G4", Title: "two", Detail: "G4", AgeSeconds: 120},
+		{Kind: waits.KindSprint, ID: "sprint:s", Title: "sp", Detail: "1 task parked", AgeSeconds: 600},
+		fc,
+	}
+	outs := []waits.Item{fc, {Kind: waits.KindFinished, ID: "sprint:d", Title: "done", Detail: "test pass, verify -", AgeSeconds: 5000}}
+	got := waitsReport(wait, outs)
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if last := lines[len(lines)-1]; last != "open gates: 2, waiting sprints: 1, failed checks: 1, finished last 24 h: 1" {
+		t.Fatalf("counts line = %q", last)
+	}
+	for _, id := range []string{"one", "two", "sp", "capped", "done"} {
+		n := 0
+		for _, l := range lines {
+			if strings.Contains(l, "  "+id+"  ") {
+				n++
+			}
+		}
+		if n == 0 {
+			t.Errorf("no line for %q in:\n%s", id, got)
+		}
+	}
+	if !strings.Contains(got, `spec=C:\example\a.md`) || !strings.Contains(got, "spec=-") || !strings.Contains(got, "result=-") {
+		t.Errorf("spec/result columns wrong:\n%s", got)
+	}
+	if !strings.Contains(got, "Waits on you") || !strings.Contains(got, "Outcomes, last 24 h") {
+		t.Errorf("headings missing:\n%s", got)
+	}
+}
+
+func waitsForemanRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, "flows", "p", "f")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"flow_id":"f-1","slug":"example-flow","project":"example","status":"awaiting-owner","gate":{"id":"G4","status":"awaiting-owner","opened_at":"2026-10-23T08:00:00Z"},"updated_at":"2026-10-23T09:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(dir, "flow.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestRunWaitsReadsForemanRoot(t *testing.T) {
+	var buf bytes.Buffer
+	if code := runWaitsTo(&buf, []string{"-foreman", waitsForemanRoot(t)}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(buf.String(), "open gates: 1") {
+		t.Fatalf("output:\n%s", buf.String())
+	}
+}
+
+func TestRunWaitsNeedsARoot(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "burnmon.json")
+	if err := os.WriteFile(cfg, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if code := runWaitsTo(&buf, []string{"-config", cfg}); code != 1 {
+		t.Fatalf("exit %d, want 1", code)
+	}
+}
+
+func TestRunWaitsJSON(t *testing.T) {
+	var buf bytes.Buffer
+	if code := runWaitsTo(&buf, []string{"-json", "-foreman", waitsForemanRoot(t)}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	var out struct {
+		WaitItems    []waits.Item `json:"wait_items"`
+		OutcomeItems []waits.Item `json:"outcome_items"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.WaitItems) != 1 || out.OutcomeItems == nil {
+		t.Fatalf("got %+v", out)
 	}
 }

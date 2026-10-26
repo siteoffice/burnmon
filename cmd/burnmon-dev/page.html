@@ -394,6 +394,14 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .secrow{display:flex; gap:10px; justify-content:space-between}
 .secrow b{color:var(--txt)}
 .sechint{color:var(--dim); font-size:11px}
+.secitem{white-space:nowrap; align-items:baseline}
+.seclist{flex:0 1 auto; min-height:0; max-height:8.3em; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+.seclist > .secitem{flex:0 0 auto}
+.secitemtxt{min-width:0; overflow:hidden; text-overflow:ellipsis}
+.secitemmeta{flex:0 0 auto}
+.secpanel.sec-aged .secbody{opacity:.55}
+.secaged{color:var(--amber); font-size:11px}
+.secfile{color:var(--amber)}
 /* R7 agent map. The overview in the section is static, read-only text; the
    full map takes the Station's place (same layer): boxes in columns, lines
    between them, a panel with the evidence on the right. Nothing here
@@ -3221,9 +3229,10 @@ body.plain #mapOverlay{font-size:13.5px}
   //   on, measured by running that layout first); while the page still
   //   overflows, parts are hidden in FIT_OFF_ORDER and #secCutNote counts them.
   //   Last resort, after every other part is hidden and the chart is at its floor:
-  //   turn_ticker, vendor_strip, system, burn_30min, so every part can be hidden and counted.
+  //   turn_ticker, vendor_strip, system, burn_30min, then waits last of all (the panel holding the
+  //   person's actions), so every part can be hidden and counted.
   // Every pass starts from show-all, so hidden parts come back when there is room.
-  var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min'];
+  var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min','waits'];
   var FIT_FLOOR = 0.6;
   // __bdevFit is tools\uicheck's own read (check_d34.go).
   window.__bdevFit = { scroll: true, histNatural: 0, histFloor: 0, histH: 0, histAtHide: 0, hidden: [] };
@@ -3427,9 +3436,14 @@ body.plain #mapOverlay{font-size:13.5px}
   function secLabel(c){ return (c && c.label) || 'API price equivalent'; }
   function secWord(state){ return secState.plain ? (SEC_STATE_PLAIN[state] || state) : state; }
   function secStub(text){ return '<div class="secstub">' + esc(text) + '</div>'; }
+  function secPanelCount(id){
+    var s = secReading.snapshot || {};
+    return id === 'waits' ? secCount((s.wait_items || []).length) : id === 'outcomes' ? secCount((s.outcome_items || []).length) : '';
+  }
   function secPanel(id, body, wide){
-    return '<section class="panel secpanel' + (wide ? ' secwide' : '') + '" data-sec="' + id + '" data-part="' + id + '">' +
-      '<div class="panelhead">' + esc(secTitle(id)) + '</div><div class="secbody">' + body + '</div></section>';
+    var aged = (id === 'waits' || id === 'outcomes') && secReading.status === 'ok' && secAged(secReading.snapshot);
+    return '<section class="panel secpanel' + (wide ? ' secwide' : '') + (aged ? ' sec-aged' : '') + '" data-sec="' + id + '" data-part="' + id + '">' +
+      '<div class="panelhead">' + esc(secTitle(id) + secPanelCount(id)) + '</div><div class="secbody">' + body + '</div></section>';
   }
 
   // secHeadline is the one sentence about the snapshot: its age in the
@@ -3445,25 +3459,66 @@ body.plain #mapOverlay{font-size:13.5px}
     return { text:'snapshot file cannot be read' + (r.error ? ': ' + r.error : ''), down:true };
   }
 
-  function secBodyWaits(snap){
-    var w = snap.waits_on_you || [], html = '';
-    if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'No session is waiting on you.') + '</div>';
-    w.forEach(function(x){
-      html += '<div class="secrow"><span><b>' + esc(secBase(x.project)) + '</b> <span class="dim">' + esc(x.vendor) + '</span></span>' +
-        '<span>waiting ' + esc(secDur(x.waiting_seconds)) + '</span></div>';
-    });
-    return html + '<div class="sechint">' + esc(secState.plain ?
-      'Questions and approvals from your flows are coming.' :
-      'Foreman gates, questions and permission prompts: coming (R9).') + '</div>';
+  // R9: one line per item. Every item field goes through esc, so a title or
+  // path holding < " or & is shown as text and the link carries the exact path.
+  var SEC_KIND = { gate:['gate','Decision needed'], sprint:['sprint waiting','Job paused, needs you'],
+    failed_check:['failed check','A check failed'], question:['question','Question for you'],
+    prompt:['permission prompt','Approval needed'], session:['session waiting','Session waiting for you'],
+    finished:['finished','Done'] };
+  function secAged(snap){ return secReading.age_seconds > 2 * ((snap && snap.tick_seconds) || 5); }
+  function secAgedLine(){
+    var n = Math.round(secReading.age_seconds || 0);
+    return '<div class="secaged">' + esc(secState.plain ? 'This list is ' + n + ' s old' :
+      'snapshot ' + n + ' s old, this list may be behind') + '</div>';
+  }
+  function secItemRow(it, outcome){
+    function link(path, word, none){
+      return path ? '<a href="#" class="secfile" data-path="' + esc(path) + '">' + esc(word) + '</a>' :
+        '<span class="dim">' + esc(none) + '</span>';
+    }
+    var plain = secState.plain, k = SEC_KIND[it.kind] || [it.kind, it.kind], word = k[plain ? 1 : 0], txt = word;
+    if(!plain && it.kind === 'gate') txt = word + ' ' + (it.detail || '');
+    var stoppedM = it.kind === 'finished' && /^(capped|failed|escalated),/.exec(it.detail || '');
+    if(plain && stoppedM) word = txt = 'Stopped, ' + stoppedM[1];
+    var detail = '';
+    if(plain){
+      if(it.kind === 'sprint' && it.parked && it.parked.length) detail = it.parked.length + (it.parked.length === 1 ? ' task needs you' : ' tasks need you');
+    } else if(it.kind !== 'gate' && !(it.detail && String(it.detail).toLowerCase() === k[0].toLowerCase())) detail = it.detail || '';
+    var age = secDur((it.age_seconds || 0) + (secReading.age_seconds || 0));
+    var shown = plain ? word : txt;
+    var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age);
+    var html = '<div class="secrow secitem" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
+      '<span class="secitemtxt"><span class="dim">' + esc(txt) + '</span> <b>' + esc(it.title) + '</b>' +
+      (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') + '</span>' +
+      '<span class="secitemmeta">' + esc(outcome ? age + ' ago' : 'waiting ' + age) + ' ' +
+      link(it.spec_path, plain ? 'request' : 'spec', plain ? 'no request' : 'no spec') + ' ' +
+      link(it.result_path, 'result', 'no result yet') + '</span></div>';
+    return html;
+  }
+  // Every item is a row, never cut off: the list sits in .seclist, which is
+  // about five rows high and scrolls inside itself, so the panel height stays
+  // bounded for the fit pass. That inner scroll is allowed even with the page
+  // scrollbar off (like the ticker): it is one list, not the page. The header
+  // carries the total (secCount).
+  function secList(rows){ return rows ? '<div class="seclist">' + rows + '</div>' : ''; }
+  function secCount(n){ return n ? ' (' + n + ')' : ''; }  function secBodyWaits(snap){
+    var w = snap.wait_items || [], html = secAged(snap) ? secAgedLine() : '';
+    if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'Nothing waits on you.') + '</div>';
+    var rows = '';
+    w.forEach(function(it){ rows += secItemRow(it, false); });
+    html += secList(rows);
+    return html;
   }
   function secBodyOutcomes(snap){
-    var s = snap.sessions || [], waiting = 0, busy = 0;
+    var s = snap.sessions || [], waiting = 0, busy = 0, o = snap.outcome_items || [];
     s.forEach(function(x){ if(x.state === 'waiting') waiting++; else if(x.state !== 'dormant') busy++; });
-    var html = '<div><b>' + s.length + '</b> ' + esc(s.length === 1 ? 'session' : 'sessions') + ' running, ' +
+    var html = (secAged(snap) ? secAgedLine() : '') + '<div><b>' + s.length + '</b> ' + esc(s.length === 1 ? 'session' : 'sessions') + ' running, ' +
       '<b>' + busy + '</b> at work, <b>' + waiting + '</b> ' + esc(secState.plain ? 'waiting for you' : 'waiting') + '</div>';
-    return html + '<div class="sechint">' + esc(secState.plain ?
-      'Results of your flows are coming.' :
-      'Gates, failed checks and their results: coming (R9).') + '</div>';
+    if(!o.length) html += '<div>' + esc(secState.plain ? 'Nothing finished in the last 24 hours.' : 'Nothing finished or failed in the last 24 hours.') + '</div>';
+    var rows = '';
+    o.forEach(function(it){ rows += secItemRow(it, true); });
+    html += secList(rows);
+    return html;
   }
   // Burn leads with tokens, then plan limits, then the price figure.
   function secBodyBurn(snap){
@@ -4060,6 +4115,14 @@ body.plain #mapOverlay{font-size:13.5px}
   document.getElementById('secPanels').addEventListener('click', function(e){
     var b = e.target.closest ? e.target.closest('.mapopen') : null;
     if(b) mapOpenView(b.getAttribute('data-src'));
+    var f = e.target.closest ? e.target.closest('.secfile') : null;
+    if(f){
+      e.preventDefault();
+      if(typeof window.bdevOpenItemFile === 'function'){
+        var r = window.bdevOpenItemFile(f.getAttribute('data-path'));
+        if(r && r.catch) r.catch(function(err){ console.error('bdevOpenItemFile:', err); });
+      }
+    }
   });
   window.__bdevMap = { open: mapOpenView, close: mapCloseView, choose: mapChoose, isOpen: function(){ return mapOpen; },
     // uicheck only: draw a payload without calling Go. src is live or the hours.

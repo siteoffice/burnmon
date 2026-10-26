@@ -389,5 +389,108 @@
       "first_seen": "2026-10-23T09:58:30Z",
       "last_seen": "2026-10-23T10:00:00Z"
     }
+  ],
+  "wait_items": [
+    {
+      "kind": "prompt",
+      "id": "session:anthropic:example-sub",
+      "title": "project",
+      "detail": "permission prompt",
+      "since": "2026-10-23T09:59:45Z",
+      "age_seconds": 15,
+      "spec_path": "C:\\example\\specs\\2026-10-20-example-spec.md",
+      "source": "agent_view"
+    },
+    {
+      "kind": "session",
+      "id": "session:anthropic:example-parent",
+      "title": "project",
+      "since": "2026-10-23T09:59:40Z",
+      "age_seconds": 20,
+      "source": "claude_pids"
+    },
+    {
+      "kind": "question",
+      "id": "agentview:ab12",
+      "title": "other",
+      "detail": "input needed",
+      "since": "2026-10-23T09:59:15Z",
+      "age_seconds": 45,
+      "source": "agent_view"
+    },
+    {
+      "kind": "sprint",
+      "id": "sprint:example__sprint-example__1",
+      "title": "sprint-example",
+      "project": "example",
+      "detail": "2 tasks parked",
+      "since": "2026-10-23T09:50:00Z",
+      "age_seconds": 600,
+      "spec_path": "C:\\example\\specs\\2026-10-20-example-spec.md",
+      "result_path": "C:\\example\\sprints\\sprint-example\\report.md",
+      "source": "foreman",
+      "parked": [
+        {
+          "n": 1,
+          "title": "Write the reader",
+          "reason": "needs a decision on the cache size"
+        },
+        {
+          "n": 3,
+          "title": "Page rows",
+          "reason": "waits on task 1"
+        }
+      ]
+    },
+    {
+      "kind": "failed_check",
+      "id": "check:example__capped__1:verify",
+      "title": "capped-example",
+      "project": "example",
+      "detail": "verify fail: two checks failed on the example page",
+      "since": "2026-10-23T09:00:00Z",
+      "age_seconds": 3600,
+      "spec_path": "C:\\example\\specs\\2026-10-19-capped-spec.md",
+      "result_path": "C:\\example\\sprints\\capped-example\\report.md",
+      "source": "foreman"
+    },
+    {
+      "kind": "gate",
+      "id": "gate:example__flow__1:G4",
+      "title": "flow-example",
+      "project": "example",
+      "detail": "G4",
+      "since": "2026-10-23T08:00:00Z",
+      "age_seconds": 7200,
+      "spec_path": "C:\\example\\specs\\2026-10-20-example-spec.md",
+      "result_path": "C:\\example\\sprints\\sprint-example\\report.md",
+      "source": "foreman"
+    }
+  ],
+  "outcome_items": [
+    {
+      "kind": "failed_check",
+      "id": "check:example__capped__1:verify",
+      "title": "capped-example",
+      "project": "example",
+      "detail": "verify fail: two checks failed on the example page",
+      "since": "2026-10-23T09:00:00Z",
+      "age_seconds": 3600,
+      "spec_path": "C:\\example\\specs\\2026-10-19-capped-spec.md",
+      "result_path": "C:\\example\\sprints\\capped-example\\report.md",
+      "source": "foreman"
+    },
+    {
+      "kind": "finished",
+      "id": "sprint:example__done__1",
+      "title": "done-example",
+      "project": "example",
+      "detail": "test pass, verify pass",
+      "since": "2026-10-23T05:00:00Z",
+      "age_seconds": 18000,
+      "spec_path": "C:\\example\\specs\\2026-10-18-done-spec.md",
+      "result_path": "C:\\example\\sprints\\done-example\\report.md",
+      "source": "foreman"
+    }
   ]
 }

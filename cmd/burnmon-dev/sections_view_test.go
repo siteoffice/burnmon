@@ -194,7 +194,7 @@ func TestPageTagsEveryPart(t *testing.T) {
 
 func TestPageHasScrollbarFitPass(t *testing.T) {
 	for _, want := range []string{
-		`var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','waits','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min'];`,
+		`var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min','waits'];`,
 		`window.__bdevFit = `,
 		`bdevSetStationTheme:', e);`,
 		`r.checked = r.value === secState.stationTheme`,
@@ -228,5 +228,85 @@ func TestPageFitPassReviewFixes(t *testing.T) {
 	}
 	if strings.Contains(pageHTML, "toggle('sec-fill', hideLegacy)") {
 		t.Errorf("sec-fill still ignores the scrollbar switch")
+	}
+}
+
+func TestPageDrawsWaitAndOutcomeItems(t *testing.T) {
+	for _, want := range []string{"wait_items", "outcome_items", "function secItemRow(", `class="secfile"`,
+		"bdevOpenItemFile", "'Decision needed'", "'Approval needed'", "this list may be behind", "This list is "} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"coming (R9)", "Questions and approvals from your flows are coming."} {
+		if strings.Contains(pageHTML, bad) {
+			t.Errorf("page still contains %q", bad)
+		}
+	}
+}
+
+func TestPageEscapesItemText(t *testing.T) {
+	i := strings.Index(pageHTML, "function secItemRow(")
+	if i < 0 {
+		t.Fatal("no secItemRow")
+	}
+	body := pageHTML[i:]
+	if j := strings.Index(body, "\n  function "); j > 0 {
+		body = body[:j]
+	}
+	for _, want := range []string{"esc(it.title)", "esc(it.detail"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("secItemRow lacks %q", want)
+		}
+	}
+	if !strings.Contains(body, `data-path="' + esc(`) {
+		t.Error("secItemRow does not escape the data-path value")
+	}
+	if strings.Contains(body, "innerHTML") {
+		t.Error("secItemRow assigns innerHTML")
+	}
+}
+
+func TestPageHasNoItemControls(t *testing.T) {
+	for _, bad := range []string{"bdevApprove", "bdevStop", "bdevReply"} {
+		if strings.Contains(pageHTML, bad) {
+			t.Errorf("page has %q (B4 is out of scope)", bad)
+		}
+	}
+}
+
+// Review findings of Task 7 and iteration 2: the person's actions panel is not
+// the one the fit pass drops first, the tooltip carries what the row shows, a
+// prompt row does not say its kind twice, and no list is cut off: every item
+// is a row, inside a bounded scroll area, with the total in the header.
+func TestPageListsEveryItemInBoundedScrollArea(t *testing.T) {
+	for _, want := range []string{
+		`var shown = plain ? word : txt;`,
+		`var full = shown + ' ' + (it.title || '')`,
+		`String(it.detail).toLowerCase() === k[0].toLowerCase()`,
+		`w.forEach(function(it){ rows += secItemRow(it, false); });`,
+		`o.forEach(function(it){ rows += secItemRow(it, true); });`,
+		`.seclist{`,
+		`overflow-y:auto`,
+		`secCount(`,
+	} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	for _, bad := range []string{`SEC_ROWS_CAP`, `secMoreLine`, `.slice(0, SEC_ROWS_CAP)`} {
+		if strings.Contains(pageHTML, bad) {
+			t.Errorf("page still has the row cap: %s", bad)
+		}
+	}
+}
+
+// A finished item whose detail starts with a stopped status must not read as
+// plain "Done" in the plain wording.
+func TestPageNamesStoppedOutcomeStatus(t *testing.T) {
+	for _, want := range []string{`/^(capped|failed|escalated),/`, `'Stopped, '`} {
+		if !strings.Contains(pageHTML, want) {
+			t.Fatalf("page lacks %q", want)
+		}
 	}
 }

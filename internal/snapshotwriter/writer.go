@@ -4,6 +4,8 @@
 package snapshotwriter
 
 import (
+	"context"
+	"errors"
 	"log"
 	"path/filepath"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
+	"burnmon/internal/waits"
 )
 
 // Tick is how often the snapshot file is rewritten (R4, agent control
@@ -21,9 +24,12 @@ import (
 // not running.
 const Tick = 5 * time.Second
 
-// foremanEvery is how often the Foreman state files are read again: they
-// change at gate and phase speed, not every tick.
-const foremanEvery = 30 * time.Second
+// foremanEvery is how often the Foreman state files are read again. One read
+// takes 250 to 680 ms on the real tree (92 sprints, 56 flows), so it is not
+// done every tick, but a new gate must show within two ticks (R9): 1.5 ticks
+// leaves room for tick jitter, so the read is due on the second tick at the
+// latest.
+const foremanEvery = Tick + Tick/2
 
 // GraphReaders holds the relation graph's own sources (R6) between ticks.
 // Every reader is local disk or the Windows process and TCP tables: no port,
@@ -33,7 +39,15 @@ type GraphReaders struct {
 	ForemanRoot string
 	Rows        func() ([]sysmon.ProcRow, time.Time)
 	Listen      func() ([]graph.Listen, error)
+	// AgentView runs "claude agents --json" (see ClaudeAgentView); nil means
+	// no poller and no agent_view source. Now is the poller's clock (nil:
+	// time.Now).
+	AgentView func(ctx context.Context) ([]byte, error)
+	Now       func() time.Time
 
+	agentViewRefused error // why EnableAgentView started no poller
+
+	poll  agentPoll
 	mcp   *graph.MCPConfig
 	meta  *graph.SubagentMeta
 	repos *graph.RepoLocator
@@ -57,12 +71,12 @@ func NewGraphReaders(home, foremanRoot string) *GraphReaders {
 	}
 }
 
-func (gr *GraphReaders) foreman(now time.Time) ([]graph.Sprint, []graph.Flow, error) {
+func (gr *GraphReaders) foreman(now time.Time) ([]graph.Sprint, []graph.Flow, time.Time, error) {
 	if now.Sub(gr.foremanAt) >= foremanEvery {
 		gr.sprints, gr.flows, gr.foremanErr = graph.ReadForeman(gr.ForemanRoot)
 		gr.foremanAt = now
 	}
-	return gr.sprints, gr.flows, gr.foremanErr
+	return gr.sprints, gr.flows, gr.foremanAt, gr.foremanErr
 }
 
 func source(name, stamp string, err error) snapshot.Source {
@@ -96,7 +110,7 @@ func FlatSessions(ss []*live.Session) []graph.Session {
 // its live-only edges in the store and returns the graph plus one source
 // entry per input. A failing source drops its own edges and is reported;
 // it never stops the tick.
-func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, now time.Time, stamp string) (graph.Graph, []snapshot.Source, error) {
+func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, now time.Time, stamp string) (graph.Graph, []snapshot.Source, []waits.Item, []waits.Item, error) {
 	in := graph.Input{Now: now, Sessions: sessions, MCPFor: gr.mcp.For, RepoFor: gr.repos.For, SubagentFor: gr.meta.Lookup}
 	if gr.Rows != nil {
 		rows, at := gr.Rows()
@@ -112,23 +126,39 @@ func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, no
 	in.Listens = listens
 	sources := []snapshot.Source{source(graph.SourceClaudePids, stamp, pidErr)}
 	if gr.ForemanRoot != "" {
-		sprints, flows, ferr := gr.foreman(now)
+		sprints, flows, readAt, ferr := gr.foreman(now)
 		if ferr == nil {
 			in.Sprints, in.Flows = sprints, flows
 		}
-		sources = append(sources, source(graph.SourceForeman, stamp, ferr))
+		sources = append(sources, source(graph.SourceForeman, readAt.UTC().Format(time.RFC3339), ferr))
 	}
 
 	g := graph.Build(in)
 	sources = append(sources, source(graph.SourceMCPConfig, stamp, gr.mcp.Err()),
 		source(graph.SourceNetTables, stamp, netErr), source(graph.SourceGit, stamp, nil))
 
+	wi := waits.Input{Now: now, Sprints: in.Sprints, Flows: in.Flows, Graph: g}
+	if gr.AgentView != nil {
+		gr.startAgentViewIfDue(now)
+		entries, at, done, aerr := gr.agentViewState()
+		wi.Agents = entries
+		if !done {
+			sources = append(sources, source(waits.SourceAgentView, stamp, errors.New("no poll has finished yet")))
+		} else {
+			sources = append(sources, source(waits.SourceAgentView, at.UTC().Format(time.RFC3339), aerr))
+		}
+	}
+	if gr.AgentView == nil && gr.agentViewRefused != nil {
+		sources = append(sources, source(waits.SourceAgentView, stamp, gr.agentViewRefused))
+	}
+	waitItems, outcomeItems := waits.Build(wi)
+
 	nodes, edges := g.Recorded()
 	first, err := st.RecordGraph(nodes, edges, now)
 	if err == nil {
 		g.Stamp(first)
 	}
-	return g, sources, err
+	return g, sources, waitItems, outcomeItems, err
 }
 
 // Writer rewrites the snapshot file from its inputs.
@@ -211,10 +241,11 @@ func (w *Writer) Once() error {
 
 	sources := []snapshot.Source{storeSrc, sysSrc}
 	g := graph.Build(graph.Input{Now: now})
+	waitItems, outcomeItems := []waits.Item{}, []waits.Item{}
 	if gr != nil {
 		var more []snapshot.Source
 		var rerr error
-		g, more, rerr = gr.buildGraph(st, FlatSessions(snap.Sessions), now, stamp)
+		g, more, waitItems, outcomeItems, rerr = gr.buildGraph(st, FlatSessions(snap.Sessions), now, stamp)
 		if rerr != nil && sources[0].OK {
 			sources[0].OK, sources[0].Error = false, "record graph: "+rerr.Error()
 		}
@@ -229,5 +260,8 @@ func (w *Writer) Once() error {
 		Sources:     sources,
 		Processes:   groups,
 		Graph:       g,
+
+		WaitItems:    waitItems,
+		OutcomeItems: outcomeItems,
 	}))
 }

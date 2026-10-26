@@ -273,9 +273,45 @@ func ReadForeman(root string) ([]Sprint, []Flow, error) {
 		if !readJSON(p, &raw, map[string]*string{"sprint_id": &raw.ID, "updated_at": &raw.UpdatedAt}) {
 			continue
 		}
-		sprints = append(sprints, Sprint{ID: raw.ID, Slug: raw.Slug, WorktreePath: raw.WorktreePath, Branch: raw.WorktreeBranch,
+		dir := filepath.Dir(p)
+		var m map[string]json.RawMessage
+		if b, err := os.ReadFile(p); err == nil {
+			_ = json.Unmarshal(b, &m)
+		}
+		times, parked := readActionLog(filepath.Join(dir, "action-log.ndjson"))
+		s := Sprint{ID: raw.ID, Slug: raw.Slug, WorktreePath: raw.WorktreePath, Branch: raw.WorktreeBranch,
 			Phase: raw.Phase, Status: raw.Status, UpdatedAt: parseTime(raw.UpdatedAt),
-			LogTimes: readLogTimes(filepath.Join(filepath.Dir(p), "action-log.ndjson"))})
+			LogTimes: times, Dir: dir,
+			Project: rawString(m, "project"), SpecPath: rawString(m, "spec_path")}
+		s.ResultPath = rawString(m, "report_path")
+		if s.ResultPath == "" {
+			if fi, err := os.Stat(filepath.Join(dir, "report.md")); err == nil && fi.Mode().IsRegular() {
+				s.ResultPath = filepath.Join(dir, "report.md")
+			}
+		}
+		s.Test = rawCheck(m["last_test_result"])
+		s.Verify = rawVerify(m["last_verify_result"])
+		var tasks []map[string]json.RawMessage
+		if json.Unmarshal(m["tasks"], &tasks) == nil {
+			for _, t := range tasks {
+				if rawString(t, "state") != "parked" {
+					continue
+				}
+				var n float64
+				_ = json.Unmarshal(t["n"], &n)
+				pt := ParkedTask{N: int(n), Title: rawString(t, "title")}
+				if e, ok := parked[pt.N]; ok {
+					pt.Reason, pt.At = e.Reason, e.At
+				}
+				s.Parked = append(s.Parked, pt)
+			}
+		}
+		for _, e := range parked {
+			if e.At.After(s.LastParkedAt) {
+				s.LastParkedAt = e.At
+			}
+		}
+		sprints = append(sprints, s)
 	}
 	flows := []Flow{}
 	paths, _ = filepath.Glob(filepath.Join(root, "flows", "*", "*", "flow.json"))
@@ -290,9 +326,18 @@ func ReadForeman(root string) ([]Sprint, []Flow, error) {
 		if !readJSON(p, &raw, map[string]*string{"flow_id": &raw.ID, "updated_at": &raw.UpdatedAt}) {
 			continue
 		}
-		f := Flow{ID: raw.ID, Slug: raw.Slug, Status: raw.Status, UpdatedAt: parseTime(raw.UpdatedAt)}
+		f := Flow{ID: raw.ID, Slug: raw.Slug, Status: raw.Status, UpdatedAt: parseTime(raw.UpdatedAt), Dir: filepath.Dir(p)}
 		if raw.Gate != nil && raw.Gate.ID != "" {
 			f.Gate, f.GatePending = raw.Gate.ID, raw.Gate.Status != "decided"
+		}
+		var m map[string]json.RawMessage
+		if b, err := os.ReadFile(p); err == nil {
+			_ = json.Unmarshal(b, &m)
+		}
+		f.Project, f.SpecPath = rawString(m, "project"), rawString(m, "spec_path")
+		var g map[string]json.RawMessage
+		if json.Unmarshal(m["gate"], &g) == nil {
+			f.GateOpenedAt = parseTime(rawString(g, "opened_at"))
 		}
 		var fm struct {
 			SessionID string `json:"session_id"`
@@ -308,31 +353,120 @@ func ReadForeman(root string) ([]Sprint, []Flow, error) {
 // maxLogTimes bounds how many action log entries one sprint can contribute.
 const maxLogTimes = 20000
 
-// readLogTimes reads the "ts" of every line of a sprint's action-log.ndjson
-// and returns them in time order. A missing file, a line it cannot read and a
-// line with no time are skipped: the log only says when the sprint was busy.
-func readLogTimes(path string) []time.Time {
+// maxLogLine is the longest action log line that is parsed; a longer line is
+// skipped and the lines after it are still read.
+const maxLogLine = 1 << 20
+
+// rawString is the string value of key in m, "" when absent or not a string.
+func rawString(m map[string]json.RawMessage, key string) string {
+	var s string
+	if json.Unmarshal(m[key], &s) != nil {
+		return ""
+	}
+	return s
+}
+
+// rawCheck reads a last_test_result object; nil unless exit_code is a number.
+func rawCheck(b json.RawMessage) *Check {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(b, &m) != nil {
+		return nil
+	}
+	var code float64
+	if json.Unmarshal(m["exit_code"], &code) != nil {
+		return nil
+	}
+	return &Check{Failed: code != 0, Label: fmt.Sprintf("test exit %d", int(code)),
+		Summary: rawString(m, "summary"), At: parseTime(rawString(m, "at"))}
+}
+
+// rawVerify reads a last_verify_result object; nil unless outcome is a string.
+func rawVerify(b json.RawMessage) *Check {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(b, &m) != nil {
+		return nil
+	}
+	var outcome string
+	if json.Unmarshal(m["outcome"], &outcome) != nil {
+		return nil
+	}
+	label := "verify pass"
+	if outcome == "fail" {
+		label = "verify fail"
+	}
+	return &Check{Failed: outcome == "fail", Label: label,
+		Summary: rawString(m, "summary"), At: parseTime(rawString(m, "at"))}
+}
+
+// readActionLog reads a sprint's action-log.ndjson: the "ts" of every line in
+// time order, and the newest task_parked entry per task number. A missing
+// file, a line it cannot read, a line longer than maxLogLine and a line with
+// no time are skipped: the log only says when the sprint was busy and why a
+// task was parked.
+func readActionLog(path string) ([]time.Time, map[int]ParkedTask) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	defer f.Close()
 	var out []time.Time
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	for sc.Scan() && len(out) < maxLogTimes {
-		var l struct {
-			TS string `json:"ts"`
+	parked := map[int]ParkedTask{}
+	r := bufio.NewReaderSize(f, 64*1024)
+	for len(out) < maxLogTimes {
+		line, err := readLine(r)
+		if len(line) > 0 {
+			var l struct {
+				TS     string  `json:"ts"`
+				Action string  `json:"action"`
+				Task   float64 `json:"task"`
+				Detail string  `json:"detail"`
+			}
+			if json.Unmarshal(line, &l) == nil && l.TS != "" {
+				if t := parseTime(l.TS); !t.IsZero() {
+					out = append(out, t)
+					if l.Action == "task_parked" {
+						if old, ok := parked[int(l.Task)]; !ok || t.After(old.At) {
+							parked[int(l.Task)] = ParkedTask{N: int(l.Task), Reason: l.Detail, At: t}
+						}
+					}
+				}
+			}
 		}
-		if json.Unmarshal(sc.Bytes(), &l) != nil || l.TS == "" {
-			continue
-		}
-		if t := parseTime(l.TS); !t.IsZero() {
-			out = append(out, t)
+		if err != nil {
+			break
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Before(out[j]) })
-	return out
+	return out, parked
+}
+
+// readLine returns the next line without its newline. A line longer than
+// maxLogLine is consumed and returned empty. The error is io.EOF at the end.
+func readLine(r *bufio.Reader) ([]byte, error) {
+	var buf []byte
+	tooLong := false
+	for {
+		chunk, isPrefix, err := r.ReadLine()
+		if err != nil {
+			if tooLong {
+				return nil, err
+			}
+			return buf, err
+		}
+		if !tooLong {
+			if len(buf)+len(chunk) > maxLogLine {
+				tooLong, buf = true, nil
+			} else {
+				buf = append(buf, chunk...)
+			}
+		}
+		if !isPrefix {
+			if tooLong {
+				return nil, nil
+			}
+			return buf, nil
+		}
+	}
 }
 
 func underscore(root, p string) bool {

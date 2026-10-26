@@ -21,7 +21,8 @@ func TestLoadFreshExample(t *testing.T) {
 	if r.AgeSeconds != 10 {
 		t.Errorf("age %d, want 10", r.AgeSeconds)
 	}
-	if r.Snapshot == nil || len(r.Snapshot.Sessions) != 2 || len(r.Snapshot.WaitsOnYou) != 1 {
+	if r.Snapshot == nil || len(r.Snapshot.Sessions) != 2 || len(r.Snapshot.WaitsOnYou) != 1 ||
+		len(r.Snapshot.WaitItems) == 0 || len(r.Snapshot.OutcomeItems) == 0 {
 		t.Fatalf("snapshot not carried through: %+v", r.Snapshot)
 	}
 }

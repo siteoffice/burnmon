@@ -170,6 +170,32 @@ type Sprint struct {
 	// LogTimes are the times of the entries in the sprint's own
 	// action-log.ndjson, in order. They say when the sprint was busy.
 	LogTimes []time.Time
+
+	// Project is the sprint's project name, SpecPath its spec, ResultPath its
+	// report ("" when none) and Dir the sprint folder.
+	Project, SpecPath, ResultPath, Dir string
+	// Parked lists the parked tasks, in task order.
+	Parked []ParkedTask
+	// Test and Verify are the last test and verify results, nil when absent.
+	Test, Verify *Check
+	// LastParkedAt is the newest task_parked entry in the action log.
+	LastParkedAt time.Time
+}
+
+// Check is one recorded test or verify result.
+type Check struct {
+	Failed  bool
+	Label   string // "test exit 1", "test exit 0", "verify fail", "verify pass"
+	Summary string
+	At      time.Time // zero when absent
+}
+
+// ParkedTask is a task a sprint parked for the person.
+type ParkedTask struct {
+	N      int
+	Title  string
+	Reason string    // detail of the newest task_parked entry for N, "" when none
+	At     time.Time // ts of that entry
 }
 
 // linkGrace is how far from a session's activity a sprint log entry may fall
@@ -210,6 +236,8 @@ type Flow struct {
 	ID, Slug, SessionID, Status, Gate string
 	GatePending                       bool
 	UpdatedAt                         time.Time
+	Project, SpecPath, Dir            string
+	GateOpenedAt                      time.Time
 }
 
 // SubagentInfo is what a Claude subagent's meta file says about it.
