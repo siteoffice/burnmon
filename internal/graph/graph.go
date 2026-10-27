@@ -54,6 +54,13 @@ const (
 	BasisInferred = "inferred" // BurnMon joined two facts that do not name each other
 )
 
+// Wait states of a top-level session, node attr "wait".
+const (
+	WaitBlocked  = "blocked"   // only the person can unblock it: a prompt, a question, a plan approval
+	WaitYourTurn = "your_turn" // the turn ended and nothing runs
+	WaitWorking  = "working"   // anything is running, a running subagent included
+)
+
 // Source names, the same names the snapshot lists in sources[].
 const (
 	SourceStore      = "store"
@@ -122,6 +129,15 @@ type Session struct {
 	// Tool is the name of the tool the session is running now ("" when none),
 	// from the stage the core works out. The name only, never its arguments.
 	Tool string
+	// AskOpen is true when the newest tool call is AskUserQuestion or
+	// ExitPlanMode, belongs to the newest turn and has no result yet.
+	AskOpen bool
+}
+
+// AgentState is one entry of `claude agents --json`, the fields the wait
+// state needs. SessionID is the bare session id.
+type AgentState struct {
+	SessionID, State, Status, WaitingFor string
 }
 
 // Proc is one process from the process walk. Cmdline is used for matching
@@ -202,9 +218,9 @@ type ParkedTask struct {
 // and still count as written while the session was active.
 const linkGrace = 10 * time.Minute
 
-// sprintMainRepo is the repo a sprint's worktree hangs off: the folder before
+// SprintMainRepo is the repo a sprint's worktree hangs off: the folder before
 // ".worktrees". It is "" for a path that is not under one.
-func sprintMainRepo(worktree string) string {
+func SprintMainRepo(worktree string) string {
 	p := strings.TrimRight(worktree, `\/`)
 	low := strings.ToLower(strings.ReplaceAll(p, "/", `\`))
 	i := strings.Index(low, `\.worktrees\`)
@@ -260,6 +276,11 @@ type Input struct {
 	Sprints     []Sprint
 	Flows       []Flow
 	SubagentFor func(parent, id string) (SubagentInfo, bool)
+	// Agents is the agent view, for the Blocked state. Tick is the snapshot
+	// tick; a subagent is running when its last turn is within two ticks
+	// (0 means 5 s).
+	Agents []AgentState
+	Tick   time.Duration
 }
 
 // harnessOfAgent maps a store agent name to sysmon's harness names, so a
@@ -505,24 +526,13 @@ func Build(in Input) Graph {
 		}
 	}
 
-	// Waits on you: Claude Code's own idle status first, else the stage.
-	for _, s := range in.Sessions {
-		id := SessionID(s.Vendor, s.ID)
-		if pf, ok := idle[id]; ok {
-			b.person()
-			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceClaudePids, AgeSeconds: b.age(pf.UpdatedAt)})
-		} else if s.State == "waiting" && s.ParentID == "" {
-			// A subagent whose turn ended has finished; it asks no one anything.
-			b.person()
-			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisInferred, Source: SourceStore, AgeSeconds: b.age(s.LastActivity)})
-		}
-	}
-	for id, pf := range idle {
-		if _, ok := b.edges[id+"|"+KindWaitsOn+"|"+personID]; !ok {
-			b.person()
-			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceClaudePids, AgeSeconds: b.age(pf.UpdatedAt)})
-		}
-	}
+	// Wait states. Precedence, once: Blocked, then Working, then Your turn.
+	// Blocked is a prompt, question or plan approval only the person can
+	// answer (agent view, or an open AskUserQuestion or ExitPlanMode call for
+	// Claude Code and Cowork). Working is anything running, a running
+	// subagent included. Your turn is a session whose turn ended and nothing
+	// runs. Only Blocked draws the line to You. A subagent never waits.
+	b.waitStates(byID, idle)
 
 	// Listening ports of kept processes.
 	for _, l := range in.Listens {
@@ -568,7 +578,7 @@ func Build(in Input) Graph {
 		// was being written. An attended sprint's agents run in the main repo.
 		// With no log to say when, only the worktree folder links, as before.
 		var linked []string
-		main := sprintMainRepo(sp.WorktreePath)
+		main := SprintMainRepo(sp.WorktreePath)
 		for _, id := range sessionIDs {
 			s := byID[id]
 			inWT := sp.WorktreePath != "" && pathKey(s.Project) == pathKey(sp.WorktreePath)

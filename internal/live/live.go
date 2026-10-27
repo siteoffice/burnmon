@@ -7,6 +7,7 @@ package live
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"burnmon/internal/insight"
@@ -83,6 +84,10 @@ type Session struct {
 	Stage      string `json:"stage,omitempty"`
 	StageSince string `json:"stage_since,omitempty"` // RFC3339
 	StageTool  string `json:"stage_tool,omitempty"`
+	// AskOpen is true when the newest tool call is AskUserQuestion or
+	// ExitPlanMode, belongs to the newest turn and has no result yet: the
+	// session waits on a person's answer. Filled by ApplyStages.
+	AskOpen bool `json:"ask_open,omitempty"`
 
 	// turns and windowStart are ApplyStages' inputs: the windowed turns
 	// BuildSnapshot already sorted (a reference, nothing copied, so a closed
@@ -751,6 +756,7 @@ func ApplyStages(sessions []*Session, st *store.Store, now time.Time) error {
 		if c, ok := calls[store.SessionKey{Vendor: s.Vendor, SessionID: s.SessionID}]; ok {
 			in.LastTool, in.LastToolAt, in.LastToolDone = c.Tool, c.At, c.ResultBytes != nil
 			in.LastToolInLatestTurn = s.inLatestTurn(c)
+			s.AskOpen = c.ResultBytes == nil && in.LastToolInLatestTurn && isAskTool(c.Tool)
 		}
 		for _, f := range s.Findings {
 			if f.Kind == insight.KindCompaction && f.At.After(in.CompactedAt) {
@@ -768,6 +774,12 @@ func ApplyStages(sessions []*Session, st *store.Store, now time.Time) error {
 		apply(s)
 	}
 	return nil
+}
+
+// isAskTool reports whether a tool name is one that waits on a person's
+// answer: AskUserQuestion or ExitPlanMode, in any case.
+func isAskTool(name string) bool {
+	return strings.EqualFold(name, "AskUserQuestion") || strings.EqualFold(name, "ExitPlanMode")
 }
 
 // coworkCloudAgent is the agent of the Cowork (Cloud) drop rows

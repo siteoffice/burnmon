@@ -95,7 +95,7 @@ func FlatSessions(ss []*live.Session) []graph.Session {
 		last, _ := time.Parse(time.RFC3339, ls.LastTurn)
 		first, _ := time.Parse(time.RFC3339, ls.Start)
 		out = append(out, graph.Session{Vendor: ls.Vendor, Agent: ls.Agent, ID: ls.SessionID, ParentID: parent,
-			Project: ls.Project, State: ls.Stage, Tool: ls.StageTool, FirstActivity: first, LastActivity: last})
+			Project: ls.Project, State: ls.Stage, Tool: ls.StageTool, FirstActivity: first, LastActivity: last, AskOpen: ls.AskOpen})
 		for _, sub := range ls.Subagents {
 			walk(sub, ls.SessionID)
 		}
@@ -133,15 +133,24 @@ func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, no
 		sources = append(sources, source(graph.SourceForeman, readAt.UTC().Format(time.RFC3339), ferr))
 	}
 
+	var agentEntries []waits.AgentEntry
+	if gr.AgentView != nil {
+		gr.startAgentViewIfDue(now)
+		entries, _, _, _ := gr.agentViewState()
+		agentEntries = entries
+		for _, e := range entries {
+			in.Agents = append(in.Agents, graph.AgentState{SessionID: e.SessionID, State: e.State, Status: e.Status, WaitingFor: e.WaitingFor})
+		}
+	}
+	in.Tick = Tick
 	g := graph.Build(in)
 	sources = append(sources, source(graph.SourceMCPConfig, stamp, gr.mcp.Err()),
 		source(graph.SourceNetTables, stamp, netErr), source(graph.SourceGit, stamp, nil))
 
 	wi := waits.Input{Now: now, Sprints: in.Sprints, Flows: in.Flows, Graph: g}
 	if gr.AgentView != nil {
-		gr.startAgentViewIfDue(now)
-		entries, at, done, aerr := gr.agentViewState()
-		wi.Agents = entries
+		_, at, done, aerr := gr.agentViewState()
+		wi.Agents = agentEntries
 		if !done {
 			sources = append(sources, source(waits.SourceAgentView, stamp, errors.New("no poll has finished yet")))
 		} else {

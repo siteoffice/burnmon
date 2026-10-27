@@ -17,8 +17,8 @@ func TestSprintMainRepo(t *testing.T) {
 		`C:\w\repo`:                      "",
 		"":                               "",
 	} {
-		if got := sprintMainRepo(in); got != want {
-			t.Errorf("sprintMainRepo(%q) = %q, want %q", in, got, want)
+		if got := SprintMainRepo(in); got != want {
+			t.Errorf("SprintMainRepo(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -135,12 +135,12 @@ func TestReadForemanLogTimes(t *testing.T) {
 }
 
 // A subagent whose turn ended is finished, not waiting for a person: only a
-// session's own wait is a wait on you.
+// Blocked session's own wait is a wait on you.
 func TestSubagentWaitingIsNotWaitsOn(t *testing.T) {
 	g := Build(Input{Now: t0, Sessions: []Session{
 		{Vendor: "anthropic", Agent: "claude-code", ID: "P", State: "waiting", LastActivity: t0},
 		{Vendor: "anthropic", Agent: "claude-code", ID: "agent-k", ParentID: "P", State: "waiting", LastActivity: t0},
-	}})
+	}, Agents: []AgentState{{SessionID: "P", State: "blocked"}, {SessionID: "agent-k", State: "blocked"}}})
 	if _, ok := edge(g, SessionID("anthropic", "P"), personID, KindWaitsOn); !ok {
 		t.Error("a waiting session lost its wait on you")
 	}

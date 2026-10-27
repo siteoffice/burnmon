@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"burnmon/internal/graph"
+	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
 	"burnmon/internal/snapshot"
@@ -351,5 +352,14 @@ func TestForemanReadAtIsTheTimeOfTheRead(t *testing.T) {
 		if g := sourceNamed(got, "claude_pids"); g.ReadAt != c.at.UTC().Format(time.RFC3339) {
 			t.Fatalf("tick %d: claude_pids read_at %s", i, g.ReadAt)
 		}
+	}
+}
+
+func TestFlatSessionsCopiesAskOpen(t *testing.T) {
+	ss := []*live.Session{{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", AskOpen: true,
+		Subagents: []*live.Session{{Vendor: "anthropic", Agent: "claude-code", SessionID: "agent-k"}}}}
+	flat := snapshotwriter.FlatSessions(ss)
+	if len(flat) != 2 || !flat[0].AskOpen || flat[1].AskOpen || flat[1].ParentID != "s1" {
+		t.Fatalf("FlatSessions = %+v", flat)
 	}
 }
