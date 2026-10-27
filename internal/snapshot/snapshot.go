@@ -123,6 +123,10 @@ type Snapshot struct {
 	WaitItems    []waits.Item `json:"wait_items"`
 	OutcomeItems []waits.Item `json:"outcome_items"`
 
+	// B6, added to version 1 as a new field only: the one count of wait_items
+	// per group. Every number a page shows for "waiting" reads it.
+	WaitCounts waits.Counts `json:"wait_counts"`
+
 	// R10, added to version 1 as new fields only: the entries of the last
 	// finished "claude agents --json" poll. BurnMon Dev uses them to decide
 	// which control buttons show; cwd and name are never written.
@@ -190,6 +194,7 @@ func Build(in Input) Snapshot {
 		Edges:         append([]graph.Edge{}, in.Graph.Edges...),
 		WaitItems:     append([]waits.Item{}, in.WaitItems...),
 		OutcomeItems:  append([]waits.Item{}, in.OutcomeItems...),
+		WaitCounts:    waits.CountOf(in.WaitItems),
 		AgentSessions: append([]AgentSession{}, in.AgentSessions...),
 	}
 

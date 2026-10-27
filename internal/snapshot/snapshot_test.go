@@ -262,7 +262,7 @@ func TestFixtureHasItemsOfEveryKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	written, _ := time.Parse(time.RFC3339, got.WrittenAt)
-	check := func(name string, items []waits.Item, kinds []string) {
+	check := func(name string, items []waits.Item, kinds []string, newestFirst bool) {
 		seen := map[string]bool{}
 		var prevAge int64 = -1
 		prevID := ""
@@ -278,7 +278,7 @@ func TestFixtureHasItemsOfEveryKind(t *testing.T) {
 			if it.AgeSeconds != int64(written.Sub(since)/time.Second) {
 				t.Fatalf("%s item %s age %d does not match written_at minus since", name, it.ID, it.AgeSeconds)
 			}
-			if it.AgeSeconds < prevAge || (it.AgeSeconds == prevAge && it.ID < prevID) {
+			if newestFirst && (it.AgeSeconds < prevAge || (it.AgeSeconds == prevAge && it.ID < prevID)) {
 				t.Fatalf("%s not sorted newest first at %s", name, it.ID)
 			}
 			prevAge, prevID = it.AgeSeconds, it.ID
@@ -296,8 +296,71 @@ func TestFixtureHasItemsOfEveryKind(t *testing.T) {
 			}
 		}
 	}
-	check("wait_items", got.WaitItems, []string{"gate", "sprint", "failed_check", "question", "prompt", "session"})
-	check("outcome_items", got.OutcomeItems, []string{"finished", "failed_check"})
+	check("wait_items", got.WaitItems, []string{"gate", "sprint", "failed_check", "question", "prompt", "session", "your_turn", "close_out", "can_close"}, false)
+	check("outcome_items", got.OutcomeItems, []string{"finished", "failed_check"}, true)
+}
+
+// B6: every wait item has a group and holds, wait_counts is the one count of
+// the list, and the list is in ranking order (Blocked, Your turn, Done; inside
+// Blocked the item that holds most first, then the oldest; ties by id).
+func TestFixtureWaitItemsGroupedCountedAndRanked(t *testing.T) {
+	got, err := Read(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tier := map[string]int{waits.GroupBlocked: 0, waits.GroupYourTurn: 1, waits.GroupDone: 2}
+	for i, it := range got.WaitItems {
+		if _, ok := tier[it.Group]; !ok {
+			t.Fatalf("item %s has group %q", it.ID, it.Group)
+		}
+		if it.Holds < 1 {
+			t.Fatalf("item %s holds %d", it.ID, it.Holds)
+		}
+		if i == 0 {
+			continue
+		}
+		p := got.WaitItems[i-1]
+		switch {
+		case tier[p.Group] != tier[it.Group]:
+			if tier[p.Group] > tier[it.Group] {
+				t.Fatalf("%s (%s) is listed before %s (%s)", p.ID, p.Group, it.ID, it.Group)
+			}
+		case it.Group == waits.GroupBlocked && p.Holds != it.Holds:
+			if p.Holds < it.Holds {
+				t.Fatalf("%s holds %d, listed before %s which holds %d", p.ID, p.Holds, it.ID, it.Holds)
+			}
+		case p.AgeSeconds != it.AgeSeconds:
+			if p.AgeSeconds < it.AgeSeconds {
+				t.Fatalf("%s is older-first violated against %s", p.ID, it.ID)
+			}
+		case p.ID > it.ID:
+			t.Fatalf("tie not by id: %s before %s", p.ID, it.ID)
+		}
+	}
+	if got.WaitCounts != waits.CountOf(got.WaitItems) {
+		t.Fatalf("wait_counts %+v, list counts %+v", got.WaitCounts, waits.CountOf(got.WaitItems))
+	}
+	if got.WaitCounts.Blocked == 0 || got.WaitCounts.YourTurn == 0 || got.WaitCounts.Done == 0 {
+		t.Fatalf("fixture should exercise all three groups: %+v", got.WaitCounts)
+	}
+}
+
+func TestWaitCountsAlwaysPresent(t *testing.T) {
+	b, err := json.Marshal(Build(Input{Now: t0, TickSeconds: 5}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if string(m["wait_counts"]) != `{"blocked":0,"your_turn":0,"done":0}` {
+		t.Fatalf("wait_counts = %s", m["wait_counts"])
+	}
+	items := []waits.Item{{ID: "a", Group: waits.GroupBlocked}, {ID: "b", Group: waits.GroupBlocked}, {ID: "c", Group: waits.GroupYourTurn}, {ID: "d", Group: waits.GroupDone}}
+	if got := Build(Input{Now: t0, TickSeconds: 5, WaitItems: items}).WaitCounts; got != (waits.Counts{Blocked: 2, YourTurn: 1, Done: 1}) {
+		t.Fatalf("wait_counts = %+v", got)
+	}
 }
 
 func TestBuildCarriesAgentSessions(t *testing.T) {

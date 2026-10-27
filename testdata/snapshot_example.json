@@ -132,7 +132,8 @@
       "vendor": "anthropic",
       "attrs": {
         "agent": "claude-code",
-        "state": "coding"
+        "state": "coding",
+        "wait": "blocked"
       },
       "source": "store",
       "age_seconds": 20
@@ -380,43 +381,32 @@
       "last_seen": "2026-10-23T10:00:00Z"
     },
     {
-      "from": "session:anthropic:example-sub",
+      "from": "session:anthropic:example-parent",
       "to": "person:you",
       "kind": "waits_on",
       "basis": "inferred",
       "source": "store",
-      "age_seconds": 5,
-      "first_seen": "2026-10-23T09:58:30Z",
+      "age_seconds": 20,
+      "first_seen": "2026-10-23T09:59:40Z",
       "last_seen": "2026-10-23T10:00:00Z"
     }
   ],
   "wait_items": [
     {
-      "kind": "prompt",
-      "id": "session:anthropic:example-sub",
-      "title": "project",
-      "detail": "permission prompt",
-      "since": "2026-10-23T09:59:45Z",
-      "age_seconds": 15,
+      "kind": "gate",
+      "id": "gate:example__flow__1:G4",
+      "title": "flow-example",
+      "project": "example",
+      "detail": "G4",
+      "since": "2026-10-23T08:00:00Z",
+      "age_seconds": 7200,
       "spec_path": "C:\\example\\specs\\2026-10-20-example-spec.md",
-      "source": "agent_view"
-    },
-    {
-      "kind": "session",
-      "id": "session:anthropic:example-parent",
-      "title": "project",
-      "since": "2026-10-23T09:59:40Z",
-      "age_seconds": 20,
-      "source": "claude_pids"
-    },
-    {
-      "kind": "question",
-      "id": "agentview:ab12",
-      "title": "other",
-      "detail": "input needed",
-      "since": "2026-10-23T09:59:15Z",
-      "age_seconds": 45,
-      "source": "agent_view"
+      "result_path": "C:\\example\\sprints\\sprint-example\\report.md",
+      "source": "foreman",
+      "group": "blocked",
+      "holds": 2,
+      "cost_tokens": 2400,
+      "cost_partial": true
     },
     {
       "kind": "sprint",
@@ -440,7 +430,34 @@
           "title": "Page rows",
           "reason": "waits on task 1"
         }
-      ]
+      ],
+      "group": "blocked",
+      "holds": 2,
+      "cost_tokens": 1800
+    },
+    {
+      "kind": "session",
+      "id": "session:anthropic:example-parent",
+      "title": "project",
+      "since": "2026-10-23T09:59:40Z",
+      "age_seconds": 20,
+      "source": "claude_pids",
+      "group": "blocked",
+      "holds": 2,
+      "cost_tokens": 300
+    },
+    {
+      "kind": "gate",
+      "id": "gate:example__flow__2:G2",
+      "title": "flow-review",
+      "project": "example",
+      "detail": "G2",
+      "since": "2026-10-23T07:30:00Z",
+      "age_seconds": 9000,
+      "spec_path": "C:\\example\\specs\\2026-10-21-example-review.md",
+      "source": "foreman",
+      "group": "blocked",
+      "holds": 1
     },
     {
       "kind": "failed_check",
@@ -452,30 +469,67 @@
       "age_seconds": 3600,
       "spec_path": "C:\\example\\specs\\2026-10-19-capped-spec.md",
       "result_path": "C:\\example\\sprints\\capped-example\\report.md",
-      "source": "foreman"
+      "source": "foreman",
+      "group": "blocked",
+      "holds": 1
     },
     {
-      "kind": "gate",
-      "id": "gate:example__flow__1:G4",
-      "title": "flow-example",
-      "project": "example",
-      "detail": "G4",
-      "since": "2026-10-23T08:00:00Z",
-      "age_seconds": 7200,
+      "kind": "question",
+      "id": "agentview:ab12",
+      "title": "other",
+      "detail": "input needed",
+      "since": "2026-10-23T09:59:15Z",
+      "age_seconds": 45,
+      "source": "agent_view",
+      "group": "blocked",
+      "holds": 1
+    },
+    {
+      "kind": "prompt",
+      "id": "session:anthropic:example-sub",
+      "title": "project",
+      "detail": "permission prompt",
+      "since": "2026-10-23T09:59:45Z",
+      "age_seconds": 15,
       "spec_path": "C:\\example\\specs\\2026-10-20-example-spec.md",
-      "result_path": "C:\\example\\sprints\\sprint-example\\report.md",
-      "source": "foreman"
+      "source": "agent_view",
+      "group": "blocked",
+      "holds": 1,
+      "cost_tokens": 90
     },
     {
-      "kind": "gate",
-      "id": "gate:example__flow__2:G2",
-      "title": "flow-review",
+      "kind": "your_turn",
+      "id": "session:anthropic:example-idle",
+      "title": "idle",
+      "since": "2026-10-23T09:58:00Z",
+      "age_seconds": 120,
+      "source": "store",
+      "group": "your_turn",
+      "holds": 1
+    },
+    {
+      "kind": "close_out",
+      "id": "closeout:example__sprint__9",
+      "title": "example-merged",
       "project": "example",
-      "detail": "G2",
-      "since": "2026-10-23T07:30:00Z",
-      "age_seconds": 9000,
-      "spec_path": "C:\\example\\specs\\2026-10-21-example-review.md",
-      "source": "foreman"
+      "detail": "Done, needs close-out",
+      "since": "2026-10-23T08:30:00Z",
+      "age_seconds": 5400,
+      "source": "foreman",
+      "group": "done",
+      "holds": 1,
+      "sprint_id": "example__sprint__9"
+    },
+    {
+      "kind": "can_close",
+      "id": "canclose:session:anthropic:example-merged",
+      "title": "example-merged",
+      "detail": "Done, can be closed",
+      "since": "2026-10-23T09:55:00Z",
+      "age_seconds": 300,
+      "source": "store",
+      "group": "done",
+      "holds": 1
     }
   ],
   "outcome_items": [
@@ -504,6 +558,11 @@
       "source": "foreman"
     }
   ],
+  "wait_counts": {
+    "blocked": 7,
+    "your_turn": 1,
+    "done": 2
+  },
   "agent_sessions": [
     {
       "kind": "background",
