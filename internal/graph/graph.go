@@ -281,6 +281,9 @@ type Input struct {
 	// (0 means 5 s).
 	Agents []AgentState
 	Tick   time.Duration
+	// MergedFor says whether branch is in the trunk of repo (merged) and
+	// whether that could be read at all (known). nil: nothing is merged.
+	MergedFor func(repo, branch string) (merged, known bool)
 }
 
 // harnessOfAgent maps a store agent name to sysmon's harness names, so a
@@ -552,6 +555,7 @@ func Build(in Input) Graph {
 		sessionIDs = append(sessionIDs, id)
 	}
 	sort.Strings(sessionIDs)
+	repoOf := map[string]Repo{}
 	if in.RepoFor != nil {
 		for _, id := range sessionIDs {
 			s := byID[id]
@@ -562,6 +566,7 @@ func Build(in Input) Graph {
 			if !ok {
 				continue
 			}
+			repoOf[id] = r
 			for _, e := range b.repoNodes(r, SourceGit) {
 				b.edge(Edge{From: id, To: e, Kind: KindTouches, Basis: BasisInferred, Source: SourceGit})
 			}
@@ -573,6 +578,7 @@ func Build(in Input) Graph {
 	for _, sp := range in.Sprints {
 		sid := "sprint:" + sp.ID
 		waiting := sp.Status == "waiting-on-you"
+		closeout := false
 		// A session links to a sprint when its folder is the sprint's worktree
 		// or its main repo and it was active while the sprint's own action log
 		// was being written. An attended sprint's agents run in the main repo.
@@ -595,12 +601,22 @@ func Build(in Input) Graph {
 		if len(linked) == 0 && !waiting {
 			continue
 		}
-		b.node(Node{ID: sid, Kind: KindSprint, Label: sp.Slug, Attrs: map[string]string{"phase": sp.Phase, "status": sp.Status},
+		// A waiting sprint whose branch is already in main needs closing out,
+		// not an answer: it leaves Blocked. Unknown stays Blocked.
+		if waiting && in.MergedFor != nil && main != "" && sp.Branch != "" {
+			m, known := in.MergedFor(main, sp.Branch)
+			closeout = m && known
+		}
+		attrs := map[string]string{"phase": sp.Phase, "status": sp.Status}
+		if closeout {
+			attrs["closeout"] = "true"
+		}
+		b.node(Node{ID: sid, Kind: KindSprint, Label: sp.Slug, Attrs: attrs,
 			Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		for _, id := range linked {
 			b.edge(Edge{From: id, To: sid, Kind: KindWorksFor, Basis: BasisInferred, Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		}
-		if waiting {
+		if waiting && !closeout {
 			b.person()
 			b.edge(Edge{From: sid, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		}
@@ -630,7 +646,53 @@ func Build(in Input) Graph {
 			b.edge(Edge{From: gid, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
 		}
 	}
+	b.markCanClose(sessionIDs, byID, repoOf)
 	return b.g
+}
+
+// markCanClose sets attr "can_close" on a Your turn or Blocked top-level
+// session in a linked worktree whose branch is in the main repo's trunk and
+// that no Foreman sprint speaks for. Its wait attr stays; its waits_on edge
+// goes, because the work is in main and the question is stale.
+func (b *builder) markCanClose(ids []string, byID map[string]Session, repoOf map[string]Repo) {
+	if b.in.MergedFor == nil {
+		return
+	}
+	sprinted := map[string]bool{}
+	for _, e := range b.g.Edges {
+		if e.Kind == KindWorksFor && strings.HasPrefix(e.To, "sprint:") {
+			sprinted[e.From] = true
+		}
+	}
+	drop := map[string]bool{}
+	for _, id := range ids {
+		r, ok := repoOf[id]
+		i, has := b.nodes[id]
+		if !ok || !has || byID[id].ParentID != "" || r.Main == "" || r.Branch == "" || sprinted[id] {
+			continue
+		}
+		if w := b.g.Nodes[i].Attrs["wait"]; w != WaitBlocked && w != WaitYourTurn {
+			continue
+		}
+		if m, known := b.in.MergedFor(r.Main, r.Branch); m && known {
+			b.g.Nodes[i].Attrs["can_close"] = "true"
+			drop[id+"|"+KindWaitsOn+"|"+personID] = true
+		}
+	}
+	if len(drop) == 0 {
+		return
+	}
+	kept := b.g.Edges[:0]
+	for _, e := range b.g.Edges {
+		if !drop[e.Key()] {
+			kept = append(kept, e)
+		}
+	}
+	b.g.Edges = kept
+	b.edges = map[string]int{}
+	for i, e := range b.g.Edges {
+		b.edges[e.Key()] = i
+	}
 }
 
 // repoNodes adds the worktree or repo node, its main repo and its branch,
