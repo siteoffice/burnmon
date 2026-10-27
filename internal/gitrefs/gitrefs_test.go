@@ -500,3 +500,23 @@ func TestTrunkIgnoresHead(t *testing.T) {
 	}
 	expect(t, NewChecker(), repo, mergedBranch, false, false)
 }
+
+// A walk that gave up on the limit or the timeout is not an answer: it must
+// not pin "unknown" for the same shas once the limit allows a real walk.
+func TestLimitUnknownIsNotCached(t *testing.T) {
+	repo, gd := newRepo(t)
+	a := writeCommit(t, gd)
+	br := writeCommit(t, gd, a)
+	m := writeCommit(t, gd, a, br) // br is merged here, 3 commits below main
+	m2 := writeCommit(t, gd, m)
+	m3 := writeCommit(t, gd, m2)
+	setRef(t, gd, "refs/heads/main", m3)
+	setRef(t, gd, "refs/heads/"+openBranch, br)
+	c := NewChecker()
+	old := walkLimit
+	walkLimit = 2
+	defer func() { walkLimit = old }()
+	expect(t, c, repo, openBranch, false, false)
+	walkLimit = old
+	expect(t, c, repo, openBranch, true, true)
+}

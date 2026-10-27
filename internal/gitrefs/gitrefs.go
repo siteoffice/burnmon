@@ -233,7 +233,12 @@ func (c *Checker) Merged(repo, branch string) (merged, known bool) {
 	}
 	c.mu.Unlock()
 
-	merged, known = walk(gd, mainSHA, brSHA)
+	merged, known, definite := walk(gd, mainSHA, brSHA)
+	if !definite {
+		// The limit or the timeout stopped the walk: that says nothing about
+		// the branch, so do not pin it until the trunk moves.
+		return merged, known
+	}
 
 	c.mu.Lock()
 	if len(c.cache) >= maxCacheEntries {
@@ -258,9 +263,9 @@ func trunkSHA(gitDir string) (string, error) {
 
 // walk searches main's ancestors, breadth first, for a merge commit that has
 // target as a second or later parent.
-func walk(gitDir, mainSHA, target string) (merged, known bool) {
+func walk(gitDir, mainSHA, target string) (merged, known, definite bool) {
 	if mainSHA == target {
-		return false, true
+		return false, true, true
 	}
 	st := newStore(gitDir)
 	defer st.close()
@@ -271,18 +276,18 @@ func walk(gitDir, mainSHA, target string) (merged, known bool) {
 	processed := 0
 	for len(queue) > 0 {
 		if processed >= walkLimit || time.Now().After(deadline) {
-			return false, false
+			return false, false, false
 		}
 		sha := queue[0]
 		queue = queue[1:]
 		processed++
 		parents, err := st.commitParents(sha)
 		if err != nil {
-			return false, false
+			return false, false, !time.Now().After(deadline)
 		}
 		for _, p := range parents[min(1, len(parents)):] {
 			if p == target {
-				return true, true
+				return true, true, true
 			}
 		}
 		for _, p := range parents {
@@ -292,5 +297,5 @@ func walk(gitDir, mainSHA, target string) (merged, known bool) {
 			}
 		}
 	}
-	return false, true
+	return false, true, true
 }

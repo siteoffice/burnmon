@@ -55,6 +55,8 @@ type HistoryInput struct {
 	RepoFor       func(cwd string) (Repo, bool)
 	Sprints       []Sprint
 	SubagentFor   func(parent, id string) (SubagentInfo, bool)
+	Flows         []Flow
+	MergedFor     func(repo, branch string) (merged, known bool)
 }
 
 // History is the graph for a past window: sessions and subagents from the
@@ -71,7 +73,8 @@ func History(st *store.Store, hi HistoryInput) (Graph, error) {
 		sessions = append(sessions, Session{Vendor: h.Vendor, Agent: h.Agent, ID: h.SessionID, ParentID: h.ParentID,
 			Project: h.Project, FirstActivity: h.First, LastActivity: h.Last})
 	}
-	g := Build(Input{Now: hi.Now, Sessions: sessions, RepoFor: hi.RepoFor, Sprints: hi.Sprints, SubagentFor: hi.SubagentFor})
+	g := Build(Input{Now: hi.Now, Sessions: sessions, RepoFor: hi.RepoFor, Sprints: hi.Sprints, Flows: hi.Flows,
+		SubagentFor: hi.SubagentFor, MergedFor: hi.MergedFor})
 
 	nodes, edges, err := st.GraphBetween(hi.From, hi.To)
 	if err != nil {

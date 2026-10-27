@@ -14,11 +14,16 @@ import (
 	"time"
 
 	"burnmon/internal/agentmap"
+	"burnmon/internal/gitrefs"
 	"burnmon/internal/graph"
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 	"burnmon/internal/waits"
 )
+
+// historyChecker is the same merge check the live writer uses, kept so its
+// answers are cached between map refreshes.
+var historyChecker = gitrefs.NewChecker()
 
 const (
 	mapHoursDefault = 24
@@ -32,6 +37,9 @@ type agentMapEnv struct {
 	SnapPath    string
 	St          *store.Store
 	ForemanRoot string
+	// MergedFor answers "is this branch in main" for the history map; nil
+	// means a gitrefs checker.
+	MergedFor func(repo, branch string) (merged, known bool)
 }
 
 // agentMapRequest is what the page sends: live or history, how many hours of
@@ -115,12 +123,16 @@ func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapP
 		}
 		p.Note = "Tokens and prices are not kept in the history view, so they read unknown."
 		if env.ForemanRoot != "" {
-			sprints, _, err := graph.ReadForeman(env.ForemanRoot)
+			sprints, flows, err := graph.ReadForeman(env.ForemanRoot)
 			if err != nil {
 				p.Note = joinNotes(p.Note, "Foreman state could not be read, so sessions are not grouped under sprints.")
 			} else {
-				hi.Sprints = sprints
+				hi.Sprints, hi.Flows = sprints, flows
 			}
+		}
+		hi.MergedFor = env.MergedFor
+		if hi.MergedFor == nil {
+			hi.MergedFor = historyChecker.Merged
 		}
 		if env.St == nil {
 			return p, fmt.Errorf("the store is not open")
@@ -131,7 +143,7 @@ func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapP
 		}
 		in.Nodes, in.Edges = g.Nodes, g.Edges
 		// One count: the same function the snapshot uses, over the history graph.
-		waiting, _ := waits.Build(waits.Input{Now: now, Graph: g, Sprints: hi.Sprints})
+		waiting, _ := waits.Build(waits.Input{Now: now, Graph: g, Sprints: hi.Sprints, Flows: hi.Flows})
 		c := waits.CountOf(waiting)
 		in.Counts = &c
 	default:
