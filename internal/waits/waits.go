@@ -131,6 +131,18 @@ func lastFolder(p string) string {
 	return p
 }
 
+// sprintFinished reports a sprint that no longer holds anything. Foreman's
+// status values (sprints\_lib\schema.md): running, paused and waiting-on-you
+// are live and count toward a gate's holds; done, passing, failed, capped and
+// escalated are finished and do not. An empty or unknown status counts as live.
+func sprintFinished(status string) bool {
+	switch status {
+	case "done", "passing", "failed", "capped", "escalated":
+		return true
+	}
+	return false
+}
+
 func sprintStopped(status string) bool {
 	return status == "capped" || status == "failed" || status == "escalated"
 }
@@ -260,7 +272,7 @@ func Build(in Input) (wait, outcomes []Item) {
 		}
 		holds := 1
 		for _, s := range in.Sprints {
-			if samePath(s.SpecPath, f.SpecPath) {
+			if samePath(s.SpecPath, f.SpecPath) && !sprintFinished(s.Status) {
 				holds++
 			}
 		}

@@ -94,8 +94,15 @@ func (ExecRunner) Run(ctx context.Context, argv []string, dir string) (int, stri
 	var out, errb limitBuf
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
-	line := firstLine(out.b.String(), errb.b.String())
 	code, cerr := classifyRun(err, killed.Load(), ctx.Err())
+	line := firstLine(out.b.String(), errb.b.String())
+	if code != 0 {
+		// A failing script prints its reason last (a Python traceback ends
+		// with the error line), so a nonzero exit prefers the last stderr line.
+		if l := lastLine(errb.b.String(), closeReasonMax); l != "" {
+			line = l
+		}
+	}
 	return code, line, cerr
 }
 

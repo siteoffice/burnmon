@@ -637,6 +637,9 @@ func (s *Service) Run(token string) (RunResult, error) {
 			}
 			if pe.Target.Control == CloseSprint && code == 1 {
 				res.Refused = closeRefused
+				if l := lastLine(first, closeReasonMax); l != "" {
+					res.Refused += ": " + l
+				}
 			}
 		default:
 			res = RunResult{Line: cut120(first)}

@@ -1,7 +1,8 @@
 // Package gitrefs reads git's files, never runs git; unknown is never merged.
 //
-// It answers one question for BurnMon: was a branch merged into main. Merged
-// means the branch tip is not main's tip and is the second or later parent of
+// It answers one question for BurnMon: was a branch merged into the trunk
+// (refs/heads/main, else refs/heads/master). Merged
+// means the branch tip is not the trunk's tip and is the second or later parent of
 // a merge commit reachable from main's tip, because Foreman merges with
 // --no-ff. A tip that only sits on main's first-parent history (a
 // fast-forward, or a branch with no commit of its own yet) is not merged. It
@@ -205,7 +206,9 @@ func NewChecker() *Checker { return &Checker{cache: map[string]result{}} }
 // only sits on main's first-parent history (a fast-forward, or a branch that
 // never got a commit of its own) is not merged. known is false on any read
 // problem or when the walk limit or timeout is hit; merged is then false.
-// Only refs/heads/main is the trunk.
+// The trunk is refs/heads/main when that ref exists (loose or packed), else
+// refs/heads/master, else unknown. HEAD is never read: the main tree's HEAD
+// may point at a work branch.
 func (c *Checker) Merged(repo, branch string) (merged, known bool) {
 	if !ValidBranch(branch) {
 		return false, false
@@ -214,7 +217,7 @@ func (c *Checker) Merged(repo, branch string) (merged, known bool) {
 	if err != nil {
 		return false, false
 	}
-	mainSHA, err := ResolveRef(gd, "refs/heads/main")
+	mainSHA, err := trunkSHA(gd)
 	if err != nil {
 		return false, false
 	}
@@ -239,6 +242,18 @@ func (c *Checker) Merged(repo, branch string) (merged, known bool) {
 	c.cache[key] = result{merged, known}
 	c.mu.Unlock()
 	return merged, known
+}
+
+// trunkSHA resolves refs/heads/main, else refs/heads/master.
+func trunkSHA(gitDir string) (string, error) {
+	sha, err := ResolveRef(gitDir, "refs/heads/main")
+	if err == nil {
+		return sha, nil
+	}
+	if sha, merr := ResolveRef(gitDir, "refs/heads/master"); merr == nil {
+		return sha, nil
+	}
+	return "", err
 }
 
 // walk searches main's ancestors, breadth first, for a merge commit that has

@@ -319,7 +319,7 @@ func TestCloseRunHasThirtySecondDeadline(t *testing.T) {
 
 func TestCloseExitOneIsARefusal(t *testing.T) {
 	c := newCloseRig(t)
-	c.runner.code, c.runner.line = 1, "Traceback (most recent call last):"
+	c.runner.code, c.runner.line = 1, ""
 	pv, err := c.preview(CloseSprint, closeItemID)
 	if err != nil {
 		t.Fatal(err)
@@ -421,5 +421,51 @@ func TestCloseWithFakeForemanLibrary(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(evil, "pwned.txt")); err == nil {
 		t.Error("PYTHONPATH was honoured: pwned.txt written")
+	}
+}
+
+func closeExitOne(t *testing.T, line string) (RunResult, []map[string]any) {
+	t.Helper()
+	c := newCloseRig(t)
+	c.runner.code, c.runner.line = 1, line
+	pv, err := c.preview(CloseSprint, closeItemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.confirm(pv.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res, c.auditLines()
+}
+
+func TestCloseExitOneShowsLastStderrLine(t *testing.T) {
+	const last = "ValueError: an Unattended sprint with parked lines ends waiting-on-you, not done"
+	trace := "Traceback (most recent call last):\n  File \"sprint_step.py\", line 9, in <module>\n    run()\n" + last + "\n\n"
+	res, lines := closeExitOne(t, trace)
+	want := closeRefused + ": " + last
+	if res.Refused != want || !res.Failed || res.ExitCode != 1 {
+		t.Fatalf("result = %+v", res)
+	}
+	if len(lines) != 2 || lines[1]["exit_code"].(float64) != 1 || lines[1]["refused"] != want {
+		t.Fatalf("audit = %v", lines)
+	}
+}
+
+func TestCloseExitOneEmptyStderrKeepsSentenceOnly(t *testing.T) {
+	res, lines := closeExitOne(t, "  \n")
+	if res.Refused != closeRefused || lines[1]["refused"] != closeRefused {
+		t.Fatalf("result = %+v, audit = %v", res, lines)
+	}
+}
+
+func TestCloseExitOneCapsLongLastLine(t *testing.T) {
+	res, lines := closeExitOne(t, "Traceback (most recent call last):\nValueError: "+strings.Repeat("x\u00e9", 400))
+	suffix := strings.TrimPrefix(res.Refused, closeRefused+": ")
+	if n := len([]rune(suffix)); n != 300 || !strings.HasPrefix(suffix, "ValueError: ") {
+		t.Fatalf("runes = %d, refused = %q", n, res.Refused)
+	}
+	if lines[1]["refused"] != res.Refused {
+		t.Fatalf("audit = %v", lines[1])
 	}
 }

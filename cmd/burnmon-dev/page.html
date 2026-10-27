@@ -4214,7 +4214,7 @@ body.plain #mapOverlay{font-size:13.5px}
         '<div class="mapframehead" title="' + esc(f.explain) + '"><b>' + esc(f.label) + '</b><span>' + esc(f.status || '') + '</span><span class="ex">' + esc(f.explain) + '</span></div></div>';
     });
     // Lines are drawn first (the svg sits under the boxes in the DOM order of the stage).
-    // A subagent of a subagent steps 16 px right inside its column (at most 3 steps).
+    // A subagent of a subagent steps 16 px right inside its column, one step per level.
     boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column) + (b.depth > 1 ? 16 * (b.depth - 1) : 0), y: b.kind === 'you' ? g.youY : g.rowY[b.row] }; });
     var related = {};
     (L.lines || []).forEach(function(ln){

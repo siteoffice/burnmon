@@ -445,3 +445,58 @@ func TestNoGitCommand(t *testing.T) {
 		t.Fatal("no non-test .go files found")
 	}
 }
+
+func writeRefsOn(t *testing.T, gitDir, trunk string, f fixture) {
+	t.Helper()
+	setRef(t, gitDir, "refs/heads/"+trunk, f.m)
+	setRef(t, gitDir, "refs/heads/"+mergedBranch, f.b)
+	setRef(t, gitDir, "refs/heads/"+openBranch, f.d)
+}
+
+// A repo with only master (no main) uses master as the trunk.
+func TestMasterTrunkWhenNoMain(t *testing.T) {
+	repo, gd := newRepo(t)
+	writeRefsOn(t, gd, "master", buildGraph(t, gd))
+	c := NewChecker()
+	expect(t, c, repo, mergedBranch, true, true)
+	expect(t, c, repo, openBranch, false, true)
+}
+
+func TestMasterTrunkPacked(t *testing.T) {
+	repo, gd := newRepo(t)
+	f := buildGraph(t, gd)
+	setPacked(t, gd, map[string]string{
+		"refs/heads/master":          f.m,
+		"refs/heads/" + mergedBranch: f.b,
+		"refs/heads/" + openBranch:   f.d,
+	})
+	c := NewChecker()
+	expect(t, c, repo, mergedBranch, true, true)
+	expect(t, c, repo, openBranch, false, true)
+}
+
+// With both, main wins: master points at an unrelated commit that would give
+// the opposite answer.
+func TestMainPreferredOverMaster(t *testing.T) {
+	repo, gd := newRepo(t)
+	f := buildGraph(t, gd)
+	writeRefs(t, gd, f)
+	setRef(t, gd, "refs/heads/master", f.a)
+	expect(t, NewChecker(), repo, mergedBranch, true, true)
+}
+
+func TestNeitherMainNorMasterIsUnknown(t *testing.T) {
+	repo, gd := newRepo(t)
+	writeRefsOn(t, gd, "trunk", buildGraph(t, gd))
+	expect(t, NewChecker(), repo, mergedBranch, false, false)
+}
+
+// The trunk is never taken from HEAD, which may point at a work branch.
+func TestTrunkIgnoresHead(t *testing.T) {
+	repo, gd := newRepo(t)
+	writeRefsOn(t, gd, "trunk", buildGraph(t, gd))
+	if err := os.WriteFile(filepath.Join(gd, "HEAD"), []byte("ref: refs/heads/trunk\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, NewChecker(), repo, mergedBranch, false, false)
+}

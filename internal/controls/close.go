@@ -17,6 +17,9 @@ const CloseDetail = "branch in main, closed from BurnMon Dev"
 // was written, so the text says only what is known.
 const closeRefused = "Foreman stopped with exit 1: the sprint may or may not be closed, check the sprint's dashboard or report"
 
+// closeReasonMax caps the reason line appended to closeRefused, in runes.
+const closeReasonMax = 300
+
 // branchRe is stricter than gitrefs.ValidBranch: a branch that reaches a
 // command line holds only letters, digits and . _ / -.
 var branchRe = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)

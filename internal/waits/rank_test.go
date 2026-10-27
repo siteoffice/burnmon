@@ -101,6 +101,29 @@ func TestHoldsCounts(t *testing.T) {
 	}
 }
 
+// A gate holds only the sprints on its spec that are not finished.
+func TestGateHoldsSkipFinishedSprints(t *testing.T) {
+	spec := `C:\example\specsin.md`
+	var sprints []graph.Sprint
+	for i, st := range []string{"running", "paused", "waiting-on-you", "done", "passing", "failed", "capped", "escalated"} {
+		sprints = append(sprints, graph.Sprint{ID: "s" + itoa(i), Status: st, SpecPath: spec})
+	}
+	sprints = append(sprints, graph.Sprint{ID: "other", Status: "running", SpecPath: `C:\example\specs\other.md`})
+	in := Input{Now: now, Graph: graph.Graph{Nodes: []graph.Node{{ID: personID, Kind: graph.KindPerson}}},
+		Flows:   []graph.Flow{{ID: "f1", Slug: "fl", Gate: "G1", GatePending: true, SpecPath: spec, UpdatedAt: now}},
+		Sprints: sprints}
+	w, _ := Build(in)
+	for _, it := range w {
+		if it.ID == "gate:f1:G1" {
+			if it.Holds != 4 {
+				t.Fatalf("holds = %d, want 4 (the flow plus running, paused, waiting-on-you)", it.Holds)
+			}
+			return
+		}
+	}
+	t.Fatal("no gate item")
+}
+
 func TestCostOfWaiting(t *testing.T) {
 	spec := `C:\example\specs\c.md`
 	g := graph.Graph{
