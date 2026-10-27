@@ -815,6 +815,10 @@ func BuildLayout(in LayoutInput) Layout {
 	}
 	boxes = append(boxes, b.l.Boxes...)
 	if youBox {
+		youPill := ""
+		if counts.Blocked > 0 {
+			youPill = b.w.waitsPill
+		}
 		r := 0
 		if len(youRows) > 0 {
 			r = youRows[0]
@@ -824,8 +828,8 @@ func BuildLayout(in LayoutInput) Layout {
 				}
 			}
 		}
-		boxes = append(boxes, Box{ID: "you", Kind: "you", Title: "You", Pill: b.w.waitsPill, Line: fmt.Sprintf("%d %s you, %d your turn", counts.Blocked, map[bool]string{true: "waiting for", false: "waiting on"}[b.w.plain], counts.YourTurn),
-			Column: youCol, Row: r, WaitsOnYou: true, Facts: b.youFacts(), Tag: "you"})
+		boxes = append(boxes, Box{ID: "you", Kind: "you", Title: "You", Pill: youPill, Line: fmt.Sprintf("%d %s you, %d your turn", counts.Blocked, map[bool]string{true: "waiting for", false: "waiting on"}[b.w.plain], counts.YourTurn),
+			Column: youCol, Row: r, WaitsOnYou: counts.Blocked > 0, Facts: b.youFacts(), Tag: "you"})
 	}
 	b.l.Boxes = boxes
 	b.l.ColumnNotes = b.columnNotes()

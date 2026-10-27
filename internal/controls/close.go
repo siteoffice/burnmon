@@ -12,9 +12,10 @@ import (
 // CloseDetail is the one-line reason Foreman records for the close.
 const CloseDetail = "branch in main, closed from BurnMon Dev"
 
-// closeRefused is the page text for exit code 1: Foreman's own close-out gate
-// said no and wrote nothing.
-const closeRefused = "Foreman refused to close this sprint (exit 1): its report's close-out block does not pass yet"
+// closeRefused is the page text for exit code 1. sprint_step.py exits 1 for
+// any uncaught error, including a dashboard render failure after sprint.json
+// was written, so the text says only what is known.
+const closeRefused = "Foreman stopped with exit 1: the sprint may or may not be closed, check the sprint's dashboard or report"
 
 // branchRe is stricter than gitrefs.ValidBranch: a branch that reaches a
 // command line holds only letters, digits and . _ / -.

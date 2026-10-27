@@ -328,7 +328,10 @@ func TestCloseExitOneIsARefusal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "Foreman refused to close this sprint (exit 1): its report's close-out block does not pass yet"
+	const want = "Foreman stopped with exit 1: the sprint may or may not be closed, check the sprint's dashboard or report"
+	if strings.Contains(want, "refused") || strings.Contains(want, "close-out block") {
+		t.Fatal("the exit 1 text claims a reason Foreman did not give")
+	}
 	if res.Refused != want || !res.Failed || res.ExitCode != 1 {
 		t.Fatalf("result = %+v", res)
 	}

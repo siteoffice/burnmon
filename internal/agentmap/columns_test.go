@@ -255,3 +255,19 @@ func TestKindTags(t *testing.T) {
 		t.Fatal("no folded box")
 	}
 }
+
+func TestYouBoxAmberOnlyWhenBlocked(t *testing.T) {
+	nodes := []graph.Node{sess(pID, "p", "coding")}
+	l := BuildLayout(LayoutInput{Nodes: nodes, Counts: &waits.Counts{Blocked: 0, YourTurn: 2}})
+	y, ok := boxByID(l, "you")
+	if !ok || y.WaitsOnYou || y.Pill != "" {
+		t.Errorf("your-turn-only You box = %+v (found %v), want no waits_on_you and no pill", y, ok)
+	}
+	if y.Line != "0 waiting on you, 2 your turn" {
+		t.Errorf("your-turn-only You line %q", y.Line)
+	}
+	l = BuildLayout(LayoutInput{Nodes: nodes, Counts: &waits.Counts{Blocked: 1, YourTurn: 2}})
+	if y, _ := boxByID(l, "you"); !y.WaitsOnYou || y.Pill != "waits on you" {
+		t.Errorf("blocked You box = %+v, want waits_on_you and the pill", y)
+	}
+}

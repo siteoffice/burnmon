@@ -454,7 +454,8 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapbox.tool, .mapbox.programs{border-style:dashed}
 .mapbox.folded{border-style:double; border-width:3px}
 .mapbox.harness{background:transparent}
-.mapbox.you{border-color:var(--amber); background:var(--panel2)}
+.mapbox.you{background:var(--panel2)}
+.mapbox.you.wait{border-color:var(--amber)}
 .mapbox .t{color:var(--strong); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapbox .l{color:var(--dim); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapbox .pr{display:flex; align-items:center; gap:6px; min-width:0}
@@ -462,6 +463,7 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapbox .p{align-self:flex-start; font-size:10.5px; padding:0 6px; border:1px solid var(--bd); border-radius:8px; color:var(--dim); white-space:nowrap}
 .mapbox .p.busy{color:var(--grn); border-color:var(--grn)}
 .mapbox .p.wait{color:var(--amber); border-color:var(--amber)}
+.mapbox .p.quiet{color:var(--dim); border-color:var(--bd2)}
 .mapbox.dim{opacity:.45}
 .mapbox .tag{position:absolute; top:-7px; left:8px; padding:0 4px; max-width:110px; background:var(--panel); color:var(--dim); font-size:9px; letter-spacing:.04em; text-transform:uppercase; line-height:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapline{fill:none; stroke:var(--bd2); stroke-width:1.5}
@@ -661,8 +663,8 @@ body.plain #mapOverlay{font-size:13.5px}
     <div class="sechint ctlwhy">Off until you tick them. Stop a session and Attach to a session need claude_path and agent_view in burnmon.json. Approve a gate and Send a gate back need python on PATH and foreman_root. Each press first shows the exact command; a second press on Confirm runs it within 5 seconds.</div>
     <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="stop"> Stop a session</label><div class="dim ctlwhy" data-ctl-why="stop"></div></div>
     <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="attach"> Attach to a session</label><div class="dim ctlwhy" data-ctl-why="attach"></div></div>
-    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="approve"> Approve a gate</label><div class="dim ctlwhy" data-ctl-why="approve"></div></div>
-    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
+    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="approve"> Approve a gate</label><div class="dim ctlwhy" data-ctl-why="approve"></div></div>
+    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
     <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint"> Close a merged sprint</label><div class="dim ctlwhy" data-ctl-why="close_sprint"></div></div>
   </div>
   <div class="setrow setstation">Station starts as
@@ -3709,21 +3711,26 @@ body.plain #mapOverlay{font-size:13.5px}
   // carries the total (secCount).
   function secList(rows){ return rows ? '<div class="seclist">' + rows + '</div>' : ''; }
   function secCount(n){ return n ? ' (' + n + ')' : ''; }  var SEC_TIERS = [['blocked','Blocked','Stuck, needs you'], ['your_turn','Your turn','Your turn'],
-    ['close_out','Done, needs close-out','Done, needs close-out'], ['can_close','Done, can be closed','Done, can be closed']];
+    ['done','Done, needs close-out','Done, needs close-out']];
   function secTier(it){
-    if(it.kind === 'close_out') return 'close_out';
-    if(it.kind === 'can_close') return 'can_close';
+    if(it.kind === 'close_out' || it.kind === 'can_close') return 'done';
     if(it.group === 'your_turn') return 'your_turn';
-    return it.group === 'done' ? 'can_close' : 'blocked';
+    return it.group === 'done' ? 'done' : 'blocked';
   }
   function secBodyWaits(snap){
     var w = snap.wait_items || [], html = secAged(snap) ? secAgedLine() : '';
     if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'Nothing waits on you.') + '</div>';
     var rows = '';
     SEC_TIERS.forEach(function(t){
-      var part = '', n = 0;
-      w.forEach(function(it){ if(secTier(it) === t[0]){ part += secItemRow(it, false); n++; } });
-      if(n) rows += '<div class="sectier ' + t[0] + '" data-tier="' + t[0] + '">' + esc(t[secState.plain ? 2 : 1] + ' (' + n + ')') + '</div>' + part;
+      var part = '', n = 0, head = t[secState.plain ? 2 : 1], co = 0;
+      // One Done tier: close_out rows first, then can_close rows. Its header names
+      // Foreman only when a close_out row is in it.
+      w.forEach(function(it){ if(it.kind === 'close_out') co++; });
+      if(t[0] === 'done' && !co) head = 'Done, can be closed';
+      (t[0] === 'done' ? [true, false] : [null]).forEach(function(first){
+        w.forEach(function(it){ if(secTier(it) === t[0] && (first === null || (it.kind === 'close_out') === first)){ part += secItemRow(it, false); n++; } });
+      });
+      if(n) rows += '<div class="sectier ' + t[0] + '" data-tier="' + t[0] + '">' + esc(head + ' (' + n + ')') + '</div>' + part;
     });
     html += secList(rows);
     return html;
@@ -4124,7 +4131,7 @@ body.plain #mapOverlay{font-size:13.5px}
   }
   function mapPillClass(b){
     if(b.waits_on_you) return 'wait';
-    if(b.kind === 'session' || b.kind === 'sub') return /idle|dormant/.test(b.pill || '') ? '' : 'busy';
+    if(b.kind === 'session' || b.kind === 'sub') { var pl = b.pill || ''; return /idle|dormant|your turn|can be closed/.test(pl) ? (/idle|dormant/.test(pl) ? '' : 'quiet') : 'busy'; }
     return '';
   }
 
@@ -4208,7 +4215,7 @@ body.plain #mapOverlay{font-size:13.5px}
     });
     // Lines are drawn first (the svg sits under the boxes in the DOM order of the stage).
     // A subagent of a subagent steps 16 px right inside its column (at most 3 steps).
-    boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column) + (b.depth > 1 ? 16 * Math.min(b.depth - 1, 3) : 0), y: b.kind === 'you' ? g.youY : g.rowY[b.row] }; });
+    boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column) + (b.depth > 1 ? 16 * (b.depth - 1) : 0), y: b.kind === 'you' ? g.youY : g.rowY[b.row] }; });
     var related = {};
     (L.lines || []).forEach(function(ln){
       if(ln.from === mapSel || ln.to === mapSel){ related[ln.from] = true; related[ln.to] = true; }
