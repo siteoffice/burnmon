@@ -278,3 +278,35 @@ func TestBindingsAreRegistered(t *testing.T) {
 		t.Error("controls_view.go must be windows only")
 	}
 }
+
+// Review Focus 5: without foreman_root the payload says so, the Close control
+// is not ready and the page marks its gear line as Foreman only.
+func TestPageWithoutForemanRoot(t *testing.T) {
+	dir := t.TempDir()
+	snap := filepath.Join("..", "..", "testdata", "snapshot_example.json")
+	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
+	pyLook := func(string) (string, error) { return `C:\example\python.exe`, nil }
+	svc := newControlServiceWith(pricing.Config{}, dir, snap, filepath.Join(dir, "store", "burnmon.db"), pyLook)
+	p := sectionsPayloadWith(dir, snap, now, svc.Availability)
+	if p.Controls.Foreman || p.Controls.Ready[controls.CloseSprint] {
+		t.Errorf("without foreman_root: foreman %v, close ready %v", p.Controls.Foreman, p.Controls.Ready[controls.CloseSprint])
+	}
+	withRoot := newControlServiceWith(pricing.Config{ForemanRoot: `C:\example\foreman`}, dir, snap, filepath.Join(dir, "store", "burnmon.db"), pyLook)
+	if q := sectionsPayloadWith(dir, snap, now, withRoot.Availability); !q.Controls.Foreman {
+		t.Error("with foreman_root the payload says foreman false")
+	}
+	if !strings.Contains(pageHTML, `<div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint">`) {
+		t.Error("the page's close_sprint gear line is not marked data-ctl-needs=\"foreman\"")
+	}
+}
+
+func TestControlServiceGetsMerged(t *testing.T) {
+	dir := t.TempDir()
+	svc := newControlServiceWith(pricing.Config{}, dir, filepath.Join(dir, "snap.json"), filepath.Join(dir, "store", "burnmon.db"), failLook)
+	if svc.Env.Merged == nil {
+		t.Fatal("Env.Merged is not wired: the Close control would always refuse")
+	}
+	if m, k := svc.Env.Merged(filepath.Join(dir, "no-such-repo"), "example-branch"); m || k {
+		t.Errorf("a repo that does not exist read as merged=%v known=%v, want unknown", m, k)
+	}
+}

@@ -45,6 +45,9 @@ type controlsPayload struct {
 	Ready    map[string]bool              `json:"ready"`
 	Why      map[string]string            `json:"why,omitempty"`
 	Verdicts map[string]map[string]string `json:"verdicts"`
+	// Foreman is true when foreman_root is set. Without it the page hides the
+	// Close switch and every Close chip, with no error text.
+	Foreman bool `json:"foreman"`
 }
 
 // sectionsChange is what the page sends: the mode toggle (Plain), the overall
@@ -95,11 +98,14 @@ func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() c
 	for _, id := range controls.All {
 		p.Controls.Ready[id] = a.Ready[id]
 	}
+	p.Controls.Foreman = a.Foreman
 	if len(a.Why) > 0 {
 		p.Controls.Why = a.Why
 	}
 	if p.Reading.Status == snapshot.StatusOK && p.Reading.Snapshot != nil {
 		v := agentmap.Build(p.Reading.Snapshot.Nodes, p.Reading.Snapshot.Edges)
+		// One count: the overview reads the snapshot's wait_counts, like the full map.
+		v.Counts.Waiting, v.Counts.YourTurn = p.Reading.Snapshot.WaitCounts.Blocked, p.Reading.Snapshot.WaitCounts.YourTurn
 		p.AgentMap = &v
 	}
 	return p

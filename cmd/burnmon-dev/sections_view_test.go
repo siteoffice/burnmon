@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"burnmon/internal/sections"
 	"burnmon/internal/snapshot"
+	"burnmon/internal/waits"
 )
 
 // Saving the theme must keep the sections, and saving the sections must keep
@@ -439,5 +441,43 @@ func TestPageControlWordsAndGear(t *testing.T) {
 		if strings.Contains(pageHTML, bad) {
 			t.Errorf("page has %q", bad)
 		}
+	}
+}
+
+// Review Focus 2: the amber number is one number in every place the window
+// shows it: the reading's wait_counts, the list's blocked items, the small
+// overview in the sections payload, the full live map's counts and its You box.
+func TestFourPlacesOneCount(t *testing.T) {
+	dir := t.TempDir()
+	snapPath := filepath.Join("..", "..", "testdata", "snapshot_example.json")
+	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
+
+	p := sectionsPayloadFor(dir, snapPath, now)
+	if p.Reading.Snapshot == nil || p.AgentMap == nil {
+		t.Fatal("no snapshot or no overview map")
+	}
+	listed := 0
+	for _, it := range p.Reading.Snapshot.WaitItems {
+		if it.Group == waits.GroupBlocked {
+			listed++
+		}
+	}
+	wc := p.Reading.Snapshot.WaitCounts
+	if listed == 0 || wc != waits.CountOf(p.Reading.Snapshot.WaitItems) || wc.Blocked != listed {
+		t.Fatalf("wait_counts %+v, blocked items listed %d", wc, listed)
+	}
+	if p.AgentMap.Counts.Waiting != listed || p.AgentMap.Counts.YourTurn != wc.YourTurn {
+		t.Errorf("overview counts %+v, want waiting %d your turn %d", p.AgentMap.Counts, listed, wc.YourTurn)
+	}
+	m, err := agentMapFor(agentMapEnv{DataDir: dir, SnapPath: snapPath}, agentMapRequest{Source: "live"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Layout.Counts.Waiting != listed || m.Layout.Counts.YourTurn != wc.YourTurn {
+		t.Errorf("full map counts %+v, want waiting %d", m.Layout.Counts, listed)
+	}
+	y, ok := boxIn(m.Layout, "you")
+	if !ok || !strings.HasPrefix(y.Line, fmt.Sprintf("%d waiting on you", listed)) {
+		t.Errorf("You box %+v (found %v), want it to start with %d", y, ok, listed)
 	}
 }

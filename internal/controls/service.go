@@ -91,6 +91,8 @@ type RunResult struct {
 type Availability struct {
 	Ready map[string]bool   `json:"ready"`
 	Why   map[string]string `json:"why,omitempty"`
+	// Foreman is true when foreman_root is set: the Foreman parts exist.
+	Foreman bool `json:"foreman"`
 }
 
 const (
@@ -111,7 +113,7 @@ func libDirOf(root string) string { return filepath.Join(root, "flows", "_lib") 
 // assess works out, once, which controls are usable now and the Self that
 // the decision used. A Self that came with an error is never returned.
 func (s *Service) assess() (Availability, Self) {
-	a := Availability{Ready: map[string]bool{}, Why: map[string]string{}}
+	a := Availability{Ready: map[string]bool{}, Why: map[string]string{}, Foreman: s.Env.ForemanRoot != ""}
 	var self Self
 	global := ""
 	switch {

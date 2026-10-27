@@ -17,6 +17,7 @@ import (
 	"burnmon/internal/graph"
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
+	"burnmon/internal/waits"
 )
 
 const (
@@ -100,6 +101,7 @@ func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapP
 			return p, nil
 		}
 		in.Nodes, in.Edges = r.Snapshot.Nodes, r.Snapshot.Edges
+		in.Counts = &r.Snapshot.WaitCounts
 		in.Evidence = map[string]agentmap.Evidence{}
 		for _, s := range r.Snapshot.Sessions {
 			in.Evidence[graph.SessionID(s.Vendor, s.ID)] = agentmap.Evidence{Model: s.Model, Tokens: s.Tokens, CostEUR: s.Cost.EUR,
@@ -128,6 +130,10 @@ func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapP
 			return p, err
 		}
 		in.Nodes, in.Edges = g.Nodes, g.Edges
+		// One count: the same function the snapshot uses, over the history graph.
+		waiting, _ := waits.Build(waits.Input{Now: now, Graph: g, Sprints: hi.Sprints})
+		c := waits.CountOf(waiting)
+		in.Counts = &c
 	default:
 		return p, fmt.Errorf("source %q is not live or history", req.Source)
 	}
