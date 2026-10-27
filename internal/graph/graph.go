@@ -650,10 +650,11 @@ func Build(in Input) Graph {
 	return b.g
 }
 
-// markCanClose sets attr "can_close" on a Your turn or Blocked top-level
-// session in a linked worktree whose branch is in the main repo's trunk and
-// that no Foreman sprint speaks for. Its wait attr stays; its waits_on edge
-// goes, because the work is in main and the question is stale.
+// markCanClose sets attr "can_close" on a Your turn top-level session in a
+// linked worktree whose branch was merged into the main repo's trunk and that
+// no Foreman sprint speaks for. A Blocked session never becomes can_close: a
+// pending question must always reach the person, so it keeps its waits_on
+// edge.
 func (b *builder) markCanClose(ids []string, byID map[string]Session, repoOf map[string]Repo) {
 	if b.in.MergedFor == nil {
 		return
@@ -664,34 +665,18 @@ func (b *builder) markCanClose(ids []string, byID map[string]Session, repoOf map
 			sprinted[e.From] = true
 		}
 	}
-	drop := map[string]bool{}
 	for _, id := range ids {
 		r, ok := repoOf[id]
 		i, has := b.nodes[id]
 		if !ok || !has || byID[id].ParentID != "" || r.Main == "" || r.Branch == "" || sprinted[id] {
 			continue
 		}
-		if w := b.g.Nodes[i].Attrs["wait"]; w != WaitBlocked && w != WaitYourTurn {
+		if b.g.Nodes[i].Attrs["wait"] != WaitYourTurn {
 			continue
 		}
 		if m, known := b.in.MergedFor(r.Main, r.Branch); m && known {
 			b.g.Nodes[i].Attrs["can_close"] = "true"
-			drop[id+"|"+KindWaitsOn+"|"+personID] = true
 		}
-	}
-	if len(drop) == 0 {
-		return
-	}
-	kept := b.g.Edges[:0]
-	for _, e := range b.g.Edges {
-		if !drop[e.Key()] {
-			kept = append(kept, e)
-		}
-	}
-	b.g.Edges = kept
-	b.edges = map[string]int{}
-	for i, e := range b.g.Edges {
-		b.edges[e.Key()] = i
 	}
 }
 

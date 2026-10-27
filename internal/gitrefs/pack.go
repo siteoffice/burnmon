@@ -26,9 +26,20 @@ func openPack(idxPath string) (*pack, error) {
 	if len(idx) < 8+1024 || !bytes.Equal(idx[:4], []byte{0xff, 't', 'O', 'c'}) || binary.BigEndian.Uint32(idx[4:8]) != 2 {
 		return nil, errors.New("gitrefs: not a v2 pack index")
 	}
-	n := int(binary.BigEndian.Uint32(idx[8+255*4:]))
-	if n < 0 || len(idx) < 8+1024+n*28+40 {
+	n64 := uint64(binary.BigEndian.Uint32(idx[8+255*4:]))
+	if n64 > uint64(len(idx)) || uint64(len(idx)) < 8+1024+n64*28+40 {
 		return nil, errors.New("gitrefs: truncated pack index")
+	}
+	n := int(n64)
+	// Every fanout entry bounds a binary search: it must not decrease and
+	// must not point past the object count.
+	prev := uint32(0)
+	for i := 0; i < 256; i++ {
+		v := binary.BigEndian.Uint32(idx[8+i*4:])
+		if v < prev || uint64(v) > n64 {
+			return nil, errors.New("gitrefs: corrupt pack index fanout")
+		}
+		prev = v
 	}
 	f, err := os.Open(strings.TrimSuffix(idxPath, ".idx") + ".pack")
 	if err != nil {
@@ -80,6 +91,9 @@ func (p *pack) find(sha string) (uint64, bool) {
 func (p *pack) read(off uint64, s *store, depth int) (int, []byte, error) {
 	if depth > maxDeltaDepth {
 		return 0, nil, errors.New("gitrefs: delta chain too deep")
+	}
+	if off >= 1<<62 {
+		return 0, nil, errors.New("gitrefs: pack offset out of range")
 	}
 	var hdr [40]byte
 	n, err := p.f.ReadAt(hdr[:], int64(off))
@@ -155,6 +169,9 @@ func (p *pack) read(off uint64, s *store, depth int) (int, []byte, error) {
 		return 0, nil, err
 	}
 	defer zr.Close()
+	if err := s.charge(size); err != nil {
+		return 0, nil, err
+	}
 	buf := make([]byte, size)
 	if _, err := io.ReadFull(zr, buf); err != nil {
 		return 0, nil, err
@@ -165,14 +182,14 @@ func (p *pack) read(off uint64, s *store, depth int) (int, []byte, error) {
 		if err != nil {
 			return 0, nil, err
 		}
-		out, err := applyDelta(base, buf)
+		out, err := applyDelta(base, buf, s)
 		return bt, out, err
 	case 7:
 		bt, base, err := s.readObject(baseName, depth+1)
 		if err != nil {
 			return 0, nil, err
 		}
-		out, err := applyDelta(base, buf)
+		out, err := applyDelta(base, buf, s)
 		return bt, out, err
 	}
 	return typ, buf, nil
@@ -197,7 +214,8 @@ func deltaVarint(d []byte, i *int) (uint64, error) {
 
 // applyDelta applies a git delta (source size, target size, copy and insert
 // ops) to base.
-func applyDelta(base, delta []byte) ([]byte, error) {
+// s, when not nil, is charged for the result buffer.
+func applyDelta(base, delta []byte, s *store) ([]byte, error) {
 	i := 0
 	src, err := deltaVarint(delta, &i)
 	if err != nil {
@@ -209,6 +227,11 @@ func applyDelta(base, delta []byte) ([]byte, error) {
 	}
 	if src != uint64(len(base)) || dst > maxObjectSize {
 		return nil, errors.New("gitrefs: delta does not match its base")
+	}
+	if s != nil {
+		if err := s.charge(dst); err != nil {
+			return nil, err
+		}
 	}
 	out := make([]byte, 0, dst)
 	for i < len(delta) {

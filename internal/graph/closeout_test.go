@@ -95,15 +95,6 @@ func TestMergedWorktreeSessionCanClose(t *testing.T) {
 	if n.Attrs["can_close"] != "true" || n.Attrs["wait"] != WaitYourTurn {
 		t.Errorf("attrs = %+v; want can_close true, wait your_turn", n.Attrs)
 	}
-	// Blocked on a stale question: can_close set, wait stays blocked, edge dropped.
-	g = Build(Input{Now: t0, Sessions: []Session{coSession("waiting", true)}, RepoFor: coRepo, MergedFor: mergedFn(&calls, true, true)})
-	n, _ = node(g, id)
-	if n.Attrs["can_close"] != "true" || n.Attrs["wait"] != WaitBlocked {
-		t.Errorf("blocked attrs = %+v; want can_close true, wait blocked", n.Attrs)
-	}
-	if _, ok := edge(g, id, personID, KindWaitsOn); ok {
-		t.Error("merged worktree session still draws a waits_on edge")
-	}
 	// Unmerged: untouched.
 	g = Build(Input{Now: t0, Sessions: []Session{coSession("waiting", true)}, RepoFor: coRepo, MergedFor: mergedFn(&calls, false, true)})
 	n, _ = node(g, id)
@@ -112,6 +103,21 @@ func TestMergedWorktreeSessionCanClose(t *testing.T) {
 	}
 	if _, ok := edge(g, id, personID, KindWaitsOn); !ok {
 		t.Error("unmerged blocked session lost its edge")
+	}
+}
+
+// A pending question must always reach the person: a Blocked session in a
+// merged worktree stays Blocked, keeps its waits_on edge and is not can_close.
+func TestBlockedSessionInMergedWorktreeStaysBlocked(t *testing.T) {
+	var calls []mergeCall
+	id := "session:anthropic:s1"
+	g := Build(Input{Now: t0, Sessions: []Session{coSession("waiting", true)}, RepoFor: coRepo, MergedFor: mergedFn(&calls, true, true)})
+	n, _ := node(g, id)
+	if n.Attrs["wait"] != WaitBlocked || n.Attrs["can_close"] != "" {
+		t.Errorf("attrs = %+v; want wait blocked, no can_close", n.Attrs)
+	}
+	if _, ok := edge(g, id, personID, KindWaitsOn); !ok {
+		t.Error("blocked session in a merged worktree lost its waits_on edge")
 	}
 }
 

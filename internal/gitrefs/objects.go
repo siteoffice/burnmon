@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Object types as git numbers them in a pack.
@@ -24,11 +25,17 @@ const (
 	maxDeltaDepth = 512
 )
 
+// maxChainBytes caps the bytes allocated while reading one object, summed
+// over its whole delta chain. A variable so tests can lower it.
+var maxChainBytes uint64 = 64 << 20
+
 // store reads objects of one git dir. It is used by one walk and closed after.
 type store struct {
-	gitDir string
-	loaded bool
-	packs  []*pack
+	gitDir   string
+	loaded   bool
+	packs    []*pack
+	deadline time.Time // zero means none; set by the walk
+	alloc    uint64    // bytes allocated for the object being read
 }
 
 func newStore(gitDir string) *store { return &store{gitDir: gitDir} }
@@ -53,8 +60,22 @@ func (s *store) loadPacks() {
 	}
 }
 
+// charge counts n more allocated bytes against the current object read and
+// checks the walk deadline. It is called before every allocation in a chain.
+func (s *store) charge(n uint64) error {
+	if !s.deadline.IsZero() && time.Now().After(s.deadline) {
+		return errors.New("gitrefs: walk deadline passed inside an object")
+	}
+	if n > maxChainBytes || s.alloc > maxChainBytes-n {
+		return errors.New("gitrefs: object chain allocates too much")
+	}
+	s.alloc += n
+	return nil
+}
+
 // commitParents returns the parent names of a commit object.
 func (s *store) commitParents(sha string) ([]string, error) {
+	s.alloc = 0
 	typ, body, err := s.readObject(sha, 0)
 	if err != nil {
 		return nil, err

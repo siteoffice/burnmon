@@ -1,6 +1,10 @@
 // Package gitrefs reads git's files, never runs git; unknown is never merged.
 //
-// It answers one question for BurnMon: is a branch already in main. It
+// It answers one question for BurnMon: was a branch merged into main. Merged
+// means the branch tip is not main's tip and is the second or later parent of
+// a merge commit reachable from main's tip, because Foreman merges with
+// --no-ff. A tip that only sits on main's first-parent history (a
+// fast-forward, or a branch with no commit of its own yet) is not merged. It
 // resolves refs from loose files and packed-refs, then walks commit parents
 // from main's tip through loose objects and pack files, using only the
 // standard library. Anything it cannot read is "unknown", and callers leave
@@ -27,6 +31,9 @@ var (
 	walkLimit   = WalkLimit
 	walkTimeout = WalkTimeout
 )
+
+// maxCacheEntries bounds the Checker cache; it is cleared when it passes this.
+var maxCacheEntries = 1024
 
 // GitDir resolves a repo or worktree folder to its common git dir. It follows
 // a .git file ("gitdir: <path>") and the commondir file of a linked worktree.
@@ -192,9 +199,13 @@ type Checker struct {
 // NewChecker returns an empty Checker.
 func NewChecker() *Checker { return &Checker{cache: map[string]result{}} }
 
-// Merged reports whether branch is main's tip or an ancestor of it. known is
-// false on any read problem or when the walk limit or timeout is hit; merged
-// is then false. Only refs/heads/main is the trunk.
+// Merged reports whether branch was merged into main with a merge commit:
+// its tip is not main's tip and is the second or later parent of a merge
+// commit reachable from main's tip (Foreman merges with --no-ff). A tip that
+// only sits on main's first-parent history (a fast-forward, or a branch that
+// never got a commit of its own) is not merged. known is false on any read
+// problem or when the walk limit or timeout is hit; merged is then false.
+// Only refs/heads/main is the trunk.
 func (c *Checker) Merged(repo, branch string) (merged, known bool) {
 	if !ValidBranch(branch) {
 		return false, false
@@ -222,19 +233,24 @@ func (c *Checker) Merged(repo, branch string) (merged, known bool) {
 	merged, known = walk(gd, mainSHA, brSHA)
 
 	c.mu.Lock()
+	if len(c.cache) >= maxCacheEntries {
+		c.cache = map[string]result{}
+	}
 	c.cache[key] = result{merged, known}
 	c.mu.Unlock()
 	return merged, known
 }
 
-// walk searches target among main's ancestors, breadth first.
+// walk searches main's ancestors, breadth first, for a merge commit that has
+// target as a second or later parent.
 func walk(gitDir, mainSHA, target string) (merged, known bool) {
 	if mainSHA == target {
-		return true, true
+		return false, true
 	}
 	st := newStore(gitDir)
 	defer st.close()
 	deadline := time.Now().Add(walkTimeout)
+	st.deadline = deadline
 	seen := map[string]bool{mainSHA: true}
 	queue := []string{mainSHA}
 	processed := 0
@@ -244,13 +260,15 @@ func walk(gitDir, mainSHA, target string) (merged, known bool) {
 		}
 		sha := queue[0]
 		queue = queue[1:]
-		if sha == target {
-			return true, true
-		}
 		processed++
 		parents, err := st.commitParents(sha)
 		if err != nil {
 			return false, false
+		}
+		for _, p := range parents[min(1, len(parents)):] {
+			if p == target {
+				return true, true
+			}
 		}
 		for _, p := range parents {
 			if !seen[p] {

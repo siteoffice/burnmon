@@ -1,6 +1,10 @@
 package gitrefs
 
 import (
+	"bytes"
+	"compress/zlib"
+	"encoding/binary"
+	"encoding/hex"
 	"go/parser"
 	"go/token"
 	"os"
@@ -9,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -43,13 +48,43 @@ func TestUnmergedSprintBranch(t *testing.T) {
 	expect(t, NewChecker(), repo, openBranch, false, true)
 }
 
-func TestFastForwardIsMerged(t *testing.T) {
+// A fast-forward, or a branch that never got a commit of its own, leaves the
+// branch tip on main's first-parent history: not merged (Foreman merges with
+// --no-ff), but known.
+func TestFastForwardOrZeroCommitBranchIsNotMerged(t *testing.T) {
 	repo, gd := newRepo(t)
 	a := writeCommit(t, gd)
 	b := writeCommit(t, gd, a)
 	setRef(t, gd, "refs/heads/main", b)
 	setRef(t, gd, "refs/heads/"+mergedBranch, b)
-	expect(t, NewChecker(), repo, mergedBranch, true, true)
+	expect(t, NewChecker(), repo, mergedBranch, false, true)
+}
+
+func TestBranchAtOlderMainCommitIsNotMerged(t *testing.T) {
+	repo, gd := newRepo(t)
+	a := writeCommit(t, gd)
+	b := writeCommit(t, gd, a)
+	c := writeCommit(t, gd, b)
+	setRef(t, gd, "refs/heads/main", c)
+	setRef(t, gd, "refs/heads/"+openBranch, a)
+	expect(t, NewChecker(), repo, openBranch, false, true)
+}
+
+func TestCacheIsBounded(t *testing.T) {
+	repo, gd := newRepo(t)
+	a := writeCommit(t, gd)
+	setRef(t, gd, "refs/heads/main", a)
+	old := maxCacheEntries
+	maxCacheEntries = 3
+	defer func() { maxCacheEntries = old }()
+	c := NewChecker()
+	for i := 0; i < 10; i++ {
+		setRef(t, gd, "refs/heads/"+openBranch, writeCommit(t, gd))
+		expect(t, c, repo, openBranch, false, true)
+		if len(c.cache) > 3 {
+			t.Fatalf("cache holds %d entries after %d calls, want at most 3", len(c.cache), i+1)
+		}
+	}
 }
 
 func TestPackedRefsOnly(t *testing.T) {
@@ -90,6 +125,117 @@ func TestHandmadePack(t *testing.T) {
 	expect(t, c2, repo, openBranch, false, true)
 }
 
+// A corrupt fanout (an entry above the object count, or one that goes down)
+// must make the pack unreadable, never panic in a lookup.
+func TestCorruptFanoutIsUnknown(t *testing.T) {
+	repo, gd := newRepo(t)
+	a, ab := commitObj()
+	b, bb := commitObj(a)
+	m, mb := commitObj(b)
+	d, db := commitObj(a)
+	_, idxPath := writePack(t, gd, [][]byte{ab, bb, mb, db})
+	idx, err := os.ReadFile(idxPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make every lookup's upper bound huge: fan[b0] = 0xFFFFFFF0 for each name's first byte.
+	for _, sha := range []string{a, b, m, d} {
+		raw, _ := hex.DecodeString(sha)
+		binary.BigEndian.PutUint32(idx[8+int(raw[0])*4:], 0xFFFFFFF0)
+		if raw[0] > 0 {
+			binary.BigEndian.PutUint32(idx[8+(int(raw[0])-1)*4:], 0)
+		}
+	}
+	if err := os.WriteFile(idxPath, idx, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openPack(idxPath); err == nil {
+		t.Fatal("openPack accepted a corrupt fanout")
+	}
+	setRef(t, gd, "refs/heads/main", m)
+	setRef(t, gd, "refs/heads/"+openBranch, d)
+	expect(t, NewChecker(), repo, openBranch, false, false)
+
+	// A decreasing fanout is refused too.
+	idx2, _ := os.ReadFile(idxPath)
+	for i := 0; i < 256; i++ {
+		binary.BigEndian.PutUint32(idx2[8+i*4:], 0)
+	}
+	binary.BigEndian.PutUint32(idx2[8+10*4:], 4)
+	binary.BigEndian.PutUint32(idx2[8+255*4:], 4)
+	if err := os.WriteFile(idxPath, idx2, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openPack(idxPath); err == nil {
+		t.Fatal("openPack accepted a decreasing fanout")
+	}
+}
+
+// buildDeltaChain writes a pack file with one 400-byte blob and levels OFS
+// deltas stacked on it (each copies the whole base), returns the pack and the
+// offset of the last object.
+func buildDeltaChain(t *testing.T, levels int) (*os.File, uint64) {
+	t.Helper()
+	z := func(b []byte) []byte {
+		var buf bytes.Buffer
+		w := zlib.NewWriter(&buf)
+		w.Write(b)
+		w.Close()
+		return buf.Bytes()
+	}
+	var pk bytes.Buffer
+	pk.WriteString("PACK\x00\x00\x00\x02\x00\x00\x00\x00")
+	last := pk.Len()
+	pk.Write([]byte{0xB0, 0x19}) // blob, size 400
+	pk.Write(z(bytes.Repeat([]byte("a"), 400)))
+	delta := []byte{0x90, 0x03, 0x90, 0x03, 0xB0, 0x90, 0x01} // src 400, dst 400, copy 400 from 0
+	for i := 0; i < levels; i++ {
+		start := pk.Len()
+		rel := start - last
+		if rel >= 128 {
+			t.Fatalf("fixture: ofs distance %d needs more than one byte", rel)
+		}
+		pk.Write([]byte{0x60 | byte(len(delta)), byte(rel)})
+		pk.Write(z(delta))
+		last = start
+	}
+	f, err := os.Create(filepath.Join(t.TempDir(), "chain.pack"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(pk.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.Close() })
+	return f, uint64(last)
+}
+
+func TestDeltaChainTotalAllocationIsCapped(t *testing.T) {
+	f, off := buildDeltaChain(t, 3)
+	p := &pack{f: f}
+	s := newStore(t.TempDir())
+	if _, body, err := p.read(off, s, 0); err != nil || len(body) != 400 {
+		t.Fatalf("uncapped read: %d bytes, err %v; want 400 bytes", len(body), err)
+	}
+	old := maxChainBytes
+	maxChainBytes = 1000 // the chain allocates 400 + 3*(400+7) bytes
+	defer func() { maxChainBytes = old }()
+	s = newStore(t.TempDir())
+	if _, _, err := p.read(off, s, 0); err == nil {
+		t.Fatal("a chain over the byte cap was read")
+	}
+}
+
+func TestDeltaChainHonoursDeadline(t *testing.T) {
+	f, off := buildDeltaChain(t, 3)
+	p := &pack{f: f}
+	s := newStore(t.TempDir())
+	s.deadline = time.Now().Add(-time.Second)
+	if _, _, err := p.read(off, s, 0); err == nil {
+		t.Fatal("a read past the walk deadline succeeded")
+	}
+}
+
 func TestApplyDelta(t *testing.T) {
 	base := []byte("hello world")
 	// src size 11, dst size 14: copy 6 bytes from offset 0, insert "there", copy "ld" (offset 9, size 2) ... built by hand.
@@ -99,7 +245,7 @@ func TestApplyDelta(t *testing.T) {
 		6, 't', 'h', 'e', 'r', 'e', '!',
 		0x80 | 0x01 | 0x10, 9, 2, // copy offset 9, size 2
 	}
-	got, err := applyDelta(base, delta)
+	got, err := applyDelta(base, delta, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,12 +253,12 @@ func TestApplyDelta(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 	// A delta that claims a different source size is refused.
-	if _, err := applyDelta([]byte("x"), delta); err == nil {
+	if _, err := applyDelta([]byte("x"), delta, nil); err == nil {
 		t.Fatal("wrong source size must fail")
 	}
 	// A copy beyond the base is refused.
 	bad := []byte{11, 3, 0x80 | 0x01 | 0x10, 10, 3}
-	if _, err := applyDelta(base, bad); err == nil {
+	if _, err := applyDelta(base, bad, nil); err == nil {
 		t.Fatal("copy past the base must fail")
 	}
 }
