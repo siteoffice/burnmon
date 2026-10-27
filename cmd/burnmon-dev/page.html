@@ -5,7 +5,7 @@
 <title>BurnMon Dev</title>
 <style>
 :root{
-  --bg:#04060a; --panel:#0a0e14; --panel2:#10151d; --bd:#1c2532;
+  --bg:#04060a; --panel:#0a0e14; --panel2:#10151d; --bd:#1c2532; --bd2:#56677d;
   --amber:#ffa028; --amber2:#ffc46b;
   --txt:#cfd8e3; --dim:#66788c;
   --grn:#00d26a; --red:#ff4b4b; --blu:#4da6ff; --cyn:#38d3e3; --mag:#d68cf0; --mag-dim:#a76dbb; --yel:#ffd75f;
@@ -19,10 +19,11 @@
    defines is overridden here, nothing else in the CSS is theme specific.
    The accent and signal colours are darkened until they hold at least 3:1
    against --panel (#fff) and --panel2, the WCAG bar for graphics; --amber,
-   --txt and --dim are text colours and hold 4.5:1. The session and harness
+   --txt and --dim are text colours and hold 4.5:1. --bd2 (map borders
+   and lines) holds 3:1 against --bg, --panel and --panel3; a Go test checks it. The session and harness
    colours drawn from script have their own light set (HARNESS_HUE_LIGHT). */
 :root[data-theme="light"]{
-  --bg:#e9edf2; --panel:#ffffff; --panel2:#f0f3f7; --bd:#cdd5df;
+  --bg:#e9edf2; --panel:#ffffff; --panel2:#f0f3f7; --bd:#cdd5df; --bd2:#6f7d8c;
   --amber:#9a5200; --amber2:#b86a00;
   --txt:#1f2a37; --dim:#586a7e;
   --grn:#00873f; --red:#d62c2c; --blu:#0b6fd1; --cyn:#00899b; --mag:#b03fd0; --mag-dim:#8a4aa0; --yel:#9a7400;
@@ -437,15 +438,16 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapscroll{flex:1 1 auto; min-width:0; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
 .mapstage{position:relative}
 .mapstage svg{position:absolute; left:0; top:0; pointer-events:none; overflow:visible}
+.mapcoln{position:absolute; top:21px; color:var(--dim); font-size:10px; font-style:italic}
 .mapcolh{position:absolute; top:8px; color:var(--dim); font-size:11px; letter-spacing:.04em; text-transform:uppercase}
-.mapframe{position:absolute; box-sizing:border-box; border:1px solid var(--bd); background:var(--panel3); border-radius:4px}
+.mapframe{position:absolute; box-sizing:border-box; border:1px solid var(--bd2); background:var(--panel3); border-radius:4px}
 .mapframe.wait{border-color:var(--amber)}
 .mapframehead{position:absolute; left:10px; right:10px; top:6px; line-height:14px; overflow:hidden}
 .mapframehead b{color:var(--strong); font-size:13px; margin-right:8px}
 .mapframehead span{color:var(--dim)}
 .mapframehead .ex{display:block; font-size:11px; max-height:42px; overflow:hidden}
 .mapbox{all:unset; box-sizing:border-box; position:absolute; display:flex; flex-direction:column; justify-content:center; gap:3px; padding:6px 10px;
-  border:1px solid var(--bd); background:var(--panel); cursor:pointer; border-radius:3px}
+  border:1px solid var(--bd2); background:var(--panel); cursor:pointer; border-radius:3px}
 .mapbox:hover, .mapbox:focus-visible, .mapbox.sel{border-color:var(--amber)}
 .mapbox.sel{background:var(--panel2)}
 .mapbox.wait{border-left:3px solid var(--amber)}
@@ -461,7 +463,9 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapbox .p.busy{color:var(--grn); border-color:var(--grn)}
 .mapbox .p.wait{color:var(--amber); border-color:var(--amber)}
 .mapbox.dim{opacity:.45}
-.mapline{fill:none; stroke:var(--bd); stroke-width:1.5}
+.mapbox .tag{position:absolute; top:-7px; left:8px; padding:0 4px; max-width:110px; background:var(--panel); color:var(--dim); font-size:9px; letter-spacing:.04em; text-transform:uppercase; line-height:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.mapline{fill:none; stroke:var(--bd2); stroke-width:1.5}
+.mapline.dotted{stroke-dasharray:2 4}
 .mapline.you{stroke:var(--amber); stroke-width:2.5}
 .mapline.hl{stroke:var(--txt); stroke-width:2.5}
 .mapline.you.hl{stroke:var(--amber2)}
@@ -4162,6 +4166,7 @@ body.plain #mapOverlay{font-size:13.5px}
     if(L && L.counts){
       var c = L.counts;
       count = c.sessions + (c.sessions === 1 ? ' session, ' : ' sessions, ') + c.subagents + (plain ? (c.subagents === 1 ? ' helper' : ' helpers') : (c.subagents === 1 ? ' subagent' : ' subagents'));
+      count += ', ' + (c.waiting || 0) + (plain ? ' waiting for you, ' : ' waiting on you, ') + (c.your_turn || 0) + ' your turn';
     }
     document.getElementById('mapSrc').textContent = src;
     document.getElementById('mapCount').textContent = count;
@@ -4189,6 +4194,8 @@ body.plain #mapOverlay{font-size:13.5px}
     }
     (L.columns || []).forEach(function(name, i){
       html += '<div class="mapcolh" style="left:' + g.x(i) + 'px">' + esc(name) + '</div>';
+      var cn = (L.column_notes || [])[i];
+      if(cn) html += '<div class="mapcoln" style="left:' + g.x(i) + 'px">' + esc(cn) + '</div>';
     });
     var framePos = {};
     (L.frames || []).forEach(function(f){
@@ -4200,7 +4207,8 @@ body.plain #mapOverlay{font-size:13.5px}
         '<div class="mapframehead" title="' + esc(f.explain) + '"><b>' + esc(f.label) + '</b><span>' + esc(f.status || '') + '</span><span class="ex">' + esc(f.explain) + '</span></div></div>';
     });
     // Lines are drawn first (the svg sits under the boxes in the DOM order of the stage).
-    boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column), y: b.kind === 'you' ? g.youY : g.rowY[b.row] }; });
+    // A subagent of a subagent steps 16 px right inside its column (at most 3 steps).
+    boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column) + (b.depth > 1 ? 16 * Math.min(b.depth - 1, 3) : 0), y: b.kind === 'you' ? g.youY : g.rowY[b.row] }; });
     var related = {};
     (L.lines || []).forEach(function(ln){
       if(ln.from === mapSel || ln.to === mapSel){ related[ln.from] = true; related[ln.to] = true; }
@@ -4217,11 +4225,13 @@ body.plain #mapOverlay{font-size:13.5px}
       else if(framePos[ln.from]){ x1 = framePos[ln.from].x; y1 = framePos[ln.from].y; }
       if(x1 === undefined || !b) return;
       var x2 = b.x, y2 = b.y + MAP.BOXH / 2, dx = Math.max(30, (x2 - x1) / 2);
+      // A line that runs back (a subagent reporting to its session) leaves the left edge and lands on the right edge.
+      if(a && b.x < a.x){ x1 = a.x; x2 = b.x + MAP.BOXW; dx = -Math.max(30, (x1 - x2) / 2); }
       var hl = mapSel && (ln.from === mapSel || ln.to === mapSel);
-      var cls = 'mapline' + (ln.you ? ' you' : '') + (hl ? ' hl' : (mapSel ? ' dim' : ''));
+      var cls = 'mapline' + (ln.you ? ' you' : '') + (ln.style === 'dotted' ? ' dotted' : '') + (hl ? ' hl' : (mapSel ? ' dim' : ''));
       svg += '<path class="' + cls + '" d="M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ' ' + (x2 - dx) + ' ' + y2 + ' ' + x2 + ' ' + y2 +
         '" marker-end="url(#' + (ln.you ? 'mapArrYou' : 'mapArr') + ')"/>';
-      var key = ln.you ? ln.word + '>' + ln.to : ln.word + '<' + ln.from;
+      var key = (ln.you || ln.style === 'dotted') ? ln.word + '>' + ln.to : ln.word + '<' + ln.from;
       if(hl || !said[key]){
         said[key] = true;
         svg += '<text class="mapword' + (ln.you ? ' you' : '') + '" x="' + ((x1 + x2) / 2) + '" y="' + (((y1 + y2) / 2) - 5) + '">' + esc(ln.word) + '</text>';
@@ -4233,7 +4243,7 @@ body.plain #mapOverlay{font-size:13.5px}
       var cls = 'mapbox ' + b.kind + (b.waits_on_you ? ' wait' : '') + (b.id === mapSel ? ' sel' : '') + (mapSel && b.id !== mapSel && !related[b.id] ? ' dim' : '');
       html += '<button type="button" class="' + cls + '" data-box="' + esc(b.id) + '" aria-pressed="' + (b.id === mapSel ? 'true' : 'false') + '" ' +
         'style="left:' + pos[b.id].x + 'px;top:' + pos[b.id].y + 'px;width:' + MAP.BOXW + 'px;height:' + MAP.BOXH + 'px">' +
-        '<span class="t">' + esc(b.title) + '</span>' + '<span class="pr">' + (b.pill ? '<span class="p ' + mapPillClass(b) + '">' + esc(b.pill) + '</span>' : '') +
+        (b.tag ? '<span class="tag">' + esc(b.tag) + '</span>' : '') + '<span class="t">' + esc(b.title) + '</span>' + '<span class="pr">' + (b.pill ? '<span class="p ' + mapPillClass(b) + '">' + esc(b.pill) + '</span>' : '') +
         (b.tool ? '<span class="tl" title="' + esc(secState.plain ? 'what it is running now' : 'tool running now') + '">' + esc(b.tool) + '</span>' : '') + '</span>' +
         (b.line ? '<span class="l">' + esc(b.line) + '</span>' : '') + '</button>';
     });
