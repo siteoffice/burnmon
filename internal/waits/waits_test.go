@@ -21,7 +21,7 @@ func TestOpenGateIsAWait(t *testing.T) {
 	decided := graph.Flow{ID: "f2", Slug: "done-flow", Gate: "G3", GatePending: false}
 	w, _ := Build(Input{Now: now, Flows: []graph.Flow{openFlow(), decided}})
 	want := []Item{{Kind: "gate", ID: "gate:f1:G4", Title: "example-flow", Project: "example", Detail: "G4",
-		Since: "2026-10-23T08:00:00Z", AgeSeconds: 7200, SpecPath: `C:\example\specs\a.md`, Source: "foreman"}}
+		Since: "2026-10-23T08:00:00Z", AgeSeconds: 7200, SpecPath: `C:\example\specs\a.md`, Source: "foreman", Group: "blocked", Holds: 1}}
 	if !reflect.DeepEqual(w, want) {
 		t.Fatalf("got %+v", w)
 	}
@@ -192,7 +192,7 @@ func TestAgentEntryReplacesSessionItem(t *testing.T) {
 	}
 }
 
-func TestItemsNewestFirst(t *testing.T) {
+func TestWaitsOldestFirstOutcomesNewestFirst(t *testing.T) {
 	mk := func(id string, age time.Duration) graph.Sprint {
 		return graph.Sprint{ID: id, Slug: id, Status: "waiting-on-you", UpdatedAt: now.Add(-age)}
 	}
@@ -201,7 +201,7 @@ func TestItemsNewestFirst(t *testing.T) {
 	for _, it := range w {
 		ids = append(ids, it.ID)
 	}
-	if !reflect.DeepEqual(ids, []string{"sprint:a", "sprint:b", "sprint:c"}) {
+	if !reflect.DeepEqual(ids, []string{"sprint:c", "sprint:a", "sprint:b"}) {
 		t.Fatalf("ids = %v", ids)
 	}
 	fin := func(id string, age time.Duration) graph.Sprint {
