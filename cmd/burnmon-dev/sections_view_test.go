@@ -286,7 +286,7 @@ func TestPageListsEveryItemInBoundedScrollArea(t *testing.T) {
 		`var shown = plain ? word : txt;`,
 		`var full = shown + ' ' + (it.title || '')`,
 		`String(it.detail).toLowerCase() === k[0].toLowerCase()`,
-		`w.forEach(function(it){ rows += secItemRow(it, false); });`,
+		`part += secItemRow(it, false);`,
 		`o.forEach(function(it){ rows += secItemRow(it, true); });`,
 		`.seclist{`,
 		`overflow-y:auto`,
@@ -479,5 +479,62 @@ func TestFourPlacesOneCount(t *testing.T) {
 	y, ok := boxIn(m.Layout, "you")
 	if !ok || !strings.HasPrefix(y.Line, fmt.Sprintf("%d waiting on you", listed)) {
 		t.Errorf("You box %+v (found %v), want it to start with %d", y, ok, listed)
+	}
+}
+
+// ---- B6 Task 9: Waits on you is the ranked your-move queue ---------------
+
+func TestPageWaitsTiers(t *testing.T) {
+	for _, want := range []string{"'Blocked'", "'Your turn'", "'Done, needs close-out'", "'Done, can be closed'", "wait_counts", "your turn"} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if body := pageFuncBody(t, "secPanelCount"); strings.Contains(body, "wait_items") {
+		t.Error("the Waits on you header count still reads wait_items, want wait_counts")
+	}
+	if body := pageFuncBody(t, "secBodyWaits"); !strings.Contains(body, "secItemRow(it, false)") {
+		t.Error("secBodyWaits does not draw its rows with secItemRow")
+	}
+}
+
+func TestPageCloseChipOnlyOnCloseOut(t *testing.T) {
+	for _, want := range []string{`close_sprint:['Close sprint','Close this job']`, `kind === 'closeout'`, `c === 'close_sprint'`} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	body := pageFuncBody(t, "ctlChips")
+	if !strings.Contains(body, "closeout") || !strings.Contains(body, "ctlState.foreman") {
+		t.Error("ctlChips has no closeout branch gated on ctlState.foreman")
+	}
+	if !strings.Contains(pageHTML, "'Close sprint'") {
+		t.Error("page lacks the Close sprint word")
+	}
+}
+
+func TestPageHidesForemanPartsWithoutForemanRoot(t *testing.T) {
+	for _, want := range []string{`[data-ctl-needs]`, `ctlState.foreman`, `foreman:!!cp.foreman`} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if body := pageFuncBody(t, "secControlsSync"); !strings.Contains(body, "data-ctl-needs") {
+		t.Error("secControlsSync does not hide the gear lines that need Foreman")
+	}
+}
+
+func TestPageCostLineEscaped(t *testing.T) {
+	body := pageFuncBody(t, "secItemRow")
+	for _, want := range []string{"cost_tokens", "cost_partial", "at least ", "tokens burned while waiting", "idle "} {
+		if !strings.Contains(body+pageFuncBody(t, "secCostLine"), want) {
+			t.Errorf("the cost line lacks %q", want)
+		}
+	}
+	if !strings.Contains(body, "esc(cost)") {
+		t.Error("secItemRow does not escape the cost line")
+	}
+	if strings.Contains(body, "innerHTML") {
+		t.Error("secItemRow assigns innerHTML")
 	}
 }

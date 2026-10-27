@@ -397,6 +397,8 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .secitem{white-space:nowrap; align-items:baseline}
 .seclist{flex:0 1 auto; min-height:0; max-height:8.3em; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
 .seclist > .secitem{flex:0 0 auto}
+.sectier{flex:0 0 auto; font:700 10px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
+.sectier.blocked{color:var(--amber)}
 .secitemtxt{min-width:0; overflow:hidden; text-overflow:ellipsis}
 .secitemmeta{flex:0 0 auto}
 .ctl{font:inherit; font-size:.85em; padding:0 .4em; margin-left:.3em; border:1px solid var(--amber); background:none; color:var(--amber); cursor:pointer}
@@ -3455,12 +3457,24 @@ body.plain #mapOverlay{font-size:13.5px}
   function secStub(text){ return '<div class="secstub">' + esc(text) + '</div>'; }
   function secPanelCount(id){
     var s = secReading.snapshot || {};
-    return id === 'waits' ? secCount((s.wait_items || []).length) : id === 'outcomes' ? secCount((s.outcome_items || []).length) : '';
+    return id === 'waits' ? secCount(secWaitCounts().blocked) : id === 'outcomes' ? secCount((s.outcome_items || []).length) : '';
+  }
+  // One count: the snapshot's wait_counts (waits.CountOf). Only an older snapshot
+  // without it is counted here, from the item groups.
+  function secWaitCounts(){
+    var s = secReading.snapshot || {}, wc = s.wait_counts, r = { blocked:0, your_turn:0, done:0 };
+    if(wc) return { blocked:wc.blocked || 0, your_turn:wc.your_turn || 0, done:wc.done || 0 };
+    (s.wait_items || []).forEach(function(it){ r[it.group === 'your_turn' || it.group === 'done' ? it.group : 'blocked']++; });
+    return r;
+  }
+  function secPanelExtra(id){
+    var n = id === 'waits' ? secWaitCounts().your_turn : 0;
+    return n ? ' <span class="dim">' + n + ' your turn</span>' : '';
   }
   function secPanel(id, body, wide){
     var aged = (id === 'waits' || id === 'outcomes') && secReading.status === 'ok' && secAged(secReading.snapshot);
     return '<section class="panel secpanel' + (wide ? ' secwide' : '') + (aged ? ' sec-aged' : '') + '" data-sec="' + id + '" data-part="' + id + '">' +
-      '<div class="panelhead">' + esc(secTitle(id) + secPanelCount(id)) + '</div><div class="secbody">' + body + '</div></section>';
+      '<div class="panelhead">' + esc(secTitle(id) + secPanelCount(id)) + secPanelExtra(id) + '</div><div class="secbody">' + body + '</div></section>';
   }
 
   // secHeadline is the one sentence about the snapshot: its age in the
@@ -3481,7 +3495,8 @@ body.plain #mapOverlay{font-size:13.5px}
   var SEC_KIND = { gate:['gate','Decision needed'], sprint:['sprint waiting','Job paused, needs you'],
     failed_check:['failed check','A check failed'], question:['question','Question for you'],
     prompt:['permission prompt','Approval needed'], session:['session waiting','Session waiting for you'],
-    finished:['finished','Done'] };
+    finished:['finished','Done'], your_turn:['your turn','Your turn'],
+    close_out:['Done, needs close-out','Done, needs close-out'], can_close:['Done, can be closed','Done, can be closed'] };
   // ---- B4 controls: chips, preview line, result ---------------------------
   // The page decides nothing about what runs. A chip press asks Go for a
   // preview (a control name and a target id, nothing else) and shows the exact
@@ -3489,12 +3504,12 @@ body.plain #mapOverlay{font-size:13.5px}
   // token Go gave. Go checks the target again, refuses a second press under
   // 400 ms and lets the token live 5 s; the page mirrors both so a double
   // click sends at most one run.
-  var CTL_WORD = { stop:['stop','Stop'], attach:['attach','Open'], approve:['approve','Approve'], send_back:['send back','Send back'] };
-  var CTL_ORDER = ['stop','attach','approve','send_back'];
+  var CTL_WORD = { stop:['stop','Stop'], attach:['attach','Open'], approve:['approve','Approve'], send_back:['send back','Send back'], close_sprint:['Close sprint','Close this job'] };
+  var CTL_ORDER = ['stop','attach','approve','send_back','close_sprint'];
   var CTL_GAP = 400;
   var CTL_TTL = 5000;
   var CTL_RESULT_MS = 10000;
-  var ctlState = { ready:{}, on:{}, why:{}, verdicts:{} };
+  var ctlState = { ready:{}, on:{}, why:{}, verdicts:{}, foreman:false };
   var ctlPending = {};
   var ctlResult = {};
   var ctlAsking = {};
@@ -3519,7 +3534,7 @@ body.plain #mapOverlay{font-size:13.5px}
     var html = '';
     CTL_ORDER.forEach(function(c){
       if(!(ctlState.on[c] && ctlState.ready[c])) return;
-      var applies = kind === 'agent' ? (c === 'stop' || c === 'attach') :
+      var applies = kind === 'closeout' ? (c === 'close_sprint' && !!ctlState.foreman) : kind === 'agent' ? (c === 'stop' || c === 'attach') :
         ((c === 'approve' || c === 'send_back') && !!ctlState.verdicts[c] && Object.prototype.hasOwnProperty.call(ctlState.verdicts[c], gate));
       if(!applies) return;
       html += '<button type="button" class="ctl" data-ctl="' + esc(c) + '" data-target="' + esc(target) + '">' + esc(ctlWord(c)) + '</button>';
@@ -3630,6 +3645,9 @@ body.plain #mapOverlay{font-size:13.5px}
     Array.prototype.forEach.call(box.querySelectorAll('input[data-ctl-sw]'), function(i){
       i.checked = !!ctlState.on[i.getAttribute('data-ctl-sw')];
     });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-ctl-needs]'), function(e){
+      e.style.display = ctlState[e.getAttribute('data-ctl-needs')] ? '' : 'none';
+    });
     Array.prototype.forEach.call(box.querySelectorAll('[data-ctl-why]'), function(s){
       var c = s.getAttribute('data-ctl-why');
       s.textContent = ctlState.ready[c] ? '' : (ctlState.why[c] || '');
@@ -3640,6 +3658,11 @@ body.plain #mapOverlay{font-size:13.5px}
     var n = Math.round(secReading.age_seconds || 0);
     return '<div class="secaged">' + esc(secState.plain ? 'This list is ' + n + ' s old' :
       'snapshot ' + n + ' s old, this list may be behind') + '</div>';
+  }
+  function secCostLine(it){
+    var n = it.cost_tokens || 0;
+    if(n > 0) return (it.cost_partial ? 'at least ' : '') + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (secState.plain ? ' tokens used while waiting' : ' tokens burned while waiting');
+    return 'idle ' + secDur((it.age_seconds || 0) + (secReading.age_seconds || 0));
   }
   function secItemRow(it, outcome){
     function link(path, word, none){
@@ -3655,18 +3678,21 @@ body.plain #mapOverlay{font-size:13.5px}
       if(it.kind === 'sprint' && it.parked && it.parked.length) detail = it.parked.length + (it.parked.length === 1 ? ' task needs you' : ' tasks need you');
     } else if(it.kind !== 'gate' && !(it.detail && String(it.detail).toLowerCase() === k[0].toLowerCase())) detail = it.detail || '';
     var age = secDur((it.age_seconds || 0) + (secReading.age_seconds || 0));
+    var cost = outcome ? '' : secCostLine(it);
     var shown = plain ? word : txt;
-    var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age);
+    var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age) + (cost ? ', ' + cost : '');
     var chips = '', lines = '';
     if(!outcome){
       var tg = null, gid = '';
       if(it.kind === 'gate'){ tg = it.id; gid = String(it.id).slice(String(it.id).lastIndexOf(':') + 1); chips = ctlChips('gate', tg, gid); }
+      else if(it.kind === 'close_out'){ tg = it.id; chips = ctlChips('closeout', tg, ''); }
       else { var ag = ctlAgentFor(it.id); if(ag){ tg = ag.id; chips = ctlChips('agent', tg, ''); } }
       if(tg !== null) lines = ctlLines(tg);
     }
     var html = '<div class="secrow secitem" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
       '<span class="secitemtxt"><span class="dim">' + esc(txt) + '</span> <b>' + esc(it.title) + '</b>' +
-      (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') + '</span>' +
+      (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') +
+      (cost ? ' <span class="dim">' + esc(cost) + '</span>' : '') + '</span>' +
       '<span class="secitemmeta">' + esc(outcome ? age + ' ago' : 'waiting ' + age) + ' ' +
       link(it.spec_path, plain ? 'request' : 'spec', plain ? 'no request' : 'no spec') + ' ' +
       link(it.result_path, 'result', 'no result yet') + chips + '</span></div>' + lines;
@@ -3678,11 +3704,23 @@ body.plain #mapOverlay{font-size:13.5px}
   // scrollbar off (like the ticker): it is one list, not the page. The header
   // carries the total (secCount).
   function secList(rows){ return rows ? '<div class="seclist">' + rows + '</div>' : ''; }
-  function secCount(n){ return n ? ' (' + n + ')' : ''; }  function secBodyWaits(snap){
+  function secCount(n){ return n ? ' (' + n + ')' : ''; }  var SEC_TIERS = [['blocked','Blocked','Stuck, needs you'], ['your_turn','Your turn','Your turn'],
+    ['close_out','Done, needs close-out','Done, needs close-out'], ['can_close','Done, can be closed','Done, can be closed']];
+  function secTier(it){
+    if(it.kind === 'close_out') return 'close_out';
+    if(it.kind === 'can_close') return 'can_close';
+    if(it.group === 'your_turn') return 'your_turn';
+    return it.group === 'done' ? 'can_close' : 'blocked';
+  }
+  function secBodyWaits(snap){
     var w = snap.wait_items || [], html = secAged(snap) ? secAgedLine() : '';
     if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'Nothing waits on you.') + '</div>';
     var rows = '';
-    w.forEach(function(it){ rows += secItemRow(it, false); });
+    SEC_TIERS.forEach(function(t){
+      var part = '', n = 0;
+      w.forEach(function(it){ if(secTier(it) === t[0]){ part += secItemRow(it, false); n++; } });
+      if(n) rows += '<div class="sectier ' + t[0] + '" data-tier="' + t[0] + '">' + esc(t[secState.plain ? 2 : 1] + ' (' + n + ')') + '</div>' + part;
+    });
     html += secList(rows);
     return html;
   }
@@ -3724,7 +3762,8 @@ body.plain #mapOverlay{font-size:13.5px}
       var c = v.counts || {};
       function n(k, one, many){ return '<b>' + k + '</b> ' + esc(k === 1 ? one : many); }
       html = '<div>' + n(c.sessions || 0, 'session', 'sessions') + ', ' + n(c.subagents || 0, plain ? 'helper' : 'subagent', plain ? 'helpers' : 'subagents') +
-        ', <b>' + (c.waiting || 0) + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') + '</div>';
+        ', <b>' + (secReading.snapshot && secReading.snapshot.wait_counts ? secWaitCounts().blocked : (c.waiting || 0)) + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') +
+        (secReading.snapshot && secReading.snapshot.wait_counts && secWaitCounts().your_turn ? ' <span class="dim">' + secWaitCounts().your_turn + ' your turn</span>' : '') + '</div>';
       var groups = v.groups || [];
       groups.slice(0, 3).forEach(function(g){
         html += '<div class="secrow"><span><b>' + esc(g.label) + '</b>' + (g.status ? ' <span class="dim">' + esc(g.status) + '</span>' : '') + '</span>' +
@@ -3914,7 +3953,7 @@ body.plain #mapOverlay{font-size:13.5px}
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space' };
     secReading = p.reading || { status:'missing', age_seconds:0 };
     var cp = p.controls || {};
-    ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {} };
+    ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {}, foreman:!!cp.foreman };
     secAgentMap = p.agent_map || null;
     secRender();
     if(mapOpen && mapSource === 'live') mapFetch();
