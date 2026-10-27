@@ -18,6 +18,7 @@
           "tool": "Bash",
           "subagent": false,
           "waits_on_you": true,
+          "wait": "blocked",
           "basis": "inferred",
           "repo": "project",
           "worktree": "sprint-example",
@@ -56,6 +57,7 @@
     "sessions": 1,
     "subagents": 1,
     "waiting": 1,
+    "your_turn": 0,
     "sprints": 1,
     "flows": 0
   },

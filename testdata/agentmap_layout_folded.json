@@ -2,8 +2,16 @@
   "columns": [
     "Tool",
     "Session",
+    "Subagents",
     "Programs and servers",
     "You"
+  ],
+  "column_notes": [
+    "none in this window",
+    "",
+    "none in this window",
+    "none in this window",
+    ""
   ],
   "boxes": [
     {
@@ -53,7 +61,9 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session",
+      "wait": "blocked"
     },
     {
       "id": "session:anthropic:s0-1",
@@ -102,7 +112,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s0-2",
@@ -151,7 +162,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s0-3",
@@ -200,7 +212,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s0-4",
@@ -249,7 +262,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s0-5",
@@ -298,7 +312,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s0-6",
@@ -347,7 +362,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s0-7",
@@ -396,7 +412,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s0-8",
@@ -445,7 +462,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s0-9",
@@ -494,7 +512,8 @@
           "label": "Works for",
           "value": "s0 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "fold:frame:sprint:s1",
@@ -519,7 +538,8 @@
           "label": "What it is",
           "value": "Agents here work for the Foreman sprint \"s1\" (running). Foreman names these agents."
         }
-      ]
+      ],
+      "tag": "group"
     },
     {
       "id": "fold:frame:sprint:s2",
@@ -544,7 +564,8 @@
           "label": "What it is",
           "value": "Agents here work for the Foreman sprint \"s2\" (running). Foreman names these agents."
         }
-      ]
+      ],
+      "tag": "group"
     },
     {
       "id": "session:anthropic:s3-0",
@@ -593,7 +614,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-1",
@@ -642,7 +664,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-2",
@@ -691,7 +714,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-3",
@@ -740,7 +764,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-4",
@@ -789,7 +814,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-5",
@@ -838,7 +864,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-6",
@@ -887,7 +914,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-7",
@@ -936,7 +964,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-8",
@@ -985,7 +1014,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s3-9",
@@ -1034,7 +1064,8 @@
           "label": "Works for",
           "value": "s3 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-0",
@@ -1083,7 +1114,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-1",
@@ -1132,7 +1164,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-2",
@@ -1181,7 +1214,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-3",
@@ -1230,7 +1264,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-4",
@@ -1279,7 +1314,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-5",
@@ -1328,7 +1364,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-6",
@@ -1377,7 +1414,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-7",
@@ -1426,7 +1464,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-8",
@@ -1475,7 +1514,8 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "session:anthropic:s4-9",
@@ -1524,15 +1564,16 @@
           "label": "Works for",
           "value": "s4 (named by Foreman)"
         }
-      ]
+      ],
+      "tag": "session"
     },
     {
       "id": "you",
       "kind": "you",
       "title": "You",
       "pill": "waits on you",
-      "line": "1 waiting on you",
-      "column": 3,
+      "line": "1 waiting on you, 0 your turn",
+      "column": 4,
       "row": 0,
       "waits_on_you": true,
       "facts": [
@@ -1540,7 +1581,8 @@
           "label": "agent",
           "value": "a0-0 (0 s old)"
         }
-      ]
+      ],
+      "tag": "you"
     }
   ],
   "lines": [
@@ -1549,7 +1591,8 @@
       "to": "you",
       "word": "waits on",
       "basis": "vendor",
-      "you": true
+      "you": true,
+      "style": "solid"
     }
   ],
   "frames": [
@@ -1565,7 +1608,7 @@
       "first_row": 0,
       "last_row": 9,
       "first_col": 1,
-      "last_col": 2
+      "last_col": 3
     },
     {
       "id": "frame:sprint:s1",
@@ -1607,7 +1650,7 @@
       "first_row": 12,
       "last_row": 21,
       "first_col": 1,
-      "last_col": 2
+      "last_col": 3
     },
     {
       "id": "frame:sprint:s4",
@@ -1621,7 +1664,7 @@
       "first_row": 22,
       "last_row": 31,
       "first_col": 1,
-      "last_col": 2
+      "last_col": 3
     }
   ],
   "idle": [],
@@ -1629,6 +1672,7 @@
     "sessions": 50,
     "subagents": 0,
     "waiting": 1,
+    "your_turn": 0,
     "sprints": 5,
     "flows": 0
   },

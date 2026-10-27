@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"burnmon/internal/graph"
+	"burnmon/internal/waits"
 )
 
 const (
@@ -67,7 +68,7 @@ func askingExample(t *testing.T) ([]graph.Node, []graph.Edge) {
 func exampleLayout(t *testing.T, mut func(*LayoutInput)) Layout {
 	t.Helper()
 	nodes, edges := askingExample(t)
-	in := LayoutInput{Nodes: nodes, Edges: edges}
+	in := LayoutInput{Nodes: nodes, Edges: edges, Counts: &waits.Counts{Blocked: 1}}
 	if mut != nil {
 		mut(&in)
 	}
@@ -80,7 +81,7 @@ func exampleLayout(t *testing.T, mut func(*LayoutInput)) Layout {
 // deepest subagent column, You last.
 func TestLayoutExampleColumnsAndBoxes(t *testing.T) {
 	l := exampleLayout(t, nil)
-	want := []string{"Tool", "Session", "Subagent", "Programs and servers", "You"}
+	want := []string{"Tool", "Session", "Subagents", "Programs and servers", "You"}
 	if strings.Join(l.Columns, "|") != strings.Join(want, "|") {
 		t.Fatalf("columns = %v, want %v", l.Columns, want)
 	}
@@ -121,7 +122,7 @@ func TestLayoutExampleLines(t *testing.T) {
 	l := exampleLayout(t, nil)
 	for _, w := range []struct{ from, to, word string }{
 		{"harness:claude", parentID, "runs"},
-		{parentID, subID, "started"},
+		{parentID, subID, "starts"},
 		{parentID, "mcp:example-server@" + parentID, "uses"},
 		{parentID, "programs:" + parentID, "started"},
 		{parentID, "you", "waits on"},
@@ -265,7 +266,7 @@ func TestLayoutYouOnlyWhenSomethingWaits(t *testing.T) {
 	}
 	nodes = append(nodes, graph.Node{ID: "person:you", Kind: graph.KindPerson, Label: "You"})
 	edges := []graph.Edge{edge("s:a", "person:you", graph.KindWaitsOn)}
-	l = BuildLayout(LayoutInput{Nodes: nodes, Edges: edges})
+	l = BuildLayout(LayoutInput{Nodes: nodes, Edges: edges, Counts: &waits.Counts{Blocked: 1}})
 	y, ok := boxByID(l, "you")
 	if !ok || !strings.Contains(y.Line, "1 waiting") || !y.WaitsOnYou {
 		t.Fatalf("You box = %+v (found %v)", y, ok)
@@ -283,7 +284,7 @@ func TestLayoutIdleWaitingSprintCountsForYou(t *testing.T) {
 		{ID: "person:you", Kind: graph.KindPerson, Label: "You"},
 	}
 	edges := []graph.Edge{edge("sprint:old", "person:you", graph.KindWaitsOn)}
-	l := BuildLayout(LayoutInput{Nodes: nodes, Edges: edges})
+	l := BuildLayout(LayoutInput{Nodes: nodes, Edges: edges, Counts: &waits.Counts{Blocked: 1}})
 	y, ok := boxByID(l, "you")
 	if !ok {
 		t.Fatal("no You box for a waiting sprint")
@@ -491,7 +492,7 @@ func TestLayoutFoldedMatchesGolden(t *testing.T) {
 	nodes, edges := groupsOf(5, 10)
 	nodes = append(nodes, graph.Node{ID: "person:you", Kind: graph.KindPerson, Label: "You"})
 	edges = append(edges, edge("session:anthropic:s0-0", "person:you", graph.KindWaitsOn))
-	checkGolden(t, "agentmap_layout_folded.json", BuildLayout(LayoutInput{Nodes: nodes, Edges: edges}))
+	checkGolden(t, "agentmap_layout_folded.json", BuildLayout(LayoutInput{Nodes: nodes, Edges: edges, Counts: &waits.Counts{Blocked: 1}}))
 }
 
 // Sessions with no Foreman work are framed by project folder, so a real
@@ -679,7 +680,7 @@ func TestLayoutFinishedSubagentIsDone(t *testing.T) {
 	// The session that spawned it still waits on you when it is asked something.
 	nodes[0] = sess("s:a", "a", "waiting")
 	edges = append(edges, edge("s:a", "person:you", graph.KindWaitsOn))
-	l = BuildLayout(LayoutInput{Nodes: nodes, Edges: edges})
+	l = BuildLayout(LayoutInput{Nodes: nodes, Edges: edges, Counts: &waits.Counts{Blocked: 1}})
 	if a, _ := boxByID(l, "s:a"); a.Pill != "waits on you" {
 		t.Errorf("session pill %q", a.Pill)
 	}

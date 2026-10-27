@@ -22,6 +22,7 @@ type Counts struct {
 	Sessions  int `json:"sessions"`
 	Subagents int `json:"subagents"`
 	Waiting   int `json:"waiting"`
+	YourTurn  int `json:"your_turn"`
 	Sprints   int `json:"sprints"`
 	Flows     int `json:"flows"`
 }
@@ -45,6 +46,9 @@ type Card struct {
 	Tool       string `json:"tool,omitempty"`
 	Subagent   bool   `json:"subagent"`
 	WaitsOnYou bool   `json:"waits_on_you"`
+	Running    bool   `json:"running,omitempty"`   // a subagent with recent activity and no end
+	Wait       string `json:"wait,omitempty"`      // blocked, your_turn or working, from the graph
+	CanClose   bool   `json:"can_close,omitempty"` // a worktree session whose branch is in main
 	Basis      string `json:"basis,omitempty"`
 	Repo       string `json:"repo,omitempty"`
 	Worktree   string `json:"worktree,omitempty"`
@@ -303,7 +307,8 @@ func (m *model) card(id string) Card {
 	n := m.nodes[id]
 	c := Card{ID: id, Label: n.Label, Vendor: n.Vendor, Agent: n.Attrs["agent"], AgentType: n.Attrs["agent_type"],
 		Model: n.Attrs["model"], State: n.Attrs["state"], Tool: n.Attrs["tool"], Subagent: n.Kind == graph.KindSubagent,
-		WaitsOnYou: m.waiters[id], MCP: []MCP{}, AgeSeconds: n.AgeSeconds, Children: []Card{}}
+		WaitsOnYou: m.waiters[id], Running: n.Attrs["running"] == "true", Wait: n.Attrs["wait"], CanClose: n.Attrs["can_close"] == "true",
+		MCP: []MCP{}, AgeSeconds: n.AgeSeconds, Children: []Card{}}
 	for _, e := range m.out[id] {
 		switch e.Kind {
 		case graph.KindUses:
