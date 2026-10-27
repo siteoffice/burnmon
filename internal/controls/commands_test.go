@@ -44,7 +44,7 @@ func TestStopAndAttachArgv(t *testing.T) {
 }
 
 func TestControlIDs(t *testing.T) {
-	want := []string{"stop", "attach", "approve", "send_back"}
+	want := []string{"stop", "attach", "approve", "send_back", "close_sprint"}
 	if !reflect.DeepEqual(All, want) {
 		t.Fatalf("All = %v", All)
 	}

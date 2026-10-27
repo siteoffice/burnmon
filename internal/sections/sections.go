@@ -96,7 +96,7 @@ type State struct {
 
 // ControlIDs are the control switch ids, the same list as controls.All (a test
 // keeps them equal; this package does not import controls).
-var ControlIDs = []string{"stop", "attach", "approve", "send_back"}
+var ControlIDs = []string{"stop", "attach", "approve", "send_back", "close_sprint"}
 
 func controlsOf(on func(id string) bool) map[string]bool {
 	m := make(map[string]bool, len(ControlIDs))
