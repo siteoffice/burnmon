@@ -122,3 +122,40 @@ func TestStationSwapsPartsNotTheZone(t *testing.T) {
 		}
 	}
 }
+
+func TestHandlesAndSharesInPage(t *testing.T) {
+	page := idlePage()
+	for _, want := range []string{"function fitSplit(", "function fitApplyShares(", "function fitPlaceHandles(", "function fitDragRange(",
+		"window.__bdevFitHandles", `id="secResetHeights"`, "heights_standard", "heights_plain", "reset_heights", "heights_mode"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	rule := func(sel string) string {
+		s := strings.Index(page, sel)
+		if s < 0 {
+			t.Fatalf("page lacks the rule %q", sel)
+		}
+		return page[s : s+strings.Index(page[s:], "}")]
+	}
+	hdl := rule(".hdl{")
+	for _, want := range []string{"position:absolute", "height:4px"} {
+		if !strings.Contains(hdl, want) {
+			t.Errorf(".hdl rule lacks %q", want)
+		}
+	}
+	if !strings.Contains(rule("\n.zonebody{"), "position:relative") {
+		t.Error(".zonebody rule lacks position:relative")
+	}
+	s := strings.Index(page, "function applyPanelFit(){")
+	e := strings.Index(page[s:], "\n  // resize (and F11")
+	if s < 0 || e < 0 {
+		t.Fatal("applyPanelFit not found")
+	}
+	body := page[s : s+e]
+	for _, want := range []string{"fitApplyShares(", "fitPlaceHandles("} {
+		if !strings.Contains(body, want) {
+			t.Errorf("applyPanelFit lacks %q", want)
+		}
+	}
+}
