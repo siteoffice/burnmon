@@ -1,5 +1,7 @@
 //go:build windows
 
+// Windows only: agentMapFor reads the Windows-only snapshot and repo code.
+
 package main
 
 import (

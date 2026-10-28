@@ -91,4 +91,33 @@ func (b *builder) waitStates(byID map[string]Session, idle map[string]PidFile) {
 		}
 		b.g.Nodes[i].Attrs["wait"] = state
 	}
+	b.agentOnlyBlocked(byID)
+}
+
+// agentOnlyBlocked draws a session node and its waits_on edge for a Blocked
+// agent view entry whose session is not in the store. The wait list counts
+// that entry, so the map gets a box and a line for it too.
+func (b *builder) agentOnlyBlocked(byID map[string]Session) {
+	for _, a := range b.in.Agents {
+		if !(a.State == "blocked" || (a.Status == "waiting" && a.WaitingFor != "")) {
+			continue
+		}
+		id, label := a.Key, a.Key
+		if a.SessionID != "" {
+			id, label = SessionID("anthropic", a.SessionID), a.SessionID
+		}
+		if id == "" {
+			continue
+		}
+		if _, ok := byID[id]; ok {
+			continue
+		}
+		if _, ok := b.nodes[id]; ok {
+			continue
+		}
+		b.person()
+		b.node(Node{ID: id, Kind: KindSession, Label: label, Vendor: "anthropic", Attrs: map[string]string{"wait": WaitBlocked},
+			Source: SourceAgentView})
+		b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceAgentView})
+	}
 }

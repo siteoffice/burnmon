@@ -115,3 +115,18 @@ func TestHistoryDropsStoredForemanEdges(t *testing.T) {
 		t.Error("stored agent_view session edge was dropped")
 	}
 }
+
+// A pending gate with no id has no node to carry a waits_on edge, so it is not
+// a Blocker: the count and the lines both leave it out, as the B6 map did.
+func TestPendingGateWithoutIDIsNotBlocker(t *testing.T) {
+	flows := []Flow{{ID: "example-bare", Slug: "example-bare", GatePending: true}}
+	if bs := ForemanBlockers(nil, flows, nil, nil); len(bs) != 0 {
+		t.Errorf("blockers = %v, want none", blockerIDs(bs))
+	}
+	g := Build(Input{Now: time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC), Flows: flows})
+	for _, e := range g.Edges {
+		if e.Kind == KindWaitsOn {
+			t.Errorf("waits_on edge %+v for a gate with no id", e)
+		}
+	}
+}

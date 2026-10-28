@@ -172,7 +172,7 @@ func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, ev
 		entries, _, _, _ := gr.agentViewState()
 		agentEntries = entries
 		for _, e := range entries {
-			in.Agents = append(in.Agents, graph.AgentState{SessionID: e.SessionID, State: e.State, Status: e.Status, WaitingFor: e.WaitingFor})
+			in.Agents = append(in.Agents, graph.AgentState{SessionID: e.SessionID, State: e.State, Status: e.Status, WaitingFor: e.WaitingFor, Key: e.Key()})
 		}
 	}
 	in.Tick = Tick

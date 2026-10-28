@@ -35,7 +35,9 @@ func stoppedWithFailedCheck(sp Sprint) bool {
 func ForemanBlockers(sprints []Sprint, flows []Flow, closeout, gone map[string]bool) []Blocker {
 	out := []Blocker{}
 	for _, f := range flows {
-		if f.GatePending {
+		// A pending gate with no id has no node to carry the edge: not a
+		// Blocker, as the B6 map drew it.
+		if f.GatePending && f.Gate != "" {
 			out = append(out, Blocker{Kind: BlockerGate, NodeID: "gate:" + f.ID + ":" + f.Gate, FlowID: f.ID})
 		}
 	}

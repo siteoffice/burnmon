@@ -144,6 +144,9 @@ type Session struct {
 // state needs. SessionID is the bare session id.
 type AgentState struct {
 	SessionID, State, Status, WaitingFor string
+	// Key is the wait item id (waits.AgentEntry.Key), used for a Blocked entry
+	// with no SessionID.
+	Key string
 }
 
 // Proc is one process from the process walk. Cmdline is used for matching
@@ -670,7 +673,7 @@ func Build(in Input) Graph {
 		if linked {
 			b.edge(Edge{From: sid, To: fid, Kind: KindWorksFor, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
 		}
-		if f.GatePending {
+		if f.GatePending && f.Gate != "" {
 			gid := "gate:" + f.ID + ":" + f.Gate
 			b.node(Node{ID: gid, Kind: KindGate, Label: f.Gate, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
 			b.edge(Edge{From: gid, To: fid, Kind: KindPartOf, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})

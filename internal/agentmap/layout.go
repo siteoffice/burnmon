@@ -363,6 +363,16 @@ func waitingCards(cs []Card) int {
 
 func (b *builder) groupWaits(g Group) bool { return g.WaitsOnYou || waitingCards(g.Cards) > 0 }
 
+// groupWaiters is how many things in a group wait on you: each waiting card
+// and the group's own sprint or flow. Each one gets its own amber line.
+func (b *builder) groupWaiters(g Group) int {
+	n := waitingCards(g.Cards)
+	if g.WaitsOnYou {
+		n++
+	}
+	return n
+}
+
 func (b *builder) groupBoxes(g Group) int {
 	n := 0
 	for _, c := range g.Cards {
@@ -703,7 +713,9 @@ func BuildLayout(in LayoutInput) Layout {
 	for total() > max {
 		pick := -1
 		for i, g := range v.Groups {
-			if folded[g.ID] || in.Open[frameID(g)] || b.groupBoxes(g) <= 1 {
+			// A group with two waiters stays open: a closed group is one box
+			// and draws one line, so it would hide a Blocked item.
+			if folded[g.ID] || in.Open[frameID(g)] || b.groupBoxes(g) <= 1 || b.groupWaiters(g) > 1 {
 				continue
 			}
 			if pick < 0 {
@@ -748,7 +760,6 @@ func BuildLayout(in LayoutInput) Layout {
 			id := "fold:" + fid
 			agents := b.groupAgents(g)
 			facts := []Fact{{"Kind", "closed group"}, {"Contains", fmt.Sprintf("%d agents, %d boxes", agents, fr.Count)}, {"What it is", fr.Explain}}
-			wc := waitingCards(g.Cards)
 			pill := "closed"
 			if b.groupWaits(g) {
 				pill = b.w.waitsPill
@@ -765,7 +776,7 @@ func BuildLayout(in LayoutInput) Layout {
 					harnessRoots[h]++
 				}
 			}
-			if wc > 0 || g.WaitsOnYou {
+			if b.groupWaiters(g) > 0 {
 				b.addLine(id, "you", b.w.waitsWord, "vendor", true)
 				youRows = append(youRows, row)
 			}
@@ -783,7 +794,6 @@ func BuildLayout(in LayoutInput) Layout {
 				row += h
 			}
 			fr.LastRow = row - 1
-			cards := 0
 			var walk func(cs []Card)
 			walk = func(cs []Card) {
 				for _, c := range cs {
@@ -792,13 +802,12 @@ func BuildLayout(in LayoutInput) Layout {
 						if bx, ok := b.boxRow(c.ID); ok {
 							youRows = append(youRows, bx)
 						}
-						cards++
 					}
 					walk(c.Children)
 				}
 			}
 			walk(g.Cards)
-			if cards == 0 && g.WaitsOnYou {
+			if g.WaitsOnYou {
 				b.addLine(fid, "you", b.w.waitsWord, "vendor", true)
 				youRows = append(youRows, start)
 			}
