@@ -139,6 +139,38 @@ func clickSelectorAt(hwnd uintptr, selector string, fx, fy float64) error {
 	return clickAt(x, y)
 }
 
+// dragSelector finds selector's centre like clickSelectorAt, then presses there
+// and drags the real cursor dy CSS pixels down (negative is up).
+func dragSelector(hwnd uintptr, selector string, dy float64) error {
+	script := fmt.Sprintf(`(function(){
+  var el = document.querySelector(%s);
+  if (!el) return {found:false};
+  el.scrollIntoView({block:'center', inline:'center'});
+  var r = el.getBoundingClientRect();
+  return {found:true, x: r.x + r.width*0.5, y: r.y + r.height*0.5};
+})()`, jsString(selector))
+	var rr struct {
+		Found bool    `json:"found"`
+		X     float64 `json:"x"`
+		Y     float64 `json:"y"`
+	}
+	if err := evalInto(script, &rr); err != nil {
+		return err
+	}
+	if !rr.Found {
+		return fmt.Errorf("no element matches %q", selector)
+	}
+	x1, y1, err := screenCoords(hwnd, rr.X, rr.Y)
+	if err != nil {
+		return err
+	}
+	x2, y2, err := screenCoords(hwnd, rr.X, rr.Y+dy)
+	if err != nil {
+		return err
+	}
+	return dragAt(x1, y1, x2, y2)
+}
+
 func jsString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)

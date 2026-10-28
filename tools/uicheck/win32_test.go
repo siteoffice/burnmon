@@ -53,3 +53,30 @@ func TestParseOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestDragPath(t *testing.T) {
+	pts := dragPath(10, 20, 14, 80, 12)
+	if len(pts) != 13 {
+		t.Fatalf("got %d points, want 13", len(pts))
+	}
+	if pts[0] != [2]int32{10, 20} || pts[12] != [2]int32{14, 80} {
+		t.Errorf("ends %v %v", pts[0], pts[12])
+	}
+	for i := 1; i < len(pts); i++ {
+		if pts[i][1] < pts[i-1][1] {
+			t.Errorf("y moved against the direction at %d: %v", i, pts)
+		}
+	}
+	up := dragPath(5, 90, 5, 10, 7)
+	for i := 1; i < len(up); i++ {
+		if up[i][1] > up[i-1][1] {
+			t.Errorf("upward drag moved down at %d: %v", i, up)
+		}
+	}
+	for _, steps := range []int{0, -3, 1} {
+		p := dragPath(1, 2, 3, 4, steps)
+		if len(p) != 2 || p[0] != [2]int32{1, 2} || p[1] != [2]int32{3, 4} {
+			t.Errorf("steps %d: %v", steps, p)
+		}
+	}
+}
