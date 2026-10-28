@@ -414,6 +414,7 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .ctlres.bad{color:var(--amber)}
 .seclist > .ctlprev, .seclist > .ctlres{flex:0 0 auto}
 .ctlwhy{font-size:11px; white-space:normal; max-width:320px}
+#secControls .ctlwhy{max-width:none; width:0; min-width:100%}
 .secpanel.sec-aged .secbody{opacity:.55}
 .secaged{color:var(--amber); font-size:11px}
 .secfile{color:var(--amber)}
@@ -4360,8 +4361,7 @@ body.plain #mapOverlay{font-size:13.5px}
   function mapIdleTableHTML(L){
     var plain = secState.plain, groups = [
       [plain ? 'Done, needs close-out' : 'Done, needs close-out', function(i){ return !!i.close_out; }],
-      [plain ? 'Waiting for you' : 'Waits on you', function(i){ return !i.close_out && !!i.waits_on_you; }],
-      ['Other sprints and flows', function(i){ return !i.close_out && !i.waits_on_you; }]];
+      ['Other sprints and flows', function(i){ return !i.close_out; }]];
     var html = '<h3>' + esc(plain ? 'Foreman jobs with no agent' : 'Sprints and flows with no session') + '</h3><table class="mapidletbl"><thead><tr><th>Name</th><th>Project</th><th>Kind</th><th>Waited</th><th>Links</th></tr></thead><tbody>';
     var link = function(p, w){ return p ? '<a href="#" class="secfile" data-path="' + esc(p) + '">' + esc(w) + '</a>' : ''; };
     groups.forEach(function(g){

@@ -40,7 +40,7 @@ func TestMapIdleButtonNotAbsolute(t *testing.T) {
 func TestMapIdleTable(t *testing.T) {
 	body := idleFn(t, "mapIdleTableHTML")
 	last := -1
-	for _, want := range []string{"Done, needs close-out", "Waits on you", "Other sprints and flows"} {
+	for _, want := range []string{"Done, needs close-out", "Other sprints and flows"} {
 		i := strings.Index(body, want)
 		if i < 0 {
 			t.Errorf("mapIdleTableHTML lacks the heading %q", want)

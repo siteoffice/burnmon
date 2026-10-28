@@ -17,7 +17,7 @@ import (
 // hold prints SKIPPED and is not a pass) it proves:
 //   - the page has no .mapidle element, only #mapIdleBtn;
 //   - a click on the button opens #mapPanel with a table of all 14 rows in the
-//     group order Done needs close-out, Waits on you, the rest, each group
+//     group order Done needs close-out, the rest (two groups), each group
 //     longest wait first;
 //   - the panel rectangle intersects no .mapbox rectangle, and every .mapbox
 //     has a non-zero rectangle inside #mapScroll (nothing is drawn over a box);
@@ -40,8 +40,8 @@ type d40Idle struct {
 	CloseOut   bool   `json:"close_out,omitempty"`
 }
 
-// d40Fixture builds 14 idle entries: 4 merged sprints to close out, 4 that wait
-// on you, 6 plain. Ages are distinct so the longest-first order is testable.
+// d40Fixture builds 14 idle entries: 4 merged sprints to close out and 10
+// plain. Ages are distinct so the longest-first order is testable.
 func d40Fixture() ([]d40Idle, []string) {
 	var idle []d40Idle
 	for i := 1; i <= 14; i++ {
@@ -51,26 +51,20 @@ func d40Fixture() ([]d40Idle, []string) {
 			SpecPath: fmt.Sprintf(`C:\example\specs\example-%02d.md`, i), ResultPath: fmt.Sprintf(`C:\example\sprints\example-%02d\report.md`, i),
 			AgeSeconds: int64((i*5%14 + 1) * 3600),
 		}
-		switch {
-		case i <= 4:
+		if i <= 4 {
 			it.CloseOut = true
-		case i <= 8:
-			it.WaitsOnYou = true
 		}
 		if i%5 == 0 {
 			it.Kind = "flow"
 		}
 		idle = append(idle, it)
 	}
-	// Expected row order: close-out, waits on you, rest; longest wait first in a group.
+	// Expected row order: close-out, then the rest; longest wait first in a group.
 	group := func(i d40Idle) int {
 		if i.CloseOut {
 			return 0
 		}
-		if i.WaitsOnYou {
-			return 1
-		}
-		return 2
+		return 1
 	}
 	sorted := append([]d40Idle(nil), idle...)
 	sort.SliceStable(sorted, func(a, b int) bool {
@@ -142,8 +136,7 @@ func init() {
 		if err := json.Unmarshal(raw, &L); err != nil {
 			return err
 		}
-		// Own starting state: d34 leaves the page in Plain, which headlines the group
-		// "Waiting for you". Leave fake mode, then Standard with every part on.
+		// Own starting state: d34 leaves the page in Plain. Leave fake mode, then Standard with every part on.
 		if _, err := evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`); err != nil {
 			return fail("leave fake mode: %w", err)
 		}
@@ -201,8 +194,8 @@ func init() {
 			if len(p.Rows) != 14 || strings.Join(p.Rows, ",") != strings.Join(want, ",") {
 				return fail("%s: %d rows %v, want 14 in the order %v", tag, len(p.Rows), p.Rows, want)
 			}
-			if len(p.Group) != 3 || p.Group[0] != "Done, needs close-out" || p.Group[1] != "Waits on you" {
-				return fail("%s: group headings %v", tag, p.Group)
+			if len(p.Group) != 2 || p.Group[0] != "Done, needs close-out" || p.Group[1] != "Other sprints and flows" {
+				return fail("%s: group headings %v, want exactly two", tag, p.Group)
 			}
 			if p.Boxes == 0 {
 				return fail("%s: the map has no boxes", tag)
