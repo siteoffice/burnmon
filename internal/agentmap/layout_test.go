@@ -688,3 +688,29 @@ func TestLayoutFinishedSubagentIsDone(t *testing.T) {
 		t.Errorf("You box %+v", y)
 	}
 }
+
+// Questions in Cowork cloud are not visible: its session box says so in its
+// facts, and no other agent's box carries the line.
+func TestCoworkCloudFactLine(t *testing.T) {
+	l := exampleLayout(t, func(in *LayoutInput) {
+		for i := range in.Nodes {
+			if in.Nodes[i].ID == parentID {
+				attrs := map[string]string{}
+				for k, v := range in.Nodes[i].Attrs {
+					attrs[k] = v
+				}
+				attrs["agent"] = "cowork-cloud"
+				in.Nodes[i].Attrs = attrs
+			}
+		}
+	})
+	p, _ := boxByID(l, parentID)
+	if got, ok := fact(p, "Questions"); !ok || got != "questions in Cowork cloud are not visible" {
+		t.Errorf("Cowork cloud facts = %+v, want the not-visible line", p.Facts)
+	}
+	l = exampleLayout(t, nil)
+	p, _ = boxByID(l, parentID)
+	if _, ok := fact(p, "Questions"); ok {
+		t.Errorf("a non-cloud session carries the line: %+v", p.Facts)
+	}
+}

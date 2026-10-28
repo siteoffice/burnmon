@@ -33,7 +33,7 @@ func TestAgentViewBlockedIsBlocked(t *testing.T) {
 }
 
 func TestPendingAskUserQuestionIsBlocked(t *testing.T) {
-	for _, agent := range []string{"claude-code", "cowork", "cowork-cloud"} {
+	for _, agent := range []string{"claude-code", "cowork"} {
 		s := ws("anthropic", agent, "q1", "", "waiting", t0.Add(-20*time.Second))
 		s.AskOpen = true
 		g := Build(Input{Now: t0, Sessions: []Session{s}})
@@ -163,5 +163,47 @@ func TestBlockedBeatsWorking(t *testing.T) {
 func TestSprintMainRepoExported(t *testing.T) {
 	if got := SprintMainRepo(`C:\example\repo\.worktrees\sprint-x\`); got != `C:\example\repo` {
 		t.Errorf("SprintMainRepo = %q", got)
+	}
+}
+
+// Questions in Cowork cloud are not visible (decision 3): a Cowork cloud
+// session never reads Blocked, even with an open AskUserQuestion call.
+func TestCoworkCloudNeverBlocked(t *testing.T) {
+	s := ws("anthropic", "cowork-cloud", "cc1", "", "waiting", t0.Add(-20*time.Second))
+	s.AskOpen = true
+	g := Build(Input{Now: t0, Sessions: []Session{s}})
+	id := "session:anthropic:cc1"
+	if got := waitOf(t, g, id); got == WaitBlocked {
+		t.Fatalf("wait = %q, a Cowork cloud session must never be blocked", got)
+	}
+	if _, ok := edge(g, id, personID, KindWaitsOn); ok {
+		t.Error("a Cowork cloud session has a waits_on edge")
+	}
+}
+
+// With the agent view on, a busy entry (a background task) is Working: it
+// beats Your turn, and Blocked still beats it.
+func TestAgentViewBusyIsWorking(t *testing.T) {
+	s := ws("anthropic", "claude-code", "b1", "", "waiting", t0.Add(-20*time.Second))
+	g := Build(Input{Now: t0, Sessions: []Session{s},
+		Agents: []AgentState{{SessionID: "b1", Status: "busy"}}})
+	if got := waitOf(t, g, "session:anthropic:b1"); got != WaitWorking {
+		t.Fatalf("busy: wait = %q, want working", got)
+	}
+	// Without the busy entry the same session is Your turn.
+	g = Build(Input{Now: t0, Sessions: []Session{s}})
+	if got := waitOf(t, g, "session:anthropic:b1"); got != WaitYourTurn {
+		t.Fatalf("no entry: wait = %q, want your_turn", got)
+	}
+	// Blocked beats busy.
+	g = Build(Input{Now: t0, Sessions: []Session{s}, Agents: []AgentState{{SessionID: "b1", State: "blocked", Status: "busy"}}})
+	if got := waitOf(t, g, "session:anthropic:b1"); got != WaitBlocked {
+		t.Fatalf("blocked+busy: wait = %q, want blocked", got)
+	}
+	// A subagent never gets a wait attr, busy or not.
+	sub := ws("anthropic", "claude-code", "b2", "b1", "waiting", t0.Add(-20*time.Second))
+	g = Build(Input{Now: t0, Sessions: []Session{s, sub}, Agents: []AgentState{{SessionID: "b2", Status: "busy"}}})
+	if got := waitOf(t, g, "session:anthropic:b2"); got != "" {
+		t.Fatalf("subagent wait = %q, want none", got)
 	}
 }

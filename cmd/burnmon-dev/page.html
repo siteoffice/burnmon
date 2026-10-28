@@ -400,6 +400,7 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .seclist > .secitem{flex:0 0 auto}
 .sectier{flex:0 0 auto; font:700 10px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
 .sectier.blocked{color:var(--amber)}
+.secgrey, .secgrey b{color:var(--dim)}
 .secitemtxt{min-width:0; overflow:hidden; text-overflow:ellipsis}
 .secitemmeta{flex:0 0 auto}
 .ctl{font:inherit; font-size:.85em; padding:0 .4em; margin-left:.3em; border:1px solid var(--amber); background:none; color:var(--amber); cursor:pointer}
@@ -3502,7 +3503,8 @@ body.plain #mapOverlay{font-size:13.5px}
     failed_check:['failed check','A check failed'], question:['question','Question for you'],
     prompt:['permission prompt','Approval needed'], session:['session waiting','Session waiting for you'],
     finished:['finished','Done'], your_turn:['your turn','Your turn'],
-    close_out:['Done, needs close-out','Done, needs close-out'], can_close:['Done, can be closed','Done, can be closed'] };
+    close_out:['Done, needs close-out','Done, needs close-out'], can_close:['Done, can be closed','Done, can be closed'],
+    branch_gone:['branch gone, check by hand','Branch gone, check by hand'] };
   // ---- B4 controls: chips, preview line, result ---------------------------
   // The page decides nothing about what runs. A chip press asks Go for a
   // preview (a control name and a target id, nothing else) and shows the exact
@@ -3687,21 +3689,28 @@ body.plain #mapOverlay{font-size:13.5px}
     var cost = outcome ? '' : secCostLine(it);
     var shown = plain ? word : txt;
     var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age) + (cost ? ', ' + cost : '');
+    // Foreman refuses to close a sprint with no report.md or with parked lines
+    // in its Close-out block, so the Close chip shows only when it would accept.
+    var closeable = it.kind === 'close_out' && !!it.report_path && !(it.parked_lines > 0), note = '';
+    if(it.kind === 'close_out' && !closeable){
+      var np = it.parked_lines | 0;
+      note = np > 0 ? ' ' + link(it.report_path, np + (np === 1 ? ' parked line' : ' parked lines'), '') : ' <span class="dim">no report yet</span>';
+    }
     var chips = '', lines = '';
     if(!outcome){
       var tg = null, gid = '';
       if(it.kind === 'gate'){ tg = it.id; gid = String(it.id).slice(String(it.id).lastIndexOf(':') + 1); chips = ctlChips('gate', tg, gid); }
-      else if(it.kind === 'close_out'){ tg = it.id; chips = ctlChips('closeout', tg, ''); }
+      else if(closeable){ tg = it.id; chips = ctlChips('closeout', tg, ''); }
       else { var ag = ctlAgentFor(it.id); if(ag){ tg = ag.id; chips = ctlChips('agent', tg, ''); } }
       if(tg !== null) lines = ctlLines(tg);
     }
-    var html = '<div class="secrow secitem" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
+    var html = '<div class="secrow secitem' + (it.kind === 'branch_gone' ? ' secgrey' : '') + '" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
       '<span class="secitemtxt"><span class="dim">' + esc(txt) + '</span> <b>' + esc(it.title) + '</b>' +
       (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') +
       (cost ? ' <span class="dim">' + esc(cost) + '</span>' : '') + '</span>' +
       '<span class="secitemmeta">' + esc(outcome ? age + ' ago' : 'waiting ' + age) + ' ' +
       link(it.spec_path, plain ? 'request' : 'spec', plain ? 'no request' : 'no spec') + ' ' +
-      link(it.result_path, 'result', 'no result yet') + chips + '</span></div>' + lines;
+      link(it.result_path, 'result', 'no result yet') + note + chips + '</span></div>' + lines;
     return html;
   }
   // Every item is a row, never cut off: the list sits in .seclist, which is
@@ -3713,7 +3722,7 @@ body.plain #mapOverlay{font-size:13.5px}
   function secCount(n){ return n ? ' (' + n + ')' : ''; }  var SEC_TIERS = [['blocked','Blocked','Stuck, needs you'], ['your_turn','Your turn','Your turn'],
     ['done','Done, needs close-out','Done, needs close-out']];
   function secTier(it){
-    if(it.kind === 'close_out' || it.kind === 'can_close') return 'done';
+    if(it.kind === 'close_out' || it.kind === 'can_close' || it.kind === 'branch_gone') return 'done';
     if(it.group === 'your_turn') return 'your_turn';
     return it.group === 'done' ? 'done' : 'blocked';
   }
@@ -3726,7 +3735,9 @@ body.plain #mapOverlay{font-size:13.5px}
       // One Done tier: close_out rows first, then can_close rows. Its header names
       // Foreman only when a close_out row is in it.
       w.forEach(function(it){ if(it.kind === 'close_out') co++; });
-      if(t[0] === 'done' && !co) head = 'Done, can be closed';
+      var cc = 0;
+      w.forEach(function(it){ if(it.kind === 'can_close') cc++; });
+      if(t[0] === 'done' && !co) head = cc ? 'Done, can be closed' : 'Done, check by hand';
       (t[0] === 'done' ? [true, false] : [null]).forEach(function(first){
         w.forEach(function(it){ if(secTier(it) === t[0] && (first === null || (it.kind === 'close_out') === first)){ part += secItemRow(it, false); n++; } });
       });

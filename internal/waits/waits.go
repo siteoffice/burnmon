@@ -26,6 +26,7 @@ const (
 	KindFinished    = "finished"
 	KindCloseOut    = "close_out"
 	KindCanClose    = "can_close"
+	KindBranchGone  = "branch_gone"
 	KindYourTurn    = "your_turn"
 
 	SourceAgentView = "agent_view"
@@ -68,6 +69,12 @@ type Item struct {
 	CostTokens  int64    `json:"cost_tokens,omitempty"`  // tokens burned by what waits on it since Since
 	CostPartial bool     `json:"cost_partial,omitempty"` // the figure misses tokens older than the live window
 	SprintID    string   `json:"sprint_id,omitempty"`    // close_out only: the Close control's target
+	// ParkedLines and ReportPath, close_out only: the parked lines in the
+	// Close-out block of the sprint's report.md, and that file's path ("" when
+	// there is none). Foreman refuses to close a sprint with parked lines or
+	// without a report, so the page shows no Close chip then.
+	ParkedLines int    `json:"parked_lines,omitempty"`
+	ReportPath  string `json:"report_path,omitempty"`
 }
 
 // Counts is the one count of the wait list, per group.
@@ -158,7 +165,7 @@ func groupOf(kind string) string {
 	switch kind {
 	case KindYourTurn:
 		return GroupYourTurn
-	case KindCloseOut, KindCanClose:
+	case KindCloseOut, KindCanClose, KindBranchGone:
 		return GroupDone
 	}
 	return GroupBlocked
@@ -256,9 +263,13 @@ func Build(in Input) (wait, outcomes []Item) {
 	}
 
 	closeout := map[string]bool{} // sprint node ids whose branch is in main
+	gone := map[string]bool{}     // sprint node ids whose branch ref is gone and whose merge was not found
 	for _, n := range in.Graph.Nodes {
 		if n.Kind == graph.KindSprint && n.Attrs["closeout"] == "true" {
 			closeout[n.ID] = true
+		}
+		if n.Kind == graph.KindSprint && n.Attrs["branch_gone"] == "true" {
+			gone[n.ID] = true
 		}
 	}
 
@@ -283,7 +294,7 @@ func Build(in Input) (wait, outcomes []Item) {
 	}
 
 	for _, s := range in.Sprints {
-		if s.Status == "waiting-on-you" && !closeout["sprint:"+s.ID] {
+		if s.Status == "waiting-on-you" && !closeout["sprint:"+s.ID] && !gone["sprint:"+s.ID] {
 			since := s.LastParkedAt
 			if since.IsZero() {
 				since = s.UpdatedAt
@@ -354,6 +365,34 @@ func Build(in Input) (wait, outcomes []Item) {
 		}
 		id := strings.TrimPrefix(n.ID, "sprint:")
 		title, project, spec, result := n.Label, "", "", ""
+		report, parked := "", 0
+		since := now.Add(-time.Duration(n.AgeSeconds) * time.Second)
+		for _, s := range in.Sprints {
+			if s.ID != id {
+				continue
+			}
+			title, project, spec, result = s.Slug, s.Project, s.SpecPath, s.ResultPath
+			since = s.LastParkedAt
+			if since.IsZero() {
+				since = s.UpdatedAt
+			}
+			report, parked = s.ReportPath, s.ParkedLines
+		}
+		it := mk(KindCloseOut, "closeout:"+id, title, project, "Done, needs close-out", since, spec, result, graph.SourceForeman)
+		it.SprintID = id
+		it.ReportPath, it.ParkedLines = report, parked
+		sess := workers[n.ID]
+		add(it, since, 1+len(sess), held(sess))
+	}
+
+	// Branch gone, check by hand: the branch ref was deleted and no merge
+	// commit naming it was found. Grey, in the Done group, no Close target.
+	for _, n := range in.Graph.Nodes {
+		if !gone[n.ID] {
+			continue
+		}
+		id := strings.TrimPrefix(n.ID, "sprint:")
+		title, project, spec, result := n.Label, "", "", ""
 		since := now.Add(-time.Duration(n.AgeSeconds) * time.Second)
 		for _, s := range in.Sprints {
 			if s.ID != id {
@@ -365,8 +404,7 @@ func Build(in Input) (wait, outcomes []Item) {
 				since = s.UpdatedAt
 			}
 		}
-		it := mk(KindCloseOut, "closeout:"+id, title, project, "Done, needs close-out", since, spec, result, graph.SourceForeman)
-		it.SprintID = id
+		it := mk(KindBranchGone, "branchgone:"+id, title, project, "branch gone, check by hand", since, spec, result, graph.SourceForeman)
 		sess := workers[n.ID]
 		add(it, since, 1+len(sess), held(sess))
 	}

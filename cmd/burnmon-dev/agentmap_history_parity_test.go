@@ -107,3 +107,33 @@ func TestHistoryMapMatchesLiveForMergedSprint(t *testing.T) {
 		t.Errorf("history merged sprint node %+v, want closeout", n)
 	}
 }
+
+// The history map follows the deleted-branch rule the live path does: a
+// sprint whose ref is gone is Done when a merge message names it, "branch
+// gone, check by hand" (no waits_on edge, not Blocked) when none does.
+func TestHistoryMapDeletedBranch(t *testing.T) {
+	root := t.TempDir()
+	for _, s := range []string{"named", "unnamed"} {
+		writeForeman(t, filepath.Join(root, "sprints", "p", s, "sprint.json"), `{"sprint_id":"p__`+s+`__1","slug":"`+s+`","worktree_path":"C:\\example\\repo\\.worktrees\\`+s+`","worktree_branch":"sprint/example-`+s+`","phase":"report","status":"waiting-on-you","updated_at":"2026-10-23T10:00:00Z"}`)
+	}
+	env := agentMapEnv{DataDir: t.TempDir(), ForemanRoot: root,
+		MergedFor:  func(repo, branch string) (bool, bool) { return false, false },
+		BranchGone: func(repo, branch string) bool { return repo == `C:\example\repo` },
+		MergedByMessage: func(repo, branch string) (bool, bool) {
+			return branch == "sprint/example-named", true
+		}}
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	st, err := store.Open(filepath.Join(t.TempDir(), "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	env.St = st
+	p, err := agentMapFor(env, agentMapRequest{Source: "history", Hours: 24}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Layout.Counts.Waiting != 0 {
+		t.Errorf("history Blocked %d, want 0: a merged-by-message and a branch-gone sprint are both off the amber count", p.Layout.Counts.Waiting)
+	}
+}

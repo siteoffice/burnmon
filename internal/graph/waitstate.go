@@ -14,8 +14,9 @@ const SourceAgentView = "agent_view"
 const defaultTick = 5 * time.Second
 
 // asksInTranscript lists the agents whose open AskUserQuestion or
-// ExitPlanMode call counts as a wait on the person.
-var asksInTranscript = map[string]bool{"claude-code": true, "cowork": true, "cowork-cloud": true}
+// ExitPlanMode call counts as a wait on the person. Cowork cloud is not in it:
+// its questions are not visible, a known gap, so it never reads Blocked.
+var asksInTranscript = map[string]bool{"claude-code": true, "cowork": true}
 
 // runningChild reports whether a subagent is running now: its last turn is
 // within two ticks of Now and its stage is not an end ("waiting", "dormant").
@@ -81,6 +82,9 @@ func (b *builder) waitStates(byID map[string]Session, idle map[string]PidFile) {
 			b.person()
 			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisInferred, Source: SourceStore, AgeSeconds: age})
 		case parentRuns[id]:
+			state = WaitWorking
+		case hasAgent && a.Status == "busy":
+			// A background task: the agent view says the session is busy.
 			state = WaitWorking
 		case hasPid || (hasAgent && a.Status == "idle") || s.State == "waiting":
 			state = WaitYourTurn

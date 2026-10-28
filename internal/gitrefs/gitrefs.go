@@ -22,9 +22,11 @@ import (
 )
 
 // Walk limits: at most WalkLimit commits and WalkTimeout of wall time.
+// MessageWalkLimit is how many first-parent commits MergedByMessage reads.
 const (
-	WalkLimit   = 20000
-	WalkTimeout = 2 * time.Second
+	WalkLimit        = 20000
+	WalkTimeout      = 2 * time.Second
+	MessageWalkLimit = 500
 )
 
 // Unexported copies so tests can lower the limits.
@@ -35,6 +37,10 @@ var (
 
 // maxCacheEntries bounds the Checker cache; it is cleared when it passes this.
 var maxCacheEntries = 1024
+
+// ErrRefNotFound is what ResolveRef returns when the ref is in neither the
+// loose files nor packed-refs. Every other error is a read problem.
+var ErrRefNotFound = errors.New("gitrefs: ref not found")
 
 // GitDir resolves a repo or worktree folder to its common git dir. It follows
 // a .git file ("gitdir: <path>") and the commondir file of a linked worktree.
@@ -142,6 +148,9 @@ func ResolveRef(gitDir, name string) (string, error) {
 func resolvePacked(gitDir, name string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(gitDir, "packed-refs"))
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", ErrRefNotFound
+		}
 		return "", err
 	}
 	for _, line := range strings.Split(string(data), "\n") {
@@ -158,7 +167,7 @@ func resolvePacked(gitDir, name string) (string, error) {
 		}
 		return "", errors.New("gitrefs: packed ref is not an object name")
 	}
-	return "", errors.New("gitrefs: ref not found")
+	return "", ErrRefNotFound
 }
 
 // ValidBranch reports whether name is safe to use as a branch name in an
@@ -298,4 +307,122 @@ func walk(gitDir, mainSHA, target string) (merged, known, definite bool) {
 		}
 	}
 	return false, true, true
+}
+
+// BranchGone reports that branch has no ref in the repo: the trunk resolves,
+// the name is safe, and the ref is in neither the loose files nor
+// packed-refs. Any other problem (no trunk, an unreadable ref file, a bad
+// name) is false: only a clearly missing ref reads as a deleted branch.
+func (c *Checker) BranchGone(repo, branch string) bool {
+	if !ValidBranch(branch) {
+		return false
+	}
+	gd, err := GitDir(repo)
+	if err != nil {
+		return false
+	}
+	if _, err := trunkSHA(gd); err != nil {
+		return false
+	}
+	_, err = ResolveRef(gd, "refs/heads/"+branch)
+	return errors.Is(err, ErrRefNotFound)
+}
+
+// MergedByMessage is the check for a branch whose ref was deleted after the
+// merge: it reads the commit messages of the trunk's last MessageWalkLimit
+// first-parent commits and reports found when a merge commit (two or more
+// parents) names branch as a whole token. A branch whose ref still exists, a
+// bad name, no trunk or any read problem is known=false. Nothing found within
+// the limit is (false, true). Same stdlib-only reader, allocation caps and
+// deadline as Merged.
+func (c *Checker) MergedByMessage(repo, branch string) (found, known bool) {
+	if !c.BranchGone(repo, branch) {
+		return false, false
+	}
+	gd, err := GitDir(repo)
+	if err != nil {
+		return false, false
+	}
+	mainSHA, err := trunkSHA(gd)
+	if err != nil {
+		return false, false
+	}
+	key := "msg|" + gd + "|" + mainSHA + "|" + branch
+	c.mu.Lock()
+	if r, ok := c.cache[key]; ok {
+		c.mu.Unlock()
+		return r.merged, r.known
+	}
+	c.mu.Unlock()
+
+	st := newStore(gd)
+	defer st.close()
+	deadline := time.Now().Add(walkTimeout)
+	st.deadline = deadline
+	sha := mainSHA
+	for n := 0; n < MessageWalkLimit && sha != ""; n++ {
+		if time.Now().After(deadline) {
+			return false, false
+		}
+		parents, msg, err := st.commitInfo(sha)
+		if err != nil {
+			return false, false
+		}
+		if len(parents) >= 2 && namesBranch(msg, branch) {
+			found = true
+			break
+		}
+		sha = ""
+		if len(parents) > 0 {
+			sha = parents[0]
+		}
+	}
+	c.mu.Lock()
+	if len(c.cache) >= maxCacheEntries {
+		c.cache = map[string]result{}
+	}
+	c.cache[key] = result{found, true}
+	c.mu.Unlock()
+	return found, true
+}
+
+// namesBranch reports whether msg holds branch as a whole token: the name is
+// preceded by the start, whitespace, a quote, a slash (an owner prefix) or
+// other punctuation, and followed by the end, whitespace, a quote or other
+// punctuation. Letters, digits, ".", "_", "-" and "/" glue a name to a longer
+// word or branch ("sprint/a" is not in "sprint/ab" or "sprint/a/b").
+func namesBranch(msg, branch string) bool {
+	glue := func(c byte) bool {
+		return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '.' || c == '_' || c == '-'
+	}
+	for from := 0; from < len(msg); {
+		i := strings.Index(msg[from:], branch)
+		if i < 0 {
+			return false
+		}
+		i += from
+		end := i + len(branch)
+		from = i + 1
+		if i > 0 && glue(msg[i-1]) {
+			continue
+		}
+		if end < len(msg) {
+			c := msg[end]
+			if glue(c) && !(c == '.' && (end+1 == len(msg) || msg[end+1] == ' ' || msg[end+1] == '\n' || msg[end+1] == '\r')) || c == '/' {
+				continue
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// MergedOrGone is Merged, and for a branch whose ref is gone it is the
+// message search instead. The Close control uses it, so a sprint found
+// merged by message can be closed like any merged one.
+func (c *Checker) MergedOrGone(repo, branch string) (merged, known bool) {
+	if c.BranchGone(repo, branch) {
+		return c.MergedByMessage(repo, branch)
+	}
+	return c.Merged(repo, branch)
 }

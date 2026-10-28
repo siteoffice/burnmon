@@ -40,6 +40,10 @@ type agentMapEnv struct {
 	// MergedFor answers "is this branch in main" for the history map; nil
 	// means a gitrefs checker.
 	MergedFor func(repo, branch string) (merged, known bool)
+	// BranchGone and MergedByMessage are the deleted-branch check; nil
+	// means a gitrefs checker.
+	BranchGone      func(repo, branch string) bool
+	MergedByMessage func(repo, branch string) (found, known bool)
 }
 
 // agentMapRequest is what the page sends: live or history, how many hours of
@@ -133,6 +137,13 @@ func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapP
 		hi.MergedFor = env.MergedFor
 		if hi.MergedFor == nil {
 			hi.MergedFor = historyChecker.Merged
+		}
+		hi.BranchGone, hi.MergedByMessage = env.BranchGone, env.MergedByMessage
+		if hi.BranchGone == nil {
+			hi.BranchGone = historyChecker.BranchGone
+		}
+		if hi.MergedByMessage == nil {
+			hi.MergedByMessage = historyChecker.MergedByMessage
 		}
 		if env.St == nil {
 			return p, fmt.Errorf("the store is not open")

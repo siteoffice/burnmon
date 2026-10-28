@@ -35,10 +35,12 @@ type closeRig struct {
 }
 
 func (c *closeRig) goodSprint() graph.Sprint {
+	dir := filepath.Join(c.root, "sprints", "example", "example-merged")
 	return graph.Sprint{ID: closeSprintID, Slug: "example-merged", Status: "waiting-on-you", Phase: "report",
-		Dir:          filepath.Join(c.root, "sprints", "example", "example-merged"),
+		Dir:          dir,
 		Branch:       closeBranch,
-		WorktreePath: closeWT}
+		WorktreePath: closeWT,
+		ReportPath:   filepath.Join(dir, "report.md")}
 }
 
 func newCloseRig(t *testing.T) *closeRig {
@@ -178,6 +180,11 @@ func TestCloseRefusesBadSprint(t *testing.T) {
 		"not merged":              func(c *closeRig) { c.setMerged(false, true) },
 		"merge unknown":           func(c *closeRig) { c.setMerged(false, false) },
 		"merged but unknown flag": func(c *closeRig) { c.setMerged(true, false) },
+		"no report":               func(c *closeRig) { c.set(func(s *graph.Sprint) { s.ReportPath = "" }) },
+		"report outside folder": func(c *closeRig) {
+			c.set(func(s *graph.Sprint) { s.ReportPath = filepath.Join(c.root, "elsewhere", "report.md") })
+		},
+		"parked lines": func(c *closeRig) { c.set(func(s *graph.Sprint) { s.ParkedLines = 2 }) },
 	}
 	for name, mut := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -223,6 +230,8 @@ func TestCloseRunRefusesChangedSprint(t *testing.T) {
 		"branch changed": func(c *closeRig) { c.set(func(s *graph.Sprint) { s.Branch = "sprint/example-other" }) },
 		"merge turned":   func(c *closeRig) { c.setMerged(false, true) },
 		"merge unknown":  func(c *closeRig) { c.setMerged(false, false) },
+		"parked lines":   func(c *closeRig) { c.set(func(s *graph.Sprint) { s.ParkedLines = 1 }) },
+		"report removed": func(c *closeRig) { c.set(func(s *graph.Sprint) { s.ReportPath = "" }) },
 		"sprint gone": func(c *closeRig) {
 			c.cmu.Lock()
 			c.sprints = nil
@@ -467,5 +476,40 @@ func TestCloseExitOneCapsLongLastLine(t *testing.T) {
 	}
 	if lines[1]["refused"] != res.Refused {
 		t.Fatalf("audit = %v", lines[1])
+	}
+}
+
+// Foreman refuses a close when the report has parked lines or is missing, so
+// BurnMon refuses first, with the reason, before any argv is built.
+func TestCloseRefusesWithReason(t *testing.T) {
+	for name, c := range map[string]struct {
+		mut  func(s *graph.Sprint)
+		want string
+	}{
+		"parked":    {func(s *graph.Sprint) { s.ParkedLines = 3 }, "3 parked lines"},
+		"no report": {func(s *graph.Sprint) { s.ReportPath = "" }, "no report.md"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rig := newCloseRig(t)
+			rig.set(c.mut)
+			_, err := rig.preview(CloseSprint, closeItemID)
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("preview error = %v, want it to say %q", err, c.want)
+			}
+			// The second press refuses the same way after a good preview.
+			rig2 := newCloseRig(t)
+			pv, err := rig2.preview(CloseSprint, closeItemID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rig2.set(c.mut)
+			res, err := rig2.confirm(pv.Token)
+			if err == nil || !strings.Contains(res.Refused, c.want) {
+				t.Fatalf("confirm = %+v, %v; want a refusal that says %q", res, err, c.want)
+			}
+			if rig2.runner.calls() != 0 {
+				t.Error("sprint_step.py would have started")
+			}
+		})
 	}
 }

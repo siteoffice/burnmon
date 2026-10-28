@@ -482,6 +482,10 @@ func (b *builder) cardFacts(c Card, g Group) []Fact {
 	if tl := toolLabel(c.Tool, b.w.plain); tl != "" {
 		f = append(f, Fact{"Current tool", tl})
 	}
+	if strings.EqualFold(c.Agent, "cowork-cloud") {
+		// A known gap: the cloud transcript has no pending-question marker.
+		f = append(f, Fact{"Questions", "questions in Cowork cloud are not visible"})
+	}
 	if g.Kind == "sprint" || g.Kind == "flow" {
 		f = append(f, Fact{"Works for", b.worksFor(g, c)})
 	}

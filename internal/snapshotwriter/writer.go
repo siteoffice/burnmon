@@ -144,7 +144,7 @@ func TokensSince(events []schema.Event, now time.Time) func(ids []string, since 
 // it never stops the tick.
 func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, events []schema.Event, now time.Time, stamp string) (graph.Graph, []snapshot.Source, []waits.Item, []waits.Item, error) {
 	in := graph.Input{Now: now, Sessions: sessions, MCPFor: gr.mcp.For, RepoFor: gr.repos.For, SubagentFor: gr.meta.Lookup,
-		MergedFor: gr.merged.Merged}
+		MergedFor: gr.merged.Merged, BranchGone: gr.merged.BranchGone, MergedByMessage: gr.merged.MergedByMessage}
 	if gr.Rows != nil {
 		rows, at := gr.Rows()
 		in.ProcsAt = at

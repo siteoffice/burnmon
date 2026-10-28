@@ -247,3 +247,29 @@ func TestItemFileOpenerGetsListedSpelling(t *testing.T) {
 		}
 	}
 }
+
+// A close_out row links its report_path (the parked lines link); the same
+// rules apply: only a path the snapshot lists, an allowed type, a real file.
+func TestItemFileOpensListedReportPath(t *testing.T) {
+	d := t.TempDir()
+	rep := filepath.Join(d, "report.md")
+	other := filepath.Join(d, "other.md")
+	for _, p := range []string{rep, other} {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	item := waits.Item{Kind: waits.KindCloseOut, ID: "closeout:s1", Title: "s1", Since: "2026-10-23T09:00:00Z",
+		Source: "foreman", SprintID: "s1", ReportPath: rep, ParkedLines: 2}
+	snap := filepath.Join(d, "snapshot.json")
+	s := snapshot.Build(snapshot.Input{Now: itemNow, TickSeconds: 5, WaitItems: []waits.Item{item}})
+	if err := snapshot.Write(snap, s); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := itemFileAllowed(snap, itemNow, rep); err != nil || got != rep {
+		t.Errorf("a listed report_path = %q, %v; want it allowed", got, err)
+	}
+	if _, err := itemFileAllowed(snap, itemNow, other); err == nil {
+		t.Error("a path the snapshot does not list was allowed")
+	}
+}

@@ -41,7 +41,7 @@ func newControlServiceWith(cfg pricing.Config, dataDir, snapPath, storePath stri
 		Elevated:    controls.Elevated,
 		Runner:      controls.ExecRunner{},
 		AuditPath:   controls.AuditPath(storePath),
-		Merged:      gitrefs.NewChecker().Merged,
+		Merged:      gitrefs.NewChecker().MergedOrGone,
 	}
 	if p, err := snapshotwriter.ResolveClaudeConfigured(cfg.ClaudePath, look, runtime.GOOS); err == nil {
 		env.ClaudePath = p

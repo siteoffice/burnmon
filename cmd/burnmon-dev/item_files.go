@@ -2,7 +2,7 @@
 
 // item_files.go is the Go side of the spec and result links in Waits on you
 // and Outcomes. The page names a file; this code opens it only when the newest
-// snapshot lists that exact path as a spec_path or result_path of a wait or
+// snapshot lists that exact path as a spec_path, result_path or report_path of a wait or
 // outcome item. The page input is untrusted: nothing else is opened.
 package main
 
@@ -64,7 +64,7 @@ func asciiFold(s string) string {
 
 // itemFileAllowed returns the snapshot's own spelling of path (cleaned) and a
 // nil error only when the snapshot at snapPath reads ok at now, lists path
-// (compared cleaned and ASCII case-folded) as a spec or result path, the
+// (compared cleaned and ASCII case-folded) as a spec, result or report path, the
 // listed path is a plain absolute drive path under 260 characters, ends in an
 // allowed type, and names an existing regular file that is not a link. The
 // caller must open the returned string, never the page's.
@@ -79,7 +79,7 @@ func itemFileAllowed(snapPath string, now time.Time, path string) (string, error
 	want := asciiFold(filepath.Clean(path))
 	var listed string
 	for _, it := range pathsOf(r.Snapshot) {
-		for _, p := range []string{it.spec, it.result} {
+		for _, p := range []string{it.spec, it.result, it.report} {
 			if p != "" && asciiFold(filepath.Clean(p)) == want {
 				listed = filepath.Clean(p)
 			}
@@ -113,13 +113,15 @@ func itemFileAllowed(snapPath string, now time.Time, path string) (string, error
 	return listed, nil
 }
 
-func pathsOf(s *snapshot.Snapshot) []struct{ spec, result string } {
-	var out []struct{ spec, result string }
+// pathsOf lists the paths the snapshot names per item: spec, result and, for
+// a close_out row, the report whose parked lines the row links.
+func pathsOf(s *snapshot.Snapshot) []struct{ spec, result, report string } {
+	var out []struct{ spec, result, report string }
 	for _, it := range s.WaitItems {
-		out = append(out, struct{ spec, result string }{it.SpecPath, it.ResultPath})
+		out = append(out, struct{ spec, result, report string }{it.SpecPath, it.ResultPath, it.ReportPath})
 	}
 	for _, it := range s.OutcomeItems {
-		out = append(out, struct{ spec, result string }{it.SpecPath, it.ResultPath})
+		out = append(out, struct{ spec, result, report string }{it.SpecPath, it.ResultPath, ""})
 	}
 	return out
 }

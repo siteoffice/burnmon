@@ -2,6 +2,7 @@ package controls
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"regexp"
 
@@ -85,6 +86,17 @@ func CheckSprint(t Target, sprints []graph.Sprint, merged func(repo, branch stri
 		return errors.New("cannot tell whether the branch is in main")
 	case !m:
 		return errors.New("the branch is not in main")
+	}
+	// Foreman's close-out gate refuses a sprint with no report.md or with
+	// parked lines in its Close-out block (an Unattended sprint ends
+	// waiting-on-you, an Attended one fails the gate). Refuse first, with the
+	// reason, so no argv is built for a close that cannot succeed. The report
+	// is the one in the sprint folder, which is the one Foreman checks.
+	switch {
+	case s.ReportPath == "" || s.ReportPath != filepath.Join(s.Dir, "report.md"):
+		return errors.New("the sprint has no report.md yet, Foreman would refuse to close it")
+	case s.ParkedLines > 0:
+		return fmt.Errorf("the sprint's report has %d parked lines, Foreman would refuse to close it", s.ParkedLines)
 	}
 	return nil
 }

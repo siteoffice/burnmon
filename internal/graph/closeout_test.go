@@ -144,3 +144,78 @@ func TestCanCloseNotForMainCheckout(t *testing.T) {
 		t.Error("a main checkout session is marked can_close")
 	}
 }
+
+// goneFns fakes the gitrefs answers for a sprint branch whose ref is gone.
+type goneFns struct {
+	gone, found, known bool
+	goneCalls, msgCalls int
+}
+
+func (f *goneFns) branchGone(repo, branch string) bool {
+	f.goneCalls++
+	return f.gone && repo == coMain && branch == "sprint/example-merged"
+}
+
+func (f *goneFns) byMessage(repo, branch string) (bool, bool) {
+	f.msgCalls++
+	return f.found, f.known
+}
+
+func goneInput(f *goneFns) Input {
+	var calls []mergeCall
+	return Input{Now: t0, Sprints: []Sprint{coSprint(coWT)}, MergedFor: mergedFn(&calls, false, false),
+		BranchGone: f.branchGone, MergedByMessage: f.byMessage}
+}
+
+func TestDeletedBranchMergedByMessageNeedsCloseOut(t *testing.T) {
+	f := &goneFns{gone: true, found: true, known: true}
+	g := Build(goneInput(f))
+	n, _ := node(g, "sprint:p__x__1")
+	if n.Attrs["closeout"] != "true" || n.Attrs["branch_gone"] != "" {
+		t.Fatalf("attrs = %+v; want closeout true, no branch_gone", n.Attrs)
+	}
+	if _, ok := edge(g, "sprint:p__x__1", personID, KindWaitsOn); ok {
+		t.Error("a sprint merged by message still waits on you")
+	}
+}
+
+func TestDeletedBranchNotFoundIsBranchGoneNotBlocked(t *testing.T) {
+	f := &goneFns{gone: true, found: false, known: true}
+	g := Build(goneInput(f))
+	n, _ := node(g, "sprint:p__x__1")
+	if n.Attrs["branch_gone"] != "true" || n.Attrs["closeout"] != "" {
+		t.Fatalf("attrs = %+v; want branch_gone true, no closeout", n.Attrs)
+	}
+	if _, ok := edge(g, "sprint:p__x__1", personID, KindWaitsOn); ok {
+		t.Error("a branch-gone sprint has a waits_on edge")
+	}
+}
+
+func TestDeletedBranchUnreadableMessageStaysBlocked(t *testing.T) {
+	f := &goneFns{gone: true, found: false, known: false}
+	g := Build(goneInput(f))
+	n, _ := node(g, "sprint:p__x__1")
+	if n.Attrs["branch_gone"] != "" || n.Attrs["closeout"] != "" {
+		t.Fatalf("attrs = %+v; want neither", n.Attrs)
+	}
+	if _, ok := edge(g, "sprint:p__x__1", personID, KindWaitsOn); !ok {
+		t.Error("an unreadable history must leave the sprint Blocked")
+	}
+}
+
+// A ref that exists but is unmerged is still Blocked, and the message search
+// is never used for it.
+func TestExistingUnmergedBranchDoesNotSearchMessages(t *testing.T) {
+	f := &goneFns{gone: false, found: true, known: true}
+	g := Build(goneInput(f))
+	n, _ := node(g, "sprint:p__x__1")
+	if n.Attrs["closeout"] != "" || n.Attrs["branch_gone"] != "" {
+		t.Fatalf("attrs = %+v; want neither", n.Attrs)
+	}
+	if _, ok := edge(g, "sprint:p__x__1", personID, KindWaitsOn); !ok {
+		t.Error("an unmerged sprint lost its waits_on edge")
+	}
+	if f.msgCalls != 0 {
+		t.Errorf("MergedByMessage called %d times for a branch that exists", f.msgCalls)
+	}
+}

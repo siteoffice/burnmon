@@ -75,28 +75,33 @@ func (s *store) charge(n uint64) error {
 
 // commitParents returns the parent names of a commit object.
 func (s *store) commitParents(sha string) ([]string, error) {
+	parents, _, err := s.commitInfo(sha)
+	return parents, err
+}
+
+// commitInfo returns the parent names and the message of a commit object.
+// The message is everything after the first blank line of the object.
+func (s *store) commitInfo(sha string) ([]string, string, error) {
 	s.alloc = 0
 	typ, body, err := s.readObject(sha, 0)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if typ != typeCommit {
-		return nil, errors.New("gitrefs: object is not a commit")
+		return nil, "", errors.New("gitrefs: object is not a commit")
 	}
+	head, msg, _ := strings.Cut(string(body), "\n\n")
 	var parents []string
-	for _, line := range strings.Split(string(body), "\n") {
-		if line == "" {
-			break
-		}
+	for _, line := range strings.Split(head, "\n") {
 		if strings.HasPrefix(line, "parent ") {
 			p := strings.TrimSpace(strings.TrimPrefix(line, "parent "))
 			if !isHex40(p) {
-				return nil, errors.New("gitrefs: bad parent line")
+				return nil, "", errors.New("gitrefs: bad parent line")
 			}
 			parents = append(parents, p)
 		}
 	}
-	return parents, nil
+	return parents, msg, nil
 }
 
 // readObject returns the type and body of an object, loose first, then packs.

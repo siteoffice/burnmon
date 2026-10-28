@@ -518,7 +518,8 @@
       "source": "foreman",
       "group": "done",
       "holds": 1,
-      "sprint_id": "example__sprint__9"
+      "sprint_id": "example__sprint__9",
+      "report_path": "C:\\example\\sprints\\example\\example-merged\\report.md"
     },
     {
       "kind": "can_close",

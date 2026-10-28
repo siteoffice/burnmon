@@ -260,3 +260,54 @@ func TestNoForemanInput(t *testing.T) {
 		t.Fatalf("counts = %+v", c)
 	}
 }
+
+// A sprint whose branch ref is gone and whose merge was not found is a grey
+// Done-group row: never Blocked, not in the amber count, no Close target.
+func TestBranchGoneItem(t *testing.T) {
+	g := graph.Graph{Nodes: []graph.Node{
+		{ID: "sprint:s7", Kind: graph.KindSprint, Label: "s7", Attrs: map[string]string{"branch_gone": "true"}, AgeSeconds: 900},
+	}}
+	sp := graph.Sprint{ID: "s7", Slug: "example-gone", Project: "example", Status: "waiting-on-you",
+		SpecPath: `C:\example\s.md`, ResultPath: `C:\example\r.md`, UpdatedAt: now.Add(-time.Hour)}
+	w, _ := Build(Input{Now: now, Graph: g, Sprints: []graph.Sprint{sp}})
+	if len(w) != 1 {
+		t.Fatalf("got %+v", w)
+	}
+	it := w[0]
+	if it.Kind != KindBranchGone || it.Group != GroupDone || it.ID != "branchgone:s7" || it.Title != "example-gone" ||
+		it.Detail != "branch gone, check by hand" || it.SprintID != "" || it.AgeSeconds != 3600 {
+		t.Fatalf("branch_gone = %+v", it)
+	}
+	if c := CountOf(w); c != (Counts{Done: 1}) {
+		t.Fatalf("counts = %+v; a branch-gone sprint must not count as Blocked", c)
+	}
+}
+
+// The close_out item carries what decides the Close chip: the report path
+// and the parked lines in its Close-out block.
+func TestCloseOutCarriesReportFacts(t *testing.T) {
+	g := graph.Graph{Nodes: []graph.Node{
+		{ID: "sprint:s1", Kind: graph.KindSprint, Label: "s1", Attrs: map[string]string{"closeout": "true"}},
+		{ID: "sprint:s2", Kind: graph.KindSprint, Label: "s2", Attrs: map[string]string{"closeout": "true"}},
+		{ID: "sprint:s3", Kind: graph.KindSprint, Label: "s3", Attrs: map[string]string{"closeout": "true"}},
+	}}
+	sprints := []graph.Sprint{
+		{ID: "s1", Slug: "parked", Status: "waiting-on-you", UpdatedAt: now, ReportPath: `C:\example\s1\report.md`, ParkedLines: 3},
+		{ID: "s2", Slug: "clean", Status: "waiting-on-you", UpdatedAt: now, ReportPath: `C:\example\s2\report.md`},
+		{ID: "s3", Slug: "noreport", Status: "waiting-on-you", UpdatedAt: now},
+	}
+	w, _ := Build(Input{Now: now, Graph: g, Sprints: sprints})
+	by := map[string]Item{}
+	for _, it := range w {
+		by[it.ID] = it
+	}
+	if it := by["closeout:s1"]; it.ParkedLines != 3 || it.ReportPath != `C:\example\s1\report.md` {
+		t.Errorf("s1 = %+v", it)
+	}
+	if it := by["closeout:s2"]; it.ParkedLines != 0 || it.ReportPath != `C:\example\s2\report.md` {
+		t.Errorf("s2 = %+v", it)
+	}
+	if it := by["closeout:s3"]; it.ParkedLines != 0 || it.ReportPath != "" {
+		t.Errorf("s3 = %+v", it)
+	}
+}

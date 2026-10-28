@@ -196,6 +196,11 @@ type Sprint struct {
 	Test, Verify *Check
 	// LastParkedAt is the newest task_parked entry in the action log.
 	LastParkedAt time.Time
+	// ReportPath is the sprint folder's report.md when that regular file exists ("" when
+	// not), and ParkedLines the parked lines of its Close-out block. Both are
+	// read only for a sprint that is waiting on you.
+	ReportPath  string
+	ParkedLines int
 }
 
 // Check is one recorded test or verify result.
@@ -284,6 +289,12 @@ type Input struct {
 	// MergedFor says whether branch is in the trunk of repo (merged) and
 	// whether that could be read at all (known). nil: nothing is merged.
 	MergedFor func(repo, branch string) (merged, known bool)
+	// BranchGone says the sprint branch has no ref any more (deleted after
+	// the merge). MergedByMessage then looks for a merge commit that names
+	// it in the trunk's recent history. Both nil: a deleted branch is not
+	// told apart from any other unknown.
+	BranchGone      func(repo, branch string) bool
+	MergedByMessage func(repo, branch string) (found, known bool)
 }
 
 // harnessOfAgent maps a store agent name to sysmon's harness names, so a
@@ -578,7 +589,7 @@ func Build(in Input) Graph {
 	for _, sp := range in.Sprints {
 		sid := "sprint:" + sp.ID
 		waiting := sp.Status == "waiting-on-you"
-		closeout := false
+		closeout, branchGone := false, false
 		// A session links to a sprint when its folder is the sprint's worktree
 		// or its main repo and it was active while the sprint's own action log
 		// was being written. An attended sprint's agents run in the main repo.
@@ -607,16 +618,29 @@ func Build(in Input) Graph {
 			m, known := in.MergedFor(main, sp.Branch)
 			closeout = m && known
 		}
+		// The branch ref is gone (deleted after the merge): a merge commit in
+		// the trunk's recent history that names it makes the sprint close-out;
+		// no such commit makes it "branch gone, check by hand", never Blocked.
+		// A history that cannot be read leaves the sprint Blocked.
+		if waiting && !closeout && in.BranchGone != nil && in.MergedByMessage != nil && main != "" && sp.Branch != "" &&
+			in.BranchGone(main, sp.Branch) {
+			if found, known := in.MergedByMessage(main, sp.Branch); known {
+				closeout, branchGone = found, !found
+			}
+		}
 		attrs := map[string]string{"phase": sp.Phase, "status": sp.Status}
 		if closeout {
 			attrs["closeout"] = "true"
+		}
+		if branchGone {
+			attrs["branch_gone"] = "true"
 		}
 		b.node(Node{ID: sid, Kind: KindSprint, Label: sp.Slug, Attrs: attrs,
 			Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		for _, id := range linked {
 			b.edge(Edge{From: id, To: sid, Kind: KindWorksFor, Basis: BasisInferred, Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		}
-		if waiting && !closeout {
+		if waiting && !closeout && !branchGone {
 			b.person()
 			b.edge(Edge{From: sid, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		}
