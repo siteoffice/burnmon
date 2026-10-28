@@ -18,6 +18,9 @@ import (
 //   b  turn ticker off
 //   c  Plain with only Burn last 30 min on (Plain only)
 //   d  every part on at 1280x800 with the scrollbar off
+//   e  every part on at 1280x800, scrollbar off, with long lists (12 wait items,
+//      8 outcome items, 8 sessions): the page scrolls only when every list sits
+//      at three rows
 // Each case asserts:
 //   - no vertical empty area over 24 px inside a column (the largest gap
 //     between a column's children, below the last child, or inside a panel
@@ -35,6 +38,9 @@ import (
 //   - scrollbar off: the page scrolls only when window.__bdevFit.fitScroll says
 //     every part is at its floor; otherwise nothing overflows, and in two
 //     columns both columns end on the same line (within 2 px).
+// The drag handles (.hdl, B7.1) are 4 px bars laid over the row gap: the gap
+// measures ignore them, and each handle is checked for its own rectangle (4 px
+// tall, inside its zonebody, not over a part).
 // A probe proves the measure can fail: a 100 px gap is pushed into a column
 // and the same read must report it (d34Probe), once per run.
 // A window size the screen cannot hold prints SKIPPED and is not a pass.
@@ -43,30 +49,50 @@ import (
 const d34MaxEmpty = 24.0
 
 type d34Page struct {
-	OverflowY  string   `json:"overflowY"`
-	Scrolls    bool     `json:"scrolls"`
-	BodyOver   float64  `json:"bodyOver"`
-	PageOver   float64  `json:"pageOver"`
-	HostOver   float64  `json:"hostOver"`
-	ZoneOver   float64  `json:"zoneOver"`
-	BodyScroll bool     `json:"bodyScroll"`
-	FitScroll  bool     `json:"fitScroll"`
-	FitClass   bool     `json:"fitClass"`
-	Fit        bool     `json:"fit"`
-	FitHidden  []string `json:"fitHidden"`
-	Hidden     []string `json:"hidden"`
-	CutNote    bool     `json:"cutNote"`
-	Empty      float64  `json:"empty"`
-	EmptyWhere string   `json:"emptyWhere"`
-	ProcOn     bool     `json:"procOn"`
-	ProcFirst  bool     `json:"procFirst"`
-	ProcAbove  bool     `json:"procAbove"`
-	ProcBelow  bool     `json:"procBelow"`
-	TwoCols    bool     `json:"twoCols"`
-	ColDiff    float64  `json:"colDiff"`
-	Parts      int      `json:"parts"`
-	TodoDrawn  bool     `json:"todoDrawn"`
-	AboveSeen  bool     `json:"aboveSeen"`
+	OverflowY  string    `json:"overflowY"`
+	Scrolls    bool      `json:"scrolls"`
+	BodyOver   float64   `json:"bodyOver"`
+	PageOver   float64   `json:"pageOver"`
+	HostOver   float64   `json:"hostOver"`
+	ZoneOver   float64   `json:"zoneOver"`
+	BodyScroll bool      `json:"bodyScroll"`
+	FitScroll  bool      `json:"fitScroll"`
+	FitClass   bool      `json:"fitClass"`
+	Fit        bool      `json:"fit"`
+	FitHidden  []string  `json:"fitHidden"`
+	Hidden     []string  `json:"hidden"`
+	CutNote    bool      `json:"cutNote"`
+	Empty      float64   `json:"empty"`
+	EmptyWhere string    `json:"emptyWhere"`
+	ProcOn     bool      `json:"procOn"`
+	ProcFirst  bool      `json:"procFirst"`
+	ProcAbove  bool      `json:"procAbove"`
+	ProcBelow  bool      `json:"procBelow"`
+	TwoCols    bool      `json:"twoCols"`
+	ColDiff    float64   `json:"colDiff"`
+	Parts      int       `json:"parts"`
+	TodoDrawn  bool      `json:"todoDrawn"`
+	AboveSeen  bool      `json:"aboveSeen"`
+	Handles    int       `json:"handles"`
+	HandleBad  string    `json:"handleBad"`
+	Lists      []d34List `json:"lists"`
+	Items      []d34Item `json:"items"`
+}
+
+type d34List struct {
+	Sec  string  `json:"sec"`
+	H    float64 `json:"h"`
+	SH   float64 `json:"sh"`
+	Rows int     `json:"rows"`
+	Seen int     `json:"seen"`
+}
+
+type d34Item struct {
+	ID    string  `json:"id"`
+	Kind  string  `json:"kind"`
+	H     float64 `json:"h"`
+	Floor float64 `json:"floor"`
+	Nat   float64 `json:"nat"`
 }
 
 const d34ReadJS = `(function(){
@@ -77,7 +103,7 @@ const d34ReadJS = `(function(){
   var note = function(v, w){ if(v > empty){ empty = v; where = w; } };
   var slack = function(k, name){
     var r = k.getBoundingClientRect();
-    var inner = Array.prototype.filter.call(k.children, function(c){ return shown(c) && c.getBoundingClientRect().height > 0.5; });
+    var inner = Array.prototype.filter.call(k.children, function(c){ return !c.classList.contains('hdl') && shown(c) && c.getBoundingClientRect().height > 0.5; });
     if(!inner.length) return;
     var ib = 0;
     inner.forEach(function(c){ ib = Math.max(ib, c.getBoundingClientRect().bottom); });
@@ -90,7 +116,7 @@ const d34ReadJS = `(function(){
     zone = Math.max(zone, zb.scrollHeight - zb.clientHeight);
     var zr = zb.getBoundingClientRect(), cs = getComputedStyle(zb);
     var top = zr.top + parseFloat(cs.paddingTop), bot = zr.bottom - parseFloat(cs.paddingBottom);
-    var kids = Array.prototype.filter.call(zb.children, function(c){ return shown(c) && c.getBoundingClientRect().height > 0.5; })
+    var kids = Array.prototype.filter.call(zb.children, function(c){ return !c.classList.contains('hdl') && shown(c) && c.getBoundingClientRect().height > 0.5; })
       .sort(function(a, b){ return a.getBoundingClientRect().top - b.getBoundingClientRect().top; });
     var name = z.className.replace('zone ', '');
     if(!kids.length) return;
@@ -135,6 +161,29 @@ const d34ReadJS = `(function(){
   }
   var two = zones.length === 2 && Math.abs(zones[0].getBoundingClientRect().top - zones[1].getBoundingClientRect().top) < 2;
   var colDiff = two ? Math.abs(zones[0].getBoundingClientRect().bottom - zones[1].getBoundingClientRect().bottom) : 0;
+  var handles = 0, handleBad = '';
+  Array.prototype.forEach.call(document.querySelectorAll('.zonebody > .hdl'), function(hd){
+    if(!shown(hd)) return;
+    handles++;
+    var hr = hd.getBoundingClientRect(), br = hd.parentNode.getBoundingClientRect();
+    if(Math.abs(hr.height - 4) > 0.5) handleBad += 'handle ' + handles + ' is ' + hr.height.toFixed(1) + ' px tall, want 4; ';
+    if(hr.top < br.top - 0.5 || hr.bottom > br.bottom + 0.5) handleBad += 'handle ' + handles + ' lies outside its zonebody; ';
+    Array.prototype.forEach.call(hd.parentNode.children, function(c){
+      if(c === hd || c.classList.contains('hdl') || !shown(c)) return;
+      var cr = c.getBoundingClientRect();
+      if(cr.height < 0.5) return;
+      var ov = Math.min(hr.bottom, cr.bottom) - Math.max(hr.top, cr.top);
+      if(ov > 2) handleBad += 'handle ' + handles + ' overlaps ' + (c.id || c.className) + ' by ' + ov.toFixed(1) + ' px; ';
+    });
+  });
+  var lists = [];
+  Array.prototype.forEach.call(document.querySelectorAll('#secHost .seclist'), function(el){
+    if(!shown(el) || el.closest('.sec-off')) return;
+    var rs = Array.prototype.slice.call(el.querySelector('table') ? el.querySelectorAll('tbody tr:not(.ctlrow)') : el.querySelectorAll('.secitem'));
+    var lr = el.getBoundingClientRect(), seen = 0;
+    rs.forEach(function(r){ var rr = r.getBoundingClientRect(); if(rr.top >= lr.top - 1 && rr.bottom <= lr.bottom + 1) seen++; });
+    lists.push({ sec: (el.closest('[data-sec]') || el).getAttribute('data-sec') || '', h: el.clientHeight, sh: el.scrollHeight, rows: rs.length, seen: seen });
+  });
   var f = window.__bdevFit, has = !!f;
   f = f || {};
   return {
@@ -150,7 +199,8 @@ const d34ReadJS = `(function(){
     cutNote: !!document.getElementById('secCutNote'),
     empty: Math.max(0, empty), emptyWhere: where,
     procOn: procOn, procFirst: procFirst, procAbove: above, procBelow: below,
-    twoCols: two, colDiff: colDiff, parts: Object.keys(parts).length, todoDrawn: shown(todo), aboveSeen: seen
+    twoCols: two, colDiff: colDiff, parts: Object.keys(parts).length, todoDrawn: shown(todo), aboveSeen: seen,
+    handles: handles, handleBad: handleBad, lists: lists, items: f.items || []
   };
 })()`
 
@@ -170,7 +220,7 @@ func d34Apply(payload string, snap []byte) (d34Page, error) {
 }
 
 // d34Verify returns the problems found in one read, empty when the case passes.
-func d34Verify(p d34Page, scrollbar, wantTodo bool) []string {
+func d34Verify(p d34Page, scrollbar, wantTodo, caseE bool) []string {
 	var bad []string
 	if !p.Fit {
 		return []string{"window.__bdevFit is missing"}
@@ -196,6 +246,20 @@ func d34Verify(p d34Page, scrollbar, wantTodo bool) []string {
 	if p.BodyOver > 1 {
 		bad = append(bad, fmt.Sprintf("the body itself overflows by %.0f px", p.BodyOver))
 	}
+	if p.HandleBad != "" {
+		bad = append(bad, "drag handles: "+p.HandleBad)
+	}
+	if caseE {
+		long := 0
+		for _, l := range p.Lists {
+			if l.Rows > 3 {
+				long++
+			}
+		}
+		if len(p.Lists) < 3 || long != len(p.Lists) {
+			bad = append(bad, fmt.Sprintf("case e needs at least three long lists (more than three rows each), got %d lists, %d long (%s)", len(p.Lists), long, strings.TrimSpace(d34ListNote(p, true)[7:])))
+		}
+	}
 	if scrollbar {
 		return bad
 	}
@@ -209,6 +273,42 @@ func d34Verify(p d34Page, scrollbar, wantTodo bool) []string {
 		if p.TwoCols && p.ColDiff > 2 {
 			bad = append(bad, fmt.Sprintf("two columns end %.0f px apart, want at most 2", p.ColDiff))
 		}
+		for _, l := range p.Lists {
+			want := l.Rows
+			if want > 3 {
+				want = 3
+			}
+			if l.Seen < want {
+				bad = append(bad, fmt.Sprintf("list %s shows %d of its first %d rows without the page scrolling", l.Sec, l.Seen, want))
+			}
+		}
+	} else {
+		for _, it := range p.Items {
+			if it.H > it.Floor+1 {
+				bad = append(bad, fmt.Sprintf("page scrolls but %s %s is at %.0f px, above its floor %.0f", it.Kind, it.ID, it.H, it.Floor))
+			}
+		}
+		for _, l := range p.Lists {
+			if l.Rows <= 3 {
+				continue
+			}
+			fl := -1.0
+			for _, it := range p.Items {
+				if it.Kind == "seclist" && it.ID == l.Sec {
+					fl = it.Floor
+				}
+			}
+			switch {
+			case fl < 0:
+				bad = append(bad, fmt.Sprintf("list %s has no fit item", l.Sec))
+			case l.H > fl+2:
+				bad = append(bad, fmt.Sprintf("page scrolls but list %s is %.0f px, floor %.0f", l.Sec, l.H, fl))
+			case l.SH <= l.H:
+				bad = append(bad, fmt.Sprintf("page scrolls and list %s does not scroll inside itself (%.0f of %.0f px)", l.Sec, l.H, l.SH))
+			case l.Seen < 3:
+				bad = append(bad, fmt.Sprintf("list %s shows %d rows at its floor, want 3", l.Sec, l.Seen))
+			}
+		}
 	}
 	return bad
 }
@@ -221,7 +321,7 @@ func d34Verify(p d34Page, scrollbar, wantTodo bool) []string {
 func d34Probe() error {
 	if _, err := evalRaw(`(function(){ var zb = Array.prototype.filter.call(document.querySelectorAll('.zone .zonebody'), function(e){ return e.getClientRects().length > 0; })[0];
 		if(!zb) return false;
-		var kids = Array.prototype.filter.call(zb.children, function(c){ return c.getBoundingClientRect().height > 0.5; });
+		var kids = Array.prototype.filter.call(zb.children, function(c){ return !c.classList.contains('hdl') && c.getBoundingClientRect().height > 0.5; });
 		var k = kids[kids.length - 1]; if(!k) return false;
 		k.setAttribute('data-d34probe', k.style.transform || '-'); k.style.transform = 'translateY(100px)'; return true; })()`); err != nil {
 		return err
@@ -237,7 +337,7 @@ func d34Probe() error {
 		return fmt.Errorf("probe: a 100 px gap measured as %.0f px (%s), the measure cannot fail", p.Empty, p.EmptyWhere)
 	}
 	failed := false
-	for _, b := range d34Verify(p, true, true) {
+	for _, b := range d34Verify(p, true, true, false) {
 		if strings.HasPrefix(b, "empty area") {
 			failed = true
 		}
@@ -249,25 +349,63 @@ func d34Probe() error {
 	return nil
 }
 
+// d34Snapshot returns the frozen example with To Do switched on and 14 tasks.
+// With extended true it also grows the lists to 12 wait items, 8 outcome items
+// and 8 sessions (clones of the first entry, invented names only).
+func d34Snapshot(extended bool) ([]byte, error) {
+	snap, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+	if err != nil {
+		return nil, fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
+	}
+	var snapMap map[string]any
+	if err := json.Unmarshal(snap, &snapMap); err != nil {
+		return nil, err
+	}
+	snapMap["todo"] = map[string]any{"enabled": true, "signed_in": true}
+	var items []map[string]any
+	for k := 1; k <= 14; k++ {
+		items = append(items, map[string]any{"Title": fmt.Sprintf("Example task %d", k), "List": "Sample list", "DueDate": "2026-09-29", "Overdue": k%5 == 0})
+	}
+	snapMap["todo_tasks"] = map[string]any{"items": items}
+	if extended {
+		grow := func(key string, n int, idf, titlef, drop string) {
+			list, _ := snapMap[key].([]any)
+			if len(list) == 0 {
+				return
+			}
+			first, _ := list[0].(map[string]any)
+			for len(list) < n {
+				c := map[string]any{}
+				for k, v := range first {
+					c[k] = v
+				}
+				nn := fmt.Sprintf("%02d", len(list)+1)
+				c["id"] = fmt.Sprintf(idf, nn)
+				if _, ok := c["title"]; ok {
+					c["title"] = fmt.Sprintf(titlef, nn)
+				}
+				if drop != "" {
+					delete(c, drop)
+				}
+				list = append(list, c)
+			}
+			snapMap[key] = list
+		}
+		grow("wait_items", 12, "gate:example__flow__%s:G4", "flow-example-%s", "")
+		grow("outcome_items", 8, "example-outcome-%s", "example-outcome-%s", "")
+		grow("sessions", 8, "example-session-%s", "example-session-%s", "parent_id")
+	}
+	return json.Marshal(snapMap)
+}
 func init() {
 	checks["d34"] = func(hwnd uintptr, args []string) error {
 		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		snap, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+		snap, err := d34Snapshot(false)
 		if err != nil {
-			return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
-		}
-		// Switch To Do on in the snapshot, so its panel is drawn when the page takes it from there.
-		var snapMap map[string]any
-		if err := json.Unmarshal(snap, &snapMap); err != nil {
 			return err
 		}
-		snapMap["todo"] = map[string]any{"enabled": true, "signed_in": true}
-		var items []map[string]any
-		for k := 1; k <= 14; k++ {
-			items = append(items, map[string]any{"Title": fmt.Sprintf("Example task %d", k), "List": "Sample list", "DueDate": "2026-09-29", "Overdue": k%5 == 0})
-		}
-		snapMap["todo_tasks"] = map[string]any{"items": items}
-		if snap, err = json.Marshal(snapMap); err != nil {
+		snapE, err := d34Snapshot(true)
+		if err != nil {
 			return err
 		}
 		allBut := func(off string) map[string]bool {
@@ -279,10 +417,10 @@ func init() {
 			}
 			return m
 		}
-		payload := func(plain bool, c string, scrollbar bool) string {
+		payload := func(plain bool, c string, scrollbar bool, snap []byte) string {
 			o := d29Opts{Plain: plain, Scrollbar: scrollbar, Status: "ok", Snap: snap}
 			switch c {
-			case "a", "d":
+			case "a", "d", "e":
 				o.PlainAll = true
 			case "b":
 				o.StandardOff = map[string]bool{"turn_ticker": true}
@@ -311,19 +449,23 @@ func init() {
 			time.Sleep(500 * time.Millisecond)
 			for _, plain := range []bool{false, true} {
 				mode := map[bool]string{false: "standard", true: "plain"}[plain]
-				for _, c := range []string{"a", "b", "c", "d"} {
+				for _, c := range []string{"a", "b", "c", "d", "e"} {
 					if c == "c" && !plain {
 						continue
 					}
-					if c == "d" && w != 1280 {
+					if (c == "d" || c == "e") && w != 1280 {
 						continue
 					}
 					for _, sb := range []bool{true, false} {
-						if c == "d" && sb {
+						if (c == "d" || c == "e") && sb {
 							continue
 						}
 						sbName := map[bool]string{true: "on", false: "off"}[sb]
-						p, err := d34Apply(payload(plain, c, sb), snap)
+						useSnap := snap
+						if c == "e" {
+							useSnap = snapE
+						}
+						p, err := d34Apply(payload(plain, c, sb, useSnap), useSnap)
 						if err != nil {
 							return err
 						}
@@ -338,9 +480,9 @@ func init() {
 								return err
 							}
 						}
-						bad := d34Verify(p, sb, wantTodo(plain, c))
+						bad := d34Verify(p, sb, wantTodo(plain, c), c == "e")
 						if len(bad) == 0 {
-							fmt.Printf("uicheck: d34: PASS %s %s scrollbar %s case %s (parts %d, largest empty %.0f px, fitScroll %v, two columns %v, To Do drawn %v)\n", tag, mode, sbName, c, p.Parts, p.Empty, p.FitScroll, p.TwoCols, p.TodoDrawn)
+							fmt.Printf("uicheck: d34: PASS %s %s scrollbar %s case %s (parts %d, largest empty %.0f px, fitScroll %v, two columns %v, To Do drawn %v, handles %d%s)\n", tag, mode, sbName, c, p.Parts, p.Empty, p.FitScroll, p.TwoCols, p.TodoDrawn, p.Handles, d34ListNote(p, c == "e"))
 						} else {
 							msg := fmt.Sprintf("%s %s scrollbar %s case %s: %s", tag, mode, sbName, c, strings.Join(bad, "; "))
 							fmt.Printf("uicheck: d34: FAIL %s\n", msg)
@@ -362,4 +504,23 @@ func init() {
 		}
 		return nil
 	}
+}
+
+// d34ListNote formats the host lists of case e as ", lists <sec> h/floor/nat rows N".
+func d34ListNote(p d34Page, on bool) string {
+	if !on {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(", lists")
+	for _, l := range p.Lists {
+		fl, nat := 0.0, 0.0
+		for _, it := range p.Items {
+			if it.Kind == "seclist" && it.ID == l.Sec {
+				fl, nat = it.Floor, it.Nat
+			}
+		}
+		fmt.Fprintf(&b, " %s %.0f/%.0f/%.0f rows %d", l.Sec, l.H, fl, nat, l.Rows)
+	}
+	return b.String()
 }
