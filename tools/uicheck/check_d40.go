@@ -142,6 +142,14 @@ func init() {
 		if err := json.Unmarshal(raw, &L); err != nil {
 			return err
 		}
+		// Own starting state: d34 leaves the page in Plain, which headlines the group
+		// "Waiting for you". Leave fake mode, then Standard with every part on.
+		if _, err := evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`); err != nil {
+			return fail("leave fake mode: %w", err)
+		}
+		if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
+			return fail("set the starting state: %w", err)
+		}
 		idle, want := d40Fixture()
 		L["idle"] = idle
 		b, _ := json.Marshal(map[string]any{"layout": L, "hours": 24})

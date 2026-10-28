@@ -25,6 +25,11 @@ func init() {
 			fmt.Println("uicheck: d20: SKIPPED, this screen is too small for a 1920x1080 window, so the heatmap row is fit-dropped and its labels measure 0px")
 			return nil
 		}
+		// Own starting state: the sections the dev store holds change between runs and
+		// checks (Plain mode drops the heatmap row, which then measures 0 of 0).
+		if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
+			return fmt.Errorf("d20: set the starting state: %w", err)
+		}
 		time.Sleep(300 * time.Millisecond)
 		script := `(function(){
   var nowMs = Date.now(), windowMs = 30 * 60 * 1000, ws = nowMs - windowMs;
