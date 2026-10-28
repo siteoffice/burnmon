@@ -24,12 +24,19 @@ import (
 //     below its last child);
 //   - no part hidden: every [data-part] without .sec-off draws, and the old
 //     "sections hidden" note is gone;
+//   - To Do is drawn in every case that has it on (the page is put in the check
+//     fake mode with a snapshot that switches To Do on, the way d19 does, so the
+//     real To Do never shows rows) and counts in "no part hidden" and in the
+//     24 px measure (gaps between the rows below the columns, and slack inside
+//     the Processes and To Do panels);
 //   - the Processes table sits above To Do (it comes first in the document and
-//     its bottom is at or above To Do's top), and below Process groups, Memory,
-//     Disks and Network;
+//     its bottom is at or above To Do's top, compared as rectangles), and below
+//     Process groups, Memory, Disks and Network;
 //   - scrollbar off: the page scrolls only when window.__bdevFit.fitScroll says
 //     every part is at its floor; otherwise nothing overflows, and in two
 //     columns both columns end on the same line (within 2 px).
+// A probe proves the measure can fail: a 100 px gap is pushed into a column
+// and the same read must report it (d34Probe), once per run.
 // A window size the screen cannot hold prints SKIPPED and is not a pass.
 // Screenshots: d34-<size>-<mode>-<case>-<sb>.
 
@@ -59,6 +66,7 @@ type d34Page struct {
 	ColDiff    float64  `json:"colDiff"`
 	Parts      int      `json:"parts"`
 	TodoDrawn  bool     `json:"todoDrawn"`
+	AboveSeen  bool     `json:"aboveSeen"`
 }
 
 const d34ReadJS = `(function(){
@@ -67,6 +75,14 @@ const d34ReadJS = `(function(){
   var ps = document.getElementById('pageScroll'), host = document.getElementById('secHost');
   var empty = 0, where = '', zone = 0;
   var note = function(v, w){ if(v > empty){ empty = v; where = w; } };
+  var slack = function(k, name){
+    var r = k.getBoundingClientRect();
+    var inner = Array.prototype.filter.call(k.children, function(c){ return shown(c) && c.getBoundingClientRect().height > 0.5; });
+    if(!inner.length) return;
+    var ib = 0;
+    inner.forEach(function(c){ ib = Math.max(ib, c.getBoundingClientRect().bottom); });
+    note(r.bottom - parseFloat(getComputedStyle(k).paddingBottom) - ib, name + ' slack inside ' + (k.id || k.className));
+  };
   var zones = Array.prototype.filter.call(document.querySelectorAll('.zone'), shown);
   zones.forEach(function(z){
     var zb = z.querySelector('.zonebody');
@@ -83,24 +99,24 @@ const d34ReadJS = `(function(){
       var r = k.getBoundingClientRect();
       note(r.top - prev, name + ' gap before child ' + i + ' (' + (k.id || k.className) + ')');
       prev = Math.max(prev, r.bottom);
-      if(k.classList.contains('panel')){
-        var inner = Array.prototype.filter.call(k.children, function(c){ return shown(c) && c.getBoundingClientRect().height > 0.5; });
-        if(inner.length){
-          var ib = 0;
-          inner.forEach(function(c){ ib = Math.max(ib, c.getBoundingClientRect().bottom); });
-          var kcs = getComputedStyle(k);
-          note(r.bottom - parseFloat(kcs.paddingBottom) - ib, name + ' slack inside ' + (k.id || k.className));
-        }
-      }
+      if(k.classList.contains('panel')) slack(k, name);
     });
     note(bot - prev, name + ' gap below last child');
+  });
+  // The rows below the columns: Processes, then To Do.
+  var rows = [q('#processesHost [data-part="processes"]'), q('#todoPanel')].filter(function(e){ return shown(e) && !e.classList.contains('sec-off'); });
+  var prevBottom = null, mainEl = q('main');
+  if(shown(mainEl)) prevBottom = mainEl.getBoundingClientRect().bottom;
+  rows.forEach(function(k){
+    var r = k.getBoundingClientRect();
+    if(prevBottom !== null) note(r.top - prevBottom, 'gap above ' + (k.id || k.className));
+    prevBottom = r.bottom;
+    slack(k, 'row');
   });
   var hidden = [], parts = {};
   Array.prototype.forEach.call(document.querySelectorAll('[data-part]'), function(e){
     if(e.classList.contains('sec-off')) return;
     var id = e.getAttribute('data-part');
-    // To Do the app has switched off (todo.enabled false) is not a hidden part.
-    if(id === 'todo' && e.style.display === 'none') return;
     if(shown(e)) parts[id] = true;
     else if(hidden.indexOf(id) < 0) hidden.push(id);
   });
@@ -108,9 +124,10 @@ const d34ReadJS = `(function(){
   var procOn = shown(proc), procFirst = true, above = true, below = true;
   var host2 = q('#processesHost');
   if(host2 && todo) procFirst = !!(host2.compareDocumentPosition(todo) & Node.DOCUMENT_POSITION_FOLLOWING);
+  var seen = false;
   if(procOn){
     var pr = proc.getBoundingClientRect();
-    if(shown(todo) && !todo.classList.contains('sec-off')) above = pr.bottom <= todo.getBoundingClientRect().top + 1;
+    if(shown(todo) && !todo.classList.contains('sec-off')){ above = pr.bottom <= todo.getBoundingClientRect().top + 1; seen = true; }
     ['#processGroupsPanel', '#boxMemory', '#boxDisks', '#boxNetwork'].forEach(function(s){
       var e = q(s);
       if(shown(e) && e.getBoundingClientRect().bottom > pr.top + 1) below = false;
@@ -133,13 +150,18 @@ const d34ReadJS = `(function(){
     cutNote: !!document.getElementById('secCutNote'),
     empty: Math.max(0, empty), emptyWhere: where,
     procOn: procOn, procFirst: procFirst, procAbove: above, procBelow: below,
-    twoCols: two, colDiff: colDiff, parts: Object.keys(parts).length, todoDrawn: shown(todo)
+    twoCols: two, colDiff: colDiff, parts: Object.keys(parts).length, todoDrawn: shown(todo), aboveSeen: seen
   };
 })()`
 
-func d34Apply(payload string) (d34Page, error) {
+func d34Apply(payload string, snap []byte) (d34Page, error) {
 	var p d34Page
 	if _, err := evalRaw(`window.__bdevSections.apply(` + payload + `)`); err != nil {
+		return p, err
+	}
+	// Fake mode, then one paint of the snapshot that switches To Do on: the
+	// real tick is stopped, so nothing paints over it (the d19 way).
+	if _, err := evalRaw(`(function(s){ window.__bdevEnterFakeMode(); window.__bdevPaintFake(s); return true; })(` + string(snap) + `)`); err != nil {
 		return p, err
 	}
 	time.Sleep(800 * time.Millisecond)
@@ -148,10 +170,16 @@ func d34Apply(payload string) (d34Page, error) {
 }
 
 // d34Verify returns the problems found in one read, empty when the case passes.
-func d34Verify(p d34Page, scrollbar bool) []string {
+func d34Verify(p d34Page, scrollbar, wantTodo bool) []string {
 	var bad []string
 	if !p.Fit {
 		return []string{"window.__bdevFit is missing"}
+	}
+	if wantTodo && !p.TodoDrawn {
+		bad = append(bad, "To Do is on but not drawn")
+	}
+	if wantTodo && p.ProcOn && !p.AboveSeen {
+		bad = append(bad, "Processes and To Do are both on but the rectangles were not compared")
 	}
 	if p.Empty > d34MaxEmpty+0.5 {
 		bad = append(bad, fmt.Sprintf("empty area %.0f px (%s), limit %.0f", p.Empty, p.EmptyWhere, d34MaxEmpty))
@@ -185,8 +213,45 @@ func d34Verify(p d34Page, scrollbar bool) []string {
 	return bad
 }
 
+// d34Probe proves the empty-area measure can fail. It moves the last child of
+// the first visible column 100 px down with a transform (a layout change would
+// let the flex column squeeze the gap away), reads the page with the same
+// script and puts the transform back. The read must report at least 99 px and
+// d34Verify must turn that into a failure. Returns an error when it does not.
+func d34Probe() error {
+	if _, err := evalRaw(`(function(){ var zb = Array.prototype.filter.call(document.querySelectorAll('.zone .zonebody'), function(e){ return e.getClientRects().length > 0; })[0];
+		if(!zb) return false;
+		var kids = Array.prototype.filter.call(zb.children, function(c){ return c.getBoundingClientRect().height > 0.5; });
+		var k = kids[kids.length - 1]; if(!k) return false;
+		k.setAttribute('data-d34probe', k.style.transform || '-'); k.style.transform = 'translateY(100px)'; return true; })()`); err != nil {
+		return err
+	}
+	var p d34Page
+	err := evalInto(d34ReadJS, &p)
+	_, _ = evalRaw(`(function(){ var k = document.querySelector('[data-d34probe]'); if(!k) return false;
+		var o = k.getAttribute('data-d34probe'); k.style.transform = o === '-' ? '' : o; k.removeAttribute('data-d34probe'); return true; })()`)
+	if err != nil {
+		return err
+	}
+	if p.Empty < 99 {
+		return fmt.Errorf("probe: a 100 px gap measured as %.0f px (%s), the measure cannot fail", p.Empty, p.EmptyWhere)
+	}
+	failed := false
+	for _, b := range d34Verify(p, true, true) {
+		if strings.HasPrefix(b, "empty area") {
+			failed = true
+		}
+	}
+	if !failed {
+		return fmt.Errorf("probe: a %.0f px gap did not fail d34Verify", p.Empty)
+	}
+	fmt.Printf("uicheck: d34: probe OK, a deliberate 100 px gap measured %.0f px (%s) and failed the check\n", p.Empty, p.EmptyWhere)
+	return nil
+}
+
 func init() {
 	checks["d34"] = func(hwnd uintptr, args []string) error {
+		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 		snap, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
 		if err != nil {
 			return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
@@ -227,6 +292,8 @@ func init() {
 			}
 			return d29Payload(o)
 		}
+		wantTodo := func(plain bool, c string) bool { return !(plain && c == "c") }
+		probed := false
 		sizes := [][2]int32{{1280, 800}, {1920, 1080}, {2560, 1440}}
 		var fails []string
 		ran, skipped := 0, 0
@@ -256,7 +323,7 @@ func init() {
 							continue
 						}
 						sbName := map[bool]string{true: "on", false: "off"}[sb]
-						p, err := d34Apply(payload(plain, c, sb))
+						p, err := d34Apply(payload(plain, c, sb), snap)
 						if err != nil {
 							return err
 						}
@@ -265,7 +332,13 @@ func init() {
 						if _, err := screenshot(hwnd, name); err != nil {
 							return err
 						}
-						bad := d34Verify(p, sb)
+						if !probed {
+							probed = true
+							if err := d34Probe(); err != nil {
+								return err
+							}
+						}
+						bad := d34Verify(p, sb, wantTodo(plain, c))
 						if len(bad) == 0 {
 							fmt.Printf("uicheck: d34: PASS %s %s scrollbar %s case %s (parts %d, largest empty %.0f px, fitScroll %v, two columns %v, To Do drawn %v)\n", tag, mode, sbName, c, p.Parts, p.Empty, p.FitScroll, p.TwoCols, p.TodoDrawn)
 						} else {

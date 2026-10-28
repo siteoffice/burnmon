@@ -28,6 +28,12 @@ func init() {
 		var errs []string
 		skipped := 0
 		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+		// Own starting state, so the order of checks does not matter: d29 leaves
+		// the page in Plain with a stale reading. Standard, every part on,
+		// Overall scrollbar off, a fresh reading.
+		if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
+			return fmt.Errorf("d19: set the starting state: %w", err)
+		}
 		for _, c := range cases {
 			if err := ensureWindowSizeWH(hwnd, c.w, c.h); err != nil {
 				return err
