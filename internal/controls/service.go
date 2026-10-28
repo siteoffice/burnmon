@@ -620,7 +620,11 @@ func (s *Service) Run(token string) (RunResult, error) {
 			timeout, dir = runGateTimeout, filepath.Dir(SprintScript(s.Env.ForemanRoot))
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		code, first, rerr := s.Env.Runner.Run(ctx, pe.Argv, dir)
+		run := s.Env.Runner.Run
+		if ll, ok := s.Env.Runner.(LastLineRunner); ok && pe.Target.Control == CloseSprint {
+			run = ll.RunLast
+		}
+		code, first, rerr := run(ctx, pe.Argv, dir)
 		cancel()
 		switch {
 		case rerr != nil:

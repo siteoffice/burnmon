@@ -98,8 +98,30 @@ func History(st *store.Store, hi HistoryInput) (Graph, error) {
 		b.node(Node{ID: n.ID, Kind: n.Kind, Label: n.Label, Vendor: n.Vendor, Attrs: attrs, Source: n.Source, AgeSeconds: b.age(n.LastSeen)})
 	}
 	for _, e := range edges {
+		if e.Kind == KindWaitsOn && !b.stillWaits(e) {
+			continue
+		}
 		b.edge(Edge{From: e.From, To: e.To, Kind: e.Kind, Basis: e.Basis, Source: e.Source, AgeSeconds: b.age(e.LastSeen),
 			FirstSeen: utc(e.FirstSeen), LastSeen: utc(e.LastSeen)})
 	}
 	return b.g, nil
+}
+
+// stillWaits reports whether a stored waits_on edge still means Blocked under
+// the B6 rules. Older ticks stored one for every idle session (source
+// claude_pids) and every stage-waiting session (source store); those are Your
+// turn now, so they are dropped. A sprint that Build marked closeout or
+// branch_gone keeps no stored edge. Only an agent view or transcript ask
+// session edge, a gate, or a sprint Build left Blocked survives.
+func (b *builder) stillWaits(e store.GraphEdge) bool {
+	if i, ok := b.nodes[e.From]; ok {
+		n := b.g.Nodes[i]
+		if n.Kind == KindSprint && (n.Attrs["closeout"] == "true" || n.Attrs["branch_gone"] == "true") {
+			return false
+		}
+	}
+	if strings.HasPrefix(e.From, "session:") {
+		return e.Source == SourceAgentView || e.Source == SourceTranscriptAsk
+	}
+	return true
 }

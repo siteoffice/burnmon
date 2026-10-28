@@ -12,6 +12,7 @@ import (
 
 	"burnmon/internal/agentmap"
 	"burnmon/internal/graph"
+	"burnmon/internal/schema"
 	"burnmon/internal/store"
 	"burnmon/internal/waits"
 )
@@ -135,5 +136,88 @@ func TestHistoryMapDeletedBranch(t *testing.T) {
 	}
 	if p.Layout.Counts.Waiting != 0 {
 		t.Errorf("history Blocked %d, want 0: a merged-by-message and a branch-gone sprint are both off the amber count", p.Layout.Counts.Waiting)
+	}
+}
+
+// A stored waits_on edge is only kept when its source still means Blocked
+// under B6: a merged sprint and an idle-pid session (written by older ticks
+// for every idle session) are not waiters in the history map, an agent view
+// blocked session and a transcript ask are. Header count, You box and edge
+// set agree.
+func TestHistoryMapDropsStaleStoredWaitsOn(t *testing.T) {
+	root := t.TempDir()
+	writeForeman(t, filepath.Join(root, "sprints", "p", "m", "sprint.json"), `{"sprint_id":"p__m__1","slug":"m","worktree_path":"C:\\example\\repo\\.worktrees\\m","worktree_branch":"sprint/example-merged","phase":"report","status":"waiting-on-you","updated_at":"2026-10-23T10:00:00Z"}`)
+	merged := func(repo, branch string) (bool, bool) { return branch == "sprint/example-merged", repo == `C:\example\repo` }
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	at := now.Add(-3 * time.Hour)
+	st, err := store.Open(filepath.Join(t.TempDir(), "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	var evs []schema.Event
+	for _, id := range []string{"SIDLE", "SBLOCK", "SASK"} {
+		evs = append(evs, schema.Event{Vendor: "anthropic", Agent: "claude-code", Surface: "cli", SessionID: id, RequestID: "r-" + id, Model: "m", Project: `C:\w\repo`, At: at, Input: 1, Output: 1})
+	}
+	if err := st.UpsertEvents(evs); err != nil {
+		t.Fatal(err)
+	}
+	idle, blocked, ask := graph.SessionID("anthropic", "SIDLE"), graph.SessionID("anthropic", "SBLOCK"), graph.SessionID("anthropic", "SASK")
+	if _, err := st.RecordGraph(
+		[]store.GraphNode{{ID: "person:you", Kind: graph.KindPerson, Label: "You", Source: graph.SourceStore}},
+		[]store.GraphEdge{
+			{From: "sprint:p__m__1", To: "person:you", Kind: graph.KindWaitsOn, Basis: graph.BasisVendor, Source: graph.SourceForeman},
+			{From: idle, To: "person:you", Kind: graph.KindWaitsOn, Basis: graph.BasisVendor, Source: graph.SourceClaudePids},
+			{From: blocked, To: "person:you", Kind: graph.KindWaitsOn, Basis: graph.BasisVendor, Source: graph.SourceAgentView},
+			{From: ask, To: "person:you", Kind: graph.KindWaitsOn, Basis: graph.BasisInferred, Source: graph.SourceTranscriptAsk},
+		}, at); err != nil {
+		t.Fatal(err)
+	}
+	env := agentMapEnv{DataDir: t.TempDir(), St: st, ForemanRoot: root, MergedFor: merged}
+	p, err := agentMapFor(env, agentMapRequest{Source: "history", Hours: 24}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sprints, flows, err := graph.ReadForeman(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hg, err := graph.History(st, graph.HistoryInput{From: now.Add(-24 * time.Hour), To: now, Now: now,
+		Sprints: sprints, Flows: flows, MergedFor: merged})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(waitsOnFrom(hg.Edges), ",")
+	if want := ask + "," + blocked; got != want {
+		t.Errorf("waits_on edges %q, want %q (agent view and transcript ask only)", got, want)
+	}
+	if p.Layout.Counts.Waiting != 2 {
+		t.Errorf("header Blocked %d, want 2", p.Layout.Counts.Waiting)
+	}
+	if y, ok := boxIn(p.Layout, "you"); !ok || !strings.HasPrefix(y.Line, "2 waiting") {
+		t.Errorf("You box %q (found %v), want 2 waiting", y.Line, ok)
+	}
+	for _, i := range p.Layout.Idle {
+		if i.WaitsOnYou {
+			t.Errorf("idle row %+v waits on you; the merged sprint must not", i)
+		}
+	}
+	for _, f := range p.Layout.Frames {
+		if f.WaitsOnYou {
+			t.Errorf("frame %+v is amber", f)
+		}
+	}
+	for _, l := range p.Layout.Lines {
+		if l.You && !strings.Contains(l.From, "SBLOCK") && !strings.Contains(l.From, "SASK") {
+			t.Errorf("amber line %+v", l)
+		}
+	}
+	for _, b := range p.Layout.Boxes {
+		if strings.Contains(b.ID, "SIDLE") && b.WaitsOnYou {
+			t.Errorf("idle-pid session box %+v is Blocked", b)
+		}
+		if strings.Contains(b.ID, "SBLOCK") && !b.WaitsOnYou {
+			t.Errorf("agent view session box %+v is not Blocked", b)
+		}
 	}
 }

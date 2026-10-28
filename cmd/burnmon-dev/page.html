@@ -666,7 +666,7 @@ body.plain #mapOverlay{font-size:13.5px}
     <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="attach"> Attach to a session</label><div class="dim ctlwhy" data-ctl-why="attach"></div></div>
     <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="approve"> Approve a gate</label><div class="dim ctlwhy" data-ctl-why="approve"></div></div>
     <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
-    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint"> Close a merged sprint</label><div class="dim ctlwhy" data-ctl-why="close_sprint"></div></div>
+    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint"> Close sprint</label><div class="dim ctlwhy" data-ctl-why="close_sprint"></div></div>
   </div>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
@@ -3689,12 +3689,13 @@ body.plain #mapOverlay{font-size:13.5px}
     var cost = outcome ? '' : secCostLine(it);
     var shown = plain ? word : txt;
     var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age) + (cost ? ', ' + cost : '');
-    // Foreman refuses to close a sprint with no report.md or with parked lines
-    // in its Close-out block, so the Close chip shows only when it would accept.
-    var closeable = it.kind === 'close_out' && !!it.report_path && !(it.parked_lines > 0), note = '';
+    // Foreman's close-out gate refuses a sprint with no report.md, parked lines or
+    // any other close-out failure, so the Close chip shows only when close_ok says
+    // Foreman would accept; otherwise the reason shows.
+    var closeable = it.kind === 'close_out' && !!it.report_path && it.close_ok === true && !(it.parked_lines > 0), note = '';
     if(it.kind === 'close_out' && !closeable){
       var np = it.parked_lines | 0;
-      note = np > 0 ? ' ' + link(it.report_path, np + (np === 1 ? ' parked line' : ' parked lines'), '') : ' <span class="dim">no report yet</span>';
+      note = np > 0 ? ' ' + link(it.report_path, np + (np === 1 ? ' parked line' : ' parked lines'), '') : !it.report_path ? ' <span class="dim">no report yet</span>' : ' <span class="dim">' + esc(it.close_reason || 'Foreman would not accept the close') + '</span>';
     }
     var chips = '', lines = '';
     if(!outcome){

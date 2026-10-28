@@ -200,7 +200,7 @@ func TestHistoryMapUsesCountOf(t *testing.T) {
 	sid := graph.SessionID("anthropic", "S1")
 	if _, err := st.RecordGraph(
 		[]store.GraphNode{{ID: "person:you", Kind: graph.KindPerson, Label: "You", Source: graph.SourceStore}},
-		[]store.GraphEdge{{From: sid, To: "person:you", Kind: graph.KindWaitsOn, Basis: "agent-view", Source: "agent-view"}},
+		[]store.GraphEdge{{From: sid, To: "person:you", Kind: graph.KindWaitsOn, Basis: graph.BasisVendor, Source: graph.SourceAgentView}},
 		at); err != nil {
 		t.Fatal(err)
 	}

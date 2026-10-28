@@ -76,6 +76,16 @@ func classifyRun(err error, killed bool, ctxErr error) (int, error) {
 }
 
 func (ExecRunner) Run(ctx context.Context, argv []string, dir string) (int, string, error) {
+	return execRun(ctx, argv, dir, false)
+}
+
+// RunLast is Run for the Close control: on a nonzero exit the line is the last
+// stderr line (a failing Python script prints its reason last), cut to 300 runes.
+func (ExecRunner) RunLast(ctx context.Context, argv []string, dir string) (int, string, error) {
+	return execRun(ctx, argv, dir, true)
+}
+
+func execRun(ctx context.Context, argv []string, dir string, last bool) (int, string, error) {
 	if err := validateArgv(argv); err != nil {
 		return -1, "", err
 	}
@@ -96,7 +106,7 @@ func (ExecRunner) Run(ctx context.Context, argv []string, dir string) (int, stri
 	err := cmd.Run()
 	code, cerr := classifyRun(err, killed.Load(), ctx.Err())
 	line := firstLine(out.b.String(), errb.b.String())
-	if code != 0 {
+	if code != 0 && last {
 		// A failing script prints its reason last (a Python traceback ends
 		// with the error line), so a nonzero exit prefers the last stderr line.
 		if l := lastLine(errb.b.String(), closeReasonMax); l != "" {

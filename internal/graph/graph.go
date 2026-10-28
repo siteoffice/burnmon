@@ -66,6 +66,11 @@ const (
 	SourceStore      = "store"
 	SourceSysmon     = "sysmon"
 	SourceClaudePids = "claude_pids"
+	// SourceTranscriptAsk is the source of a waits_on edge drawn from an open
+	// question or plan approval in a transcript. It differs from SourceStore so
+	// the history map can tell it from the pre-B6 stage-waiting edge, which
+	// used SourceStore with the same basis.
+	SourceTranscriptAsk = "transcript_ask"
 	SourceForeman    = "foreman"
 	SourceMCPConfig  = "mcp_config"
 	SourceNetTables  = "net_tables"
@@ -201,6 +206,10 @@ type Sprint struct {
 	// read only for a sprint that is waiting on you.
 	ReportPath  string
 	ParkedLines int
+	// CloseOK and CloseReason are CloseOutVerdict for the sprint folder: whether
+	// Foreman's close-out gate would accept, and why not. Read with ReportPath.
+	CloseOK     bool
+	CloseReason string
 }
 
 // Check is one recorded test or verify result.

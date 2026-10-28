@@ -37,7 +37,7 @@ func SprintScript(root string) string {
 // its sibling modules. The caller passes values CheckSprint has validated.
 func CloseArgv(pythonPath, root, sprintDir string) []string {
 	return []string{pythonPath, "-E", "-s", SprintScript(root), sprintDir,
-		"--phase", "done", "--action", "sprint_done", "--actor", "burnmon",
+		"--phase", "done", "--action", "sprint_done", "--actor", "human",
 		"--detail", CloseDetail, "--status", "done"}
 }
 
@@ -97,6 +97,12 @@ func CheckSprint(t Target, sprints []graph.Sprint, merged func(repo, branch stri
 		return errors.New("the sprint has no report.md yet, Foreman would refuse to close it")
 	case s.ParkedLines > 0:
 		return fmt.Errorf("the sprint's report has %d parked lines, Foreman would refuse to close it", s.ParkedLines)
+	case !s.CloseOK:
+		reason := s.CloseReason
+		if reason == "" {
+			reason = graph.ReasonNotMirrored
+		}
+		return errors.New("Foreman would refuse to close this sprint: " + reason)
 	}
 	return nil
 }

@@ -75,6 +75,11 @@ type Item struct {
 	// without a report, so the page shows no Close chip then.
 	ParkedLines int    `json:"parked_lines,omitempty"`
 	ReportPath  string `json:"report_path,omitempty"`
+	// CloseOK and CloseReason, close_out only: graph.CloseOutVerdict, whether
+	// Foreman's close-out gate would accept the report, and why not. The page
+	// shows the Close chip only when CloseOK is true.
+	CloseOK     bool   `json:"close_ok,omitempty"`
+	CloseReason string `json:"close_reason,omitempty"`
 }
 
 // Counts is the one count of the wait list, per group.
@@ -365,7 +370,7 @@ func Build(in Input) (wait, outcomes []Item) {
 		}
 		id := strings.TrimPrefix(n.ID, "sprint:")
 		title, project, spec, result := n.Label, "", "", ""
-		report, parked := "", 0
+		report, parked, closeOK, closeReason := "", 0, false, ""
 		since := now.Add(-time.Duration(n.AgeSeconds) * time.Second)
 		for _, s := range in.Sprints {
 			if s.ID != id {
@@ -376,11 +381,12 @@ func Build(in Input) (wait, outcomes []Item) {
 			if since.IsZero() {
 				since = s.UpdatedAt
 			}
-			report, parked = s.ReportPath, s.ParkedLines
+			report, parked, closeOK, closeReason = s.ReportPath, s.ParkedLines, s.CloseOK, s.CloseReason
 		}
 		it := mk(KindCloseOut, "closeout:"+id, title, project, "Done, needs close-out", since, spec, result, graph.SourceForeman)
 		it.SprintID = id
 		it.ReportPath, it.ParkedLines = report, parked
+		it.CloseOK, it.CloseReason = closeOK, closeReason
 		sess := workers[n.ID]
 		add(it, since, 1+len(sess), held(sess))
 	}

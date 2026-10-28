@@ -293,7 +293,7 @@ func TestCloseOutCarriesReportFacts(t *testing.T) {
 	}}
 	sprints := []graph.Sprint{
 		{ID: "s1", Slug: "parked", Status: "waiting-on-you", UpdatedAt: now, ReportPath: `C:\example\s1\report.md`, ParkedLines: 3},
-		{ID: "s2", Slug: "clean", Status: "waiting-on-you", UpdatedAt: now, ReportPath: `C:\example\s2\report.md`},
+		{ID: "s2", Slug: "clean", Status: "waiting-on-you", UpdatedAt: now, ReportPath: `C:\example\s2\report.md`, CloseOK: true},
 		{ID: "s3", Slug: "noreport", Status: "waiting-on-you", UpdatedAt: now},
 	}
 	w, _ := Build(Input{Now: now, Graph: g, Sprints: sprints})
@@ -307,7 +307,13 @@ func TestCloseOutCarriesReportFacts(t *testing.T) {
 	if it := by["closeout:s2"]; it.ParkedLines != 0 || it.ReportPath != `C:\example\s2\report.md` {
 		t.Errorf("s2 = %+v", it)
 	}
-	if it := by["closeout:s3"]; it.ParkedLines != 0 || it.ReportPath != "" {
+	if it := by["closeout:s2"]; !it.CloseOK || it.CloseReason != "" {
+		t.Errorf("s2 verdict = %+v, want CloseOK", it)
+	}
+	if it := by["closeout:s1"]; it.CloseOK {
+		t.Errorf("s1 = %+v, a sprint whose gate would refuse is not CloseOK", it)
+	}
+	if it := by["closeout:s3"]; it.ParkedLines != 0 || it.ReportPath != "" || it.CloseOK {
 		t.Errorf("s3 = %+v", it)
 	}
 }

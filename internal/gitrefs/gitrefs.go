@@ -386,37 +386,52 @@ func (c *Checker) MergedByMessage(repo, branch string) (found, known bool) {
 	return found, true
 }
 
-// namesBranch reports whether msg holds branch as a whole token: the name is
-// preceded by the start, whitespace, a quote, a slash (an owner prefix) or
-// other punctuation, and followed by the end, whitespace, a quote or other
-// punctuation. Letters, digits, ".", "_", "-" and "/" glue a name to a longer
-// word or branch ("sprint/a" is not in "sprint/ab" or "sprint/a/b").
+// namesBranch reports whether the SUBJECT line of a merge commit message
+// names branch, in one of the forms a merge writes. The body and any other
+// text never count. The subject must be, exactly and case-sensitive:
+//
+//	Merge branch '<b>'  or  Merge branch "<b>", optionally followed by
+//	" into <word>" and nothing else
+//	Merge pull request #<N> from <owner>/<b>, where <owner> is one segment
+//	without "/" (so the first segment is the owner, and branch "work/x" is
+//	named by "from wilco/work/x" but branch "x" is not)
+//	merge <b>  or  merge: <b>, the hub's own hand-written merge subjects
 func namesBranch(msg, branch string) bool {
-	glue := func(c byte) bool {
-		return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '.' || c == '_' || c == '-'
+	if branch == "" {
+		return false
 	}
-	for from := 0; from < len(msg); {
-		i := strings.Index(msg[from:], branch)
-		if i < 0 {
-			return false
-		}
-		i += from
-		end := i + len(branch)
-		from = i + 1
-		if i > 0 && glue(msg[i-1]) {
-			continue
-		}
-		if end < len(msg) {
-			c := msg[end]
-			if glue(c) && !(c == '.' && (end+1 == len(msg) || msg[end+1] == ' ' || msg[end+1] == '\n' || msg[end+1] == '\r')) || c == '/' {
-				continue
+	subject := msg
+	if i := strings.IndexByte(subject, '\n'); i >= 0 {
+		subject = subject[:i]
+	}
+	subject = strings.TrimSuffix(subject, "\r")
+	switch {
+	case strings.HasPrefix(subject, "Merge branch "):
+		rest := strings.TrimPrefix(subject, "Merge branch ")
+		for _, q := range []string{"'", `"`} {
+			if after, ok := strings.CutPrefix(rest, q+branch+q); ok {
+				if after == "" {
+					return true
+				}
+				word, ok := strings.CutPrefix(after, " into ")
+				return ok && word != "" && !strings.ContainsAny(word, " \t")
 			}
 		}
-		return true
+		return false
+	case strings.HasPrefix(subject, "Merge pull request #"):
+		num, rest, ok := strings.Cut(strings.TrimPrefix(subject, "Merge pull request #"), " from ")
+		if !ok || num == "" || strings.Trim(num, "0123456789") != "" {
+			return false
+		}
+		owner, name, ok := strings.Cut(rest, "/")
+		return ok && owner != "" && name == branch
+	case strings.HasPrefix(subject, "merge: "):
+		return strings.TrimPrefix(subject, "merge: ") == branch
+	case strings.HasPrefix(subject, "merge "):
+		return strings.TrimPrefix(subject, "merge ") == branch
 	}
 	return false
 }
-
 // MergedOrGone is Merged, and for a branch whose ref is gone it is the
 // message search instead. The Close control uses it, so a sprint found
 // merged by message can be closed like any merged one.

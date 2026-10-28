@@ -80,7 +80,7 @@ func (b *builder) waitStates(byID map[string]Session, idle map[string]PidFile) {
 		case s.AskOpen && asksInTranscript[strings.ToLower(s.Agent)]:
 			state = WaitBlocked
 			b.person()
-			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisInferred, Source: SourceStore, AgeSeconds: age})
+			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisInferred, Source: SourceTranscriptAsk, AgeSeconds: age})
 		case parentRuns[id]:
 			state = WaitWorking
 		case hasAgent && a.Status == "busy":

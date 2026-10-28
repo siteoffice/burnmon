@@ -40,7 +40,8 @@ func (c *closeRig) goodSprint() graph.Sprint {
 		Dir:          dir,
 		Branch:       closeBranch,
 		WorktreePath: closeWT,
-		ReportPath:   filepath.Join(dir, "report.md")}
+		ReportPath:   filepath.Join(dir, "report.md"),
+		CloseOK:       true}
 }
 
 func newCloseRig(t *testing.T) *closeRig {
@@ -90,7 +91,7 @@ func TestCloseArgv(t *testing.T) {
 	got := CloseArgv(`C:\py\python.exe`, `C:\example\root`, `C:\example\root\sprints\example\example-merged`)
 	want := []string{`C:\py\python.exe`, "-E", "-s", `C:\example\root\sprints\_lib\sprint_step.py`,
 		`C:\example\root\sprints\example\example-merged`, "--phase", "done", "--action", "sprint_done",
-		"--actor", "burnmon", "--detail", "branch in main, closed from BurnMon Dev", "--status", "done"}
+		"--actor", "human", "--detail", "branch in main, closed from BurnMon Dev", "--status", "done"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("CloseArgv = %q", got)
 	}
@@ -185,6 +186,9 @@ func TestCloseRefusesBadSprint(t *testing.T) {
 			c.set(func(s *graph.Sprint) { s.ReportPath = filepath.Join(c.root, "elsewhere", "report.md") })
 		},
 		"parked lines": func(c *closeRig) { c.set(func(s *graph.Sprint) { s.ParkedLines = 2 }) },
+		"gate would fail": func(c *closeRig) {
+			c.set(func(s *graph.Sprint) { s.CloseOK, s.CloseReason = false, "Foreman's close-out gate fails: line 3: no class" })
+		},
 	}
 	for name, mut := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -487,6 +491,8 @@ func TestCloseRefusesWithReason(t *testing.T) {
 		want string
 	}{
 		"parked":    {func(s *graph.Sprint) { s.ParkedLines = 3 }, "3 parked lines"},
+		"gate fails": {func(s *graph.Sprint) { s.CloseOK, s.CloseReason = false, "Foreman's close-out gate fails: line 3: no class" }, "line 3: no class"},
+		"not mirrored": {func(s *graph.Sprint) { s.CloseOK, s.CloseReason = false, "" }, graph.ReasonNotMirrored},
 		"no report": {func(s *graph.Sprint) { s.ReportPath = "" }, "no report.md"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -511,5 +517,58 @@ func TestCloseRefusesWithReason(t *testing.T) {
 				t.Error("sprint_step.py would have started")
 			}
 		})
+	}
+}
+
+// lastLineRunner is a fakeRunner that also offers RunLast and counts which
+// method ran.
+type lastLineRunner struct {
+	fakeRunner
+	last, plain int
+}
+
+func (l *lastLineRunner) Run(ctx context.Context, argv []string, dir string) (int, string, error) {
+	l.mu.Lock()
+	l.plain++
+	l.mu.Unlock()
+	return l.fakeRunner.Run(ctx, argv, dir)
+}
+
+func (l *lastLineRunner) RunLast(ctx context.Context, argv []string, dir string) (int, string, error) {
+	l.mu.Lock()
+	l.last++
+	l.mu.Unlock()
+	return l.fakeRunner.Run(ctx, argv, dir)
+}
+
+// Only the Close control asks for the last line; Stop uses plain Run.
+func TestOnlyCloseUsesRunLast(t *testing.T) {
+	c := newCloseRig(t)
+	lr := &lastLineRunner{}
+	c.env.Runner = lr
+	c.rebuild()
+	pv, err := c.preview(CloseSprint, closeItemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.confirm(pv.Token); err != nil {
+		t.Fatal(err)
+	}
+	if lr.last != 1 || lr.plain != 0 {
+		t.Errorf("close: RunLast %d, Run %d, want 1 and 0", lr.last, lr.plain)
+	}
+	r := newRig(t)
+	lr2 := &lastLineRunner{}
+	r.env.Runner = lr2
+	r.rebuild()
+	p, err := r.preview(Stop, "ab12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.confirm(p.Token); err != nil {
+		t.Fatal(err)
+	}
+	if lr2.last != 0 || lr2.plain != 1 {
+		t.Errorf("stop: RunLast %d, Run %d, want 0 and 1", lr2.last, lr2.plain)
 	}
 }

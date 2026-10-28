@@ -401,7 +401,10 @@ func main() {
 	// bdevOpenItemFile (R9): opens a spec or result file only when the current
 	// snapshot lists that exact path (item_files.go). The page input is untrusted.
 	if err := w.Bind("bdevOpenItemFile", func(path string) error {
-		return bdevOpenItemFile(snapPath, path)
+		a.mu.Lock()
+		root := a.cfg.ForemanRoot
+		a.mu.Unlock()
+		return bdevOpenItemFile(snapPath, path, root)
 	}); err != nil {
 		log.Println("could not bind bdevOpenItemFile:", err)
 	}

@@ -291,6 +291,7 @@ func ReadForeman(root string) ([]Sprint, []Flow, error) {
 		}
 		if s.Status == "waiting-on-you" {
 			s.ReportPath, s.ParkedLines = readReport(dir)
+			s.CloseOK, s.CloseReason, _ = CloseOutVerdict(dir)
 		}
 		s.Test = rawCheck(m["last_test_result"])
 		s.Verify = rawVerify(m["last_verify_result"])

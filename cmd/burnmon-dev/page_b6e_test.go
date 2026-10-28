@@ -29,7 +29,7 @@ func TestPageBranchGoneRow(t *testing.T) {
 
 func TestPageCloseChipOnlyWhenForemanWouldAccept(t *testing.T) {
 	row := pageFuncBody(t, "secItemRow")
-	for _, want := range []string{"report_path", "parked_lines", "parked line", "no report yet"} {
+	for _, want := range []string{"report_path", "parked_lines", "parked line", "no report yet", "close_reason"} {
 		if !strings.Contains(row, want) {
 			t.Errorf("secItemRow lacks %q", want)
 		}
@@ -46,7 +46,14 @@ func TestPageCloseChipOnlyWhenForemanWouldAccept(t *testing.T) {
 	if !strings.Contains(branch, "closeable") || !strings.Contains(branch, "ctlChips('closeout'") {
 		t.Errorf("the close_out chip is not gated on closeable: %q", branch)
 	}
-	if !strings.Contains(row, "var closeable = ") || !strings.Contains(row, "!!it.report_path") || !strings.Contains(row, "!(it.parked_lines > 0)") {
-		t.Error("closeable is not 'a report exists and no parked lines'")
+	if !strings.Contains(row, "var closeable = ") || !strings.Contains(row, "!!it.report_path") || !strings.Contains(row, "it.close_ok === true") || !strings.Contains(row, "!(it.parked_lines > 0)") {
+		t.Error("closeable is not 'a report exists, no parked lines and Foreman's gate would accept (close_ok)'")
+	}
+}
+
+// The gear names the control as the spec does: "Close sprint".
+func TestPageGearLabelIsCloseSprint(t *testing.T) {
+	if !strings.Contains(pageHTML, `data-ctl-sw="close_sprint"> Close sprint</label>`) || strings.Contains(pageHTML, "Close a merged sprint") {
+		t.Error("the gear label is not 'Close sprint'")
 	}
 }

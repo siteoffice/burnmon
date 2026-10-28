@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // writeCommitMsg writes a loose commit with the given message and parents.
@@ -122,6 +123,10 @@ func mergeAtDepth(t *testing.T, depth int) string {
 }
 
 func TestMergedByMessageSearchesFiveHundredCommits(t *testing.T) {
+	// The 2 s production deadline made this test timing dependent under load.
+	old := walkTimeout
+	walkTimeout = time.Minute
+	defer func() { walkTimeout = old }()
 	// depth 499 is the 500th commit from the tip: found. depth 500 is the 501st.
 	expectMsg(t, NewChecker(), mergeAtDepth(t, 499), "sprint/example-deep", true, true)
 	expectMsg(t, NewChecker(), mergeAtDepth(t, 500), "sprint/example-deep", false, true)
@@ -199,4 +204,63 @@ func TestMergedOrGone(t *testing.T) {
 	if m, k := NewChecker().MergedOrGone(r2, openBranch); m || !k {
 		t.Fatalf("open ref = (%v, %v), want (false, true)", m, k)
 	}
+}
+
+// Only the subject line of a merge commit names the merged branch, in the
+// forms git and GitHub write. Anything else that mentions the name does not.
+func TestNamesBranchSubjectForms(t *testing.T) {
+	for name, c := range map[string]struct {
+		msg, branch string
+		want        bool
+	}{
+		"git merge":                     {"Merge branch 'sprint/x'", "sprint/x", true},
+		"git merge double quotes":       {`Merge branch "sprint/x"`, "sprint/x", true},
+		"git merge into trunk":          {"Merge branch 'sprint/x' into main", "sprint/x", true},
+		"git merge into master":         {"Merge branch 'sprint/x' into master\n\nbody", "sprint/x", true},
+		"crlf subject":                  {"Merge branch 'sprint/x'\r\n\r\nbody", "sprint/x", true},
+		"github pr":                     {"Merge pull request #79 from wilco/work/wilco-de-tree/cron-check-post-deploy", "work/wilco-de-tree/cron-check-post-deploy", true},
+		"github pr with body":           {"Merge pull request #79 from wilco/work/x\n\nsome body", "work/x", true},
+		"github pr no slash in branch":  {"Merge pull request #5 from wilco/hotfix", "hotfix", true},
+		"hub merge subject":             {"merge sprint/crlf-writers-lf", "sprint/crlf-writers-lf", true},
+		"hub merge colon subject":       {"merge: sprint/lane4a-followups", "sprint/lane4a-followups", true},
+		"feature prefix":                {"Merge branch 'feature/sprint/x'", "sprint/x", false},
+		"body line only":                {"Merge branch 'other'\n\nReplaces sprint/x, dropped unmerged", "sprint/x", false},
+		"subject says replaces":         {"Replaces sprint/x, dropped unmerged", "sprint/x", false},
+		"plus suffix":                   {"Merge branch 'sprint/x+1'", "sprint/x", false},
+		"tilde suffix":                  {"Merge branch 'sprint/x~1'", "sprint/x", false},
+		"reflog suffix":                 {"Merge branch 'sprint/x@{u}'", "sprint/x", false},
+		"dot suffix":                    {"Merge branch 'sprint/x.'", "sprint/x", false},
+		"longer branch":                 {"Merge branch 'sprint/xy'", "sprint/x", false},
+		"case differs":                  {"Merge branch 'Sprint/x'", "sprint/x", false},
+		"two branches":                  {"Merge branch 'sprint/x' and 'sprint/y'", "sprint/x", false},
+		"trailing text":                 {"Merge branch 'sprint/x' is wrong", "sprint/x", false},
+		"into two words":                {"Merge branch 'sprint/x' into main now", "sprint/x", false},
+		"pr owner is the first segment": {"Merge pull request #1 from wilco/work/x", "x", false},
+		"pr owner with slash":           {"Merge pull request #1 from a/b/work/x", "work/x", false},
+		"pr no owner":                   {"Merge pull request #1 from work/x", "work/x", false},
+		"pr no number":                  {"Merge pull request # from wilco/work/x", "work/x", false},
+		"pr trailing text":              {"Merge pull request #1 from wilco/work/x and more", "work/x", false},
+		"pr suffix":                     {"Merge pull request #1 from wilco/work/x~1", "work/x", false},
+		"pr in body":                    {"Something\n\nMerge pull request #1 from wilco/work/x", "work/x", false},
+		"hub merge extra":               {"merge sprint/x and more", "sprint/x", false},
+		"empty":                         {"", "sprint/x", false},
+	} {
+		if got := namesBranch(c.msg, c.branch); got != c.want {
+			t.Errorf("%s: namesBranch(%q, %q) = %v, want %v", name, c.msg, c.branch, got, c.want)
+		}
+	}
+}
+
+// Through the walk: a body line or a lookalike subject on a merge commit does
+// not make a branch merged.
+func TestMergedByMessageIgnoresBodyAndLookalikes(t *testing.T) {
+	for name, msg := range map[string]string{
+		"body":     "Merge branch 'sprint/other'\n\nReplaces sprint/x, dropped unmerged",
+		"feature":  "Merge branch 'feature/sprint/x'",
+		"suffixed": "Merge branch 'sprint/x+1'",
+	} {
+		expectMsg(t, NewChecker(), goneRepo(t, msg), "sprint/x", false, true)
+		_ = name
+	}
+	expectMsg(t, NewChecker(), goneRepo(t, "Merge branch 'sprint/x' into main"), "sprint/x", true, true)
 }

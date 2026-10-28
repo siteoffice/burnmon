@@ -68,7 +68,7 @@ func asciiFold(s string) string {
 // listed path is a plain absolute drive path under 260 characters, ends in an
 // allowed type, and names an existing regular file that is not a link. The
 // caller must open the returned string, never the page's.
-func itemFileAllowed(snapPath string, now time.Time, path string) (string, error) {
+func itemFileAllowed(snapPath string, now time.Time, path, foremanRoot string) (string, error) {
 	r := snapshot.Load(snapPath, now)
 	if r.Status != snapshot.StatusOK || r.Snapshot == nil {
 		return "", errors.New("snapshot is not current")
@@ -78,10 +78,12 @@ func itemFileAllowed(snapPath string, now time.Time, path string) (string, error
 	}
 	want := asciiFold(filepath.Clean(path))
 	var listed string
+	onlyReport := true
 	for _, it := range pathsOf(r.Snapshot) {
-		for _, p := range []string{it.spec, it.result, it.report} {
+		for i, p := range []string{it.spec, it.result, it.report} {
 			if p != "" && asciiFold(filepath.Clean(p)) == want {
 				listed = filepath.Clean(p)
+				onlyReport = onlyReport && i == 2
 			}
 		}
 	}
@@ -110,7 +112,45 @@ func itemFileAllowed(snapPath string, now time.Time, path string) (string, error
 	if !itemFileExts[asciiFold(filepath.Ext(real))] {
 		return "", errors.New("file type not allowed")
 	}
+	if err := itemFileContained(real, foremanRoot, onlyReport); err != nil {
+		return "", err
+	}
 	return listed, nil
+}
+
+const errOutsideForeman = "file is outside the Foreman folders"
+
+// itemFileContained keeps a link inside the Foreman folders. real is the path
+// after EvalSymlinks, so a link or junction in any parent cannot lead out. With
+// foreman_root set the file must sit in <root>\sprints or <root>\flows, or in a
+// folder named "specs" (where Foreman's spec files live, in the hub and in the
+// project folders; BurnMon has no configured spec root, so that name is the
+// rule). Without foreman_root a report path is refused and a spec or result
+// path keeps the earlier rule: the snapshot must list it.
+func itemFileContained(real, foremanRoot string, onlyReport bool) error {
+	if foremanRoot == "" {
+		if onlyReport {
+			return errors.New(errOutsideForeman)
+		}
+		return nil
+	}
+	root, err := filepath.EvalSymlinks(filepath.Clean(foremanRoot))
+	if err != nil || !plainDrivePath(root) {
+		return errors.New(errOutsideForeman)
+	}
+	f := asciiFold(real)
+	for _, sub := range []string{"sprints", "flows"} {
+		if strings.HasPrefix(f, asciiFold(filepath.Join(root, sub))+`\`) {
+			return nil
+		}
+	}
+	dir := filepath.Dir(f)
+	for _, part := range strings.Split(dir, `\`) {
+		if part == "specs" {
+			return nil
+		}
+	}
+	return errors.New(errOutsideForeman)
 }
 
 // pathsOf lists the paths the snapshot names per item: spec, result and, for
@@ -128,16 +168,16 @@ func pathsOf(s *snapshot.Snapshot) []struct{ spec, result, report string } {
 
 // openItemFileChecked is what the binding calls: check, then open the
 // snapshot's own spelling of the path (not the page's).
-func openItemFileChecked(snapPath string, now time.Time, path string) error {
-	listed, err := itemFileAllowed(snapPath, now, path)
+func openItemFileChecked(snapPath string, now time.Time, path, foremanRoot string) error {
+	listed, err := itemFileAllowed(snapPath, now, path, foremanRoot)
 	if err != nil {
 		return err
 	}
 	return openItemFile(listed)
 }
 
-func bdevOpenItemFile(snapPath, path string) error {
-	err := openItemFileChecked(snapPath, time.Now(), path)
+func bdevOpenItemFile(snapPath, path, foremanRoot string) error {
+	err := openItemFileChecked(snapPath, time.Now(), path, foremanRoot)
 	if err != nil {
 		log.Println("bdevOpenItemFile:", err)
 	}
