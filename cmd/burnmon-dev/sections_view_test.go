@@ -184,7 +184,7 @@ func TestPageTagsEveryPart(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		`var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions','processes'];`,
+		`var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions'];`,
 		`id="secScrollbar"`,
 		`name="secStationStart"`,
 	} {
@@ -196,11 +196,10 @@ func TestPageTagsEveryPart(t *testing.T) {
 
 func TestPageHasScrollbarFitPass(t *testing.T) {
 	for _, want := range []string{
-		`var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min','waits'];`,
 		`window.__bdevFit = `,
 		`bdevSetStationTheme:', e);`,
 		`r.checked = r.value === secState.stationTheme`,
-		`arow.classList.toggle('split-one'`,
+		`getElementById('activityHeatmapRow').classList.toggle('split-one'`,
 		`body.scroll-on #pageScroll`,
 		`classList.toggle('scroll-on'`,
 	} {
@@ -213,16 +212,11 @@ func TestPageHasScrollbarFitPass(t *testing.T) {
 	}
 }
 // Review findings of iteration 3: the host fills the window only with the
-// scrollbar off, the greedy pass puts parts back, and an empty zone leaves no shell.
+// scrollbar off, the old greedy hide pass is gone (B7).
 func TestPageFitPassReviewFixes(t *testing.T) {
 	for _, want := range []string{
 		`classList.toggle('sec-fill', hideLegacy && !secState.scrollbar)`,
 		`function secHostSync()`,
-		`function fitShells(hidden)`,
-		`function fitRow(hidden)`,
-		`hidden.slice().reverse().forEach(function(id){`,
-		`hidden.splice(at, 0, id);`,
-		`drop(document.getElementById('legacy'), b && s && gone(['todo']));`,
 	} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %s", want)

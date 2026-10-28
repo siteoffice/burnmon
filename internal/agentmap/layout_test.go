@@ -292,8 +292,9 @@ func TestLayoutIdleWaitingSprintCountsForYou(t *testing.T) {
 	if v, _ := fact(y, "sprint"); !strings.Contains(v, "old") {
 		t.Errorf("You facts %+v do not name the sprint", y.Facts)
 	}
-	if len(l.Idle) != 1 || len(l.Frames) != 0 {
-		t.Errorf("idle %d, frames %d", len(l.Idle), len(l.Frames))
+	// A blocked idle sprint is one box, not also a row in the idle list.
+	if _, ok := boxByID(l, "sprint:old"); !ok || len(l.Idle) != 0 || len(l.Frames) != 0 {
+		t.Errorf("sprint box %v, idle %d, frames %d", ok, len(l.Idle), len(l.Frames))
 	}
 }
 
@@ -497,7 +498,7 @@ func TestLayoutFoldedMatchesGolden(t *testing.T) {
 
 // Sessions with no Foreman work are framed by project folder, so a real
 // machine (dozens of sessions, no sprint) is not one giant group that folds
-// into one box. One project only keeps the plain "No Foreman work" frame, and
+// into one box. One project is framed too, and
 // a subagent whose parent is not in the window goes to "Other".
 func TestLayoutSplitsUnlinkedSessionsByProject(t *testing.T) {
 	nodes := []graph.Node{
@@ -522,8 +523,8 @@ func TestLayoutSplitsUnlinkedSessionsByProject(t *testing.T) {
 	}
 
 	one := BuildLayout(LayoutInput{Nodes: []graph.Node{sess("s:a1", "alpha", "coding"), sess("s:a2", "alpha", "coding")}})
-	if len(one.Frames) != 1 || one.Frames[0].Kind != "none" || one.Frames[0].Label != NoGroupLabel {
-		t.Errorf("one project: frames %+v, want the single No Foreman work frame", one.Frames)
+	if len(one.Frames) != 1 || one.Frames[0].Kind != "project" || one.Frames[0].Label != "alpha" {
+		t.Errorf("one project: frames %+v, want the single alpha project frame", one.Frames)
 	}
 }
 

@@ -92,6 +92,9 @@ type Line struct {
 	Word  string `json:"word"`
 	Basis string `json:"basis,omitempty"`
 	You   bool   `json:"you"`
+	// Count is how many Blocked items a folded box's amber line stands for;
+	// absent means 1.
+	Count int `json:"count,omitempty"`
 	// Style is solid, or dotted for a running subagent reporting back.
 	Style string `json:"style"`
 }
@@ -713,9 +716,9 @@ func BuildLayout(in LayoutInput) Layout {
 	for total() > max {
 		pick := -1
 		for i, g := range v.Groups {
-			// A group with two waiters stays open: a closed group is one box
-			// and draws one line, so it would hide a Blocked item.
-			if folded[g.ID] || in.Open[frameID(g)] || b.groupBoxes(g) <= 1 || b.groupWaiters(g) > 1 {
+			// A closed group with waiters draws one amber line that carries
+			// their count, so folding it hides no Blocked item.
+			if folded[g.ID] || in.Open[frameID(g)] || b.groupBoxes(g) <= 1 {
 				continue
 			}
 			if pick < 0 {
@@ -776,8 +779,18 @@ func BuildLayout(in LayoutInput) Layout {
 					harnessRoots[h]++
 				}
 			}
-			if b.groupWaiters(g) > 0 {
-				b.addLine(id, "you", b.w.waitsWord, "vendor", true)
+			if n := b.groupWaiters(g); n > 0 {
+				word, count := b.w.waitsWord, 0
+				if n > 1 {
+					word, count = fmt.Sprintf("%d waiting", n), n
+					if b.w.plain {
+						word += " for you"
+					}
+				}
+				b.addLine(id, "you", word, "vendor", true)
+				if count > 0 {
+					b.l.Lines[len(b.l.Lines)-1].Count = count
+				}
 				youRows = append(youRows, row)
 			}
 			row++
@@ -815,6 +828,14 @@ func BuildLayout(in LayoutInput) Layout {
 		b.l.Frames = append(b.l.Frames, fr)
 	}
 	row = b.blockedBoxes(v.Idle, row, &youRows)
+	// A blocked idle item is a box now; it is not listed a second time.
+	listed := make([]Idle, 0, len(v.Idle))
+	for _, i := range v.Idle {
+		if !i.WaitsOnYou {
+			listed = append(listed, i)
+		}
+	}
+	b.l.Idle = listed
 
 	hids := make([]string, 0, len(harnessRow))
 	for h := range harnessRow {
@@ -901,8 +922,9 @@ func (b *builder) youFacts() []Fact {
 
 // splitUnlinked turns the one "No Foreman work" group into one group per
 // project folder (the session's label), so folding acts on a project and not on
-// everything at once. A subagent whose parent is not here goes to "Other". With
-// one project or none the group is left alone.
+// everything at once, and each folder is framed also when it is the only one. A
+// subagent whose parent is not here goes to "Other". A Cowork cloud session has
+// no folder: its frame reads "Cowork cloud session" and the short session id.
 func splitUnlinked(groups []Group) []Group {
 	out := make([]Group, 0, len(groups))
 	for _, g := range groups {
@@ -913,21 +935,27 @@ func splitUnlinked(groups []Group) []Group {
 		byKey := map[string]*Group{}
 		var keys []string
 		for _, c := range g.Cards {
-			key := c.Label
-			if c.Subagent || key == "" {
-				key = "Other"
+			frameLabel := c.Label
+			if frameLabel == "" && !c.Subagent && strings.EqualFold(c.Agent, "cowork-cloud") {
+				id := c.ID
+				if i := strings.LastIndex(id, ":"); i >= 0 {
+					id = id[i+1:]
+				}
+				if len(id) > 8 {
+					id = id[:8]
+				}
+				frameLabel = "Cowork cloud session " + id
 			}
-			p, ok := byKey[key]
+			if c.Subagent || frameLabel == "" {
+				frameLabel = "Other"
+			}
+			p, ok := byKey[frameLabel]
 			if !ok {
-				p = &Group{ID: "project:" + key, Kind: "project", Label: key, Cards: []Card{}}
-				byKey[key] = p
-				keys = append(keys, key)
+				p = &Group{ID: "project:" + frameLabel, Kind: "project", Label: frameLabel, Cards: []Card{}}
+				byKey[frameLabel] = p
+				keys = append(keys, frameLabel)
 			}
 			p.Cards = append(p.Cards, c)
-		}
-		if len(keys) < 2 {
-			out = append(out, g)
-			continue
 		}
 		sort.SliceStable(keys, func(i, j int) bool {
 			a, b := byKey[keys[i]], byKey[keys[j]]
@@ -949,12 +977,22 @@ func splitUnlinked(groups []Group) []Group {
 // blockedBoxes draws the Blocked Foreman things no session works for: a gate
 // or waiting sprint that shows as an idle row, and a failed check. Each gets
 // a box and its amber line into You, so the lines equal the Blocked count. The
-// idle row stays listed. It returns the next free row.
+// idle row is dropped from the idle list by the caller. It returns the next
+// free row. When frames exist the first box starts one row below the last
+// frame, so a box outside a frame keeps a row gap from the frame above it.
 func (b *builder) blockedBoxes(idle []Idle, row int, youRows *[]int) int {
+	gap := len(b.l.Frames) > 0
+	skip := func() {
+		if gap {
+			row++
+			gap = false
+		}
+	}
 	for _, i := range idle {
 		if !i.WaitsOnYou {
 			continue
 		}
+		skip()
 		facts := []Fact{{"Kind", i.Kind}, {"Status", i.Status}, {"Source", b.sourceOf(i.ID)}}
 		if i.Gate != "" {
 			facts = append(facts, Fact{"Gate", i.Gate})
@@ -977,6 +1015,7 @@ func (b *builder) blockedBoxes(idle []Idle, row int, youRows *[]int) int {
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
+		skip()
 		n := b.m.nodes[id]
 		title, status := n.Label, ""
 		for _, e := range b.m.out[id] {

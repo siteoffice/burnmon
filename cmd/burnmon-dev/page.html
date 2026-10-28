@@ -48,7 +48,6 @@ body{
    .todobody's own overflow-y:auto below - rows keep their natural height
    instead of shrinking to fit, the panel scrolls instead of squeezing them
    unreadable). check_d9.go excludes both #turnTicker and #todoBody. */
-.fit-dropped{display:none !important}
 
 /* loading screen, section 11 steps 2-3: shown from first paint, hidden once
    the page's own first poll cycle renders (see the Promise.all near the
@@ -350,12 +349,15 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 /* Microsoft To Do panel, section 9: off by default, full width, sits below
    the two-column layout too (a sibling of main, not inside either zone). */
 .todopanel{flex:0 1 auto; max-height:200px; margin:0 4px 4px; display:none; flex-direction:column}
-/* alpha.7 item 3: with To Do visible, applyTodoGrow (script below) sets the
-   System chart to 70% of the height it measured without this class and
-   hands the freed height to this panel, which then fills the bottom of the
-   window; .todobody keeps its own scroll. Never applied with To Do off. */
-body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
-.todobody{flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px}
+#processesHost{flex:0 0 auto; margin:0 4px 4px; display:flex; flex-direction:column; min-height:0}
+#processesHost > .secpanel{flex:1 1 auto; min-height:0}
+#processesHost:empty{display:none}
+.todobody{flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px;
+  scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
+.todobody::-webkit-scrollbar{width:8px}
+.todobody::-webkit-scrollbar-track{background:var(--panel2)}
+.todobody::-webkit-scrollbar-thumb{background:var(--sb)}
+.todobody::-webkit-scrollbar-thumb:hover{background:var(--sb-hover)}
 .todorow{flex:0 0 auto; display:flex; gap:8px; align-items:baseline; font:11.5px/1.4 var(--mono); white-space:nowrap; overflow:hidden}
 .todorow .due{color:var(--dim); flex:0 0 auto}
 .todorow .due.overdue{color:var(--red)}
@@ -371,12 +373,13 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
    With Overall scrollbar on (body.scroll-on, both modes) the page scrolls: the sections host sits
    above the older Burn and System zones inside #pageScroll, and #legacy gets
    exactly the window's height so those zones lay out as they always did.
-   With it off the page fits the window: the System chart shrinks to its floor,
-   then parts are hidden in FIT_OFF_ORDER and a line says how many. Everything a switch turns
+   With it off the page fits the window: parts shrink to their floors and share the free
+   height (applyPanelFit); only when every part sits at its floor does body.fit-scroll let the
+   page scroll. Nothing the person switched on is hidden. Everything a switch turns
    off gets .sec-off. */
 .sec-off{display:none !important}
 #pageScroll{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden}
-body.scroll-on #pageScroll{overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+body.scroll-on #pageScroll, body.fit-scroll #pageScroll{overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
 #legacy{flex:1 1 auto; min-height:0; display:flex; flex-direction:column}
 body.scroll-on #legacy{flex:0 0 auto}
 .sechost{flex:0 0 auto; overflow:hidden; margin:4px 4px 0; display:flex; flex-direction:column; gap:4px; min-height:0}
@@ -487,7 +490,15 @@ body.plain #mapOverlay{font-size:13.5px}
 .mappanel button{margin-top:12px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font:inherit; padding:4px 10px; cursor:pointer}
 .mappanel button:hover{border-color:var(--amber)}
 .mapempty{padding:24px; color:var(--dim)}
-.mapidle summary{cursor:pointer; color:var(--dim)}
+.mapidlebar{padding:0 24px 12px}
+.mapidlebtn{border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font:inherit; padding:4px 10px; cursor:pointer}
+.mapidlebtn:hover, .mapidlebtn[aria-pressed="true"]{border-color:var(--amber)}
+.mappanel.wide{flex-basis:min(440px, 40%)}
+.mapidletbl{width:100%; border-collapse:collapse; font-size:12px}
+.mapidletbl th{text-align:left; color:var(--dim); font-weight:normal; padding:2px 6px 2px 0}
+.mapidletbl td{padding:3px 6px 3px 0; vertical-align:top; overflow-wrap:anywhere}
+.mapidletbl tr.grp td{color:var(--strong); font-weight:700; padding-top:10px}
+.mappanel .mapidletbl button{margin-top:0; padding:1px 6px}
 .sesub td:first-child{padding-left:20px}
 /* The Export line: the Plain toggle at the left, the gear and EXPORT at the right. */
 .hdrline{flex:1 1 360px; display:flex; align-items:center; gap:14px; min-width:0}
@@ -512,6 +523,8 @@ body.plain #mapOverlay{font-size:13.5px}
 #secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
 #secSettings input{margin:0; accent-color:var(--amber)}
 #histAdmin{display:flex; flex-direction:column; gap:6px; margin-top:6px; padding-top:8px; border-top:1px solid var(--bd)}
+#histAdmin .histgrid{display:grid; grid-template-columns:auto auto 1fr; gap:6px 10px; align-items:center}
+#histAdmin .histgrid .histend{justify-self:end}
 #histAdmin .histrow{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
 #histAdmin input[type=text], #histAdmin input[type=number]{background:var(--bg); color:inherit; border:1px solid var(--bd); padding:2px 4px; font:inherit}
 #histAdmin .histbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
@@ -550,7 +563,6 @@ body.plain #mapOverlay{font-size:13.5px}
 <div id="pageScroll">
 <div class="sechost" id="secHost">
   <div id="secNotice"></div>
-  <div class="sechint" id="secCutNote"></div>
   <div class="secpanels" id="secPanels"></div>
 </div>
 <div id="legacy">
@@ -649,6 +661,7 @@ body.plain #mapOverlay{font-size:13.5px}
     </div>
   </section>
 </main>
+<div id="processesHost"></div>
 <section class="panel todopanel" id="todoPanel" data-part="todo">
   <div class="panelhead">Microsoft To Do</div>
   <div class="todobody" id="todoBody"></div>
@@ -675,16 +688,15 @@ body.plain #mapOverlay{font-size:13.5px}
   <div id="histAdmin">
     <h4>History</h4>
     <div class="sechint" id="hist_keep"></div>
-    <div class="histrow">
-      <label>Delete older than (days) <input id="hist_days" type="number" step="1" min="1" value="90" style="width:70px"></label>
+    <div class="histgrid">
+      <label for="hist_days">Delete older than (days)</label>
+      <input id="hist_days" type="number" step="1" min="1" value="90" style="width:70px">
       <button id="hist_delete_older" class="histbtn del" type="button">Delete older than N days</button>
-    </div>
-    <div class="histrow">
-      <label>Session <input id="hist_session" type="text" placeholder="session id" style="width:160px"></label>
+      <label for="hist_session">Session</label>
+      <input id="hist_session" type="text" placeholder="session id" style="width:160px">
       <button id="hist_delete_session" class="histbtn del" type="button">Delete one session</button>
-    </div>
-    <div class="histrow">
-      <button id="hist_delete_all" class="histbtn del" type="button">Delete all history</button>
+      <span></span><span></span>
+      <button id="hist_delete_all" class="histbtn del histend" type="button">Delete all history</button>
     </div>
     <div class="sechint" id="hist_delete_result"></div>
     <h4>Export history</h4>
@@ -695,7 +707,7 @@ body.plain #mapOverlay{font-size:13.5px}
       <label>Label <input id="hist_label" type="text" value="dev-1" style="width:70px"></label>
     </div>
     <div class="histrow" id="hist_owners"></div>
-    <div class="histrow"><button id="hist_export" class="histbtn" type="button">Export</button></div>
+    <div class="histgrid"><span></span><span></span><button id="hist_export" class="histbtn histend" type="button">Export</button></div>
     <div class="sechint" id="hist_export_result" style="word-break:break-all"></div>
   </div>
   <div class="sechint">Esc closes this list</div>
@@ -715,7 +727,7 @@ body.plain #mapOverlay{font-size:13.5px}
     <button type="button" id="mapClose" class="mapclose">Close (Esc)</button>
   </div>
   <div class="mapmain">
-    <div class="mapscroll" id="mapScroll"><div class="mapstage" id="mapStage"></div></div>
+    <div class="mapscroll" id="mapScroll"><div class="mapstage" id="mapStage"></div><div class="mapidlebar" id="mapIdleBar"></div></div>
     <aside class="mappanel" id="mapPanel" aria-live="polite"></aside>
   </div>
   <div class="mapstrip">
@@ -2089,6 +2101,7 @@ body.plain #mapOverlay{font-size:13.5px}
       return;
     }
     if(mapOpen){
+      if(mapIdleOpen){ mapIdleOpen = false; mapRender(); return; }
       mapCloseView();
       return;
     }
@@ -2635,7 +2648,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // figure).
   // lastHarnessHeatmapNow: the shared tick's own "now" (section 5, "all
   // time-axis charts... use the same now from the snapshot"), so a resize
-  // or a panel un-hiding (rerenderFitPart) can redraw against a
+  // can redraw against a
   // reasonable anchor even without a fresh snapshot in hand.
   var lastHarnessHeatmapNow = Date.now();
 
@@ -3168,233 +3181,277 @@ body.plain #mapOverlay{font-size:13.5px}
   // already-cached lastSysmonHistory on resize, debounced to one redraw per
   // animation frame rather than once per resize event, fixes it without
   // waiting on the next tick.
-  // pageOverflows/applyPanelFit: no-scroll patch section 4, "window too
-  // small: drop low panels", fixed order To Do, then process groups, then
-  // the Activity/heatmap row; header, burn chart, vendor strip, turn
-  // ticker and the system panel always stay (they are never in
-  // FIT_CANDIDATE_IDS). Measures the actual page (a scrollbar-free window
-  // never lets body or any .zonebody overflow) rather than tracking panel
-  // pixel budgets by hand, so this stays correct regardless of exactly how
-  // much any one panel's own content happens to need this tick; a dropped
-  // panel comes back as soon as there's slack again because this always
-  // starts from "show everything" and only re-hides what still does not fit.
-  var FIT_CANDIDATE_IDS = ['todoPanel', 'processGroupsPanel', 'activityHeatmapRow'];
-  function pageOverflows(){
-    if(document.body.scrollHeight > document.body.clientHeight + 1) return true;
-    if(document.body.scrollWidth > document.body.clientWidth + 1) return true;
-    var zones = document.querySelectorAll('.zonebody');
-    for(var i = 0; i < zones.length; i++){
-      if(zones[i].scrollHeight > zones[i].clientHeight + 1) return true;
-    }
-    var lg = document.getElementById('legacy');
-    if(lg && lg.scrollHeight > lg.clientHeight + 1) return true;
-    // Scrollbar off: the page area and the sections host must fit as well.
-    if(!document.body.classList.contains('scroll-on')){
-      var ps = document.getElementById('pageScroll'), host = document.getElementById('secHost');
-      if(ps && ps.scrollHeight > ps.clientHeight + 1) return true;
-      if(host && host.scrollHeight > host.clientHeight + 1) return true;
-    }
-    return false;
-  }
-  // A panel's own width/height-cropped content (renderHeatmap,
-  // renderHarnessHeatmap, renderProcessGroups) reads clientWidth/clientHeight as
-  // 0 while display:none, so whatever last rendered into it while it was
-  // fit-dropped is wrong (crops to almost nothing) and would otherwise sit
-  // there stale once the panel comes back, until that panel's own next
-  // slow poll happens to land (up to 60s later). applyPanelFit re-renders
-  // any candidate that just went from dropped to shown, from its own
-  // last-fetched cache, so it repaints correctly the instant it reappears
-  // (fixed after review, 2026-09-25). The redraw is rerenderFitPart, below.
-  // applyTodoGrow/clearTodoGrow (alpha.7 item 3, Wilco 2026-09-29): with
-  // To Do visible, the System chart (.histwrap) gets 70% of the height it
-  // has in the plain layout at the same window size, and To Do takes the
-  // freed 30% at the bottom. Measured, not a CSS ratio: .histwrap is the
-  // system zone's only flex grower, so its plain height is whatever is
-  // left, and only a measurement says what 70% of that is. main shrinks by
-  // the freed amount; in one column the burn zone is pinned to its measured
-  // height so only the system zone gives it up (every panel below the chart
-  // moves up), in two columns the burn column shrinks by the same amount
-  // (its turn ticker is the only grower there), since To Do spans both. A
-  // grow that would make the page overflow is undone, so check_d9 and the
-  // drop order in applyPanelFit stay exactly as they were.
-  // __bdevTodoLayout is tools\uicheck's own read (check_d19.go).
+  // B7 fit pass (spec 2026-10-27, items 1, 2, 6). Never hides a part the person
+  // switched on. Every visible part has a natural height (measured in the
+  // scrollbar-on layout, the one the older CSS always had) and a floor.
+  //   Too much: parts give height in this order, each down to its floor and no
+  //   further: System chart, Sessions last 30 min chart, turn ticker, To Do,
+  //   then the lists (process groups, Processes, vendor strip).
+  //   Too little: the free height goes to growers, per column. Charts first
+  //   (up to 1.6 times natural), then the turn ticker and To Do (up to their
+  //   content), then the charts without the cap, then the column's last panel,
+  //   so no column leaves an empty block. In two columns both columns end on
+  //   the same line; To Do and Processes sit below both.
+  //   Every part at its floor and still too tall: body.fit-scroll lets the page
+  //   scroll. Nothing is hidden, so window.__bdevFit.hidden is always [].
+  // Every pass starts from the CSS layout again: fitUndo gives the inline sizes back.
+  var FIT_CHART_MIN = 60, FIT_ROWS_MIN = 3, FIT_TABLE_MIN_ROWS = 2, FIT_CHART_GROW = 1.6;
+  // __bdevFit and __bdevTodoLayout are tools\uicheck's own reads (check_d34.go, check_d19.go).
+  window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [] };
   window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
-  function clearTodoGrow(){
-    document.body.classList.remove('todo-grow');
-    ['main', '.zone.burn', '.histwrap'].forEach(function(sel){
-      var el = document.querySelector(sel);
-      if(el) el.style.flex = '';
-    });
-  }
-  function applyTodoGrow(){
-    var todo = document.getElementById('todoPanel');
-    var hist = document.querySelector('.histwrap');
-    var mainEl = document.querySelector('main');
-    var burnZone = document.querySelector('.zone.burn');
-    var plainH = hist ? hist.getBoundingClientRect().height : 0;
-    window.__bdevTodoLayout = { applied: false, plainHistH: plainH, histH: plainH };
-    if(!todo || !hist || !mainEl || !burnZone) return;
-    if(getComputedStyle(todo).display === 'none' || plainH <= 0) return;
-    var freed = Math.round(plainH * 0.3);
-    var mainH = mainEl.getBoundingClientRect().height;
-    if(getComputedStyle(mainEl).flexDirection !== 'row'){
-      burnZone.style.flex = '0 0 ' + burnZone.getBoundingClientRect().height + 'px';
-    }
-    hist.style.flex = '0 0 ' + (plainH - freed) + 'px';
-    mainEl.style.flex = '0 0 ' + (mainH - freed) + 'px';
-    document.body.classList.add('todo-grow');
-    if(pageOverflows()){ clearTodoGrow(); return; }
-    window.__bdevTodoLayout = { applied: true, plainHistH: plainH, histH: hist.getBoundingClientRect().height };
-  }
-  // B2 fit pass, keyed on the Overall scrollbar switch (secState.scrollbar).
-  //   On: today's layout. The older zones get the scroll area's height and the
-  //   page scrolls; To Do, process groups and the Activity and Heatmap row are
-  //   dropped silently, in that order, when a zone would overflow.
-  //   Off: the page fits the window. The System chart (.histwrap) may shrink
-  //   to FIT_FLOOR of its natural height (the height it has with the switch
-  //   on, measured by running that layout first); while the page still
-  //   overflows, parts are hidden in FIT_OFF_ORDER and #secCutNote counts them.
-  //   Last resort, after every other part is hidden and the chart is at its floor:
-  //   turn_ticker, vendor_strip, system, burn_30min, then waits last of all (the panel holding the
-  //   person's actions), so every part can be hidden and counted.
-  // Every pass starts from show-all, so hidden parts come back when there is room.
-  var FIT_OFF_ORDER = ['todo','process_groups','processes','heatmap','activity','sessions','git','outcomes','agents_map','burn','turn_ticker','vendor_strip','system','burn_30min','waits'];
-  var FIT_FLOOR = 0.6;
-  // __bdevFit is tools\uicheck's own read (check_d34.go).
-  window.__bdevFit = { scroll: true, histNatural: 0, histFloor: 0, histH: 0, histAtHide: 0, hidden: [] };
+  var fitTouched = [];
   function fitHistH(){
     var h = document.querySelector('.histwrap');
     return h ? h.getBoundingClientRect().height : 0;
   }
-  // Clears every drop and returns the part ids that were dropped.
-  function fitClearDrops(){
-    var was = {};
-    Array.prototype.forEach.call(document.querySelectorAll('.fit-dropped'), function(el){
-      if(el.id === 'activityHeatmapRow'){ was.activity = true; was.heatmap = true; }
-      var id = el.getAttribute('data-part');
-      if(id) was[id] = true;
-      el.classList.remove('fit-dropped');
+  function fitShown(el){ return !!el && getComputedStyle(el).display !== 'none'; }
+  function fitPx(v){ return parseFloat(v) || 0; }
+  function fitBoxV(el){
+    var c = getComputedStyle(el);
+    return fitPx(c.paddingTop) + fitPx(c.paddingBottom) + fitPx(c.borderTopWidth) + fitPx(c.borderBottomWidth);
+  }
+  function fitMarginV(el){
+    var c = getComputedStyle(el);
+    return fitPx(c.marginTop) + fitPx(c.marginBottom);
+  }
+  function fitSetPx(el, px){
+    if(!el.__fitOrig) el.__fitOrig = { flex: el.style.flex, minHeight: el.style.minHeight, maxHeight: el.style.maxHeight };
+    if(fitTouched.indexOf(el) < 0) fitTouched.push(el);
+    el.style.flex = '0 0 ' + Math.floor(px) + 'px';
+    el.style.minHeight = '0';
+    el.style.maxHeight = 'none';
+  }
+  function fitUndo(){
+    fitTouched.forEach(function(el){
+      var o = el.__fitOrig;
+      el.style.flex = o.flex; el.style.minHeight = o.minHeight; el.style.maxHeight = o.maxHeight;
     });
-    var arow = document.getElementById('activityHeatmapRow');
-    if(arow) arow.classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
-    return was;
+    fitTouched = [];
+    document.body.classList.remove('fit-scroll');
+    var lg = document.getElementById('legacy');
+    if(lg) lg.style.flex = '';
   }
-  // The scrollbar-on layout; returns the System chart height before the To Do grow.
-  function fitRunOn(){
-    secSizeLegacy();
-    clearTodoGrow();
-    var candidates = FIT_CANDIDATE_IDS.map(function(id){ return document.getElementById(id); }).filter(Boolean);
-    for(var i = 0; i < candidates.length; i++){
-      if(!pageOverflows()) break;
-      candidates[i].classList.add('fit-dropped');
+  // Process groups crops its own rows to its box; measure it with every row shown.
+  function fitUncropGroups(){
+    Array.prototype.forEach.call(document.querySelectorAll('#processGroups tr'), function(tr){ tr.style.display = ''; });
+  }
+  function fitRowH(el, sel, fallback){
+    var r = el.querySelector(sel);
+    return r && r.offsetHeight ? r.offsetHeight : fallback;
+  }
+  // One item per direct child of a column body, and the three rows below main.
+  function fitItem(col, el, kind, rank){
+    var nat = el.offsetHeight, o = { el: el, col: col, kind: kind, rank: rank, nat: nat, floor: nat, cap: nat, h: nat };
+    var head = el.querySelector('.panelhead'), hh = head ? head.offsetHeight : 0;
+    if(kind === 'chart'){
+      o.floor = FIT_CHART_MIN; o.nat = Math.max(nat, FIT_CHART_MIN); o.cap = Math.round(o.nat * FIT_CHART_GROW);
+    } else if(kind === 'ticker'){
+      var tk = el.querySelector('.ticker');
+      o.cap = Math.max(nat, hh + (tk ? tk.scrollHeight : 0) + 2);
+      o.floor = Math.min(o.cap, hh + FIT_ROWS_MIN * fitRowH(el, '.trow', 22) + (FIT_ROWS_MIN - 1) * 2 + 10);
+      o.nat = Math.max(nat, o.floor);
+    } else if(kind === 'todo'){
+      var tb = el.querySelector('.todobody');
+      o.cap = Math.max(nat, hh + (tb ? tb.scrollHeight : 0) + 2);
+      o.floor = Math.min(o.cap, hh + FIT_ROWS_MIN * fitRowH(el, '.todorow', 17) + (FIT_ROWS_MIN - 1) * 3 + 14);
+      o.nat = Math.max(nat, o.floor);
+    } else if(kind === 'list'){
+      var th = el.querySelector('thead');
+      var extra = el.querySelector('.secbody') ? 14 : 2;
+      o.floor = Math.min(nat, hh + (th ? th.offsetHeight : 0) + FIT_TABLE_MIN_ROWS * fitRowH(el, 'tbody tr', 22) + extra);
     }
-    var natural = fitHistH();
-    applyTodoGrow();
-    return natural;
+    o.h = o.nat;
+    return o;
   }
-  function fitSay(n){
-    var note = document.getElementById('secCutNote');
-    if(note) note.textContent = n ? n + (n === 1 ? ' section' : ' sections') + ' hidden, the window is too small' : '';
-    secHostSync();
-  }
-  // A zone whose parts are all off or hidden leaves no empty box and label
-  // behind; main and #legacy go with their last zone. fitClearDrops restores them.
-  function fitShells(hidden){
-    function gone(ids){ return ids.every(function(id){ return !secPartOn(id) || hidden.indexOf(id) >= 0; }); }
-    var b = gone(SEC_BURN_PARTS), s = gone(SEC_SYSTEM_PARTS);
-    function drop(el, v){ if(el) el.classList.toggle('fit-dropped', v); }
-    drop(document.querySelector('.zone.burn'), b);
-    drop(document.querySelector('.zone.system'), s);
-    drop(document.querySelector('main'), b && s);
-    drop(document.getElementById('legacy'), b && s && gone(['todo']));
-  }
-  // The Activity and Heatmap row follows its two halves: both gone, the row goes;
-  // one gone (hidden or switched off), the other takes the row.
-  function fitRow(hidden){
-    var row = document.getElementById('activityHeatmapRow');
-    if(!row) return;
-    row.classList.remove('fit-dropped');
-    row.classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
-    if(!hidden.some(function(id){ return id === 'activity' || id === 'heatmap'; })) return;
-    var aGone = !secPartOn('activity') || hidden.indexOf('activity') >= 0, hGone = !secPartOn('heatmap') || hidden.indexOf('heatmap') >= 0;
-    if(aGone && hGone) row.classList.add('fit-dropped');
-    else row.classList.add('split-one');
-  }
-  function fitRunOff(fit){
-    var hidden = [], elsOf = {};
-    for(var i = 0; i < FIT_OFF_ORDER.length; i++){
-      if(!pageOverflows()) break;
-      var id = FIT_OFF_ORDER[i];
-      if(!secPartOn(id)) continue;
-      var els = Array.prototype.filter.call(document.querySelectorAll('[data-part="' + id + '"]'), function(el){ return el.getClientRects().length > 0; });
-      if(!els.length) continue;
-      if(!hidden.length) fit.histAtHide = fitHistH();
-      els.forEach(function(el){ el.classList.add('fit-dropped'); });
-      elsOf[id] = els;
-      hidden.push(id);
-      fitRow(hidden);
-      fitShells(hidden);
-      // The note takes a line of its own, so it counts in the next overflow test.
-      fitSay(hidden.length);
-    }
-    // The greedy pass never looks back: put each hidden part back, latest first,
-    // and keep it when the page still fits. The count and the list stay exact.
-    hidden.slice().reverse().forEach(function(id){
-      var at = hidden.indexOf(id);
-      elsOf[id].forEach(function(el){ el.classList.remove('fit-dropped'); });
-      hidden.splice(at, 1);
-      fitRow(hidden);
-      fitShells(hidden);
-      fitSay(hidden.length);
-      if(!pageOverflows()) return;
-      elsOf[id].forEach(function(el){ el.classList.add('fit-dropped'); });
-      hidden.splice(at, 0, id);
-      fitRow(hidden);
-      fitShells(hidden);
-      fitSay(hidden.length);
+  function fitCollect(){
+    var q = function(s){ return document.querySelector(s); };
+    var cols = {}, below = [];
+    [['burn', '.zone.burn'], ['sys', '.zone.system']].forEach(function(c){
+      var zone = q(c[1]);
+      if(!fitShown(zone) || !fitShown(zone.parentNode)) return;
+      var bodyEl = zone.querySelector('.zonebody'), items = [];
+      Array.prototype.forEach.call(bodyEl.children, function(el){
+        if(!fitShown(el)) return;
+        var id = el.id, kind = 'fixed', rank = -1;
+        if(el.classList.contains('burnchart')){ kind = 'chart'; rank = 1; }
+        else if(el.classList.contains('histwrap')){ kind = 'chart'; rank = 0; }
+        else if(id === 'turnTickerPanel'){ kind = 'ticker'; rank = 2; }
+        else if(id === 'processGroupsPanel'){ kind = 'list'; rank = 4; }
+        else if(id === 'vendorStripPanel'){ kind = 'list'; rank = 6; }
+        items.push(fitItem(c[0], el, kind, rank));
+      });
+      cols[c[0]] = { zone: zone, bodyEl: bodyEl, items: items, label: zone.querySelector('.zonelabel') };
     });
-    fit.hidden = hidden;
+    var ph = document.getElementById('processesHost');
+    if(ph && ph.firstElementChild && fitShown(ph)) below.push(fitItem('below', ph, 'list', 5));
+    var td = document.getElementById('todoPanel');
+    if(fitShown(td)) below.push(fitItem('below', td, 'todo', 3));
+    return { cols: cols, below: below };
   }
-  function rerenderFitPart(id){
-    if(id === 'activity') renderHeatmap(lastHeatmapPayload);
-    else if(id === 'heatmap') renderHarnessHeatmap(lastProcessGroupsHistory);
-    else if(id === 'process_groups') renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
+  function fitColNeed(c){
+    var sum = 0;
+    c.items.forEach(function(it){ sum += it.h; });
+    var gap = fitPx(getComputedStyle(c.bodyEl).rowGap);
+    return (c.label ? c.label.offsetHeight : 0) + fitBoxV(c.zone) + fitBoxV(c.bodyEl) + gap * Math.max(0, c.items.length - 1) + sum;
+  }
+  // Gives amt to the growers of one chain, tier by tier; the last tier always takes the rest.
+  function fitAbsorb(items, amt){
+    function tier(pick, roomOf){
+      if(amt <= 0.5) return;
+      var list = items.filter(pick), rooms = list.map(roomOf), sum = 0;
+      rooms.forEach(function(r){ sum += r; });
+      if(sum <= 0.5) return;
+      var give = Math.min(amt, sum);
+      list.forEach(function(it, i){ it.h += give * rooms[i] / sum; });
+      amt -= give;
+    }
+    tier(function(it){ return it.kind === 'chart'; }, function(it){ return Math.max(0, it.cap - it.h); });
+    tier(function(it){ return it.kind === 'ticker' || it.kind === 'todo'; }, function(it){ return Math.max(0, it.cap - it.h); });
+    var charts = items.filter(function(it){ return it.kind === 'chart'; });
+    if(amt > 0.5 && charts.length){
+      charts.forEach(function(it){ it.h += amt / charts.length; });
+      amt = 0;
+    }
+    if(amt > 0.5 && items.length) items[items.length - 1].h += amt;
   }
   function applyPanelFit(){
     var body = document.body, hist = document.querySelector('.histwrap');
-    var histHBefore = fitHistH();
+    var histBefore = fitHistH();
     var scroll = !!secState.scrollbar;
-    var was = fitClearDrops();
-    fitSay(0);
-    var fit = { scroll: scroll, histNatural: 0, histFloor: 0, histH: 0, histAtHide: 0, hidden: [] };
-    if(hist) hist.style.minHeight = '';
+    var lg = document.getElementById('legacy'), mainEl = document.querySelector('main');
+    fitUndo();
+    fitUncropGroups();
+    // Natural heights come from the scrollbar-on layout, as before B7.
     body.classList.add('scroll-on');
-    fit.histNatural = fitRunOn();
-    if(!scroll){
-      body.classList.remove('scroll-on');
-      fitClearDrops();
-      clearTodoGrow();
-      secSizeLegacy();
-      if(hist && fit.histNatural > 0){
-        fit.histFloor = Math.max(60, Math.round(FIT_FLOOR * fit.histNatural));
-        hist.style.minHeight = fit.histFloor + 'px';
+    secSizeLegacy();
+    var found = fitCollect();
+    if(!scroll) body.classList.remove('scroll-on');
+    secSizeLegacy();
+    var cols = found.cols, below = found.below, keys = Object.keys(cols);
+    var all = [], two = false, mainShown = fitShown(mainEl) && keys.length > 0;
+    keys.forEach(function(k){ all = all.concat(cols[k].items); });
+    all = all.concat(below);
+    var fit = { scroll: scroll, fitScroll: false, hidden: [], columns: [] };
+    if(lg && all.length){
+      two = mainShown && getComputedStyle(mainEl).flexDirection === 'row';
+      // The room: the legacy block's own height. Scrollbar on with main off has no fixed room.
+      var B = lg.clientHeight, free0 = scroll && !mainShown;
+      var mainChrome = mainShown ? fitBoxV(mainEl) + (!two && keys.length > 1 ? fitPx(getComputedStyle(mainEl).rowGap) : 0) : 0;
+      var belowExtra = 0;
+      below.forEach(function(it){ belowExtra += fitMarginV(it.el); });
+      var needOf = function(k){ return fitColNeed(cols[k]); };
+      var mainNeed = function(){
+        if(!mainShown) return 0;
+        var v = keys.map(needOf);
+        return mainChrome + (two ? Math.max.apply(null, v) : v.reduce(function(a, b){ return a + b; }, 0));
+      };
+      var total = function(){
+        var s = mainNeed() + belowExtra;
+        below.forEach(function(it){ s += it.h; });
+        return s;
+      };
+      if(free0) B = total();
+      // Give, in the order of give, never below a floor.
+      var ranked = all.filter(function(it){ return it.rank >= 0; }).sort(function(a, b){ return a.rank - b.rank; });
+      for(var guard = 0; guard < 400; guard++){
+        var deficit = total() - B;
+        if(deficit <= 0.5) break;
+        var moved = false;
+        for(var i = 0; i < ranked.length; i++){
+          var it = ranked[i], room = it.h - it.floor;
+          if(room <= 0.5) continue;
+          var take = Math.min(room, deficit);
+          if(two && it.col !== 'below'){
+            var other = keys.filter(function(k){ return k !== it.col; })[0];
+            if(other){
+              var d = needOf(it.col) - needOf(other);
+              if(d < -0.5) continue;
+              if(d > 0.5) take = Math.min(take, d);
+            }
+          }
+          it.h -= take; moved = true;
+          break;
+        }
+        if(!moved) break;
       }
-      fitRunOff(fit);
-      applyTodoGrow();
-      if(fit.histFloor && fitHistH() < fit.histFloor - 1) clearTodoGrow();
+      var over = total() - B;
+      if(over > 0.5){
+        fit.fitScroll = true;
+      } else {
+        // Two columns end on one line: the shorter one absorbs the difference with its own growers.
+        if(two && keys.length > 1){
+          var hc = Math.max.apply(null, keys.map(needOf));
+          keys.forEach(function(k){ fitAbsorb(cols[k].items, hc - needOf(k)); });
+        }
+      }
+      if(over < -0.5){
+        // Free height: each column absorbs its own.
+        if(!two){
+          var chain = [];
+          keys.forEach(function(k){ chain = chain.concat(cols[k].items); });
+          fitAbsorb(chain.concat(below), B - total());
+        }
+        var f2 = B - total();
+        if(two && f2 > 0.5){
+          var chartRoom = function(k){
+            var r = 0;
+            cols[k].items.forEach(function(it){ if(it.kind === 'chart') r += Math.max(0, it.cap - it.h); });
+            return r;
+          };
+          var dh1 = keys.length ? Math.min.apply(null, keys.map(chartRoom)) : 0;
+          dh1 = Math.min(f2, dh1);
+          if(dh1 > 0.5) keys.forEach(function(k){ fitAbsorb(cols[k].items.filter(function(it){ return it.kind === 'chart'; }), dh1); });
+          f2 = B - total();
+          // To Do and the ticker share what is left, in proportion to the room each has.
+          var tdo = below.filter(function(it){ return it.kind === 'todo'; })[0];
+          var tRoom = tdo ? Math.max(0, tdo.cap - tdo.h) : 0, kRoom = 0;
+          keys.forEach(function(k){ cols[k].items.forEach(function(it){ if(it.kind === 'ticker') kRoom += Math.max(0, it.cap - it.h); }); });
+          if(f2 > 0.5 && tRoom + kRoom > 0.5){
+            var toTodo = Math.min(tRoom, f2 * tRoom / (tRoom + kRoom));
+            if(tdo) tdo.h += toTodo;
+            f2 -= toTodo;
+          }
+          if(f2 > 0.5){
+            if(keys.length > 1){
+              var cur = Math.max.apply(null, keys.map(needOf));
+              keys.forEach(function(k){ fitAbsorb(cols[k].items, cur + f2 - needOf(k)); });
+            } else if(keys.length === 1){
+              fitAbsorb(cols[keys[0]].items, f2);
+            }
+            f2 = B - total();
+          }
+          if(f2 > 0.5 && below.length) below[below.length - 1].h += f2;
+        }
+        if(!keys.length && below.length) fitAbsorb(below, B - total());
+      }
+      // Apply the sizes.
+      all.forEach(function(it){
+        if(it.kind === 'fixed' && Math.abs(it.h - it.nat) < 0.5) return;
+        fitSetPx(it.el, it.h);
+      });
+      if(mainShown){
+        keys.forEach(function(k){ if(!two) fitSetPx(cols[k].zone, needOf(k)); });
+        fitSetPx(mainEl, mainNeed());
+      }
+      if(fit.fitScroll){
+        body.classList.add('fit-scroll');
+        lg.style.flex = '0 0 auto';
+        if(scroll) lg.style.height = Math.ceil(total()) + 'px';
+      }
+      keys.forEach(function(k){
+        var g = cols[k].items.filter(function(it){ return it.kind === 'chart' || it.kind === 'ticker'; })[0];
+        fit.columns.push({ name: k, free: Math.round(B - total()), grower: g ? (g.el.id || g.kind) : '' });
+      });
+      var hi = all.filter(function(it){ return it.el === hist; })[0];
+      window.__bdevTodoLayout = { applied: true, plainHistH: hi ? hi.nat : 0, histH: hi ? hi.h : 0 };
+    } else {
+      window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
     }
-    fit.histH = fitHistH();
-    var now = {};
-    Array.prototype.forEach.call(document.querySelectorAll('.fit-dropped'), function(el){
-      if(el.id === 'activityHeatmapRow'){ now.activity = true; now.heatmap = true; }
-      var id = el.getAttribute('data-part');
-      if(id) now[id] = true;
-    });
-    Object.keys(was).forEach(function(id){ if(!now[id]) rerenderFitPart(id); });
+    secHostSync();
     window.__bdevFit = fit;
-    // The chart canvas was drawn at the height it had before this pass;
-    // redraw it when the grow, the floor or their undo changed that height.
-    if(hist && Math.abs(fit.histH - histHBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
+    renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
+    // The chart canvas was drawn at the height it had before this pass.
+    if(hist && Math.abs(fitHistH() - histBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
   }
 
   // resize (and F11, which is itself a resize of the window's client area):
@@ -3428,7 +3485,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // port. A stale or missing file is shown as "BurnMon is not running" and
   // its old numbers are not drawn. Plain Mode means plain words, a page that
   // fits the window and the Plain list of sections; it makes no model call.
-  var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions','processes'];
+  var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions'];
   var SEC_TITLE = {
     waits:['Waits on you','Needs you'], outcomes:['Outcomes','Results'], burn:['Burn','Token use'],
     agents_map:['Agents map','Who works with whom'], sessions:['Sessions','Running sessions'],
@@ -3910,9 +3967,14 @@ body.plain #mapOverlay{font-size:13.5px}
       var body;
       if(SEC_NEEDS_SNAPSHOT[id] && !snap) body = secStub(secState.plain ? 'No current numbers. Start BurnMon to see them.' : 'No current snapshot.');
       else body = SEC_BODY[id](snap);
-      var p = secPanel(id, body, id === 'sessions' || id === 'processes');
+      var p = secPanel(id, body, id === 'sessions');
       if(n < 5) row1 += p; else rest += p;
     });
+    var ph = document.getElementById('processesHost');
+    if(ph){
+      var pbody = !secPartOn('processes') ? '' : (!snap ? secStub(secState.plain ? 'No current numbers. Start BurnMon to see them.' : 'No current snapshot.') : SEC_BODY.processes(snap));
+      ph.innerHTML = secPartOn('processes') ? secPanel('processes', pbody, true) : '';
+    }
     document.getElementById('secPanels').innerHTML = (row1 ? '<div class="secrow1" id="secRow1">' + row1 + '</div>' : '') + rest;
     ctlFill();
     secApplyParts();
@@ -3924,11 +3986,11 @@ body.plain #mapOverlay{font-size:13.5px}
   // nothing in it is on. Without any part on the host is simply empty.
   var SEC_BURN_PARTS = ['burn_30min','vendor_strip','activity','heatmap','turn_ticker'];
   var SEC_SYSTEM_PARTS = ['system','process_groups'];
-  // The sections host goes when nothing is in it: no section on, no notice, no cut note.
+  // The sections host goes when nothing is in it: no section on, no notice.
   function secHostSync(){
-    var host = document.getElementById('secHost'), nt = document.getElementById('secNotice'), cut = document.getElementById('secCutNote');
+    var host = document.getElementById('secHost'), nt = document.getElementById('secNotice');
     if(!host) return;
-    var empty = !SEC_ORDER.some(secPartOn) && !(nt && nt.innerHTML) && !(cut && cut.textContent);
+    var empty = !SEC_ORDER.some(secPartOn) && !(nt && nt.innerHTML);
     host.classList.toggle('sec-off', empty);
   }
   function secApplyParts(){
@@ -3941,7 +4003,7 @@ body.plain #mapOverlay{font-size:13.5px}
     set(document.querySelector('.zone.burn'), !showBurn);
     set(document.querySelector('.zone.system'), !showSys);
     set(document.querySelector('main'), !showBurn && !showSys);
-    var hideLegacy = !showBurn && !showSys && !showTodo;
+    var hideLegacy = !showBurn && !showSys && !showTodo && !secPartOn('processes');
     set(document.getElementById('legacy'), hideLegacy);
     set(document.getElementById('activityHeatmapRow'), !secPartOn('activity') && !secPartOn('heatmap'));
     document.getElementById('activityHeatmapRow').classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
@@ -4133,6 +4195,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // open, and nothing here animates, so only one of the two ever costs anything.
   var mapOpen = false, mapSource = 'live', mapData = null, mapErr = '', mapToken = 0, mapSel = '';
   var mapOpenFrames = {};
+  var mapIdleOpen = false;
   var MAP_TABS = [['live', 'LIVE'], ['24', 'Last 24 hours'], ['168', 'Last 7 days']];
   var MAP = { COLW: 222, BOXW: 170, BOXH: 66, ROWH: 84, PADX: 24, HEAD: 34, FRAMEHEAD: 76 };
 
@@ -4150,11 +4213,13 @@ body.plain #mapOverlay{font-size:13.5px}
   // Cells to pixels. A frame gets room above its first row for its header.
   // Column pitch: 222 px, or wider when the scroll area has room, so the map
   // spreads over the window. The last box then ends PADX from the right edge.
-  function mapColW(cols, availW){
-    if(cols <= 1) return MAP.COLW;
-    return Math.max(MAP.COLW, (availW - 2 * MAP.PADX - MAP.BOXW) / (cols - 1));
+  // With the idle table open the pitch drops to a box plus a 24 px gap (tight),
+  // and mapRender scales the stage down for what still does not fit.
+  function mapColW(cols, availW, minW){
+    if(cols <= 1) return minW;
+    return Math.max(minW, (availW - 2 * MAP.PADX - MAP.BOXW) / (cols - 1));
   }
-  function mapGeometry(L, availW){
+  function mapGeometry(L, availW, tight){
     var maxRow = 0, gap = {};
     (L.boxes || []).forEach(function(b){ if(b.row > maxRow) maxRow = b.row; });
     (L.frames || []).forEach(function(f){
@@ -4163,9 +4228,9 @@ body.plain #mapOverlay{font-size:13.5px}
     var hasYou = (L.boxes || []).some(function(b){ return b.kind === 'you'; });
     var rowY = [], y = MAP.HEAD + (hasYou ? MAP.ROWH : 0);
     for(var r = 0; r <= maxRow; r++){ y += gap[r] || 0; rowY[r] = y; y += MAP.ROWH; }
-    var cols = (L.columns || []).length, colW = mapColW(cols, availW);
-    var width = colW > MAP.COLW ? Math.max(availW, MAP.PADX * 2 + (cols - 1) * colW + MAP.BOXW) : MAP.PADX * 2 + cols * MAP.COLW;
-    return { rowY: rowY, youY: MAP.HEAD, width: width, height: y + 24, colW: colW,
+    var cols = (L.columns || []).length, minW = tight ? MAP.BOXW + 24 : MAP.COLW, colW = mapColW(cols, availW, minW);
+    var width = colW > minW ? Math.max(availW, MAP.PADX * 2 + (cols - 1) * colW + MAP.BOXW) : MAP.PADX * 2 + cols * minW;
+    return { rowY: rowY, youY: MAP.HEAD, width: width, height: y + 24 + ((L.idle || []).length ? MAP.FRAMEHEAD : 0), colW: colW,
       x: function(c){ return MAP.PADX + c * colW; } };
   }
 
@@ -4194,7 +4259,8 @@ body.plain #mapOverlay{font-size:13.5px}
     if(!L || !(L.boxes || []).length){
       var msg = mapErr || (p ? (p.note || (plain ? 'No agents in this window.' : 'No sessions in this window.')) : 'Reading...');
       stage.style.width = ''; stage.style.height = '';
-      stage.innerHTML = '<div class="mapempty">' + esc(msg) + '</div>' + mapIdleHTML(L);
+      stage.innerHTML = '<div class="mapempty">' + esc(msg) + '</div>';
+      document.getElementById('mapIdleBar').innerHTML = mapIdleHTML(L);
       mapRenderPanel(null, L);
       return;
     }
@@ -4203,12 +4269,22 @@ body.plain #mapOverlay{font-size:13.5px}
     // The side panel changes the scroll area's width, so it is drawn first.
     mapRenderPanel(sel, L);
     var scrollEl = document.getElementById('mapScroll');
-    var g = mapGeometry(L, scrollEl.clientWidth), pos = {}, html = '';
+    // The idle table widens the panel and narrows this area, so the map reflows
+    // tight and then scales to the width left: every box stays fully visible and
+    // nothing is covered by the panel (spec item 7). Zoom 1 otherwise.
+    var tight = !!(mapIdleOpen && L && (L.idle || []).length), zoom = 1;
+    stage.style.zoom = '';
+    var g = mapGeometry(L, scrollEl.clientWidth, tight), pos = {}, html = '';
+    if(tight){
+      var room = scrollEl.clientWidth - 12;
+      if(g.width > room) zoom = room / g.width;
+      if(zoom < 1) stage.style.zoom = String(zoom);
+    }
     stage.style.width = g.width + 'px'; stage.style.height = g.height + 'px';
     // A vertical scrollbar that the new height brings narrows the area: spread again.
     var aw = scrollEl.clientWidth;
-    if(aw !== Math.round(g.width) && g.colW > MAP.COLW){
-      g = mapGeometry(L, aw);
+    if(!tight && aw !== Math.round(g.width) && g.colW > MAP.COLW){
+      g = mapGeometry(L, aw, false);
       stage.style.width = g.width + 'px';
     }
     (L.columns || []).forEach(function(name, i){
@@ -4267,26 +4343,49 @@ body.plain #mapOverlay{font-size:13.5px}
         (b.line ? '<span class="l">' + esc(b.line) + '</span>' : '') + '</button>';
     });
     var top = document.getElementById('mapScroll').scrollTop, left = document.getElementById('mapScroll').scrollLeft;
-    stage.innerHTML = html + mapIdleHTML(L);
+    stage.innerHTML = html;
+    document.getElementById('mapIdleBar').innerHTML = mapIdleHTML(L);
     document.getElementById('mapScroll').scrollTop = top; document.getElementById('mapScroll').scrollLeft = left;
   }
 
   // Sprints and flows that wait with no agent running are not boxes (a handful
-  // of old ones would push live work down); they are listed under the map.
+  // of old ones would push live work down). One button under the map opens them
+  // as a table in the side panel; nothing is drawn over the map.
   function mapIdleHTML(L){
     if(!L || !(L.idle || []).length) return '';
     var plain = secState.plain;
-    var html = '<details class="mapidle" style="position:absolute;left:' + MAP.PADX + 'px;bottom:6px"><summary>' + L.idle.length + ' ' +
-      esc(plain ? 'Foreman jobs with no agent running' : 'sprints and flows with no session running') + '</summary>';
-    L.idle.forEach(function(i){
-      html += '<div class="mapnote">' + esc(i.label) + ' - ' + esc(i.kind) + (i.status ? ', ' + esc(i.status) : '') +
-        (i.waits_on_you ? ', ' + esc(plain ? 'waiting for you' : 'waits on you') : '') + ', ' + esc(secDur(i.age_seconds)) + ' old</div>';
+    return '<button type="button" id="mapIdleBtn" class="mapidlebtn" aria-pressed="' + (mapIdleOpen ? 'true' : 'false') + '">' + L.idle.length + ' ' +
+      esc(plain ? 'Foreman jobs with no agent' : 'sprints and flows with no session') + '</button>';
+  }
+  function mapIdleTableHTML(L){
+    var plain = secState.plain, groups = [
+      [plain ? 'Done, needs close-out' : 'Done, needs close-out', function(i){ return !!i.close_out; }],
+      [plain ? 'Waiting for you' : 'Waits on you', function(i){ return !i.close_out && !!i.waits_on_you; }],
+      ['Other sprints and flows', function(i){ return !i.close_out && !i.waits_on_you; }]];
+    var html = '<h3>' + esc(plain ? 'Foreman jobs with no agent' : 'Sprints and flows with no session') + '</h3><table class="mapidletbl"><thead><tr><th>Name</th><th>Project</th><th>Kind</th><th>Waited</th><th>Links</th></tr></thead><tbody>';
+    var link = function(p, w){ return p ? '<a href="#" class="secfile" data-path="' + esc(p) + '">' + esc(w) + '</a>' : ''; };
+    groups.forEach(function(g){
+      var rows = (L.idle || []).filter(g[1]).sort(function(a, b){ return b.age_seconds - a.age_seconds; });
+      if(!rows.length) return;
+      html += '<tr class="grp"><td colspan="5">' + esc(g[0]) + '</td></tr>';
+      rows.forEach(function(i){
+        var chip = (i.close_out && i.kind === 'sprint') ? ctlChips('closeout', i.id, '') : '';
+        html += '<tr><td>' + esc(i.label) + '</td><td>' + esc(i.project || '') + '</td><td>' + esc(i.kind) + '</td><td>' + esc(secDur(i.age_seconds)) + '</td><td>' +
+          [link(i.spec_path, 'spec'), link(i.result_path, 'result')].filter(Boolean).join(' ') + (chip ? ' ' + chip : '') + '</td></tr>';
+      });
     });
-    return html + '</details>';
+    return html + '</tbody></table>';
   }
 
   function mapRenderPanel(b, L){
     var el = document.getElementById('mapPanel');
+    if(mapIdleOpen && L && (L.idle || []).length){
+      el.classList.add('on'); el.classList.add('wide');
+      el.innerHTML = mapIdleTableHTML(L);
+      return;
+    }
+    mapIdleOpen = false;
+    el.classList.remove('wide');
     if(!b){
       el.classList.remove('on');
       el.innerHTML = '';
@@ -4338,7 +4437,7 @@ body.plain #mapOverlay{font-size:13.5px}
   }
   function mapChoose(src){
     mapSource = src;
-    mapSel = '';
+    mapSel = ''; mapIdleOpen = false;
     mapData = null; mapErr = '';
     mapRender();
     mapFetch();
@@ -4359,10 +4458,26 @@ body.plain #mapOverlay{font-size:13.5px}
       mapFetch();
       return;
     }
+    mapIdleOpen = false;
     mapSel = mapSel === id ? '' : id;
     mapRender();
   });
+  document.getElementById('mapIdleBar').addEventListener('click', function(e){
+    if(!(e.target.closest && e.target.closest('#mapIdleBtn'))) return;
+    mapIdleOpen = !mapIdleOpen;
+    mapRender();
+  });
   document.getElementById('mapPanel').addEventListener('click', function(e){
+    if(ctlClick(e)){ mapRender(); return; }
+    var f = e.target.closest ? e.target.closest('.secfile') : null;
+    if(f){
+      e.preventDefault();
+      if(typeof window.bdevOpenItemFile === 'function'){
+        var r = window.bdevOpenItemFile(f.getAttribute('data-path'));
+        if(r && r.catch) r.catch(function(err){ console.error('bdevOpenItemFile:', err); });
+      }
+      return;
+    }
     var b = e.target.closest ? e.target.closest('button[data-turn]') : null;
     if(!b) return;
     var sid = b.getAttribute('data-turn'), turn = stationTurnCount(sid);
@@ -4389,7 +4504,8 @@ body.plain #mapOverlay{font-size:13.5px}
     // uicheck only: draw a payload without calling Go. src is live or the hours.
     // It also drops any answer still on its way from Go, so the page shows what was handed in.
     setPayload: function(p, src){ mapToken++; mapSource = src || 'live'; mapData = p; mapErr = ''; mapSel = ''; mapRender(); },
-    select: function(id){ mapSel = id; mapRender(); },
+    select: function(id){ mapSel = id; mapIdleOpen = false; mapRender(); },
+    idle: function(open){ mapIdleOpen = !!open; mapRender(); },
     frames: function(){ return Object.keys(mapOpenFrames); } };
 
   // The page can be driven without Go (uicheck d29 feeds the frozen example).

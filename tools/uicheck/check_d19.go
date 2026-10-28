@@ -7,13 +7,12 @@ import (
 	"time"
 )
 
-// d19: WS2 alpha.7 item 3 (02_roadmap\2026-09-29_ws2_smooth_tick_and_system
-// _layout.md): with the To Do panel visible, the System chart (.histwrap) is
-// 70% of the height it has in the plain layout at the same window size, To
-// Do fills the window to its bottom edge, and nothing overflows. With To Do
-// off the chart keeps its plain height. At a window too small for To Do in
-// the plain layout (1280x860 today), applyPanelFit's drop order still wins:
-// To Do is fit-dropped and the chart keeps its plain height. The three To Do
+// d19: with the To Do panel visible it is never hidden (B7 replaced the old
+// 70 percent chart rule and the drop order): the fit pass shares the free
+// height, To Do reaches the window bottom edge (the end of the scrolled
+// page when every part sits at its floor) and no zone overflows. At a window
+// too small for To Do in the plain layout (1280x860 today) it sits at its
+// floor of three rows and the page scrolls. The three To Do
 // on sizes are ones that fit this laptop's primary screen: uicheck places
 // the window at (100,100) there and caps it to that screen, so the portrait
 // 1152x2048 size cannot be reached from here. Fake mode only, with made-up
@@ -29,6 +28,12 @@ func init() {
 		var errs []string
 		skipped := 0
 		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+		// Own starting state, so the order of checks does not matter: d29 leaves
+		// the page in Plain with a stale reading. Standard, every part on,
+		// Overall scrollbar off, a fresh reading.
+		if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
+			return fmt.Errorf("d19: set the starting state: %w", err)
+		}
 		for _, c := range cases {
 			if err := ensureWindowSizeWH(hwnd, c.w, c.h); err != nil {
 				return err
@@ -115,23 +120,12 @@ func init() {
 			if out.BodyOver || out.ZoneOver {
 				errs = append(errs, fmt.Sprintf("%dx%d todo=%s: page or a zone overflows", c.w, c.h, state))
 			}
-			if !c.todo || c.expectDrop {
-				if c.expectDrop && !out.TodoDropped {
-					errs = append(errs, fmt.Sprintf("%dx%d: expected To Do to be fit-dropped at this size", c.w, c.h))
-				}
-				if l.Applied || math.Abs(l.HistH-l.PlainHistH) > 0.5 {
-					errs = append(errs, fmt.Sprintf("%dx%d To Do off or dropped: chart changed height (%.0f vs plain %.0f)", c.w, c.h, l.HistH, l.PlainHistH))
-				}
+			if !c.todo {
 				continue
 			}
 			if out.TodoDropped {
-				errs = append(errs, fmt.Sprintf("%dx%d: To Do was fit-dropped, nothing to grow", c.w, c.h))
+				errs = append(errs, fmt.Sprintf("%dx%d: To Do is hidden, B7 never hides a part", c.w, c.h))
 				continue
-			}
-			// Rounding the freed height to whole px moves the ratio by at
-			// most 0.5px / plain height.
-			if !l.Applied || math.Abs(ratio-0.7) > 0.01 {
-				errs = append(errs, fmt.Sprintf("%dx%d: chart ratio %.3f applied=%v, want 0.700", c.w, c.h, ratio, l.Applied))
 			}
 			// .todopanel's own 4px bottom margin.
 			if math.Abs(out.InnerH-4-out.TodoBottom) > 2 {
@@ -145,7 +139,7 @@ func init() {
 			fmt.Printf("uicheck: d19: PARTIAL, %d of %d cases skipped because the screen is too small; run on a screen that holds 2560x1300 CSS px for a full pass\n", skipped, len(cases))
 			return nil
 		}
-		fmt.Println("uicheck: d19: To Do layout clean (chart at 70% with To Do on, To Do fills the bottom, unchanged with To Do off, no overflow)")
+		fmt.Println("uicheck: d19: To Do layout clean (To Do never hidden, fills the bottom, no overflow)")
 		return nil
 	}
 }
