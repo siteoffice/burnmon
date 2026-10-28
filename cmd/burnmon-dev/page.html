@@ -355,7 +355,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
    hands the freed height to this panel, which then fills the bottom of the
    window; .todobody keeps its own scroll. Never applied with To Do off. */
 body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
-.todobody{flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px}
+.todobody{flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px;
+  scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
+.todobody::-webkit-scrollbar{width:8px}
+.todobody::-webkit-scrollbar-track{background:var(--panel2)}
+.todobody::-webkit-scrollbar-thumb{background:var(--sb)}
+.todobody::-webkit-scrollbar-thumb:hover{background:var(--sb-hover)}
 .todorow{flex:0 0 auto; display:flex; gap:8px; align-items:baseline; font:11.5px/1.4 var(--mono); white-space:nowrap; overflow:hidden}
 .todorow .due{color:var(--dim); flex:0 0 auto}
 .todorow .due.overdue{color:var(--red)}
@@ -512,6 +517,8 @@ body.plain #mapOverlay{font-size:13.5px}
 #secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
 #secSettings input{margin:0; accent-color:var(--amber)}
 #histAdmin{display:flex; flex-direction:column; gap:6px; margin-top:6px; padding-top:8px; border-top:1px solid var(--bd)}
+#histAdmin .histgrid{display:grid; grid-template-columns:auto auto 1fr; gap:6px 10px; align-items:center}
+#histAdmin .histgrid .histend{justify-self:end}
 #histAdmin .histrow{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
 #histAdmin input[type=text], #histAdmin input[type=number]{background:var(--bg); color:inherit; border:1px solid var(--bd); padding:2px 4px; font:inherit}
 #histAdmin .histbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
@@ -649,6 +656,7 @@ body.plain #mapOverlay{font-size:13.5px}
     </div>
   </section>
 </main>
+<div id="processesHost"></div>
 <section class="panel todopanel" id="todoPanel" data-part="todo">
   <div class="panelhead">Microsoft To Do</div>
   <div class="todobody" id="todoBody"></div>
@@ -675,16 +683,15 @@ body.plain #mapOverlay{font-size:13.5px}
   <div id="histAdmin">
     <h4>History</h4>
     <div class="sechint" id="hist_keep"></div>
-    <div class="histrow">
-      <label>Delete older than (days) <input id="hist_days" type="number" step="1" min="1" value="90" style="width:70px"></label>
+    <div class="histgrid">
+      <label for="hist_days">Delete older than (days)</label>
+      <input id="hist_days" type="number" step="1" min="1" value="90" style="width:70px">
       <button id="hist_delete_older" class="histbtn del" type="button">Delete older than N days</button>
-    </div>
-    <div class="histrow">
-      <label>Session <input id="hist_session" type="text" placeholder="session id" style="width:160px"></label>
+      <label for="hist_session">Session</label>
+      <input id="hist_session" type="text" placeholder="session id" style="width:160px">
       <button id="hist_delete_session" class="histbtn del" type="button">Delete one session</button>
-    </div>
-    <div class="histrow">
-      <button id="hist_delete_all" class="histbtn del" type="button">Delete all history</button>
+      <span></span><span></span>
+      <button id="hist_delete_all" class="histbtn del histend" type="button">Delete all history</button>
     </div>
     <div class="sechint" id="hist_delete_result"></div>
     <h4>Export history</h4>
@@ -695,7 +702,7 @@ body.plain #mapOverlay{font-size:13.5px}
       <label>Label <input id="hist_label" type="text" value="dev-1" style="width:70px"></label>
     </div>
     <div class="histrow" id="hist_owners"></div>
-    <div class="histrow"><button id="hist_export" class="histbtn" type="button">Export</button></div>
+    <div class="histgrid"><span></span><span></span><button id="hist_export" class="histbtn histend" type="button">Export</button></div>
     <div class="sechint" id="hist_export_result" style="word-break:break-all"></div>
   </div>
   <div class="sechint">Esc closes this list</div>
@@ -3428,7 +3435,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // port. A stale or missing file is shown as "BurnMon is not running" and
   // its old numbers are not drawn. Plain Mode means plain words, a page that
   // fits the window and the Plain list of sections; it makes no model call.
-  var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions','processes'];
+  var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions'];
   var SEC_TITLE = {
     waits:['Waits on you','Needs you'], outcomes:['Outcomes','Results'], burn:['Burn','Token use'],
     agents_map:['Agents map','Who works with whom'], sessions:['Sessions','Running sessions'],
@@ -3910,9 +3917,14 @@ body.plain #mapOverlay{font-size:13.5px}
       var body;
       if(SEC_NEEDS_SNAPSHOT[id] && !snap) body = secStub(secState.plain ? 'No current numbers. Start BurnMon to see them.' : 'No current snapshot.');
       else body = SEC_BODY[id](snap);
-      var p = secPanel(id, body, id === 'sessions' || id === 'processes');
+      var p = secPanel(id, body, id === 'sessions');
       if(n < 5) row1 += p; else rest += p;
     });
+    var ph = document.getElementById('processesHost');
+    if(ph){
+      var pbody = !secPartOn('processes') ? '' : (!snap ? secStub(secState.plain ? 'No current numbers. Start BurnMon to see them.' : 'No current snapshot.') : SEC_BODY.processes(snap));
+      ph.innerHTML = secPartOn('processes') ? secPanel('processes', pbody, true) : '';
+    }
     document.getElementById('secPanels').innerHTML = (row1 ? '<div class="secrow1" id="secRow1">' + row1 + '</div>' : '') + rest;
     ctlFill();
     secApplyParts();
@@ -3941,7 +3953,7 @@ body.plain #mapOverlay{font-size:13.5px}
     set(document.querySelector('.zone.burn'), !showBurn);
     set(document.querySelector('.zone.system'), !showSys);
     set(document.querySelector('main'), !showBurn && !showSys);
-    var hideLegacy = !showBurn && !showSys && !showTodo;
+    var hideLegacy = !showBurn && !showSys && !showTodo && !secPartOn('processes');
     set(document.getElementById('legacy'), hideLegacy);
     set(document.getElementById('activityHeatmapRow'), !secPartOn('activity') && !secPartOn('heatmap'));
     document.getElementById('activityHeatmapRow').classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));

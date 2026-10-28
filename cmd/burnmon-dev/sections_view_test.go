@@ -184,7 +184,7 @@ func TestPageTagsEveryPart(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		`var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions','processes'];`,
+		`var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions'];`,
 		`id="secScrollbar"`,
 		`name="secStationStart"`,
 	} {
