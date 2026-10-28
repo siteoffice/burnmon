@@ -20,7 +20,7 @@ import (
 //     their parts; with all 15 off the host is empty and nothing breaks;
 //   - Plain shows its own list (the five R8 panels), in plain words, and fits
 //     the window; its list can take a burn-zone part; at 1024x480 with all
-//     on it drops whole sections and says how many;
+//     on it hides nothing and the page scrolls (B7);
 //   - the Plain toggle's text flips between "Plain: off" and "Plain: on";
 //   - the gear lists four groups of parts, Overall scrollbar on top, the
 //     "Station starts as" pair below; choosing a Station theme calls the
@@ -108,7 +108,6 @@ type d29Page struct {
 	Header       string   `json:"header"`
 	Notice       string   `json:"notice"`
 	Text         string   `json:"text"`
-	Note         string   `json:"note"`
 	Scrolls      bool     `json:"scrolls"`
 	OverflowY    string   `json:"overflowY"`
 	HostOver     float64  `json:"hostOver"`
@@ -170,7 +169,6 @@ const d29ReadJS = `(function(){
     header: document.getElementById('hdrSnapAge').textContent,
     notice: document.getElementById('secNotice').textContent,
     text: document.getElementById('secPanels').textContent,
-    note: document.getElementById('secCutNote').textContent,
     scrolls: ps.scrollHeight > ps.clientHeight + 1, overflowY: getComputedStyle(ps).overflowY,
     hostOver: host.scrollHeight - host.clientHeight, bodyOver: document.body.scrollHeight - document.body.clientHeight,
     agentsSlot: !!document.getElementById('secAgentsSlot'),
@@ -224,7 +222,7 @@ func init() {
 		}
 		wantAll := strings.Join(d29Parts, ",")
 
-		// Standard, every part on, scrollbar on: all shown, none dropped, the page scrolls, no note.
+		// Standard, every part on, scrollbar on: all shown, none dropped, the page scrolls.
 		p, err := d29Apply(d29Payload(std(nil)))
 		if err != nil {
 			return err
@@ -237,9 +235,6 @@ func init() {
 		}
 		if !p.Scrolls || p.OverflowY != "auto" {
 			return d29Fail("standard page does not scroll (scrolls %v, overflow-y %s)", p.Scrolls, p.OverflowY)
-		}
-		if p.Note != "" {
-			return d29Fail("standard shows a hidden note: %q", p.Note)
 		}
 		if p.BodyOver > 1 {
 			return d29Fail("standard: the body itself overflows by %.0f px", p.BodyOver)
@@ -294,7 +289,7 @@ func init() {
 			return d29Fail("system and process_groups off: burn zone %v, system zone %v", p.BurnZone, p.SystemZone)
 		}
 
-		// Every part off: an empty host, no zones, no note, no error.
+		// Every part off: an empty host, no zones, no error.
 		allOff := map[string]bool{}
 		for _, id := range d29Parts {
 			allOff[id] = true
@@ -302,8 +297,8 @@ func init() {
 		if p, err = d29Apply(d29Payload(std(allOff))); err != nil {
 			return d29Fail("all 15 parts off raised: %v", err)
 		}
-		if len(p.shown()) != 0 || p.MainShown || p.BurnZone || p.SystemZone || p.Note != "" {
-			return d29Fail("all parts off: shown %v, main %v, note %q", p.shown(), p.MainShown, p.Note)
+		if len(p.shown()) != 0 || p.MainShown || p.BurnZone || p.SystemZone {
+			return d29Fail("all parts off: shown %v, main %v", p.shown(), p.MainShown)
 		}
 
 		// Plain, scrollbar off: the Plain list, plain words, no older zones, fits the window.
@@ -323,8 +318,8 @@ func init() {
 		if p.OverflowY != "hidden" {
 			return d29Fail("plain page can scroll (overflow-y %s)", p.OverflowY)
 		}
-		if p.Note != "" || p.HostOver > 1 {
-			return d29Fail("plain at this size: note %q, host overflow %.0f px", p.Note, p.HostOver)
+		if p.HostOver > 1 {
+			return d29Fail("plain at this size: host overflow %.0f px", p.HostOver)
 		}
 		for _, jargon := range []string{"tokens/min", "API price equiv."} {
 			if strings.Contains(p.Text, jargon) {
@@ -346,7 +341,7 @@ func init() {
 			return d29Fail("plain with two burn parts: shown %v, burn zone %v, system zone %v", p.shown(), p.BurnZone, p.SystemZone)
 		}
 
-		// Plain keeps the fit: everything on in a small window drops whole sections and says so.
+		// B7: everything on in a small window hides nothing. Parts shrink to their floors and the page scrolls.
 		if err := ensureWindowSizeWH(hwnd, 1024, 480); err != nil {
 			return err
 		}
@@ -354,21 +349,21 @@ func init() {
 		if p, err = d29Apply(d29Payload(plain(d29Opts{PlainAll: true}))); err != nil {
 			return err
 		}
-		if len(p.shown()) >= len(d29Parts) || !strings.Contains(p.Note, "hidden, the window is too small") {
-			return d29Fail("plain at 1024x480 with all parts: shown %v, note %q", p.shown(), p.Note)
+		if len(p.shown()) < len(d29Parts) {
+			return d29Fail("plain at 1024x480 with all parts hid some: shown %v", p.shown())
 		}
-		if p.HostOver > 1 || p.BodyOver > 1 || p.OverflowY != "hidden" {
-			return d29Fail("plain at 1024x480 overflows: host %.0f px, body %.0f px, overflow-y %s", p.HostOver, p.BodyOver, p.OverflowY)
+		if p.BodyOver > 1 || p.OverflowY != "auto" {
+			return d29Fail("plain at 1024x480: body overflow %.0f px, overflow-y %s (want the page to scroll)", p.BodyOver, p.OverflowY)
 		}
 		if _, err := screenshot(hwnd, "d29-plain-small"); err != nil {
 			return err
 		}
-		// Standard at the same size drops nothing and has no note: it scrolls instead.
+		// Standard at the same size drops nothing either: it scrolls.
 		if p, err = d29Apply(d29Payload(std(nil))); err != nil {
 			return err
 		}
-		if strings.Join(p.shown(), ",") != wantAll || p.Note != "" || !p.Scrolls {
-			return d29Fail("standard at 1024x480: shown %v, note %q, scrolls %v", p.shown(), p.Note, p.Scrolls)
+		if strings.Join(p.shown(), ",") != wantAll || !p.Scrolls {
+			return d29Fail("standard at 1024x480: shown %v, scrolls %v", p.shown(), p.Scrolls)
 		}
 		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
 			return err
