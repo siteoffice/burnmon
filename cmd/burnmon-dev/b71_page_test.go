@@ -84,3 +84,41 @@ func TestSessionsTableInsideSeclist(t *testing.T) {
 		t.Error("secBodySessions does not wrap the table in .seclist.seclist-tbl")
 	}
 }
+
+func TestStationSwapsPartsNotTheZone(t *testing.T) {
+	page := idlePage()
+	s := strings.Index(page, "function mountStation(")
+	if s < 0 {
+		t.Fatal("no mountStation")
+	}
+	body := page[s:]
+	if e := strings.Index(body, "\n  function unmountStation("); e > 0 {
+		body = body[:e]
+	}
+	for _, want := range []string{".zone.burn .zonebody", "stationSpan("} {
+		if !strings.Contains(body, want) {
+			t.Errorf("mountStation lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "querySelector('.zone.burn');") {
+		t.Error("mountStation still hides the whole .zone.burn")
+	}
+	for _, want := range []string{"function stationPeek(", "function stationSettle("} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page.html lacks %q", want)
+		}
+	}
+	a := strings.Index(page, "function applyPanelFit(){")
+	if a < 0 {
+		t.Fatal("no applyPanelFit")
+	}
+	fit := page[a:]
+	if e := strings.Index(fit, "\n  // resize (and F11"); e > 0 {
+		fit = fit[:e]
+	}
+	for _, want := range []string{"stationPeek(true)", "stationPeek(false)"} {
+		if !strings.Contains(fit, want) {
+			t.Errorf("applyPanelFit lacks %q", want)
+		}
+	}
+}

@@ -1905,6 +1905,37 @@ body.plain #mapOverlay{font-size:13.5px}
   }
   window.__bdevStationView = function(){ return station && typeof station.view === 'function' ? station.view() : null; }; // tools\uicheck (check_d23.go) only
   window.__bdevStationTheme = function(){ return station && typeof station.theme === 'function' ? station.theme() : null; }; // tools\uicheck (check_d23.go) only
+  // The vertical span of the visible parts: bottom of the last minus top of
+  // the first. Handles and the Station box are not parts.
+  function stationSpan(kids){
+    var top = Infinity, bot = -Infinity;
+    kids.forEach(function(el){
+      if(el.id === 'stationPanel' || (el.classList && el.classList.contains('hdl'))) return;
+      if(el.getClientRects().length === 0) return;
+      var r = el.getBoundingClientRect();
+      if(r.top < top) top = r.top;
+      if(r.bottom > bot) bot = r.bottom;
+    });
+    return bot > top ? bot - top : 0;
+  }
+  // applyPanelFit runs on the real parts: show them and hide the box, then
+  // stationSettle measures the span again and puts the box back.
+  function stationPeek(on){
+    if(!stationPanel) return;
+    if(on){
+      stationPanel.hidden.forEach(function(el){ el.style.display = ''; });
+      stationPanel.box.style.display = 'none';
+    } else stationSettle();
+  }
+  function stationSettle(){
+    var host = stationPanel.box.parentNode;
+    var kids = Array.prototype.filter.call(host.children, function(el){ return el !== stationPanel.box; });
+    var S = stationSpan(kids);
+    kids.forEach(function(el){ el.style.display = 'none'; });
+    stationPanel.hidden = kids;
+    stationPanel.box.style.display = '';
+    stationPanel.box.style.flex = S > 0 ? '0 0 ' + Math.round(S) + 'px' : '1';
+  }
   function mountStation(){
     if(station.isMounted()) return;
     if(stationMode === 'full'){
@@ -1912,17 +1943,19 @@ body.plain #mapOverlay{font-size:13.5px}
       ov.classList.add('on');
       station.mount(ov, 'full');
     } else {
-      // O takes the whole burn zone, label to turn ticker, everything above
-      // System (Wilco, 2026-10-01): the chart panel alone was too short for
-      // the deck to read.
-      var host = document.querySelector('.zone.burn');
-      var hidden = Array.prototype.slice.call(host.children);
-      hidden.forEach(function(el){ el.style.display = 'none'; });
+      // B7.1: O swaps the parts, not the zone. The visible parts of the burn
+      // zonebody (chart, vendor strip, activity row, turn ticker) are hidden
+      // and the box takes exactly the span they occupied, measured right
+      // before the swap, so nothing around it moves. The zone label stays.
+      var host = document.querySelector('.zone.burn .zonebody');
+      var kids = Array.prototype.slice.call(host.children);
+      var S = stationSpan(kids);
+      kids.forEach(function(el){ el.style.display = 'none'; });
       var box = document.createElement('div');
       box.id = 'stationPanel';
-      box.style.cssText = 'flex:1;min-height:0';
+      box.style.cssText = S > 0 ? 'flex:0 0 ' + Math.round(S) + 'px;min-height:0' : 'flex:1;min-height:0';
       host.appendChild(box);
-      stationPanel = {box: box, hidden: hidden};
+      stationPanel = {box: box, hidden: kids};
       station.mount(box, 'panel', stationMode === 'iso' ? 'iso' : 'top');
     }
     feedStation();
@@ -1935,8 +1968,8 @@ body.plain #mapOverlay{font-size:13.5px}
       stationPanel.box.parentNode.removeChild(stationPanel.box);
       stationPanel.hidden.forEach(function(el){ el.style.display = ''; });
       stationPanel = null;
-      // While the zone was hidden, applyPanelFit saw room to spare and the
-      // heatmaps drew at width 0: re-fit and redraw now, not on the next paint.
+      // The parts were hidden, so the heatmaps may have drawn at width 0:
+      // re-fit and redraw now, not on the next paint.
       applyPanelFit();
       renderHeatmap(lastHeatmapPayload);
       renderHarnessHeatmap(lastProcessGroupsHistory);
@@ -3342,6 +3375,7 @@ body.plain #mapOverlay{font-size:13.5px}
     if(amt > 0.5 && items.length) items[items.length - 1].h += amt;
   }
   function applyPanelFit(){
+    var sp = stationPanel; if(sp) stationPeek(true);
     var body = document.body, hist = document.querySelector('.histwrap');
     var histBefore = fitHistH();
     var scroll = !!secState.scrollbar;
@@ -3498,6 +3532,7 @@ body.plain #mapOverlay{font-size:13.5px}
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
     // The chart canvas was drawn at the height it had before this pass.
     if(hist && Math.abs(fitHistH() - histBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
+    if(sp) stationPeek(false);
   }
 
   // resize (and F11, which is itself a resize of the window's client area):

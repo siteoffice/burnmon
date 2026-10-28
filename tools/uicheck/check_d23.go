@@ -11,8 +11,8 @@ import (
 // three sessions with stages (never live data), then real key presses:
 // P opens the full overlay and its canvas draws, a Station click opens the
 // turn popup on top, Esc closes the popup first and the Station on the
-// next press; O replaces the whole burn zone (chart to turn ticker, all of
-// it above System) with the plan view filling that zone, and it draws; O
+// next press; O replaces the parts of the burn zone (chart to turn ticker) with
+// the plan view at the height of those parts (B7.1), and it draws; O
 // brings the zone back; I does the same with the 3D view, and Esc closes O and
 // I after a turn popup and before fullscreen (2026-10-05). Screenshots of the
 // views in both themes (P, O and I, site and space). Station themes (alpha.10):
@@ -230,7 +230,7 @@ func init() {
 			return !s.Overlay && s.Theme == start
 		})
 		step("O swaps the chart for the plan view and it draws", vkO, func(s d23State) bool {
-			return s.Panel && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH >= s.ZoneH-4 && s.Lit > 500 && strings.Contains(s.Hud, "3 agents")
+			return s.Panel && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH > 0 && s.PanelH <= s.ZoneH && s.Lit > 500 && strings.Contains(s.Hud, "3 agents")
 		})
 		if err := d23Shot(hwnd, "d23-station-panel"); err != nil {
 			return err
@@ -276,7 +276,7 @@ func init() {
 		// I (3D Station in the burn zone, 2026-10-05): the same zone and
 		// frame as O, the isometric projection instead of the plan.
 		step("I swaps the chart for the 3D Station and it draws", vkI, func(s d23State) bool {
-			return s.Panel && s.View == "iso" && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH >= s.ZoneH-4 && s.Lit > 500 &&
+			return s.Panel && s.View == "iso" && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH > 0 && s.PanelH <= s.ZoneH && s.Lit > 500 &&
 				strings.Contains(s.Hud, "3 agents") && !s.Overlay
 		})
 		if err := d23Shot(hwnd, "d23-station-iso"); err != nil {
