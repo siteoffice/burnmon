@@ -384,6 +384,7 @@ body.scroll-on #pageScroll, body.fit-scroll #pageScroll{overflow-y:auto; scrollb
 body.scroll-on #legacy{flex:0 0 auto}
 .sechost{flex:0 0 auto; overflow:hidden; margin:4px 4px 0; display:flex; flex-direction:column; gap:4px; min-height:0}
 .sechost.sec-fill{flex:1 1 auto; margin-bottom:4px}
+body.fit-scroll .sechost.sec-fill{flex:0 0 auto}
 .secnotice{padding:6px 8px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font-size:12px}
 .secnotice.warn{border-color:var(--amber)}
 .secpanels{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:4px}
@@ -399,8 +400,14 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .secrow b{color:var(--txt)}
 .sechint{color:var(--dim); font-size:11px}
 .secitem{white-space:nowrap; align-items:baseline}
-.seclist{flex:0 1 auto; min-height:0; max-height:8.3em; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+.seclist{flex:0 1 auto; min-height:0; max-height:8.3em; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
 .seclist > .secitem{flex:0 0 auto}
+.seclist::-webkit-scrollbar{width:8px}
+.seclist::-webkit-scrollbar-track{background:var(--panel2)}
+.seclist::-webkit-scrollbar-thumb{background:var(--sb)}
+.seclist::-webkit-scrollbar-thumb:hover{background:var(--sb-hover)}
+.seclist-tbl{max-height:none}
+.seclist > table{flex:0 0 auto; width:100%}
 .sectier{flex:0 0 auto; font:700 10px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
 .sectier.blocked{color:var(--amber)}
 .secgrey, .secgrey b{color:var(--dim)}
@@ -3193,12 +3200,14 @@ body.plain #mapOverlay{font-size:13.5px}
   //   content), then the charts without the cap, then the column's last panel,
   //   so no column leaves an empty block. In two columns both columns end on
   //   the same line; To Do and Processes sit below both.
+  //   The host lists (Waits on you, Outcomes, Sessions) give last, after every
+  //   legacy part, down to three rows each, scrollbar off only (B7.1).
   //   Every part at its floor and still too tall: body.fit-scroll lets the page
   //   scroll. Nothing is hidden, so window.__bdevFit.hidden is always [].
   // Every pass starts from the CSS layout again: fitUndo gives the inline sizes back.
   var FIT_CHART_MIN = 60, FIT_ROWS_MIN = 3, FIT_TABLE_MIN_ROWS = 2, FIT_CHART_GROW = 1.6;
   // __bdevFit and __bdevTodoLayout are tools\uicheck's own reads (check_d34.go, check_d19.go).
-  window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [] };
+  window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [], items: [] };
   window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
   var fitTouched = [];
   function fitHistH(){
@@ -3289,6 +3298,23 @@ body.plain #mapOverlay{font-size:13.5px}
     if(fitShown(td)) below.push(fitItem('below', td, 'todo', 3));
     return { cols: cols, below: below };
   }
+  // Host lists (B7.1): each visible .seclist in #secHost, floor = three rows.
+  function fitListFloor(el, nat){
+    el.scrollTop = 0;
+    var rows = el.querySelector('table') ? el.querySelectorAll('tbody tr:not(.ctlrow)') : el.querySelectorAll('.secitem');
+    if(rows.length <= FIT_ROWS_MIN) return nat;
+    return Math.min(nat, Math.ceil(rows[FIT_ROWS_MIN - 1].getBoundingClientRect().bottom - el.getBoundingClientRect().top) + 1);
+  }
+  function fitCollectHost(){
+    var out = [];
+    Array.prototype.forEach.call(document.querySelectorAll('#secHost .seclist'), function(el, i){
+      if(!fitShown(el) || el.closest('.sec-off')) return;
+      var h = el.offsetHeight;
+      out.push({ el: el, col: 'host', kind:'seclist', rank: 7 + i, nat: h, cap: h, h: h, floor: fitListFloor(el, h),
+        id: (el.closest('[data-sec]') || el).getAttribute('data-sec') || '' });
+    });
+    return out;
+  }
   function fitColNeed(c){
     var sum = 0;
     c.items.forEach(function(it){ sum += it.h; });
@@ -3332,7 +3358,9 @@ body.plain #mapOverlay{font-size:13.5px}
     var all = [], two = false, mainShown = fitShown(mainEl) && keys.length > 0;
     keys.forEach(function(k){ all = all.concat(cols[k].items); });
     all = all.concat(below);
-    var fit = { scroll: scroll, fitScroll: false, hidden: [], columns: [] };
+    var hostItems = scroll ? [] : fitCollectHost();
+    all = all.concat(hostItems);
+    var fit = { scroll: scroll, fitScroll: false, hidden: [], columns: [], items: [] };
     if(lg && all.length){
       two = mainShown && getComputedStyle(mainEl).flexDirection === 'row';
       // The room: the legacy block's own height. Scrollbar on with main off has no fixed room.
@@ -3341,6 +3369,20 @@ body.plain #mapOverlay{font-size:13.5px}
       var belowExtra = 0;
       below.forEach(function(it){ belowExtra += fitMarginV(it.el); });
       var needOf = function(k){ return fitColNeed(cols[k]); };
+      var host = document.getElementById('secHost'), ps = document.getElementById('pageScroll');
+      var lgOn = fitShown(lg) && (keys.length > 0 || below.length > 0);
+      // Waits on you and Outcomes can sit side by side, so the gain is measured: the
+      // current heights go on the lists and the host's own height is read back.
+      var hostH0 = host ? host.offsetHeight : 0;
+      var hostGain = function(){
+        hostItems.forEach(function(it){ fitSetPx(it.el, it.h); });
+        return host ? hostH0 - host.offsetHeight : 0;
+      };
+      var fitDeficit = function(){
+        if(lgOn) return total() - B - hostGain();
+        hostItems.forEach(function(it){ fitSetPx(it.el, it.h); });
+        return host.scrollHeight + fitMarginV(host) - ps.clientHeight;
+      };
       var mainNeed = function(){
         if(!mainShown) return 0;
         var v = keys.map(needOf);
@@ -3355,14 +3397,14 @@ body.plain #mapOverlay{font-size:13.5px}
       // Give, in the order of give, never below a floor.
       var ranked = all.filter(function(it){ return it.rank >= 0; }).sort(function(a, b){ return a.rank - b.rank; });
       for(var guard = 0; guard < 400; guard++){
-        var deficit = total() - B;
+        var deficit = fitDeficit();
         if(deficit <= 0.5) break;
         var moved = false;
         for(var i = 0; i < ranked.length; i++){
           var it = ranked[i], room = it.h - it.floor;
           if(room <= 0.5) continue;
           var take = Math.min(room, deficit);
-          if(two && it.col !== 'below'){
+          if(two && it.col !== 'below' && it.col !== 'host'){
             var other = keys.filter(function(k){ return k !== it.col; })[0];
             if(other){
               var d = needOf(it.col) - needOf(other);
@@ -3375,7 +3417,8 @@ body.plain #mapOverlay{font-size:13.5px}
         }
         if(!moved) break;
       }
-      var over = total() - B;
+      // A deficit that started below zero never shrank a host item, so the free-height branch below needs no host term.
+      var over = fitDeficit();
       if(over > 0.5){
         fit.fitScroll = true;
       } else {
@@ -3428,6 +3471,7 @@ body.plain #mapOverlay{font-size:13.5px}
       // Apply the sizes.
       all.forEach(function(it){
         if(it.kind === 'fixed' && Math.abs(it.h - it.nat) < 0.5) return;
+        if(it.kind === 'seclist' && it.h >= it.nat - 0.5) return;
         fitSetPx(it.el, it.h);
       });
       if(mainShown){
@@ -3443,6 +3487,7 @@ body.plain #mapOverlay{font-size:13.5px}
         var g = cols[k].items.filter(function(it){ return it.kind === 'chart' || it.kind === 'ticker'; })[0];
         fit.columns.push({ name: k, free: Math.round(B - total()), grower: g ? (g.el.id || g.kind) : '' });
       });
+      fit.items = all.map(function(it){ return { id: it.id || it.el.id || it.kind, kind: it.kind, h: Math.round(it.h), floor: Math.round(it.floor), nat: Math.round(it.nat) }; });
       var hi = all.filter(function(it){ return it.el === hist; })[0];
       window.__bdevTodoLayout = { applied: true, plainHistH: hi ? hi.nat : 0, histH: hi ? hi.h : 0 };
     } else {
@@ -3889,8 +3934,8 @@ body.plain #mapOverlay{font-size:13.5px}
       ['Tool','Project','Doing now','Tokens','Price at list','Last active'] :
       ['Agent','Project','State','Tokens','API price equiv.','Idle'];
     if(withCtl) head = head.concat(['']);
-    return '<table><thead><tr>' + head.map(function(h, i){ return '<th' + (i < 3 ? ' style="text-align:left"' : '') + '>' + esc(h) + '</th>'; }).join('') +
-      '</tr></thead><tbody>' + rows + '</tbody></table>';
+    return '<div class="seclist seclist-tbl">' + '<table><thead><tr>' + head.map(function(h, i){ return '<th' + (i < 3 ? ' style="text-align:left"' : '') + '>' + esc(h) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows + '</tbody></table>' + '</div>';
   }
   function secBodyProcesses(snap){
     var p = snap.processes || [], bad = (snap.sources || []).filter(function(s){ return s.name === 'sysmon' && !s.ok; });
