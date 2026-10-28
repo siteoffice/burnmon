@@ -2,10 +2,11 @@
 //
 // It answers one question for BurnMon: was a branch merged into the trunk
 // (refs/heads/main, else refs/heads/master). Merged
-// means the branch tip is not the trunk's tip and is the second or later parent of
-// a merge commit reachable from main's tip, because Foreman merges with
-// --no-ff. A tip that only sits on main's first-parent history (a
-// fast-forward, or a branch with no commit of its own yet) is not merged. It
+// means the branch tip is reachable from main's tip but is not on main's
+// first-parent line: it arrived through a merge commit's second or later
+// parent, directly or through a stacked branch. A tip that only sits on
+// main's first-parent line (a fast-forward, or a branch with no commit of its
+// own yet) is not merged. It
 // resolves refs from loose files and packed-refs, then walks commit parents
 // from main's tip through loose objects and pack files, using only the
 // standard library. Anything it cannot read is "unknown", and callers leave
@@ -209,15 +210,16 @@ type Checker struct {
 // NewChecker returns an empty Checker.
 func NewChecker() *Checker { return &Checker{cache: map[string]result{}} }
 
-// Merged reports whether branch was merged into main with a merge commit:
-// its tip is not main's tip and is the second or later parent of a merge
-// commit reachable from main's tip (Foreman merges with --no-ff). A tip that
-// only sits on main's first-parent history (a fast-forward, or a branch that
-// never got a commit of its own) is not merged. known is false on any read
-// problem or when the walk limit or timeout is hit; merged is then false.
-// The trunk is refs/heads/main when that ref exists (loose or packed), else
-// refs/heads/master, else unknown. HEAD is never read: the main tree's HEAD
-// may point at a work branch.
+// Merged reports whether branch was merged into main: its tip is reachable
+// from main's tip but is not on main's first-parent line, so it came in
+// through a merge commit's second or later parent, directly or through a
+// stacked branch. A tip that only sits on main's first-parent line (a
+// fast-forward, or a branch with no commit of its own) is not merged, and a
+// tip that is not reachable from main at all is not merged. known is false on
+// any read problem or when the walk limit or timeout is hit; merged is then
+// false. The trunk is refs/heads/main when that ref exists (loose or packed),
+// else refs/heads/master, else unknown. HEAD is never read: the main tree's
+// HEAD may point at a work branch.
 func (c *Checker) Merged(repo, branch string) (merged, known bool) {
 	if !ValidBranch(branch) {
 		return false, false
@@ -270,8 +272,10 @@ func trunkSHA(gitDir string) (string, error) {
 	return "", err
 }
 
-// walk searches main's ancestors, breadth first, for a merge commit that has
-// target as a second or later parent.
+// walk reports whether target is reachable from mainSHA but not on main's
+// first-parent line. Pass one follows first parents (target there: not
+// merged); pass two goes breadth first over every parent (target there: merged).
+// Both passes share one commit limit and one deadline.
 func walk(gitDir, mainSHA, target string) (merged, known, definite bool) {
 	if mainSHA == target {
 		return false, true, true
@@ -280,9 +284,28 @@ func walk(gitDir, mainSHA, target string) (merged, known, definite bool) {
 	defer st.close()
 	deadline := time.Now().Add(walkTimeout)
 	st.deadline = deadline
+	processed := 0
+	firstParent := map[string]bool{}
+	for sha := mainSHA; sha != "" && !firstParent[sha]; {
+		if processed >= walkLimit || time.Now().After(deadline) {
+			return false, false, false
+		}
+		if sha == target {
+			return false, true, true
+		}
+		firstParent[sha] = true
+		processed++
+		parents, err := st.commitParents(sha)
+		if err != nil {
+			return false, false, !time.Now().After(deadline)
+		}
+		sha = ""
+		if len(parents) > 0 {
+			sha = parents[0]
+		}
+	}
 	seen := map[string]bool{mainSHA: true}
 	queue := []string{mainSHA}
-	processed := 0
 	for len(queue) > 0 {
 		if processed >= walkLimit || time.Now().After(deadline) {
 			return false, false, false
@@ -294,12 +317,10 @@ func walk(gitDir, mainSHA, target string) (merged, known, definite bool) {
 		if err != nil {
 			return false, false, !time.Now().After(deadline)
 		}
-		for _, p := range parents[min(1, len(parents)):] {
-			if p == target {
-				return true, true, true
-			}
-		}
 		for _, p := range parents {
+			if p == target {
+				return !firstParent[p], true, true
+			}
 			if !seen[p] {
 				seen[p] = true
 				queue = append(queue, p)
@@ -328,9 +349,10 @@ func (c *Checker) BranchGone(repo, branch string) bool {
 	return errors.Is(err, ErrRefNotFound)
 }
 
-// MergedByMessage is the check for a branch whose ref was deleted after the
-// merge: it reads the commit messages of the trunk's last MessageWalkLimit
-// first-parent commits and reports found when a merge commit (two or more
+// MergedByMessage is only for a branch whose ref was deleted after the
+// merge, because with no ref there is no head to test: it reads the commit
+// messages of the trunk's last MessageWalkLimit first-parent commits and
+// reports found when a merge commit (two or more
 // parents) names branch as a whole token. A branch whose ref still exists, a
 // bad name, no trunk or any read problem is known=false. Nothing found within
 // the limit is (false, true). Same stdlib-only reader, allocation caps and
