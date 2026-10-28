@@ -493,7 +493,7 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapidlebar{padding:0 24px 12px}
 .mapidlebtn{border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font:inherit; padding:4px 10px; cursor:pointer}
 .mapidlebtn:hover, .mapidlebtn[aria-pressed="true"]{border-color:var(--amber)}
-.mappanel.wide{flex-basis:min(520px, 45%)}
+.mappanel.wide{flex-basis:min(440px, 40%)}
 .mapidletbl{width:100%; border-collapse:collapse; font-size:12px}
 .mapidletbl th{text-align:left; color:var(--dim); font-weight:normal; padding:2px 6px 2px 0}
 .mapidletbl td{padding:3px 6px 3px 0; vertical-align:top; overflow-wrap:anywhere}
@@ -4213,11 +4213,13 @@ body.plain #mapOverlay{font-size:13.5px}
   // Cells to pixels. A frame gets room above its first row for its header.
   // Column pitch: 222 px, or wider when the scroll area has room, so the map
   // spreads over the window. The last box then ends PADX from the right edge.
-  function mapColW(cols, availW){
-    if(cols <= 1) return MAP.COLW;
-    return Math.max(MAP.COLW, (availW - 2 * MAP.PADX - MAP.BOXW) / (cols - 1));
+  // With the idle table open the pitch drops to a box plus a 24 px gap (tight),
+  // and mapRender scales the stage down for what still does not fit.
+  function mapColW(cols, availW, minW){
+    if(cols <= 1) return minW;
+    return Math.max(minW, (availW - 2 * MAP.PADX - MAP.BOXW) / (cols - 1));
   }
-  function mapGeometry(L, availW){
+  function mapGeometry(L, availW, tight){
     var maxRow = 0, gap = {};
     (L.boxes || []).forEach(function(b){ if(b.row > maxRow) maxRow = b.row; });
     (L.frames || []).forEach(function(f){
@@ -4226,8 +4228,8 @@ body.plain #mapOverlay{font-size:13.5px}
     var hasYou = (L.boxes || []).some(function(b){ return b.kind === 'you'; });
     var rowY = [], y = MAP.HEAD + (hasYou ? MAP.ROWH : 0);
     for(var r = 0; r <= maxRow; r++){ y += gap[r] || 0; rowY[r] = y; y += MAP.ROWH; }
-    var cols = (L.columns || []).length, colW = mapColW(cols, availW);
-    var width = colW > MAP.COLW ? Math.max(availW, MAP.PADX * 2 + (cols - 1) * colW + MAP.BOXW) : MAP.PADX * 2 + cols * MAP.COLW;
+    var cols = (L.columns || []).length, minW = tight ? MAP.BOXW + 24 : MAP.COLW, colW = mapColW(cols, availW, minW);
+    var width = colW > minW ? Math.max(availW, MAP.PADX * 2 + (cols - 1) * colW + MAP.BOXW) : MAP.PADX * 2 + cols * minW;
     return { rowY: rowY, youY: MAP.HEAD, width: width, height: y + 24 + ((L.idle || []).length ? MAP.FRAMEHEAD : 0), colW: colW,
       x: function(c){ return MAP.PADX + c * colW; } };
   }
@@ -4267,12 +4269,22 @@ body.plain #mapOverlay{font-size:13.5px}
     // The side panel changes the scroll area's width, so it is drawn first.
     mapRenderPanel(sel, L);
     var scrollEl = document.getElementById('mapScroll');
-    var g = mapGeometry(L, scrollEl.clientWidth), pos = {}, html = '';
+    // The idle table widens the panel and narrows this area, so the map reflows
+    // tight and then scales to the width left: every box stays fully visible and
+    // nothing is covered by the panel (spec item 7). Zoom 1 otherwise.
+    var tight = !!(mapIdleOpen && L && (L.idle || []).length), zoom = 1;
+    stage.style.zoom = '';
+    var g = mapGeometry(L, scrollEl.clientWidth, tight), pos = {}, html = '';
+    if(tight){
+      var room = scrollEl.clientWidth - 12;
+      if(g.width > room) zoom = room / g.width;
+      if(zoom < 1) stage.style.zoom = String(zoom);
+    }
     stage.style.width = g.width + 'px'; stage.style.height = g.height + 'px';
     // A vertical scrollbar that the new height brings narrows the area: spread again.
     var aw = scrollEl.clientWidth;
-    if(aw !== Math.round(g.width) && g.colW > MAP.COLW){
-      g = mapGeometry(L, aw);
+    if(!tight && aw !== Math.round(g.width) && g.colW > MAP.COLW){
+      g = mapGeometry(L, aw, false);
       stage.style.width = g.width + 'px';
     }
     (L.columns || []).forEach(function(name, i){

@@ -11,9 +11,10 @@ import (
 // The pixel proof is uicheck d35; this guards the wiring in the embedded page.
 func TestPageAgentMapSpreadWiring(t *testing.T) {
 	for _, want := range []string{
-		"function mapColW(cols, availW)",
-		"function mapGeometry(L, availW)",
-		"mapGeometry(L, scrollEl.clientWidth)",
+		"function mapColW(cols, availW, minW)",
+		"function mapGeometry(L, availW, tight)",
+		"stage.style.zoom = String(zoom)",
+		"mapGeometry(L, scrollEl.clientWidth, tight)",
 		"if(mapOpen) mapRender();",
 	} {
 		if !strings.Contains(pageHTML, want) {
@@ -22,7 +23,7 @@ func TestPageAgentMapSpreadWiring(t *testing.T) {
 	}
 	// The panel for the selected box is drawn before the geometry reads the width.
 	panel := strings.Index(pageHTML, "mapRenderPanel(sel, L);")
-	geom := strings.Index(pageHTML, "var g = mapGeometry(L, scrollEl.clientWidth)")
+	geom := strings.Index(pageHTML, "var g = mapGeometry(L, scrollEl.clientWidth, tight)")
 	if panel < 0 || geom < 0 || panel > geom {
 		t.Errorf("mapRenderPanel(sel, L) must come before mapGeometry (panel %d, geometry %d)", panel, geom)
 	}
