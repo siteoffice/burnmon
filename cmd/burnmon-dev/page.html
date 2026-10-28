@@ -490,7 +490,15 @@ body.plain #mapOverlay{font-size:13.5px}
 .mappanel button{margin-top:12px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font:inherit; padding:4px 10px; cursor:pointer}
 .mappanel button:hover{border-color:var(--amber)}
 .mapempty{padding:24px; color:var(--dim)}
-.mapidle summary{cursor:pointer; color:var(--dim)}
+.mapidlebar{padding:0 24px 12px}
+.mapidlebtn{border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font:inherit; padding:4px 10px; cursor:pointer}
+.mapidlebtn:hover, .mapidlebtn[aria-pressed="true"]{border-color:var(--amber)}
+.mappanel.wide{flex-basis:min(520px, 45%)}
+.mapidletbl{width:100%; border-collapse:collapse; font-size:12px}
+.mapidletbl th{text-align:left; color:var(--dim); font-weight:normal; padding:2px 6px 2px 0}
+.mapidletbl td{padding:3px 6px 3px 0; vertical-align:top; overflow-wrap:anywhere}
+.mapidletbl tr.grp td{color:var(--strong); font-weight:700; padding-top:10px}
+.mappanel .mapidletbl button{margin-top:0; padding:1px 6px}
 .sesub td:first-child{padding-left:20px}
 /* The Export line: the Plain toggle at the left, the gear and EXPORT at the right. */
 .hdrline{flex:1 1 360px; display:flex; align-items:center; gap:14px; min-width:0}
@@ -719,7 +727,7 @@ body.plain #mapOverlay{font-size:13.5px}
     <button type="button" id="mapClose" class="mapclose">Close (Esc)</button>
   </div>
   <div class="mapmain">
-    <div class="mapscroll" id="mapScroll"><div class="mapstage" id="mapStage"></div></div>
+    <div class="mapscroll" id="mapScroll"><div class="mapstage" id="mapStage"></div><div class="mapidlebar" id="mapIdleBar"></div></div>
     <aside class="mappanel" id="mapPanel" aria-live="polite"></aside>
   </div>
   <div class="mapstrip">
@@ -2093,6 +2101,7 @@ body.plain #mapOverlay{font-size:13.5px}
       return;
     }
     if(mapOpen){
+      if(mapIdleOpen){ mapIdleOpen = false; mapRender(); return; }
       mapCloseView();
       return;
     }
@@ -4186,6 +4195,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // open, and nothing here animates, so only one of the two ever costs anything.
   var mapOpen = false, mapSource = 'live', mapData = null, mapErr = '', mapToken = 0, mapSel = '';
   var mapOpenFrames = {};
+  var mapIdleOpen = false;
   var MAP_TABS = [['live', 'LIVE'], ['24', 'Last 24 hours'], ['168', 'Last 7 days']];
   var MAP = { COLW: 222, BOXW: 170, BOXH: 66, ROWH: 84, PADX: 24, HEAD: 34, FRAMEHEAD: 76 };
 
@@ -4218,7 +4228,7 @@ body.plain #mapOverlay{font-size:13.5px}
     for(var r = 0; r <= maxRow; r++){ y += gap[r] || 0; rowY[r] = y; y += MAP.ROWH; }
     var cols = (L.columns || []).length, colW = mapColW(cols, availW);
     var width = colW > MAP.COLW ? Math.max(availW, MAP.PADX * 2 + (cols - 1) * colW + MAP.BOXW) : MAP.PADX * 2 + cols * MAP.COLW;
-    return { rowY: rowY, youY: MAP.HEAD, width: width, height: y + 24, colW: colW,
+    return { rowY: rowY, youY: MAP.HEAD, width: width, height: y + 24 + ((L.idle || []).length ? MAP.FRAMEHEAD : 0), colW: colW,
       x: function(c){ return MAP.PADX + c * colW; } };
   }
 
@@ -4247,7 +4257,8 @@ body.plain #mapOverlay{font-size:13.5px}
     if(!L || !(L.boxes || []).length){
       var msg = mapErr || (p ? (p.note || (plain ? 'No agents in this window.' : 'No sessions in this window.')) : 'Reading...');
       stage.style.width = ''; stage.style.height = '';
-      stage.innerHTML = '<div class="mapempty">' + esc(msg) + '</div>' + mapIdleHTML(L);
+      stage.innerHTML = '<div class="mapempty">' + esc(msg) + '</div>';
+      document.getElementById('mapIdleBar').innerHTML = mapIdleHTML(L);
       mapRenderPanel(null, L);
       return;
     }
@@ -4320,26 +4331,49 @@ body.plain #mapOverlay{font-size:13.5px}
         (b.line ? '<span class="l">' + esc(b.line) + '</span>' : '') + '</button>';
     });
     var top = document.getElementById('mapScroll').scrollTop, left = document.getElementById('mapScroll').scrollLeft;
-    stage.innerHTML = html + mapIdleHTML(L);
+    stage.innerHTML = html;
+    document.getElementById('mapIdleBar').innerHTML = mapIdleHTML(L);
     document.getElementById('mapScroll').scrollTop = top; document.getElementById('mapScroll').scrollLeft = left;
   }
 
   // Sprints and flows that wait with no agent running are not boxes (a handful
-  // of old ones would push live work down); they are listed under the map.
+  // of old ones would push live work down). One button under the map opens them
+  // as a table in the side panel; nothing is drawn over the map.
   function mapIdleHTML(L){
     if(!L || !(L.idle || []).length) return '';
     var plain = secState.plain;
-    var html = '<details class="mapidle" style="position:absolute;left:' + MAP.PADX + 'px;bottom:6px"><summary>' + L.idle.length + ' ' +
-      esc(plain ? 'Foreman jobs with no agent running' : 'sprints and flows with no session running') + '</summary>';
-    L.idle.forEach(function(i){
-      html += '<div class="mapnote">' + esc(i.label) + ' - ' + esc(i.kind) + (i.status ? ', ' + esc(i.status) : '') +
-        (i.waits_on_you ? ', ' + esc(plain ? 'waiting for you' : 'waits on you') : '') + ', ' + esc(secDur(i.age_seconds)) + ' old</div>';
+    return '<button type="button" id="mapIdleBtn" class="mapidlebtn" aria-pressed="' + (mapIdleOpen ? 'true' : 'false') + '">' + L.idle.length + ' ' +
+      esc(plain ? 'Foreman jobs with no agent' : 'sprints and flows with no session') + '</button>';
+  }
+  function mapIdleTableHTML(L){
+    var plain = secState.plain, groups = [
+      [plain ? 'Done, needs close-out' : 'Done, needs close-out', function(i){ return !!i.close_out; }],
+      [plain ? 'Waiting for you' : 'Waits on you', function(i){ return !i.close_out && !!i.waits_on_you; }],
+      ['Other sprints and flows', function(i){ return !i.close_out && !i.waits_on_you; }]];
+    var html = '<h3>' + esc(plain ? 'Foreman jobs with no agent' : 'Sprints and flows with no session') + '</h3><table class="mapidletbl"><thead><tr><th>Name</th><th>Project</th><th>Kind</th><th>Waited</th><th>Links</th></tr></thead><tbody>';
+    var link = function(p, w){ return p ? '<a href="#" class="secfile" data-path="' + esc(p) + '">' + esc(w) + '</a>' : ''; };
+    groups.forEach(function(g){
+      var rows = (L.idle || []).filter(g[1]).sort(function(a, b){ return b.age_seconds - a.age_seconds; });
+      if(!rows.length) return;
+      html += '<tr class="grp"><td colspan="5">' + esc(g[0]) + '</td></tr>';
+      rows.forEach(function(i){
+        var chip = (i.close_out && i.kind === 'sprint') ? ctlChips('closeout', i.id, '') : '';
+        html += '<tr><td>' + esc(i.label) + '</td><td>' + esc(i.project || '') + '</td><td>' + esc(i.kind) + '</td><td>' + esc(secDur(i.age_seconds)) + '</td><td>' +
+          [link(i.spec_path, 'spec'), link(i.result_path, 'result')].filter(Boolean).join(' ') + (chip ? ' ' + chip : '') + '</td></tr>';
+      });
     });
-    return html + '</details>';
+    return html + '</tbody></table>';
   }
 
   function mapRenderPanel(b, L){
     var el = document.getElementById('mapPanel');
+    if(mapIdleOpen && L && (L.idle || []).length){
+      el.classList.add('on'); el.classList.add('wide');
+      el.innerHTML = mapIdleTableHTML(L);
+      return;
+    }
+    mapIdleOpen = false;
+    el.classList.remove('wide');
     if(!b){
       el.classList.remove('on');
       el.innerHTML = '';
@@ -4391,7 +4425,7 @@ body.plain #mapOverlay{font-size:13.5px}
   }
   function mapChoose(src){
     mapSource = src;
-    mapSel = '';
+    mapSel = ''; mapIdleOpen = false;
     mapData = null; mapErr = '';
     mapRender();
     mapFetch();
@@ -4412,10 +4446,26 @@ body.plain #mapOverlay{font-size:13.5px}
       mapFetch();
       return;
     }
+    mapIdleOpen = false;
     mapSel = mapSel === id ? '' : id;
     mapRender();
   });
+  document.getElementById('mapIdleBar').addEventListener('click', function(e){
+    if(!(e.target.closest && e.target.closest('#mapIdleBtn'))) return;
+    mapIdleOpen = !mapIdleOpen;
+    mapRender();
+  });
   document.getElementById('mapPanel').addEventListener('click', function(e){
+    if(ctlClick(e)){ mapRender(); return; }
+    var f = e.target.closest ? e.target.closest('.secfile') : null;
+    if(f){
+      e.preventDefault();
+      if(typeof window.bdevOpenItemFile === 'function'){
+        var r = window.bdevOpenItemFile(f.getAttribute('data-path'));
+        if(r && r.catch) r.catch(function(err){ console.error('bdevOpenItemFile:', err); });
+      }
+      return;
+    }
     var b = e.target.closest ? e.target.closest('button[data-turn]') : null;
     if(!b) return;
     var sid = b.getAttribute('data-turn'), turn = stationTurnCount(sid);
@@ -4442,7 +4492,8 @@ body.plain #mapOverlay{font-size:13.5px}
     // uicheck only: draw a payload without calling Go. src is live or the hours.
     // It also drops any answer still on its way from Go, so the page shows what was handed in.
     setPayload: function(p, src){ mapToken++; mapSource = src || 'live'; mapData = p; mapErr = ''; mapSel = ''; mapRender(); },
-    select: function(id){ mapSel = id; mapRender(); },
+    select: function(id){ mapSel = id; mapIdleOpen = false; mapRender(); },
+    idle: function(open){ mapIdleOpen = !!open; mapRender(); },
     frames: function(){ return Object.keys(mapOpenFrames); } };
 
   // The page can be driven without Go (uicheck d29 feeds the frozen example).
