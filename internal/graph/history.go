@@ -93,11 +93,17 @@ func History(st *store.Store, hi HistoryInput) (Graph, error) {
 		b.edges[e.Key()] = i
 	}
 	for _, n := range nodes {
+		if n.Source == SourceForeman {
+			continue
+		}
 		var attrs map[string]string
 		_ = json.Unmarshal([]byte(n.Attrs), &attrs)
 		b.node(Node{ID: n.ID, Kind: n.Kind, Label: n.Label, Vendor: n.Vendor, Attrs: attrs, Source: n.Source, AgeSeconds: b.age(n.LastSeen)})
 	}
 	for _, e := range edges {
+		if e.Source == SourceForeman {
+			continue
+		}
 		if e.Kind == KindWaitsOn && !b.stillWaits(e) {
 			continue
 		}
@@ -108,18 +114,11 @@ func History(st *store.Store, hi HistoryInput) (Graph, error) {
 }
 
 // stillWaits reports whether a stored waits_on edge still means Blocked under
-// the B6 rules. Older ticks stored one for every idle session (source
+// the B6 rules. Foreman edges are never stored here: Build rebuilds them. Older ticks stored one for every idle session (source
 // claude_pids) and every stage-waiting session (source store); those are Your
-// turn now, so they are dropped. A sprint that Build marked closeout or
-// branch_gone keeps no stored edge. Only an agent view or transcript ask
-// session edge, a gate, or a sprint Build left Blocked survives.
+// turn now, so they are dropped. Only an agent view or transcript ask session
+// edge survives.
 func (b *builder) stillWaits(e store.GraphEdge) bool {
-	if i, ok := b.nodes[e.From]; ok {
-		n := b.g.Nodes[i]
-		if n.Kind == KindSprint && (n.Attrs["closeout"] == "true" || n.Attrs["branch_gone"] == "true") {
-			return false
-		}
-	}
 	if strings.HasPrefix(e.From, "session:") {
 		return e.Source == SourceAgentView || e.Source == SourceTranscriptAsk
 	}

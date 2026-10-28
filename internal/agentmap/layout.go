@@ -805,6 +805,7 @@ func BuildLayout(in LayoutInput) Layout {
 		}
 		b.l.Frames = append(b.l.Frames, fr)
 	}
+	row = b.blockedBoxes(v.Idle, row, &youRows)
 
 	hids := make([]string, 0, len(harnessRow))
 	for h := range harnessRow {
@@ -934,4 +935,53 @@ func splitUnlinked(groups []Group) []Group {
 		}
 	}
 	return out
+}
+
+// blockedBoxes draws the Blocked Foreman things no session works for: a gate
+// or waiting sprint that shows as an idle row, and a failed check. Each gets
+// a box and its amber line into You, so the lines equal the Blocked count. The
+// idle row stays listed. It returns the next free row.
+func (b *builder) blockedBoxes(idle []Idle, row int, youRows *[]int) int {
+	for _, i := range idle {
+		if !i.WaitsOnYou {
+			continue
+		}
+		facts := []Fact{{"Kind", i.Kind}, {"Status", i.Status}, {"Source", b.sourceOf(i.ID)}}
+		if i.Gate != "" {
+			facts = append(facts, Fact{"Gate", i.Gate})
+		}
+		line := i.Status
+		if i.Gate != "" {
+			line = "gate " + i.Gate
+		}
+		b.l.Boxes = append(b.l.Boxes, Box{ID: i.ID, Kind: i.Kind, Title: i.Label, Pill: b.w.waitsPill, Line: line,
+			Column: 1, Row: row, WaitsOnYou: true, Facts: facts, Tag: i.Kind, Wait: "blocked"})
+		b.addLine(i.ID, "you", b.w.waitsWord, "vendor", true)
+		*youRows = append(*youRows, row)
+		row++
+	}
+	ids := make([]string, 0, len(b.m.waiters))
+	for id, n := range b.m.waiters {
+		if n && b.m.nodes[id].Kind == graph.KindCheck {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		n := b.m.nodes[id]
+		title, status := n.Label, ""
+		for _, e := range b.m.out[id] {
+			if e.Kind == graph.KindPartOf && b.m.nodes[e.To].Kind == graph.KindSprint {
+				title = b.m.nodes[e.To].Label + ": " + n.Label
+				status = b.m.nodes[e.To].Attrs["status"]
+			}
+		}
+		b.l.Boxes = append(b.l.Boxes, Box{ID: id, Kind: "check", Title: title, Pill: b.w.waitsPill, Line: "failed check",
+			Column: 1, Row: row, WaitsOnYou: true, Facts: []Fact{{"Kind", "failed check"}, {"Sprint status", status}, {"Source", b.sourceOf(id)}},
+			Tag: "check", Wait: "blocked"})
+		b.addLine(id, "you", b.w.waitsWord, "vendor", true)
+		*youRows = append(*youRows, row)
+		row++
+	}
+	return row
 }

@@ -30,6 +30,7 @@ const (
 	KindFlow     = "flow"
 	KindSprint   = "sprint"
 	KindGate     = "gate"
+	KindCheck    = "check"
 	KindPerson   = "person"
 )
 
@@ -71,10 +72,10 @@ const (
 	// the history map can tell it from the pre-B6 stage-waiting edge, which
 	// used SourceStore with the same basis.
 	SourceTranscriptAsk = "transcript_ask"
-	SourceForeman    = "foreman"
-	SourceMCPConfig  = "mcp_config"
-	SourceNetTables  = "net_tables"
-	SourceGit        = "git"
+	SourceForeman       = "foreman"
+	SourceMCPConfig     = "mcp_config"
+	SourceNetTables     = "net_tables"
+	SourceGit           = "git"
 )
 
 const (
@@ -595,6 +596,7 @@ func Build(in Input) Graph {
 
 	// Foreman: sprints and flows linked to a session, and gates or sprints
 	// that wait on you.
+	closeoutSet, goneSet := map[string]bool{}, map[string]bool{}
 	for _, sp := range in.Sprints {
 		sid := "sprint:" + sp.ID
 		waiting := sp.Status == "waiting-on-you"
@@ -618,7 +620,7 @@ func Build(in Input) Graph {
 				linked = append(linked, id)
 			}
 		}
-		if len(linked) == 0 && !waiting {
+		if len(linked) == 0 && !waiting && !stoppedWithFailedCheck(sp) {
 			continue
 		}
 		// A waiting sprint whose branch is already in main needs closing out,
@@ -649,10 +651,7 @@ func Build(in Input) Graph {
 		for _, id := range linked {
 			b.edge(Edge{From: id, To: sid, Kind: KindWorksFor, Basis: BasisInferred, Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		}
-		if waiting && !closeout && !branchGone {
-			b.person()
-			b.edge(Edge{From: sid, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
-		}
+		closeoutSet[sid], goneSet[sid] = closeout, branchGone
 		if sp.WorktreePath != "" {
 			wt := "worktree:" + pathKey(sp.WorktreePath)
 			b.node(Node{ID: wt, Kind: KindWorktree, Label: baseLabel(sp.WorktreePath), Source: SourceForeman})
@@ -671,13 +670,37 @@ func Build(in Input) Graph {
 		if linked {
 			b.edge(Edge{From: sid, To: fid, Kind: KindWorksFor, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
 		}
-		if f.GatePending && f.Gate != "" {
+		if f.GatePending {
 			gid := "gate:" + f.ID + ":" + f.Gate
 			b.node(Node{ID: gid, Kind: KindGate, Label: f.Gate, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
 			b.edge(Edge{From: gid, To: fid, Kind: KindPartOf, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
-			b.person()
-			b.edge(Edge{From: gid, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
 		}
+	}
+	// The one decision: every Foreman thing that waits on you gets a box and
+	// one waits_on edge to You.
+	for _, bl := range ForemanBlockers(in.Sprints, in.Flows, closeoutSet, goneSet) {
+		var at time.Time
+		switch bl.Kind {
+		case BlockerGate:
+			for _, f := range in.Flows {
+				if f.ID == bl.FlowID {
+					at = f.UpdatedAt
+				}
+			}
+		default:
+			for _, sp := range in.Sprints {
+				if sp.ID == bl.SprintID {
+					at = sp.UpdatedAt
+				}
+			}
+		}
+		age := b.age(at)
+		if bl.Kind == BlockerCheck {
+			b.node(Node{ID: bl.NodeID, Kind: KindCheck, Label: bl.Check, Source: SourceForeman, AgeSeconds: age})
+			b.edge(Edge{From: bl.NodeID, To: "sprint:" + bl.SprintID, Kind: KindPartOf, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: age})
+		}
+		b.person()
+		b.edge(Edge{From: bl.NodeID, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: age})
 	}
 	b.markCanClose(sessionIDs, byID, repoOf)
 	return b.g

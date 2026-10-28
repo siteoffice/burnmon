@@ -155,10 +155,6 @@ func sprintFinished(status string) bool {
 	return false
 }
 
-func sprintStopped(status string) bool {
-	return status == "capped" || status == "failed" || status == "escalated"
-}
-
 // entry is a wait item with what the cost of waiting needs.
 type entry struct {
 	it    Item
@@ -278,9 +274,16 @@ func Build(in Input) (wait, outcomes []Item) {
 		}
 	}
 
-	for _, f := range in.Flows {
-		if !f.GatePending {
+	blockers := graph.ForemanBlockers(in.Sprints, in.Flows, closeout, gone)
+	for _, bl := range blockers {
+		if bl.Kind != graph.BlockerGate {
 			continue
+		}
+		var f graph.Flow
+		for _, x := range in.Flows {
+			if x.ID == bl.FlowID {
+				f = x
+			}
 		}
 		since := f.GateOpenedAt
 		if since.IsZero() {
@@ -298,8 +301,29 @@ func Build(in Input) (wait, outcomes []Item) {
 			f.SpecPath, resultForSpec(f.SpecPath), graph.SourceForeman), since, holds, held(sess))
 	}
 
-	for _, s := range in.Sprints {
-		if s.Status == "waiting-on-you" && !closeout["sprint:"+s.ID] && !gone["sprint:"+s.ID] {
+	for _, bl := range blockers {
+		var s graph.Sprint
+		for _, x := range in.Sprints {
+			if x.ID == bl.SprintID {
+				s = x
+			}
+		}
+		if bl.Kind == graph.BlockerCheck {
+			chk := s.Test
+			if bl.Check == "verify" {
+				chk = s.Verify
+			}
+			at := chk.At
+			if at.IsZero() {
+				at = s.UpdatedAt
+			}
+			detail := chk.Label
+			if chk.Summary != "" {
+				detail += ": " + chk.Summary
+			}
+			add(mk(KindFailedCheck, bl.NodeID, s.Slug, s.Project, detail, at, s.SpecPath, s.ResultPath, graph.SourceForeman), at, 1, nil)
+		}
+		if bl.Kind == graph.BlockerSprint {
 			since := s.LastParkedAt
 			if since.IsZero() {
 				since = s.UpdatedAt
@@ -318,7 +342,9 @@ func Build(in Input) (wait, outcomes []Item) {
 			sess := workers["sprint:"+s.ID]
 			add(it, since, 1+len(sess), held(sess))
 		}
+	}
 
+	for _, s := range in.Sprints {
 		failedOutcome := false
 		for _, c := range []struct {
 			name string
@@ -337,9 +363,6 @@ func Build(in Input) (wait, outcomes []Item) {
 			}
 			it := mk(KindFailedCheck, "check:"+s.ID+":"+c.name, s.Slug, s.Project, detail, at,
 				s.SpecPath, s.ResultPath, graph.SourceForeman)
-			if sprintStopped(s.Status) {
-				add(it, at, 1, nil)
-			}
 			if now.Sub(at) <= OutcomeWindow {
 				outcomes = append(outcomes, it)
 				failedOutcome = true
@@ -350,7 +373,7 @@ func Build(in Input) (wait, outcomes []Item) {
 		// escalated) within the window is a finished outcome. A sprint that
 		// already shows a failed_check outcome is not listed a second time:
 		// one outcome row per sprint.
-		stopped := sprintStopped(s.Status)
+		stopped := graph.SprintStopped(s.Status)
 		ended := stopped || s.Phase == "done" || s.Status == "passing" || s.Status == "done"
 		if ended && !failedOutcome && now.Sub(s.UpdatedAt) <= OutcomeWindow {
 			detail := "test " + checkWord(s.Test) + ", verify " + checkWord(s.Verify)

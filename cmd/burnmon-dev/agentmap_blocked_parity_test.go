@@ -93,7 +93,11 @@ func checkBlockedAgainstCount(t *testing.T, tab string, ly agentmap.Layout, item
 			t.Errorf("%s: box %+v is Blocked but its sprint is closed or its gate decided", tab, b)
 		}
 	}
-for _, i := range ly.Idle {		if (strings.Contains(i.ID, "example-closed") || strings.Contains(i.ID, "example-decided")) && i.WaitsOnYou {			t.Errorf("%s: idle row %+v waits on you but its sprint is closed or its gate decided", tab, i)		}	}
+	for _, i := range ly.Idle {
+		if (strings.Contains(i.ID, "example-closed") || strings.Contains(i.ID, "example-decided")) && i.WaitsOnYou {
+			t.Errorf("%s: idle row %+v waits on you but its sprint is closed or its gate decided", tab, i)
+		}
+	}
 }
 
 func TestBlockedLinesMatchCountLive(t *testing.T) {
