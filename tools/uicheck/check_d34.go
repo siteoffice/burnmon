@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,72 +9,133 @@ import (
 	"time"
 )
 
-// d34: the Overall scrollbar switch both ways (B2). Driven by
-// window.__bdevSections.apply with the frozen example. It proves:
-//   - scrollbar on: the page scrolls (overflow-y auto), nothing is hidden,
-//     no note, and the System chart keeps the height it has in that layout;
-//   - scrollbar off: the page does not scroll and nothing overflows (body,
-//     page area, sections host, any .zonebody); the System chart shrank to its
-//     floor (60 percent of its natural height, at least 60 px) before any
-//     part was hidden; the parts hidden are the first ones of the fixed drop
-//     order and the note counts them;
-//   - a window that grows again brings every hidden part back;
-//   - Plain with all its parts on behaves the same way at 1024x480.
-//
-// To Do is not part of the drop-order prefix: uicheck runs with Microsoft To
-// Do disabled, so its panel is never on screen and never counts as hidden.
-//
-// Screenshots: d34-standard-scroll-on, d34-standard-scroll-off,
-// d34-plain-scroll-on, d34-plain-scroll-off.
+// d34: the layout fill (B7, spec 2026-10-27, items 1, 2, 3, 6). The B2 check
+// that asserted the old hide order is replaced; the id stays. Driven by
+// window.__bdevSections.apply with the frozen example. For each window size in
+// 1280x800, 1920x1080 and 2560x1440, in Standard and in Plain, with the Overall
+// scrollbar on and off, these cases run:
+//   a  every part on
+//   b  turn ticker off
+//   c  Plain with only Burn last 30 min on (Plain only)
+//   d  every part on at 1280x800 with the scrollbar off
+// Each case asserts:
+//   - no vertical empty area over 24 px inside a column (the largest gap
+//     between a column's children, below the last child, or inside a panel
+//     below its last child);
+//   - no part hidden: every [data-part] without .sec-off draws, and the old
+//     "sections hidden" note is gone;
+//   - the Processes table sits above To Do (it comes first in the document and
+//     its bottom is at or above To Do's top), and below Process groups, Memory,
+//     Disks and Network;
+//   - scrollbar off: the page scrolls only when window.__bdevFit.fitScroll says
+//     every part is at its floor; otherwise nothing overflows, and in two
+//     columns both columns end on the same line (within 2 px).
+// A window size the screen cannot hold prints SKIPPED and is not a pass.
+// Screenshots: d34-<size>-<mode>-<case>-<sb>.
 
-// d34Order is FIT_OFF_ORDER without todo, which uicheck never shows.
-var d34Order = []string{"process_groups", "processes", "heatmap", "activity", "sessions", "git", "outcomes", "agents_map", "burn", "turn_ticker", "vendor_strip", "system", "burn_30min", "waits"}
+const d34MaxEmpty = 24.0
 
 type d34Page struct {
-	OverflowY string   `json:"overflowY"`
-	Scrolls   bool     `json:"scrolls"`
-	Note      string   `json:"note"`
-	BodyOver  float64  `json:"bodyOver"`
-	PageOver  float64  `json:"pageOver"`
-	HostOver  float64  `json:"hostOver"`
-	ZoneOver  float64  `json:"zoneOver"`
-	Fit       bool     `json:"fit"`
-	Scroll    bool     `json:"scroll"`
-	Natural   float64  `json:"natural"`
-	Floor     float64  `json:"floor"`
-	HistH     float64  `json:"histH"`
-	AtHide    float64  `json:"atHide"`
-	Hidden    []string `json:"hidden"`
-	Dropped   []string `json:"dropped"`
+	OverflowY  string   `json:"overflowY"`
+	Scrolls    bool     `json:"scrolls"`
+	BodyOver   float64  `json:"bodyOver"`
+	PageOver   float64  `json:"pageOver"`
+	HostOver   float64  `json:"hostOver"`
+	ZoneOver   float64  `json:"zoneOver"`
+	BodyScroll bool     `json:"bodyScroll"`
+	FitScroll  bool     `json:"fitScroll"`
+	FitClass   bool     `json:"fitClass"`
+	Fit        bool     `json:"fit"`
+	FitHidden  []string `json:"fitHidden"`
+	Hidden     []string `json:"hidden"`
+	CutNote    bool     `json:"cutNote"`
+	Empty      float64  `json:"empty"`
+	EmptyWhere string   `json:"emptyWhere"`
+	ProcOn     bool     `json:"procOn"`
+	ProcFirst  bool     `json:"procFirst"`
+	ProcAbove  bool     `json:"procAbove"`
+	ProcBelow  bool     `json:"procBelow"`
+	TwoCols    bool     `json:"twoCols"`
+	ColDiff    float64  `json:"colDiff"`
+	Parts      int      `json:"parts"`
+	TodoDrawn  bool     `json:"todoDrawn"`
 }
 
 const d34ReadJS = `(function(){
+  var q = function(s){ return document.querySelector(s); };
+  var shown = function(e){ return !!e && e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none'; };
   var ps = document.getElementById('pageScroll'), host = document.getElementById('secHost');
-  var zone = 0;
-  Array.prototype.forEach.call(document.querySelectorAll('.zonebody'), function(z){
-    if(z.getClientRects().length > 0) zone = Math.max(zone, z.scrollHeight - z.clientHeight);
+  var empty = 0, where = '', zone = 0;
+  var note = function(v, w){ if(v > empty){ empty = v; where = w; } };
+  var zones = Array.prototype.filter.call(document.querySelectorAll('.zone'), shown);
+  zones.forEach(function(z){
+    var zb = z.querySelector('.zonebody');
+    if(!zb || !shown(zb)) return;
+    zone = Math.max(zone, zb.scrollHeight - zb.clientHeight);
+    var zr = zb.getBoundingClientRect(), cs = getComputedStyle(zb);
+    var top = zr.top + parseFloat(cs.paddingTop), bot = zr.bottom - parseFloat(cs.paddingBottom);
+    var kids = Array.prototype.filter.call(zb.children, function(c){ return shown(c) && c.getBoundingClientRect().height > 0.5; })
+      .sort(function(a, b){ return a.getBoundingClientRect().top - b.getBoundingClientRect().top; });
+    var name = z.className.replace('zone ', '');
+    if(!kids.length) return;
+    var prev = top;
+    kids.forEach(function(k, i){
+      var r = k.getBoundingClientRect();
+      note(r.top - prev, name + ' gap before child ' + i + ' (' + (k.id || k.className) + ')');
+      prev = Math.max(prev, r.bottom);
+      if(k.classList.contains('panel')){
+        var inner = Array.prototype.filter.call(k.children, function(c){ return shown(c) && c.getBoundingClientRect().height > 0.5; });
+        if(inner.length){
+          var ib = 0;
+          inner.forEach(function(c){ ib = Math.max(ib, c.getBoundingClientRect().bottom); });
+          var kcs = getComputedStyle(k);
+          note(r.bottom - parseFloat(kcs.paddingBottom) - ib, name + ' slack inside ' + (k.id || k.className));
+        }
+      }
+    });
+    note(bot - prev, name + ' gap below last child');
   });
-  var dropped = [];
-  Array.prototype.forEach.call(document.querySelectorAll('[data-part].fit-dropped'), function(e){
+  var hidden = [], parts = {};
+  Array.prototype.forEach.call(document.querySelectorAll('[data-part]'), function(e){
+    if(e.classList.contains('sec-off')) return;
     var id = e.getAttribute('data-part');
-    if(dropped.indexOf(id) < 0) dropped.push(id);
+    // To Do the app has switched off (todo.enabled false) is not a hidden part.
+    if(id === 'todo' && e.style.display === 'none') return;
+    if(shown(e)) parts[id] = true;
+    else if(hidden.indexOf(id) < 0) hidden.push(id);
   });
+  var proc = q('#processesHost [data-part="processes"]'), todo = q('#todoPanel');
+  var procOn = shown(proc), procFirst = true, above = true, below = true;
+  var host2 = q('#processesHost');
+  if(host2 && todo) procFirst = !!(host2.compareDocumentPosition(todo) & Node.DOCUMENT_POSITION_FOLLOWING);
+  if(procOn){
+    var pr = proc.getBoundingClientRect();
+    if(shown(todo) && !todo.classList.contains('sec-off')) above = pr.bottom <= todo.getBoundingClientRect().top + 1;
+    ['#processGroupsPanel', '#boxMemory', '#boxDisks', '#boxNetwork'].forEach(function(s){
+      var e = q(s);
+      if(shown(e) && e.getBoundingClientRect().bottom > pr.top + 1) below = false;
+    });
+  }
+  var two = zones.length === 2 && Math.abs(zones[0].getBoundingClientRect().top - zones[1].getBoundingClientRect().top) < 2;
+  var colDiff = two ? Math.abs(zones[0].getBoundingClientRect().bottom - zones[1].getBoundingClientRect().bottom) : 0;
   var f = window.__bdevFit, has = !!f;
   f = f || {};
   return {
     overflowY: getComputedStyle(ps).overflowY,
     scrolls: ps.scrollHeight > ps.clientHeight + 1,
-    note: document.getElementById('secCutNote').textContent,
     bodyOver: document.body.scrollHeight - document.body.clientHeight,
     pageOver: ps.scrollHeight - ps.clientHeight,
     hostOver: host.scrollHeight - host.clientHeight,
     zoneOver: zone,
-    fit: has, scroll: !!f.scroll, natural: f.histNatural || 0, floor: f.histFloor || 0, histH: f.histH || 0,
-    atHide: f.histAtHide || 0, hidden: f.hidden || [], dropped: dropped
+    bodyScroll: document.body.classList.contains('scroll-on'),
+    fitScroll: !!f.fitScroll, fitClass: document.body.classList.contains('fit-scroll'),
+    fit: has, fitHidden: f.hidden || [], hidden: hidden,
+    cutNote: !!document.getElementById('secCutNote'),
+    empty: Math.max(0, empty), emptyWhere: where,
+    procOn: procOn, procFirst: procFirst, procAbove: above, procBelow: below,
+    twoCols: two, colDiff: colDiff, parts: Object.keys(parts).length, todoDrawn: shown(todo)
   };
 })()`
-
-func d34Fail(format string, args ...any) error { return fmt.Errorf("d34: "+format, args...) }
 
 func d34Apply(payload string) (d34Page, error) {
 	var p d34Page
@@ -85,95 +147,42 @@ func d34Apply(payload string) (d34Page, error) {
 	return p, err
 }
 
-func d34NoOverflow(tag string, p d34Page) error {
-	if p.BodyOver > 1 || p.PageOver > 1 || p.HostOver > 1 || p.ZoneOver > 1 {
-		return d34Fail("%s overflows: body %.0f, page area %.0f, host %.0f, zone %.0f", tag, p.BodyOver, p.PageOver, p.HostOver, p.ZoneOver)
-	}
-	return nil
-}
-
-func d34NoteWant(n int) string {
-	if n == 0 {
-		return ""
-	}
-	if n == 1 {
-		return "1 section hidden, the window is too small"
-	}
-	return fmt.Sprintf("%d sections hidden, the window is too small", n)
-}
-
-// d34On checks the scrollbar-on state: scrolls, nothing hidden, no note, chart natural.
-func d34On(tag string, p d34Page) error {
+// d34Verify returns the problems found in one read, empty when the case passes.
+func d34Verify(p d34Page, scrollbar bool) []string {
+	var bad []string
 	if !p.Fit {
-		return d34Fail("%s: window.__bdevFit is missing", tag)
+		return []string{"window.__bdevFit is missing"}
 	}
-	if !p.Scroll || p.OverflowY != "auto" {
-		return d34Fail("%s: scrollbar on, but scroll %v and overflow-y %q", tag, p.Scroll, p.OverflowY)
+	if p.Empty > d34MaxEmpty+0.5 {
+		bad = append(bad, fmt.Sprintf("empty area %.0f px (%s), limit %.0f", p.Empty, p.EmptyWhere, d34MaxEmpty))
 	}
-	if !p.Scrolls {
-		return d34Fail("%s: scrollbar on, but the page does not scroll", tag)
+	if len(p.Hidden) != 0 || len(p.FitHidden) != 0 {
+		bad = append(bad, fmt.Sprintf("hidden parts %v, fit hidden %v", p.Hidden, p.FitHidden))
 	}
-	if p.Note != "" || len(p.Hidden) != 0 {
-		return d34Fail("%s: scrollbar on hides %v with note %q", tag, p.Hidden, p.Note)
+	if p.CutNote {
+		bad = append(bad, "#secCutNote still exists")
 	}
-	if p.Natural <= 0 || p.HistH < p.Natural-1 || p.HistH > p.Natural+1 {
-		return d34Fail("%s: System chart is %.1f px, natural %.1f px", tag, p.HistH, p.Natural)
+	if !p.ProcFirst || !p.ProcAbove || !p.ProcBelow {
+		bad = append(bad, fmt.Sprintf("Processes order: before To Do %v, above To Do %v, below groups/Memory/Disks/Network %v", p.ProcFirst, p.ProcAbove, p.ProcBelow))
 	}
-	return nil
-}
-
-// d34Off checks the scrollbar-off state at a window too small for everything.
-func d34Off(tag string, p d34Page, wantHidden bool) error {
-	if !p.Fit {
-		return d34Fail("%s: window.__bdevFit is missing", tag)
+	if p.BodyOver > 1 {
+		bad = append(bad, fmt.Sprintf("the body itself overflows by %.0f px", p.BodyOver))
 	}
-	if p.Scroll || p.OverflowY != "hidden" || p.Scrolls {
-		return d34Fail("%s: scrollbar off, but scroll %v, overflow-y %q, scrolls %v", tag, p.Scroll, p.OverflowY, p.Scrolls)
+	if scrollbar {
+		return bad
 	}
-	if err := d34NoOverflow(tag, p); err != nil {
-		return err
+	if p.FitScroll != p.FitClass {
+		bad = append(bad, fmt.Sprintf("fitScroll %v but body.fit-scroll %v", p.FitScroll, p.FitClass))
 	}
-	if wantHidden && len(p.Hidden) == 0 {
-		return d34Fail("%s: nothing was hidden, the window should be too small", tag)
-	}
-	if len(p.Hidden) > len(d34Order) {
-		return d34Fail("%s: hid %v, more than the drop order holds", tag, p.Hidden)
-	}
-	// The greedy pass puts a part back when the page still fits, so the list
-	// is the drop order with gaps: every entry in order, none out of place.
-	at := 0
-	for _, id := range p.Hidden {
-		for at < len(d34Order) && d34Order[at] != id {
-			at++
+	if !p.FitScroll {
+		if p.PageOver > 1 || p.HostOver > 1 || p.ZoneOver > 1 || p.Scrolls {
+			bad = append(bad, fmt.Sprintf("not at floors yet overflows: page %.0f, host %.0f, zone %.0f, scrolls %v", p.PageOver, p.HostOver, p.ZoneOver, p.Scrolls))
 		}
-		if at == len(d34Order) {
-			return d34Fail("%s: hidden %v is not in the drop order %v", tag, p.Hidden, d34Order)
-		}
-		at++
-	}
-	if len(p.Dropped) != len(p.Hidden) {
-		return d34Fail("%s: hidden %v but %v carry fit-dropped", tag, p.Hidden, p.Dropped)
-	}
-	if want := d34NoteWant(len(p.Hidden)); p.Note != want {
-		return d34Fail("%s: note %q, want %q", tag, p.Note, want)
-	}
-	if p.Natural <= 0 || p.Floor < 0.6*p.Natural-1 || p.Floor < 59 {
-		return d34Fail("%s: floor %.1f px, natural %.1f px, want at least 60 percent and 60 px", tag, p.Floor, p.Natural)
-	}
-	systemHidden := false
-	for _, id := range p.Hidden {
-		if id == "system" {
-			systemHidden = true
+		if p.TwoCols && p.ColDiff > 2 {
+			bad = append(bad, fmt.Sprintf("two columns end %.0f px apart, want at most 2", p.ColDiff))
 		}
 	}
-	// A hidden System panel has no chart height left to hold to the floor.
-	if !systemHidden && p.HistH < p.Floor-1 {
-		return d34Fail("%s: System chart %.1f px is below its floor %.1f px", tag, p.HistH, p.Floor)
-	}
-	if len(p.Hidden) > 0 && p.AtHide > p.Floor+2 {
-		return d34Fail("%s: a part was hidden while the System chart was %.1f px, floor %.1f px (it must shrink first)", tag, p.AtHide, p.Floor)
-	}
-	return nil
+	return bad
 }
 
 func init() {
@@ -182,105 +191,102 @@ func init() {
 		if err != nil {
 			return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
 		}
-		std := func(scrollbar bool) string {
-			return d29Payload(d29Opts{Scrollbar: scrollbar, Status: "ok", Snap: snap})
+		// Switch To Do on in the snapshot, so its panel is drawn when the page takes it from there.
+		var snapMap map[string]any
+		if err := json.Unmarshal(snap, &snapMap); err != nil {
+			return err
 		}
-		plain := func(scrollbar bool) string {
-			return d29Payload(d29Opts{Plain: true, PlainAll: true, Scrollbar: scrollbar, Status: "ok", Snap: snap})
+		snapMap["todo"] = map[string]any{"enabled": true, "signed_in": true}
+		var items []map[string]any
+		for k := 1; k <= 14; k++ {
+			items = append(items, map[string]any{"Title": fmt.Sprintf("Example task %d", k), "List": "Sample list", "DueDate": "2026-09-29", "Overdue": k%5 == 0})
 		}
-		size := func(w, h int32) error {
+		snapMap["todo_tasks"] = map[string]any{"items": items}
+		if snap, err = json.Marshal(snapMap); err != nil {
+			return err
+		}
+		allBut := func(off string) map[string]bool {
+			m := map[string]bool{}
+			for _, id := range d29Parts {
+				if id != off {
+					m[id] = true
+				}
+			}
+			return m
+		}
+		payload := func(plain bool, c string, scrollbar bool) string {
+			o := d29Opts{Plain: plain, Scrollbar: scrollbar, Status: "ok", Snap: snap}
+			switch c {
+			case "a", "d":
+				o.PlainAll = true
+			case "b":
+				o.StandardOff = map[string]bool{"turn_ticker": true}
+				o.PlainOnly = allBut("turn_ticker")
+			case "c":
+				o.PlainOnly = map[string]bool{"burn_30min": true}
+			}
+			return d29Payload(o)
+		}
+		sizes := [][2]int32{{1280, 800}, {1920, 1080}, {2560, 1440}}
+		var fails []string
+		ran, skipped := 0, 0
+		for _, sz := range sizes {
+			w, h := sz[0], sz[1]
+			tag := fmt.Sprintf("%dx%d", w, h)
 			if err := ensureWindowSizeWH(hwnd, w, h); err != nil {
 				return err
 			}
+			if windowCapped {
+				fmt.Printf("uicheck: d34: SKIPPED %s, this screen is too small\n", tag)
+				skipped++
+				continue
+			}
 			time.Sleep(500 * time.Millisecond)
-			return nil
+			for _, plain := range []bool{false, true} {
+				mode := map[bool]string{false: "standard", true: "plain"}[plain]
+				for _, c := range []string{"a", "b", "c", "d"} {
+					if c == "c" && !plain {
+						continue
+					}
+					if c == "d" && w != 1280 {
+						continue
+					}
+					for _, sb := range []bool{true, false} {
+						if c == "d" && sb {
+							continue
+						}
+						sbName := map[bool]string{true: "on", false: "off"}[sb]
+						p, err := d34Apply(payload(plain, c, sb))
+						if err != nil {
+							return err
+						}
+						ran++
+						name := fmt.Sprintf("d34-%s-%s-%s-%s", tag, mode, c, sbName)
+						if _, err := screenshot(hwnd, name); err != nil {
+							return err
+						}
+						bad := d34Verify(p, sb)
+						if len(bad) == 0 {
+							fmt.Printf("uicheck: d34: PASS %s %s scrollbar %s case %s (parts %d, largest empty %.0f px, fitScroll %v, two columns %v, To Do drawn %v)\n", tag, mode, sbName, c, p.Parts, p.Empty, p.FitScroll, p.TwoCols, p.TodoDrawn)
+						} else {
+							msg := fmt.Sprintf("%s %s scrollbar %s case %s: %s", tag, mode, sbName, c, strings.Join(bad, "; "))
+							fmt.Printf("uicheck: d34: FAIL %s\n", msg)
+							fails = append(fails, msg)
+						}
+					}
+				}
+			}
 		}
-
-		if err := size(1024, 600); err != nil {
+		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
 			return err
 		}
-		p, err := d34Apply(std(true))
-		if err != nil {
-			return err
+		fmt.Printf("uicheck: d34: %d cases ran, %d sizes skipped, %d failed\n", ran, skipped, len(fails))
+		if len(fails) > 0 {
+			return fmt.Errorf("d34: %d case(s) failed, first: %s", len(fails), fails[0])
 		}
-		if err := d34On("standard 1024x600 scrollbar on", p); err != nil {
-			return err
+		if ran == 0 {
+			return fmt.Errorf("d34: no size ran")
 		}
-		if _, err := screenshot(hwnd, "d34-standard-scroll-on"); err != nil {
-			return err
-		}
-		p, err = d34Apply(std(false))
-		if err != nil {
-			return err
-		}
-		if err := d34Off("standard 1024x600 scrollbar off", p, true); err != nil {
-			return err
-		}
-		if _, err := screenshot(hwnd, "d34-standard-scroll-off"); err != nil {
-			return err
-		}
-
-		// Review focus 4: the window grows again, every hidden part comes back.
-		if err := size(1152, 2048); err != nil {
-			return err
-		}
-		p, err = d34Apply(std(false))
-		if err != nil {
-			return err
-		}
-		if err := d34Off("standard 1152x2048 scrollbar off", p, false); err != nil {
-			return err
-		}
-		if len(p.Hidden) != 0 || p.Note != "" || len(p.Dropped) != 0 {
-			return d34Fail("after growing to 1152x2048 hidden %v, dropped %v, note %q", p.Hidden, p.Dropped, p.Note)
-		}
-
-		if err := size(1024, 480); err != nil {
-			return err
-		}
-		p, err = d34Apply(plain(true))
-		if err != nil {
-			return err
-		}
-		if err := d34On("plain 1024x480 scrollbar on", p); err != nil {
-			return err
-		}
-		if _, err := screenshot(hwnd, "d34-plain-scroll-on"); err != nil {
-			return err
-		}
-		p, err = d34Apply(plain(false))
-		if err != nil {
-			return err
-		}
-		if err := d34Off("plain 1024x480 scrollbar off", p, true); err != nil {
-			return err
-		}
-		if !strings.Contains(p.Note, "hidden, the window is too small") {
-			return d34Fail("plain 1024x480 scrollbar off: note %q", p.Note)
-		}
-		if _, err := screenshot(hwnd, "d34-plain-scroll-off"); err != nil {
-			return err
-		}
-		// Scrollbar on with the Plain defaults: no older zone is showing, the
-		// sections host must keep its natural height so the page scrolls and
-		// no panel is cut off by the host.
-		if err := size(1024, 480); err != nil {
-			return err
-		}
-		plainDef := d29Payload(d29Opts{Plain: true, Scrollbar: true, Status: "ok", Snap: snap})
-		p, err = d34Apply(plainDef)
-		if err != nil {
-			return err
-		}
-		if !p.Scroll || p.OverflowY != "auto" || !p.Scrolls {
-			return d34Fail("plain defaults 1024x480 scrollbar on: the page does not scroll (scroll %v, overflow-y %q, scrolls %v)", p.Scroll, p.OverflowY, p.Scrolls)
-		}
-		if p.HostOver > 1 || p.BodyOver > 1 {
-			return d34Fail("plain defaults 1024x480 scrollbar on: host cuts its panels off by %.0f px, body %.0f px", p.HostOver, p.BodyOver)
-		}
-		if p.Note != "" || len(p.Hidden) != 0 {
-			return d34Fail("plain defaults 1024x480 scrollbar on hides %v with note %q", p.Hidden, p.Note)
-		}
-		return size(1152, 2048)
+		return nil
 	}
 }

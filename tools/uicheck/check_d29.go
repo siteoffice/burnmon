@@ -49,6 +49,7 @@ type d29Opts struct {
 	StandardOff      map[string]bool
 	PlainOn          map[string]bool
 	PlainAll         bool
+	PlainOnly        map[string]bool
 	Status           string
 	Snap             json.RawMessage
 	StationTheme     string
@@ -59,6 +60,9 @@ func d29Payload(o d29Opts) string {
 	for _, id := range d29Parts {
 		standard[id] = !o.StandardOff[id]
 		plainSet[id] = o.PlainAll || d29PlainDefault[id] || o.PlainOn[id]
+		if o.PlainOnly != nil {
+			plainSet[id] = o.PlainOnly[id]
+		}
 	}
 	current := standard
 	if o.Plain {
