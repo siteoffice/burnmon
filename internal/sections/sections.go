@@ -9,6 +9,7 @@ package sections
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 )
@@ -92,6 +93,51 @@ type State struct {
 	// Controls holds one switch per control (ControlIDs). Every control is off
 	// until the person turns it on; a missing key is off.
 	Controls map[string]bool `json:"controls"`
+	// HeightsStandard and HeightsPlain hold the saved split of a column per mode:
+	// layout key (HeightKeys) to the part's share of the column's resizable
+	// height. Nil when nothing is saved; the view file then has no such key.
+	HeightsStandard map[string]float64 `json:"heights_standard,omitempty"`
+	HeightsPlain    map[string]float64 `json:"heights_plain,omitempty"`
+}
+
+// HeightKeys are layout keys, not part ids: the Activity and Heatmap halves
+// share one row, and the System part draws a CPU box and a chart.
+var HeightKeys = []string{"burn_30min", "vendor_strip", "activity_heatmap", "turn_ticker", "system_chart", "process_groups"}
+
+// cleanHeights keeps known keys with a finite value in (0, 1]; empty gives nil.
+func cleanHeights(h map[string]float64) map[string]float64 {
+	var out map[string]float64
+	for _, k := range HeightKeys {
+		v, ok := h[k]
+		if !ok || math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > 1 {
+			continue
+		}
+		if out == nil {
+			out = map[string]float64{}
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// WithHeights returns a copy with one mode's saved heights replaced. An
+// unknown mode changes nothing.
+func (s State) WithHeights(mode string, h map[string]float64) State {
+	out := s.Normalize()
+	switch mode {
+	case ModeStandard:
+		out.HeightsStandard = cleanHeights(h)
+	case ModePlain:
+		out.HeightsPlain = cleanHeights(h)
+	}
+	return out
+}
+
+// ResetHeights returns a copy with the saved heights of both modes cleared.
+func (s State) ResetHeights() State {
+	out := s.Normalize()
+	out.HeightsStandard, out.HeightsPlain = nil, nil
+	return out
 }
 
 // ControlIDs are the control switch ids, the same list as controls.All (a test
@@ -202,7 +248,7 @@ func (s State) Normalize() State {
 		})
 	}
 	ctl := controlsOf(func(id string) bool { return s.Controls[id] })
-	return State{Plain: s.Plain, Scrollbar: s.Scrollbar, Standard: pick(s.Standard, d.Standard), PlainSet: pick(s.PlainSet, d.PlainSet), Controls: ctl}
+	return State{Plain: s.Plain, Scrollbar: s.Scrollbar, Standard: pick(s.Standard, d.Standard), PlainSet: pick(s.PlainSet, d.PlainSet), Controls: ctl, HeightsStandard: cleanHeights(s.HeightsStandard), HeightsPlain: cleanHeights(s.HeightsPlain)}
 }
 
 // r8Fill completes an R8 list (seven sections) with its R8 defaults.
@@ -255,13 +301,15 @@ func Load(path string) State {
 		return Default()
 	}
 	var f struct {
-		Plain     bool            `json:"plain_mode"`
-		Scrollbar *bool           `json:"overall_scrollbar"`
-		Standard  map[string]bool `json:"parts_standard"`
-		PlainSet  map[string]bool `json:"parts_plain"`
-		R8Std     map[string]bool `json:"sections_standard"`
-		R8Plain   map[string]bool `json:"sections_plain"`
-		Controls  map[string]bool `json:"controls"`
+		Plain           bool               `json:"plain_mode"`
+		Scrollbar       *bool              `json:"overall_scrollbar"`
+		Standard        map[string]bool    `json:"parts_standard"`
+		PlainSet        map[string]bool    `json:"parts_plain"`
+		R8Std           map[string]bool    `json:"sections_standard"`
+		R8Plain         map[string]bool    `json:"sections_plain"`
+		Controls        map[string]bool    `json:"controls"`
+		HeightsStandard map[string]float64 `json:"heights_standard"`
+		HeightsPlain    map[string]float64 `json:"heights_plain"`
 	}
 	if json.Unmarshal(b, &f) != nil {
 		return Default()
@@ -277,6 +325,8 @@ func Load(path string) State {
 		st.Scrollbar = *f.Scrollbar
 	}
 	st.Controls = f.Controls
+	st.HeightsStandard = f.HeightsStandard
+	st.HeightsPlain = f.HeightsPlain
 	return st.Normalize()
 }
 
@@ -309,6 +359,15 @@ func Save(path string, s State) error {
 	}
 	if rest["controls"], err = json.Marshal(s.Controls); err != nil {
 		return err
+	}
+	for key, h := range map[string]map[string]float64{"heights_standard": s.HeightsStandard, "heights_plain": s.HeightsPlain} {
+		if len(h) == 0 {
+			delete(rest, key)
+			continue
+		}
+		if rest[key], err = json.Marshal(h); err != nil {
+			return err
+		}
 	}
 	b, err := json.MarshalIndent(rest, "", "  ")
 	if err != nil {
