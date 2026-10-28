@@ -92,7 +92,6 @@ func TestBuildEdges(t *testing.T) {
 		{s1, "mcp:perplexity", KindUses, BasisInferred, SourceMCPConfig},
 		{"mcp:perplexity", mcpProc, KindRunsAs, BasisInferred, SourceMCPConfig},
 		{"process:4:102", "port:tcp:8020", KindListensOn, BasisVendor, SourceNetTables},
-		{s1, "person:you", KindWaitsOn, BasisVendor, SourceClaudePids},
 		{s1, "sprint:p__x__1", KindWorksFor, BasisInferred, SourceForeman},
 		{"sprint:p__x__1", `worktree:c:\w\repo\.worktrees\sprint-x`, KindTouches, BasisVendor, SourceForeman},
 		{s1, `worktree:c:\w\repo\.worktrees\sprint-x`, KindTouches, BasisInferred, SourceGit},
@@ -119,6 +118,7 @@ func TestBuildEdges(t *testing.T) {
 		{"process:7:300", "port:tcp:9999", KindListensOn},         // not in a harness tree
 		{"session:openai:C1", "person:you", KindWaitsOn},          // not waiting
 		{"session:anthropic:agent-a1", "person:you", KindWaitsOn}, // not waiting
+		{s1, "person:you", KindWaitsOn},                           // idle pid: Your turn, not Blocked
 	} {
 		if _, ok := edge(g, absent[0], absent[1], absent[2]); ok {
 			t.Errorf("unexpected edge %v", absent)
@@ -192,12 +192,12 @@ func TestBuildPidReuse(t *testing.T) {
 	if _, ok := edge(g, "session:anthropic:S1", "process:2:100", KindRunsIn); ok {
 		t.Fatal("session linked to a reused pid")
 	}
-	if _, ok := edge(g, "session:anthropic:S1", "person:you", KindWaitsOn); !ok {
-		t.Fatal("waits_on from the stage should remain")
+	if _, ok := edge(g, "session:anthropic:S1", "person:you", KindWaitsOn); ok {
+		t.Fatal("a Your turn session must not wait on you")
 	}
-	e, _ := edge(g, "session:anthropic:S1", "person:you", KindWaitsOn)
-	if e.Basis != BasisInferred || e.Source != SourceStore {
-		t.Errorf("waits_on without a pid file: basis %q source %q, want inferred store", e.Basis, e.Source)
+	// The scenario's subagent ran 5 s ago, so the parent is Working.
+	if n, _ := node(g, "session:anthropic:S1"); n.Attrs["wait"] != WaitWorking {
+		t.Errorf("wait without a pid file = %q, want working (running subagent)", n.Attrs["wait"])
 	}
 }
 

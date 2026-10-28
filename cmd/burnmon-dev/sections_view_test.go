@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"burnmon/internal/sections"
 	"burnmon/internal/snapshot"
+	"burnmon/internal/waits"
 )
 
 // Saving the theme must keep the sections, and saving the sections must keep
@@ -284,7 +286,7 @@ func TestPageListsEveryItemInBoundedScrollArea(t *testing.T) {
 		`var shown = plain ? word : txt;`,
 		`var full = shown + ' ' + (it.title || '')`,
 		`String(it.detail).toLowerCase() === k[0].toLowerCase()`,
-		`w.forEach(function(it){ rows += secItemRow(it, false); });`,
+		`part += secItemRow(it, false);`,
 		`o.forEach(function(it){ rows += secItemRow(it, true); });`,
 		`.seclist{`,
 		`overflow-y:auto`,
@@ -439,5 +441,100 @@ func TestPageControlWordsAndGear(t *testing.T) {
 		if strings.Contains(pageHTML, bad) {
 			t.Errorf("page has %q", bad)
 		}
+	}
+}
+
+// Review Focus 2: the amber number is one number in every place the window
+// shows it: the reading's wait_counts, the list's blocked items, the small
+// overview in the sections payload, the full live map's counts and its You box.
+func TestFourPlacesOneCount(t *testing.T) {
+	dir := t.TempDir()
+	snapPath := filepath.Join("..", "..", "testdata", "snapshot_example.json")
+	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
+
+	p := sectionsPayloadFor(dir, snapPath, now)
+	if p.Reading.Snapshot == nil || p.AgentMap == nil {
+		t.Fatal("no snapshot or no overview map")
+	}
+	listed := 0
+	for _, it := range p.Reading.Snapshot.WaitItems {
+		if it.Group == waits.GroupBlocked {
+			listed++
+		}
+	}
+	wc := p.Reading.Snapshot.WaitCounts
+	if listed == 0 || wc != waits.CountOf(p.Reading.Snapshot.WaitItems) || wc.Blocked != listed {
+		t.Fatalf("wait_counts %+v, blocked items listed %d", wc, listed)
+	}
+	if p.AgentMap.Counts.Waiting != listed || p.AgentMap.Counts.YourTurn != wc.YourTurn {
+		t.Errorf("overview counts %+v, want waiting %d your turn %d", p.AgentMap.Counts, listed, wc.YourTurn)
+	}
+	m, err := agentMapFor(agentMapEnv{DataDir: dir, SnapPath: snapPath}, agentMapRequest{Source: "live"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Layout.Counts.Waiting != listed || m.Layout.Counts.YourTurn != wc.YourTurn {
+		t.Errorf("full map counts %+v, want waiting %d", m.Layout.Counts, listed)
+	}
+	y, ok := boxIn(m.Layout, "you")
+	if !ok || !strings.HasPrefix(y.Line, fmt.Sprintf("%d waiting on you", listed)) {
+		t.Errorf("You box %+v (found %v), want it to start with %d", y, ok, listed)
+	}
+}
+
+// ---- B6 Task 9: Waits on you is the ranked your-move queue ---------------
+
+func TestPageWaitsTiers(t *testing.T) {
+	for _, want := range []string{"'Blocked'", "'Your turn'", "'Done, needs close-out'", "'Done, can be closed'", "wait_counts", "your turn"} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if body := pageFuncBody(t, "secPanelCount"); strings.Contains(body, "wait_items") {
+		t.Error("the Waits on you header count still reads wait_items, want wait_counts")
+	}
+	if body := pageFuncBody(t, "secBodyWaits"); !strings.Contains(body, "secItemRow(it, false)") {
+		t.Error("secBodyWaits does not draw its rows with secItemRow")
+	}
+}
+
+func TestPageCloseChipOnlyOnCloseOut(t *testing.T) {
+	for _, want := range []string{`close_sprint:['Close sprint','Close this job']`, `kind === 'closeout'`, `c === 'close_sprint'`} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	body := pageFuncBody(t, "ctlChips")
+	if !strings.Contains(body, "closeout") || !strings.Contains(body, "ctlState.foreman") {
+		t.Error("ctlChips has no closeout branch gated on ctlState.foreman")
+	}
+	if !strings.Contains(pageHTML, "'Close sprint'") {
+		t.Error("page lacks the Close sprint word")
+	}
+}
+
+func TestPageHidesForemanPartsWithoutForemanRoot(t *testing.T) {
+	for _, want := range []string{`[data-ctl-needs]`, `ctlState.foreman`, `foreman:!!cp.foreman`} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if body := pageFuncBody(t, "secControlsSync"); !strings.Contains(body, "data-ctl-needs") {
+		t.Error("secControlsSync does not hide the gear lines that need Foreman")
+	}
+}
+
+func TestPageCostLineEscaped(t *testing.T) {
+	body := pageFuncBody(t, "secItemRow")
+	for _, want := range []string{"cost_tokens", "cost_partial", "at least ", "tokens burned while waiting", "idle "} {
+		if !strings.Contains(body+pageFuncBody(t, "secCostLine"), want) {
+			t.Errorf("the cost line lacks %q", want)
+		}
+	}
+	if !strings.Contains(body, "esc(cost)") {
+		t.Error("secItemRow does not escape the cost line")
+	}
+	if strings.Contains(body, "innerHTML") {
+		t.Error("secItemRow assigns innerHTML")
 	}
 }

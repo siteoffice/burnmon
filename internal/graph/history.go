@@ -55,6 +55,11 @@ type HistoryInput struct {
 	RepoFor       func(cwd string) (Repo, bool)
 	Sprints       []Sprint
 	SubagentFor   func(parent, id string) (SubagentInfo, bool)
+	Flows         []Flow
+	MergedFor     func(repo, branch string) (merged, known bool)
+	BranchGone    func(repo, branch string) bool
+	// MergedByMessage is the deleted-branch check, see Input.
+	MergedByMessage func(repo, branch string) (found, known bool)
 }
 
 // History is the graph for a past window: sessions and subagents from the
@@ -71,7 +76,9 @@ func History(st *store.Store, hi HistoryInput) (Graph, error) {
 		sessions = append(sessions, Session{Vendor: h.Vendor, Agent: h.Agent, ID: h.SessionID, ParentID: h.ParentID,
 			Project: h.Project, FirstActivity: h.First, LastActivity: h.Last})
 	}
-	g := Build(Input{Now: hi.Now, Sessions: sessions, RepoFor: hi.RepoFor, Sprints: hi.Sprints, SubagentFor: hi.SubagentFor})
+	g := Build(Input{Now: hi.Now, Sessions: sessions, RepoFor: hi.RepoFor, Sprints: hi.Sprints, Flows: hi.Flows,
+		SubagentFor: hi.SubagentFor, MergedFor: hi.MergedFor,
+		BranchGone: hi.BranchGone, MergedByMessage: hi.MergedByMessage})
 
 	nodes, edges, err := st.GraphBetween(hi.From, hi.To)
 	if err != nil {
@@ -86,13 +93,34 @@ func History(st *store.Store, hi HistoryInput) (Graph, error) {
 		b.edges[e.Key()] = i
 	}
 	for _, n := range nodes {
+		if n.Source == SourceForeman {
+			continue
+		}
 		var attrs map[string]string
 		_ = json.Unmarshal([]byte(n.Attrs), &attrs)
 		b.node(Node{ID: n.ID, Kind: n.Kind, Label: n.Label, Vendor: n.Vendor, Attrs: attrs, Source: n.Source, AgeSeconds: b.age(n.LastSeen)})
 	}
 	for _, e := range edges {
+		if e.Source == SourceForeman {
+			continue
+		}
+		if e.Kind == KindWaitsOn && !b.stillWaits(e) {
+			continue
+		}
 		b.edge(Edge{From: e.From, To: e.To, Kind: e.Kind, Basis: e.Basis, Source: e.Source, AgeSeconds: b.age(e.LastSeen),
 			FirstSeen: utc(e.FirstSeen), LastSeen: utc(e.LastSeen)})
 	}
 	return b.g, nil
+}
+
+// stillWaits reports whether a stored waits_on edge still means Blocked under
+// the B6 rules. Foreman edges are never stored here: Build rebuilds them. Older ticks stored one for every idle session (source
+// claude_pids) and every stage-waiting session (source store); those are Your
+// turn now, so they are dropped. Only an agent view or transcript ask session
+// edge survives.
+func (b *builder) stillWaits(e store.GraphEdge) bool {
+	if strings.HasPrefix(e.From, "session:") {
+		return e.Source == SourceAgentView || e.Source == SourceTranscriptAsk
+	}
+	return true
 }

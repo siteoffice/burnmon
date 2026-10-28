@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"burnmon/internal/controls"
+	"burnmon/internal/gitrefs"
 	"burnmon/internal/graph"
 	"burnmon/internal/pricing"
 	"burnmon/internal/snapshot"
@@ -40,6 +41,7 @@ func newControlServiceWith(cfg pricing.Config, dataDir, snapPath, storePath stri
 		Elevated:    controls.Elevated,
 		Runner:      controls.ExecRunner{},
 		AuditPath:   controls.AuditPath(storePath),
+		Merged:      gitrefs.NewChecker().MergedOrGone,
 	}
 	if p, err := snapshotwriter.ResolveClaudeConfigured(cfg.ClaudePath, look, runtime.GOOS); err == nil {
 		env.ClaudePath = p

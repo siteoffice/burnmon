@@ -78,10 +78,11 @@ func TestBuildSprintWithSubagent(t *testing.T) {
 	}
 	k := c.Children[0]
 	// The example's subagent ended its turn: it is finished, and waits on no one.
+	// Only the blocked top-level session waits on you (B6).
 	if !k.Subagent || k.AgentType != "Explore" || k.Model != "sonnet" || k.WaitsOnYou {
 		t.Errorf("subagent card = %+v", k)
 	}
-	want := Counts{Sessions: 1, Subagents: 1, Waiting: 0, Sprints: 1}
+	want := Counts{Sessions: 1, Subagents: 1, Waiting: 1, Sprints: 1}
 	if v.Counts != want {
 		t.Errorf("counts = %+v, want %+v", v.Counts, want)
 	}

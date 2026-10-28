@@ -44,6 +44,12 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "only on stderr")
 		os.Exit(1)
+	case "pytrace":
+		fmt.Println("progress line")
+		fmt.Fprintln(os.Stderr, "Traceback (most recent call last):")
+		fmt.Fprintln(os.Stderr, "ValueError: example failure")
+		fmt.Fprintln(os.Stderr, "")
+		os.Exit(1)
 	case "long":
 		fmt.Println(strings.Repeat("é", 500))
 		os.Exit(0)
@@ -191,6 +197,26 @@ func TestExecRunnerStderrFallbackSkipsBlank(t *testing.T) {
 	t.Setenv("BURNMON_CONTROLS_HELPER", "stderronly")
 	code, line, err := ExecRunner{}.Run(context.Background(), []string{os.Args[0]}, "")
 	if err != nil || code != 1 || line != "only on stderr" {
+		t.Fatalf("code=%d line=%q err=%v", code, line, err)
+	}
+}
+
+// RunLast is the Close control's run: a nonzero exit gives the last stderr
+// line, the reason a Python script prints after its traceback.
+func TestExecRunnerRunLastReturnsLastStderrLine(t *testing.T) {
+	t.Setenv("BURNMON_CONTROLS_HELPER", "pytrace")
+	code, line, err := ExecRunner{}.RunLast(context.Background(), []string{os.Args[0]}, "")
+	if err != nil || code != 1 || line != "ValueError: example failure" {
+		t.Fatalf("code=%d line=%q err=%v", code, line, err)
+	}
+}
+
+// Run keeps B4's behaviour for Stop, Attend and the gate controls: the first
+// line, whatever follows it.
+func TestExecRunnerRunKeepsFirstLineOnNonzeroExit(t *testing.T) {
+	t.Setenv("BURNMON_CONTROLS_HELPER", "pytrace")
+	code, line, err := ExecRunner{}.Run(context.Background(), []string{os.Args[0]}, "")
+	if err != nil || code != 1 || line != "progress line" {
 		t.Fatalf("code=%d line=%q err=%v", code, line, err)
 	}
 }

@@ -14,8 +14,11 @@ const (
 	SendBack = "send_back"
 )
 
+// CloseSprint runs Foreman's own sprint_done on a sprint whose branch is in main.
+const CloseSprint = "close_sprint"
+
 // All lists every control in a stable order.
-var All = []string{Stop, Attach, Approve, SendBack}
+var All = []string{Stop, Attach, Approve, SendBack, CloseSprint}
 
 var agentIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 

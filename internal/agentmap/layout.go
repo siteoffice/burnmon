@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"burnmon/internal/graph"
+	"burnmon/internal/waits"
 )
 
 // Layout is the map drawn as boxes in columns with lines between them. It
@@ -16,6 +17,13 @@ import (
 
 // DefaultMaxBoxes is the size above which groups fold shut.
 const DefaultMaxBoxes = 40
+
+// MaxSubagentBoxes is how many subagents one parent shows a box each for; more
+// are one box that opens on a click.
+const MaxSubagentBoxes = 10
+
+// noneNote is the dim note in a column that holds no box.
+const noneNote = "none in this window"
 
 // Evidence is what the live snapshot says about one session or subagent,
 // keyed by its node id. A session the snapshot does not list has none and its
@@ -39,6 +47,9 @@ type LayoutInput struct {
 	Open     map[string]bool // frame ids the person opened; never folded
 	Plain    bool
 	MaxBoxes int // 0 means DefaultMaxBoxes
+	// Counts is the one count of waiting things, from waits.CountOf. The You box
+	// and the counts in the layout read it; nil means zero.
+	Counts *waits.Counts
 }
 
 // Fact is one line of the evidence panel.
@@ -63,6 +74,13 @@ type Box struct {
 	Group      string `json:"group,omitempty"`
 	WaitsOnYou bool   `json:"waits_on_you"`
 	Facts      []Fact `json:"facts"`
+	// Depth is 0 for a session, 1 for a direct subagent, 2 and up deeper; every
+	// subagent sits in column 2 and the page indents by depth.
+	Depth int `json:"depth,omitempty"`
+	// Tag is the small word naming the kind of box.
+	Tag string `json:"tag"`
+	// Wait is blocked, your_turn, working or done.
+	Wait string `json:"wait,omitempty"`
 }
 
 // Line joins two boxes. From is a box id, or a frame id for a frame that
@@ -74,6 +92,8 @@ type Line struct {
 	Word  string `json:"word"`
 	Basis string `json:"basis,omitempty"`
 	You   bool   `json:"you"`
+	// Style is solid, or dotted for a running subagent reporting back.
+	Style string `json:"style"`
 }
 
 // Frame is the light frame around the agents of one sprint or flow. Count is
@@ -96,19 +116,22 @@ type Frame struct {
 // Layout is what the page draws.
 type Layout struct {
 	Columns []string `json:"columns"`
-	Boxes   []Box    `json:"boxes"`
-	Lines   []Line   `json:"lines"`
-	Frames  []Frame  `json:"frames"`
-	Idle    []Idle   `json:"idle"`
-	Counts  Counts   `json:"counts"`
-	Notes   []string `json:"notes"`
+	// ColumnNotes has one entry per column: "" or "none in this window".
+	ColumnNotes []string `json:"column_notes"`
+	Boxes       []Box    `json:"boxes"`
+	Lines       []Line   `json:"lines"`
+	Frames      []Frame  `json:"frames"`
+	Idle        []Idle   `json:"idle"`
+	Counts      Counts   `json:"counts"`
+	Notes       []string `json:"notes"`
 }
 
 type wording struct {
 	plain                       bool
-	colSub, colDeep, colTools   string
+	colSub, colTools            string
 	waitsPill, waitsWord        string
 	subKind, toolKind, toolPill string
+	harnessTag, sessionTag      string
 	frameKind                   map[string]string
 	stateWord                   map[string]string
 }
@@ -121,11 +144,11 @@ var plainStates = map[string]string{
 
 func wordsFor(plain bool) wording {
 	if plain {
-		return wording{plain: true, colSub: "Helper", colDeep: "Deeper helper", colTools: "Programs and tool servers",
+		return wording{plain: true, colSub: "Helper", colTools: "Programs and tool servers", harnessTag: "app", sessionTag: "agent",
 			waitsPill: "waiting for you", waitsWord: "waiting for", subKind: "helper", toolKind: "tool server", toolPill: "tool server",
 			frameKind: map[string]string{"sprint": "Foreman job", "flow": "Foreman job"}, stateWord: plainStates}
 	}
-	return wording{colSub: "Subagent", colDeep: "Deeper subagent", colTools: "Programs and servers",
+	return wording{colSub: "Subagents", colTools: "Programs and servers", harnessTag: "tool", sessionTag: "session",
 		waitsPill: "waits on you", waitsWord: "waits on", subKind: "subagent", toolKind: "MCP server", toolPill: "MCP",
 		frameKind: map[string]string{"sprint": "Foreman sprint", "flow": "Foreman flow"}}
 }
@@ -244,17 +267,27 @@ type builder struct {
 	in       LayoutInput
 	w        wording
 	l        Layout
-	toolsCol int
+	toolsCol int // always 3
 	lineSeen map[string]bool
 }
 
 func (b *builder) addLine(from, to, word, basis string, you bool) {
+	b.addStyled(from, to, word, basis, "solid", you)
+}
+
+func (b *builder) addStyled(from, to, word, basis, style string, you bool) {
 	k := from + "|" + word + "|" + to
 	if b.lineSeen[k] {
 		return
 	}
 	b.lineSeen[k] = true
-	b.l.Lines = append(b.l.Lines, Line{From: from, To: to, Word: word, Basis: basis, You: you})
+	b.l.Lines = append(b.l.Lines, Line{From: from, To: to, Word: word, Basis: basis, You: you, Style: style})
+}
+
+// subsFolded says whether a card's subagents are one closed box: more than
+// MaxSubagentBoxes of them, and the person has not opened it.
+func (b *builder) subsFolded(c Card) bool {
+	return len(c.Children) > MaxSubagentBoxes && !b.in.Open["subs:"+c.ID]
 }
 
 // maxMCPBoxes is how many MCP servers a session gets a box each for; more are
@@ -285,6 +318,9 @@ func (b *builder) toolCount(c Card) int {
 
 func (b *builder) boxCount(c Card) int {
 	n := 1 + b.toolCount(c)
+	if b.subsFolded(c) {
+		return n + 1
+	}
 	for _, k := range c.Children {
 		n += b.boxCount(k)
 	}
@@ -301,23 +337,17 @@ func (b *builder) agentCount(c Card) int {
 
 func (b *builder) height(c Card) int {
 	h := b.toolCount(c)
-	for _, k := range c.Children {
-		h += b.height(k)
+	if b.subsFolded(c) {
+		h++
+	} else {
+		for _, k := range c.Children {
+			h += b.height(k)
+		}
 	}
 	if h < 1 {
 		h = 1
 	}
 	return h
-}
-
-func depthOf(c Card) int {
-	d := 0
-	for _, k := range c.Children {
-		if x := depthOf(k) + 1; x > d {
-			d = x
-		}
-	}
-	return d
 }
 
 func waitingCards(cs []Card) int {
@@ -332,6 +362,16 @@ func waitingCards(cs []Card) int {
 }
 
 func (b *builder) groupWaits(g Group) bool { return g.WaitsOnYou || waitingCards(g.Cards) > 0 }
+
+// groupWaiters is how many things in a group wait on you: each waiting card
+// and the group's own sprint or flow. Each one gets its own amber line.
+func (b *builder) groupWaiters(g Group) int {
+	n := waitingCards(g.Cards)
+	if g.WaitsOnYou {
+		n++
+	}
+	return n
+}
 
 func (b *builder) groupBoxes(g Group) int {
 	n := 0
@@ -452,6 +492,10 @@ func (b *builder) cardFacts(c Card, g Group) []Fact {
 	if tl := toolLabel(c.Tool, b.w.plain); tl != "" {
 		f = append(f, Fact{"Current tool", tl})
 	}
+	if strings.EqualFold(c.Agent, "cowork-cloud") {
+		// A known gap: the cloud transcript has no pending-question marker.
+		f = append(f, Fact{"Questions", "questions in Cowork cloud are not visible"})
+	}
 	if g.Kind == "sprint" || g.Kind == "flow" {
 		f = append(f, Fact{"Works for", b.worksFor(g, c)})
 	}
@@ -493,17 +537,24 @@ func (b *builder) cardTitle(c Card) string {
 
 // place puts a card and what belongs to it: its tools under its own row, its
 // children after them. It returns the rows used.
-func (b *builder) place(c Card, g Group, fid string, col, row int) int {
+func (b *builder) place(c Card, g Group, fid string, row, depth int) int {
 	pill := b.w.cardState(c)
-	if c.WaitsOnYou {
+	wait := b.waitOf(c)
+	switch {
+	case c.WaitsOnYou:
 		pill = b.w.waitsPill
+	case wait == "your_turn":
+		pill = "your turn"
+	case wait == "done" && !c.Subagent:
+		pill = "can be closed"
 	}
-	kind := "session"
+	kind, tag, col := "session", b.w.sessionTag, 1
 	if c.Subagent {
-		kind = "sub"
+		kind, tag, col = "sub", b.w.subKind, 2
 	}
 	b.l.Boxes = append(b.l.Boxes, Box{ID: c.ID, Kind: kind, Title: b.cardTitle(c), Pill: pill, Line: b.cardLine(c),
-		Tool: toolLabel(c.Tool, b.w.plain), Column: col, Row: row, Group: fid, WaitsOnYou: c.WaitsOnYou, Facts: b.cardFacts(c, g)})
+		Tool: toolLabel(c.Tool, b.w.plain), Column: col, Row: row, Group: fid, WaitsOnYou: c.WaitsOnYou, Facts: b.cardFacts(c, g),
+		Depth: depth, Tag: tag, Wait: wait})
 	r := row
 	if len(c.MCP) > maxMCPBoxes {
 		id := "mcp:all@" + c.ID
@@ -519,7 +570,7 @@ func (b *builder) place(c Card, g Group, fid string, col, row int) int {
 		}
 		title := fmt.Sprintf("%d %ss", len(c.MCP), b.w.toolKind)
 		b.l.Boxes = append(b.l.Boxes, Box{ID: id, Kind: "tool", Title: title, Pill: b.w.toolPill,
-			Line: fmt.Sprintf("%d with a port", withPort), Column: b.toolsCol, Row: r, Group: fid, Facts: facts})
+			Line: fmt.Sprintf("%d with a port", withPort), Column: b.toolsCol, Row: r, Group: fid, Facts: facts, Tag: b.w.toolPill})
 		b.addLine(c.ID, id, "uses", "inferred", false)
 		r++
 	}
@@ -539,7 +590,7 @@ func (b *builder) place(c Card, g Group, fid string, col, row int) int {
 			facts = append(facts, Fact{"Listens on", "unknown"})
 		}
 		b.l.Boxes = append(b.l.Boxes, Box{ID: id, Kind: "tool", Title: mc.Name, Pill: b.w.toolPill, Line: line,
-			Column: b.toolsCol, Row: r, Group: fid, Facts: facts})
+			Column: b.toolsCol, Row: r, Group: fid, Facts: facts, Tag: b.w.toolPill})
 		b.addLine(c.ID, id, "uses", "inferred", false)
 		r++
 	}
@@ -566,17 +617,48 @@ func (b *builder) place(c Card, g Group, fid string, col, row int) int {
 		}
 		facts = append(facts, Fact{"Command lines", "never recorded"})
 		b.l.Boxes = append(b.l.Boxes, Box{ID: id, Kind: "programs", Title: title, Pill: "programs", Line: "started here",
-			Column: b.toolsCol, Row: r, Group: fid, Facts: facts})
+			Column: b.toolsCol, Row: r, Group: fid, Facts: facts, Tag: "programs"})
 		b.addLine(c.ID, id, "started", "vendor", false)
 		r++
 	}
 	cr := row + b.toolCount(c)
-	for _, k := range c.Children {
-		h := b.place(k, g, fid, col+1, cr)
-		b.addLine(c.ID, k.ID, "started", "vendor", false)
-		cr += h
+	if b.subsFolded(c) {
+		id := "fold:subs:" + c.ID
+		n := len(c.Children)
+		title := fmt.Sprintf("%d %ss", n, b.w.subKind)
+		facts := []Fact{{"Kind", "closed group"}, {"Contains", fmt.Sprintf("%d %ss", n, b.w.subKind)}}
+		b.l.Boxes = append(b.l.Boxes, Box{ID: id, Kind: "folded", Title: title, Pill: "closed", Line: "click to open",
+			Column: 2, Row: cr, Group: fid, Facts: facts, Depth: depth + 1, Tag: "group"})
+		b.addLine(c.ID, id, "starts", "vendor", false)
+	} else {
+		for _, k := range c.Children {
+			h := b.place(k, g, fid, cr, depth+1)
+			b.addLine(c.ID, k.ID, "starts", "vendor", false)
+			if k.Running {
+				b.addStyled(k.ID, c.ID, "reports to", "vendor", "dotted", false)
+			}
+			cr += h
+		}
 	}
 	return b.height(c)
+}
+
+// waitOf is the wait word of a box: what the graph says, with the open
+// waits_on edge winning for older data that has no wait attribute. A subagent
+// is done once its turn ended and working until then.
+func (b *builder) waitOf(c Card) string {
+	switch {
+	case c.WaitsOnYou:
+		return "blocked"
+	case c.CanClose:
+		return "done"
+	case c.Subagent:
+		if c.State == "waiting" || c.State == "dormant" {
+			return "done"
+		}
+		return "working"
+	}
+	return c.Wait
 }
 
 func (b *builder) sourceOf(nodeID string) string {
@@ -598,7 +680,12 @@ func BuildLayout(in LayoutInput) Layout {
 	if max <= 0 {
 		max = DefaultMaxBoxes
 	}
-	youBox := len(b.m.waiters) > 0
+	var counts waits.Counts
+	if in.Counts != nil {
+		counts = *in.Counts
+	}
+	b.l.Counts.Waiting, b.l.Counts.YourTurn = counts.Blocked, counts.YourTurn
+	youBox := counts.Blocked+counts.YourTurn > 0
 
 	harnesses := map[string]bool{}
 	for _, g := range v.Groups {
@@ -626,7 +713,9 @@ func BuildLayout(in LayoutInput) Layout {
 	for total() > max {
 		pick := -1
 		for i, g := range v.Groups {
-			if folded[g.ID] || in.Open[frameID(g)] || b.groupBoxes(g) <= 1 {
+			// A group with two waiters stays open: a closed group is one box
+			// and draws one line, so it would hide a Blocked item.
+			if folded[g.ID] || in.Open[frameID(g)] || b.groupBoxes(g) <= 1 || b.groupWaiters(g) > 1 {
 				continue
 			}
 			if pick < 0 {
@@ -654,31 +743,9 @@ func BuildLayout(in LayoutInput) Layout {
 		folded[v.Groups[pick].ID] = true
 	}
 
-	maxDepth := 0
-	for _, g := range v.Groups {
-		if folded[g.ID] {
-			continue
-		}
-		for _, c := range g.Cards {
-			if d := depthOf(c); d > maxDepth {
-				maxDepth = d
-			}
-		}
-	}
-	b.l.Columns = append(b.l.Columns, "Tool", "Session")
-	for d := 1; d <= maxDepth; d++ {
-		if d == 1 {
-			b.l.Columns = append(b.l.Columns, b.w.colSub)
-		} else {
-			b.l.Columns = append(b.l.Columns, b.w.colDeep)
-		}
-	}
-	b.toolsCol = 2 + maxDepth
-	b.l.Columns = append(b.l.Columns, b.w.colTools)
-	youCol := b.toolsCol + 1
-	if youBox {
-		b.l.Columns = append(b.l.Columns, "You")
-	}
+	b.l.Columns = append(b.l.Columns, "Tool", "Session", b.w.colSub, b.w.colTools, "You")
+	b.toolsCol = 3
+	youCol := 4
 
 	harnessRow := map[string]int{}
 	harnessRoots := map[string]int{}
@@ -693,13 +760,12 @@ func BuildLayout(in LayoutInput) Layout {
 			id := "fold:" + fid
 			agents := b.groupAgents(g)
 			facts := []Fact{{"Kind", "closed group"}, {"Contains", fmt.Sprintf("%d agents, %d boxes", agents, fr.Count)}, {"What it is", fr.Explain}}
-			wc := waitingCards(g.Cards)
 			pill := "closed"
 			if b.groupWaits(g) {
 				pill = b.w.waitsPill
 			}
 			b.l.Boxes = append(b.l.Boxes, Box{ID: id, Kind: "folded", Title: g.Label, Pill: pill,
-				Line: plural(agents, "agent", "agents") + " - click to open", Column: 1, Row: row, Group: fid, WaitsOnYou: b.groupWaits(g), Facts: facts})
+				Line: plural(agents, "agent", "agents") + " - click to open", Column: 1, Row: row, Group: fid, WaitsOnYou: b.groupWaits(g), Facts: facts, Tag: "group"})
 			fr.Folded, fr.LastRow, fr.LastCol = true, row, 1
 			for _, c := range g.Cards {
 				if h := b.m.harnessOf(c.ID); h != "" {
@@ -710,14 +776,14 @@ func BuildLayout(in LayoutInput) Layout {
 					harnessRoots[h]++
 				}
 			}
-			if wc > 0 || g.WaitsOnYou {
+			if b.groupWaiters(g) > 0 {
 				b.addLine(id, "you", b.w.waitsWord, "vendor", true)
 				youRows = append(youRows, row)
 			}
 			row++
 		} else {
 			for _, c := range g.Cards {
-				h := b.place(c, g, fid, 1, row)
+				h := b.place(c, g, fid, row, 0)
 				if hid := b.m.harnessOf(c.ID); hid != "" {
 					b.addLine(hid, c.ID, "runs", "vendor", false)
 					if r, ok := harnessRow[hid]; !ok || row < r {
@@ -728,7 +794,6 @@ func BuildLayout(in LayoutInput) Layout {
 				row += h
 			}
 			fr.LastRow = row - 1
-			cards := 0
 			var walk func(cs []Card)
 			walk = func(cs []Card) {
 				for _, c := range cs {
@@ -737,19 +802,19 @@ func BuildLayout(in LayoutInput) Layout {
 						if bx, ok := b.boxRow(c.ID); ok {
 							youRows = append(youRows, bx)
 						}
-						cards++
 					}
 					walk(c.Children)
 				}
 			}
 			walk(g.Cards)
-			if cards == 0 && g.WaitsOnYou {
+			if g.WaitsOnYou {
 				b.addLine(fid, "you", b.w.waitsWord, "vendor", true)
 				youRows = append(youRows, start)
 			}
 		}
 		b.l.Frames = append(b.l.Frames, fr)
 	}
+	row = b.blockedBoxes(v.Idle, row, &youRows)
 
 	hids := make([]string, 0, len(harnessRow))
 	for h := range harnessRow {
@@ -760,10 +825,14 @@ func BuildLayout(in LayoutInput) Layout {
 	for _, h := range hids {
 		n := b.m.nodes[h]
 		boxes = append(boxes, Box{ID: h, Kind: "harness", Title: n.Label, Pill: "running", Line: plural(harnessRoots[h], "session", "sessions"),
-			Column: 0, Row: harnessRow[h], Facts: []Fact{{"Kind", "tool"}, {"Name", n.Label}, {"Source", b.sourceOf(h)}}})
+			Column: 0, Row: harnessRow[h], Facts: []Fact{{"Kind", "tool"}, {"Name", n.Label}, {"Source", b.sourceOf(h)}}, Tag: b.w.harnessTag})
 	}
 	boxes = append(boxes, b.l.Boxes...)
 	if youBox {
+		youPill := ""
+		if counts.Blocked > 0 {
+			youPill = b.w.waitsPill
+		}
 		r := 0
 		if len(youRows) > 0 {
 			r = youRows[0]
@@ -773,11 +842,30 @@ func BuildLayout(in LayoutInput) Layout {
 				}
 			}
 		}
-		boxes = append(boxes, Box{ID: "you", Kind: "you", Title: "You", Pill: b.w.waitsPill, Line: fmt.Sprintf("%d %s you", len(b.m.waiters), map[bool]string{true: "waiting for", false: "waiting on"}[b.w.plain]),
-			Column: youCol, Row: r, WaitsOnYou: true, Facts: b.youFacts()})
+		boxes = append(boxes, Box{ID: "you", Kind: "you", Title: "You", Pill: youPill, Line: fmt.Sprintf("%d %s you, %d your turn", counts.Blocked, map[bool]string{true: "waiting for", false: "waiting on"}[b.w.plain], counts.YourTurn),
+			Column: youCol, Row: r, WaitsOnYou: counts.Blocked > 0, Facts: b.youFacts(), Tag: "you"})
 	}
 	b.l.Boxes = boxes
+	b.l.ColumnNotes = b.columnNotes()
 	return b.l
+}
+
+// columnNotes gives each column its note: "none in this window" when no box
+// sits in it.
+func (b *builder) columnNotes() []string {
+	notes := make([]string, len(b.l.Columns))
+	used := make([]bool, len(b.l.Columns))
+	for _, bx := range b.l.Boxes {
+		if bx.Column >= 0 && bx.Column < len(used) {
+			used[bx.Column] = true
+		}
+	}
+	for i := range notes {
+		if !used[i] {
+			notes[i] = noneNote
+		}
+	}
+	return notes
 }
 
 func (b *builder) boxRow(id string) (int, bool) {
@@ -856,4 +944,53 @@ func splitUnlinked(groups []Group) []Group {
 		}
 	}
 	return out
+}
+
+// blockedBoxes draws the Blocked Foreman things no session works for: a gate
+// or waiting sprint that shows as an idle row, and a failed check. Each gets
+// a box and its amber line into You, so the lines equal the Blocked count. The
+// idle row stays listed. It returns the next free row.
+func (b *builder) blockedBoxes(idle []Idle, row int, youRows *[]int) int {
+	for _, i := range idle {
+		if !i.WaitsOnYou {
+			continue
+		}
+		facts := []Fact{{"Kind", i.Kind}, {"Status", i.Status}, {"Source", b.sourceOf(i.ID)}}
+		if i.Gate != "" {
+			facts = append(facts, Fact{"Gate", i.Gate})
+		}
+		line := i.Status
+		if i.Gate != "" {
+			line = "gate " + i.Gate
+		}
+		b.l.Boxes = append(b.l.Boxes, Box{ID: i.ID, Kind: i.Kind, Title: i.Label, Pill: b.w.waitsPill, Line: line,
+			Column: 1, Row: row, WaitsOnYou: true, Facts: facts, Tag: i.Kind, Wait: "blocked"})
+		b.addLine(i.ID, "you", b.w.waitsWord, "vendor", true)
+		*youRows = append(*youRows, row)
+		row++
+	}
+	ids := make([]string, 0, len(b.m.waiters))
+	for id, n := range b.m.waiters {
+		if n && b.m.nodes[id].Kind == graph.KindCheck {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		n := b.m.nodes[id]
+		title, status := n.Label, ""
+		for _, e := range b.m.out[id] {
+			if e.Kind == graph.KindPartOf && b.m.nodes[e.To].Kind == graph.KindSprint {
+				title = b.m.nodes[e.To].Label + ": " + n.Label
+				status = b.m.nodes[e.To].Attrs["status"]
+			}
+		}
+		b.l.Boxes = append(b.l.Boxes, Box{ID: id, Kind: "check", Title: title, Pill: b.w.waitsPill, Line: "failed check",
+			Column: 1, Row: row, WaitsOnYou: true, Facts: []Fact{{"Kind", "failed check"}, {"Sprint status", status}, {"Source", b.sourceOf(id)}},
+			Tag: "check", Wait: "blocked"})
+		b.addLine(id, "you", b.w.waitsWord, "vendor", true)
+		*youRows = append(*youRows, row)
+		row++
+	}
+	return row
 }

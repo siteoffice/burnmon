@@ -29,6 +29,13 @@ type Runner interface {
 	Start(argv []string) error
 }
 
+// LastLineRunner is a Runner that can also return the last stderr line of a
+// failing process instead of the first line. Only the Close control asks for
+// it: a Python script prints its reason last, after the traceback.
+type LastLineRunner interface {
+	RunLast(ctx context.Context, argv []string, dir string) (exitCode int, line string, err error)
+}
+
 // CheckAgent compares the preview target with a fresh agent view read. It
 // returns the fresh entry when the control may run.
 func CheckAgent(t Target, fresh []waits.AgentEntry, self Self) (waits.AgentEntry, error) {
@@ -94,6 +101,22 @@ func CheckGate(t Target, flows []graph.Flow) error {
 		return nil
 	}
 	return errors.New("the flow is no longer listed")
+}
+
+// lastLine is the last non-empty line of s, trimmed and cut to max runes. A
+// Python error prints its reason last, after the traceback.
+func lastLine(s string, max int) string {
+	lines := strings.Split(s, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if l := strings.TrimSpace(lines[i]); l != "" {
+			r := []rune(l)
+			if len(r) > max {
+				r = r[:max]
+			}
+			return string(r)
+		}
+	}
+	return ""
 }
 
 // firstLine is the first non-empty line of stdout, else of stderr, cut to 120 runes.

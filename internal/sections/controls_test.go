@@ -11,7 +11,7 @@ import (
 )
 
 func TestControlsDefaultOff(t *testing.T) {
-	want := map[string]bool{"stop": false, "attach": false, "approve": false, "send_back": false}
+	want := map[string]bool{"stop": false, "attach": false, "approve": false, "send_back": false, "close_sprint": false}
 	if got := Default().Controls; !reflect.DeepEqual(got, want) {
 		t.Errorf("Default().Controls = %v, want every control off", got)
 	}
@@ -27,10 +27,10 @@ func TestControlsDefaultOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := Load(p).Controls
-	if !got["stop"] || got["attach"] || got["approve"] || got["send_back"] {
+	if !got["stop"] || got["attach"] || got["approve"] || got["send_back"] || got["close_sprint"] {
 		t.Errorf("Load with only stop = %v", got)
 	}
-	if _, ok := got["reply"]; ok || len(got) != 4 {
+	if _, ok := got["reply"]; ok || len(got) != 5 {
 		t.Errorf("unknown control id kept: %v", got)
 	}
 }

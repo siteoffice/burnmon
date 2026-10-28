@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"burnmon/internal/gitrefs"
 	"burnmon/internal/graph"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
+	"burnmon/internal/schema"
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
@@ -51,6 +53,8 @@ type GraphReaders struct {
 	mcp   *graph.MCPConfig
 	meta  *graph.SubagentMeta
 	repos *graph.RepoLocator
+	// merged answers "is this branch in main" from the repo's own files.
+	merged *gitrefs.Checker
 
 	foremanAt  time.Time
 	sprints    []graph.Sprint
@@ -67,6 +71,7 @@ func NewGraphReaders(home, foremanRoot string) *GraphReaders {
 		mcp:         graph.NewMCPConfig(filepath.Join(home, ".claude.json")),
 		meta:        graph.NewSubagentMeta(filepath.Join(home, ".claude", "projects")),
 		repos:       graph.NewRepoLocator(),
+		merged:      gitrefs.NewChecker(),
 		Listen:      graph.Listening,
 	}
 }
@@ -95,7 +100,7 @@ func FlatSessions(ss []*live.Session) []graph.Session {
 		last, _ := time.Parse(time.RFC3339, ls.LastTurn)
 		first, _ := time.Parse(time.RFC3339, ls.Start)
 		out = append(out, graph.Session{Vendor: ls.Vendor, Agent: ls.Agent, ID: ls.SessionID, ParentID: parent,
-			Project: ls.Project, State: ls.Stage, Tool: ls.StageTool, FirstActivity: first, LastActivity: last})
+			Project: ls.Project, State: ls.Stage, Tool: ls.StageTool, FirstActivity: first, LastActivity: last, AskOpen: ls.AskOpen})
 		for _, sub := range ls.Subagents {
 			walk(sub, ls.SessionID)
 		}
@@ -106,12 +111,40 @@ func FlatSessions(ss []*live.Session) []graph.Session {
 	return out
 }
 
+// TokensSince returns the cost-of-waiting function for waits.Input: the tokens
+// (input, output, cache write, cache read, reasoning) the given session nodes
+// burned since a time, summed from events, the tick's live window. An item
+// older than the window gets partial = true: the writer cannot see further
+// back, and says so instead of guessing.
+func TokensSince(events []schema.Event, now time.Time) func(ids []string, since time.Time) (int64, bool) {
+	return func(ids []string, since time.Time) (int64, bool) {
+		want := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			want[id] = true
+		}
+		var total int64
+		for _, e := range events {
+			if e.At.Before(since) || !want["session:"+e.Vendor+":"+e.SessionID] {
+				continue
+			}
+			total += e.Input + e.Output
+			for _, p := range []*int64{e.CacheWrite, e.CacheRead, e.Reasoning} {
+				if p != nil {
+					total += *p
+				}
+			}
+		}
+		return total, since.Before(now.Add(-live.ChartWindow))
+	}
+}
+
 // buildGraph reads the graph's own sources, builds the live graph, records
 // its live-only edges in the store and returns the graph plus one source
 // entry per input. A failing source drops its own edges and is reported;
 // it never stops the tick.
-func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, now time.Time, stamp string) (graph.Graph, []snapshot.Source, []waits.Item, []waits.Item, error) {
-	in := graph.Input{Now: now, Sessions: sessions, MCPFor: gr.mcp.For, RepoFor: gr.repos.For, SubagentFor: gr.meta.Lookup}
+func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, events []schema.Event, now time.Time, stamp string) (graph.Graph, []snapshot.Source, []waits.Item, []waits.Item, error) {
+	in := graph.Input{Now: now, Sessions: sessions, MCPFor: gr.mcp.For, RepoFor: gr.repos.For, SubagentFor: gr.meta.Lookup,
+		MergedFor: gr.merged.Merged, BranchGone: gr.merged.BranchGone, MergedByMessage: gr.merged.MergedByMessage}
 	if gr.Rows != nil {
 		rows, at := gr.Rows()
 		in.ProcsAt = at
@@ -133,15 +166,24 @@ func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, no
 		sources = append(sources, source(graph.SourceForeman, readAt.UTC().Format(time.RFC3339), ferr))
 	}
 
+	var agentEntries []waits.AgentEntry
+	if gr.AgentView != nil {
+		gr.startAgentViewIfDue(now)
+		entries, _, _, _ := gr.agentViewState()
+		agentEntries = entries
+		for _, e := range entries {
+			in.Agents = append(in.Agents, graph.AgentState{SessionID: e.SessionID, State: e.State, Status: e.Status, WaitingFor: e.WaitingFor, Key: e.Key()})
+		}
+	}
+	in.Tick = Tick
 	g := graph.Build(in)
 	sources = append(sources, source(graph.SourceMCPConfig, stamp, gr.mcp.Err()),
 		source(graph.SourceNetTables, stamp, netErr), source(graph.SourceGit, stamp, nil))
 
-	wi := waits.Input{Now: now, Sprints: in.Sprints, Flows: in.Flows, Graph: g}
+	wi := waits.Input{Now: now, Sprints: in.Sprints, Flows: in.Flows, Graph: g, TokensSince: TokensSince(events, now)}
 	if gr.AgentView != nil {
-		gr.startAgentViewIfDue(now)
-		entries, at, done, aerr := gr.agentViewState()
-		wi.Agents = entries
+		_, at, done, aerr := gr.agentViewState()
+		wi.Agents = agentEntries
 		if !done {
 			sources = append(sources, source(waits.SourceAgentView, stamp, errors.New("no poll has finished yet")))
 		} else {
@@ -245,7 +287,7 @@ func (w *Writer) Once() error {
 	if gr != nil {
 		var more []snapshot.Source
 		var rerr error
-		g, more, waitItems, outcomeItems, rerr = gr.buildGraph(st, FlatSessions(snap.Sessions), now, stamp)
+		g, more, waitItems, outcomeItems, rerr = gr.buildGraph(st, FlatSessions(snap.Sessions), events, now, stamp)
 		if rerr != nil && sources[0].OK {
 			sources[0].OK, sources[0].Error = false, "record graph: "+rerr.Error()
 		}

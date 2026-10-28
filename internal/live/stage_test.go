@@ -132,6 +132,63 @@ func TestApplyStages(t *testing.T) {
 	}
 }
 
+// TestApplyStagesAskOpen: AskOpen is true only for an AskUserQuestion or
+// ExitPlanMode call in the newest turn that has no result yet.
+func TestApplyStagesAskOpen(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	at := func(sec int) time.Time { return now.Add(time.Duration(-sec) * time.Second) }
+	ev := func(sid, key string, sec int) schema.Event {
+		return schema.Event{Vendor: "anthropic", Agent: "claude-code", Surface: "cli", SessionID: sid,
+			RequestID: key, Model: "claude-sonnet-5", At: at(sec), Input: 1000, Output: 10}
+	}
+	call := func(sid, turn, tool string, done bool) schema.ToolCall {
+		c := schema.ToolCall{Vendor: "anthropic", Agent: "claude-code", SessionID: sid, CallID: sid + "-c", Turn: turn, Tool: tool, At: at(3), InputBytes: 1}
+		if done {
+			c.ResultBytes = ptr(5)
+		}
+		return c
+	}
+	events := []schema.Event{
+		ev("ask", "a1", 40), ev("ask", "a2", 4),
+		ev("answered", "b1", 40), ev("answered", "b2", 4),
+		ev("plan", "c1", 40), ev("plan", "c2", 4),
+		ev("read", "d1", 40), ev("read", "d2", 4),
+		ev("old", "e1", 40), ev("old", "e2", 2),
+	}
+	calls := []schema.ToolCall{
+		call("ask", "a2", "AskUserQuestion", false),
+		call("answered", "b2", "AskUserQuestion", true),
+		call("plan", "c2", "ExitPlanMode", false),
+		call("read", "d2", "Read", false),
+		call("old", "e1", "AskUserQuestion", false),
+	}
+	st, err := store.Open(filepath.Join(t.TempDir(), "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.UpsertEvents(events); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertToolCalls(calls); err != nil {
+		t.Fatal(err)
+	}
+	cfg := testConfig()
+	snap := BuildSnapshot(events, cfg, now)
+	if err := ApplySessionTotals(snap.Sessions, st, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyStages(snap.Sessions, st, now); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"ask": true, "answered": false, "plan": true, "read": false, "old": false}
+	for _, s := range snap.Sessions {
+		if w, ok := want[s.SessionID]; ok && s.AskOpen != w {
+			t.Errorf("%s: AskOpen = %v, want %v", s.SessionID, s.AskOpen, w)
+		}
+	}
+}
+
 // TestApplyStagesLeavesSnapshotWithoutStagesUntouched: burnmon.exe and the
 // CLI never call ApplyStages, so their JSON carries no stage fields at all.
 func TestApplyStagesLeavesSnapshotWithoutStagesUntouched(t *testing.T) {

@@ -5,7 +5,7 @@
 <title>BurnMon Dev</title>
 <style>
 :root{
-  --bg:#04060a; --panel:#0a0e14; --panel2:#10151d; --bd:#1c2532;
+  --bg:#04060a; --panel:#0a0e14; --panel2:#10151d; --bd:#1c2532; --bd2:#56677d;
   --amber:#ffa028; --amber2:#ffc46b;
   --txt:#cfd8e3; --dim:#66788c;
   --grn:#00d26a; --red:#ff4b4b; --blu:#4da6ff; --cyn:#38d3e3; --mag:#d68cf0; --mag-dim:#a76dbb; --yel:#ffd75f;
@@ -19,10 +19,11 @@
    defines is overridden here, nothing else in the CSS is theme specific.
    The accent and signal colours are darkened until they hold at least 3:1
    against --panel (#fff) and --panel2, the WCAG bar for graphics; --amber,
-   --txt and --dim are text colours and hold 4.5:1. The session and harness
+   --txt and --dim are text colours and hold 4.5:1. --bd2 (map borders
+   and lines) holds 3:1 against --bg, --panel and --panel3; a Go test checks it. The session and harness
    colours drawn from script have their own light set (HARNESS_HUE_LIGHT). */
 :root[data-theme="light"]{
-  --bg:#e9edf2; --panel:#ffffff; --panel2:#f0f3f7; --bd:#cdd5df;
+  --bg:#e9edf2; --panel:#ffffff; --panel2:#f0f3f7; --bd:#cdd5df; --bd2:#6f7d8c;
   --amber:#9a5200; --amber2:#b86a00;
   --txt:#1f2a37; --dim:#586a7e;
   --grn:#00873f; --red:#d62c2c; --blu:#0b6fd1; --cyn:#00899b; --mag:#b03fd0; --mag-dim:#8a4aa0; --yel:#9a7400;
@@ -397,6 +398,9 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .secitem{white-space:nowrap; align-items:baseline}
 .seclist{flex:0 1 auto; min-height:0; max-height:8.3em; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
 .seclist > .secitem{flex:0 0 auto}
+.sectier{flex:0 0 auto; font:700 10px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
+.sectier.blocked{color:var(--amber)}
+.secgrey, .secgrey b{color:var(--dim)}
 .secitemtxt{min-width:0; overflow:hidden; text-overflow:ellipsis}
 .secitemmeta{flex:0 0 auto}
 .ctl{font:inherit; font-size:.85em; padding:0 .4em; margin-left:.3em; border:1px solid var(--amber); background:none; color:var(--amber); cursor:pointer}
@@ -435,22 +439,24 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapscroll{flex:1 1 auto; min-width:0; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
 .mapstage{position:relative}
 .mapstage svg{position:absolute; left:0; top:0; pointer-events:none; overflow:visible}
+.mapcoln{position:absolute; top:21px; color:var(--dim); font-size:10px; font-style:italic}
 .mapcolh{position:absolute; top:8px; color:var(--dim); font-size:11px; letter-spacing:.04em; text-transform:uppercase}
-.mapframe{position:absolute; box-sizing:border-box; border:1px solid var(--bd); background:var(--panel3); border-radius:4px}
+.mapframe{position:absolute; box-sizing:border-box; border:1px solid var(--bd2); background:var(--panel3); border-radius:4px}
 .mapframe.wait{border-color:var(--amber)}
 .mapframehead{position:absolute; left:10px; right:10px; top:6px; line-height:14px; overflow:hidden}
 .mapframehead b{color:var(--strong); font-size:13px; margin-right:8px}
 .mapframehead span{color:var(--dim)}
 .mapframehead .ex{display:block; font-size:11px; max-height:42px; overflow:hidden}
 .mapbox{all:unset; box-sizing:border-box; position:absolute; display:flex; flex-direction:column; justify-content:center; gap:3px; padding:6px 10px;
-  border:1px solid var(--bd); background:var(--panel); cursor:pointer; border-radius:3px}
+  border:1px solid var(--bd2); background:var(--panel); cursor:pointer; border-radius:3px}
 .mapbox:hover, .mapbox:focus-visible, .mapbox.sel{border-color:var(--amber)}
 .mapbox.sel{background:var(--panel2)}
 .mapbox.wait{border-left:3px solid var(--amber)}
 .mapbox.tool, .mapbox.programs{border-style:dashed}
 .mapbox.folded{border-style:double; border-width:3px}
 .mapbox.harness{background:transparent}
-.mapbox.you{border-color:var(--amber); background:var(--panel2)}
+.mapbox.you{background:var(--panel2)}
+.mapbox.you.wait{border-color:var(--amber)}
 .mapbox .t{color:var(--strong); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapbox .l{color:var(--dim); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapbox .pr{display:flex; align-items:center; gap:6px; min-width:0}
@@ -458,8 +464,11 @@ body.plain #mapOverlay{font-size:13.5px}
 .mapbox .p{align-self:flex-start; font-size:10.5px; padding:0 6px; border:1px solid var(--bd); border-radius:8px; color:var(--dim); white-space:nowrap}
 .mapbox .p.busy{color:var(--grn); border-color:var(--grn)}
 .mapbox .p.wait{color:var(--amber); border-color:var(--amber)}
+.mapbox .p.quiet{color:var(--dim); border-color:var(--bd2)}
 .mapbox.dim{opacity:.45}
-.mapline{fill:none; stroke:var(--bd); stroke-width:1.5}
+.mapbox .tag{position:absolute; top:-7px; left:8px; padding:0 4px; max-width:110px; background:var(--panel); color:var(--dim); font-size:9px; letter-spacing:.04em; text-transform:uppercase; line-height:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.mapline{fill:none; stroke:var(--bd2); stroke-width:1.5}
+.mapline.dotted{stroke-dasharray:2 4}
 .mapline.you{stroke:var(--amber); stroke-width:2.5}
 .mapline.hl{stroke:var(--txt); stroke-width:2.5}
 .mapline.you.hl{stroke:var(--amber2)}
@@ -655,8 +664,9 @@ body.plain #mapOverlay{font-size:13.5px}
     <div class="sechint ctlwhy">Off until you tick them. Stop a session and Attach to a session need claude_path and agent_view in burnmon.json. Approve a gate and Send a gate back need python on PATH and foreman_root. Each press first shows the exact command; a second press on Confirm runs it within 5 seconds.</div>
     <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="stop"> Stop a session</label><div class="dim ctlwhy" data-ctl-why="stop"></div></div>
     <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="attach"> Attach to a session</label><div class="dim ctlwhy" data-ctl-why="attach"></div></div>
-    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="approve"> Approve a gate</label><div class="dim ctlwhy" data-ctl-why="approve"></div></div>
-    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
+    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="approve"> Approve a gate</label><div class="dim ctlwhy" data-ctl-why="approve"></div></div>
+    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
+    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint"> Close sprint</label><div class="dim ctlwhy" data-ctl-why="close_sprint"></div></div>
   </div>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
@@ -3454,12 +3464,24 @@ body.plain #mapOverlay{font-size:13.5px}
   function secStub(text){ return '<div class="secstub">' + esc(text) + '</div>'; }
   function secPanelCount(id){
     var s = secReading.snapshot || {};
-    return id === 'waits' ? secCount((s.wait_items || []).length) : id === 'outcomes' ? secCount((s.outcome_items || []).length) : '';
+    return id === 'waits' ? secCount(secWaitCounts().blocked) : id === 'outcomes' ? secCount((s.outcome_items || []).length) : '';
+  }
+  // One count: the snapshot's wait_counts (waits.CountOf). Only an older snapshot
+  // without it is counted here, from the item groups.
+  function secWaitCounts(){
+    var s = secReading.snapshot || {}, wc = s.wait_counts, r = { blocked:0, your_turn:0, done:0 };
+    if(wc) return { blocked:wc.blocked || 0, your_turn:wc.your_turn || 0, done:wc.done || 0 };
+    (s.wait_items || []).forEach(function(it){ r[it.group === 'your_turn' || it.group === 'done' ? it.group : 'blocked']++; });
+    return r;
+  }
+  function secPanelExtra(id){
+    var n = id === 'waits' ? secWaitCounts().your_turn : 0;
+    return n ? ' <span class="dim">' + n + ' your turn</span>' : '';
   }
   function secPanel(id, body, wide){
     var aged = (id === 'waits' || id === 'outcomes') && secReading.status === 'ok' && secAged(secReading.snapshot);
     return '<section class="panel secpanel' + (wide ? ' secwide' : '') + (aged ? ' sec-aged' : '') + '" data-sec="' + id + '" data-part="' + id + '">' +
-      '<div class="panelhead">' + esc(secTitle(id) + secPanelCount(id)) + '</div><div class="secbody">' + body + '</div></section>';
+      '<div class="panelhead">' + esc(secTitle(id) + secPanelCount(id)) + secPanelExtra(id) + '</div><div class="secbody">' + body + '</div></section>';
   }
 
   // secHeadline is the one sentence about the snapshot: its age in the
@@ -3480,7 +3502,9 @@ body.plain #mapOverlay{font-size:13.5px}
   var SEC_KIND = { gate:['gate','Decision needed'], sprint:['sprint waiting','Job paused, needs you'],
     failed_check:['failed check','A check failed'], question:['question','Question for you'],
     prompt:['permission prompt','Approval needed'], session:['session waiting','Session waiting for you'],
-    finished:['finished','Done'] };
+    finished:['finished','Done'], your_turn:['your turn','Your turn'],
+    close_out:['Done, needs close-out','Done, needs close-out'], can_close:['Done, can be closed','Done, can be closed'],
+    branch_gone:['branch gone, check by hand','Branch gone, check by hand'] };
   // ---- B4 controls: chips, preview line, result ---------------------------
   // The page decides nothing about what runs. A chip press asks Go for a
   // preview (a control name and a target id, nothing else) and shows the exact
@@ -3488,12 +3512,12 @@ body.plain #mapOverlay{font-size:13.5px}
   // token Go gave. Go checks the target again, refuses a second press under
   // 400 ms and lets the token live 5 s; the page mirrors both so a double
   // click sends at most one run.
-  var CTL_WORD = { stop:['stop','Stop'], attach:['attach','Open'], approve:['approve','Approve'], send_back:['send back','Send back'] };
-  var CTL_ORDER = ['stop','attach','approve','send_back'];
+  var CTL_WORD = { stop:['stop','Stop'], attach:['attach','Open'], approve:['approve','Approve'], send_back:['send back','Send back'], close_sprint:['Close sprint','Close this job'] };
+  var CTL_ORDER = ['stop','attach','approve','send_back','close_sprint'];
   var CTL_GAP = 400;
   var CTL_TTL = 5000;
   var CTL_RESULT_MS = 10000;
-  var ctlState = { ready:{}, on:{}, why:{}, verdicts:{} };
+  var ctlState = { ready:{}, on:{}, why:{}, verdicts:{}, foreman:false };
   var ctlPending = {};
   var ctlResult = {};
   var ctlAsking = {};
@@ -3518,7 +3542,7 @@ body.plain #mapOverlay{font-size:13.5px}
     var html = '';
     CTL_ORDER.forEach(function(c){
       if(!(ctlState.on[c] && ctlState.ready[c])) return;
-      var applies = kind === 'agent' ? (c === 'stop' || c === 'attach') :
+      var applies = kind === 'closeout' ? (c === 'close_sprint' && !!ctlState.foreman) : kind === 'agent' ? (c === 'stop' || c === 'attach') :
         ((c === 'approve' || c === 'send_back') && !!ctlState.verdicts[c] && Object.prototype.hasOwnProperty.call(ctlState.verdicts[c], gate));
       if(!applies) return;
       html += '<button type="button" class="ctl" data-ctl="' + esc(c) + '" data-target="' + esc(target) + '">' + esc(ctlWord(c)) + '</button>';
@@ -3629,6 +3653,9 @@ body.plain #mapOverlay{font-size:13.5px}
     Array.prototype.forEach.call(box.querySelectorAll('input[data-ctl-sw]'), function(i){
       i.checked = !!ctlState.on[i.getAttribute('data-ctl-sw')];
     });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-ctl-needs]'), function(e){
+      e.style.display = ctlState[e.getAttribute('data-ctl-needs')] ? '' : 'none';
+    });
     Array.prototype.forEach.call(box.querySelectorAll('[data-ctl-why]'), function(s){
       var c = s.getAttribute('data-ctl-why');
       s.textContent = ctlState.ready[c] ? '' : (ctlState.why[c] || '');
@@ -3639,6 +3666,11 @@ body.plain #mapOverlay{font-size:13.5px}
     var n = Math.round(secReading.age_seconds || 0);
     return '<div class="secaged">' + esc(secState.plain ? 'This list is ' + n + ' s old' :
       'snapshot ' + n + ' s old, this list may be behind') + '</div>';
+  }
+  function secCostLine(it){
+    var n = it.cost_tokens || 0;
+    if(n > 0) return (it.cost_partial ? 'at least ' : '') + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (secState.plain ? ' tokens used while waiting' : ' tokens burned while waiting');
+    return 'idle ' + secDur((it.age_seconds || 0) + (secReading.age_seconds || 0));
   }
   function secItemRow(it, outcome){
     function link(path, word, none){
@@ -3654,21 +3686,32 @@ body.plain #mapOverlay{font-size:13.5px}
       if(it.kind === 'sprint' && it.parked && it.parked.length) detail = it.parked.length + (it.parked.length === 1 ? ' task needs you' : ' tasks need you');
     } else if(it.kind !== 'gate' && !(it.detail && String(it.detail).toLowerCase() === k[0].toLowerCase())) detail = it.detail || '';
     var age = secDur((it.age_seconds || 0) + (secReading.age_seconds || 0));
+    var cost = outcome ? '' : secCostLine(it);
     var shown = plain ? word : txt;
-    var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age);
+    var full = shown + ' ' + (it.title || '') + (detail ? ' ' + detail : '') + ', ' + (outcome ? age + ' ago' : 'waiting ' + age) + (cost ? ', ' + cost : '');
+    // Foreman's close-out gate refuses a sprint with no report.md, parked lines or
+    // any other close-out failure, so the Close chip shows only when close_ok says
+    // Foreman would accept; otherwise the reason shows.
+    var closeable = it.kind === 'close_out' && !!it.report_path && it.close_ok === true && !(it.parked_lines > 0), note = '';
+    if(it.kind === 'close_out' && !closeable){
+      var np = it.parked_lines | 0;
+      note = np > 0 ? ' ' + link(it.report_path, np + (np === 1 ? ' parked line' : ' parked lines'), '') : !it.report_path ? ' <span class="dim">no report yet</span>' : ' <span class="dim">' + esc(it.close_reason || 'Foreman would not accept the close') + '</span>';
+    }
     var chips = '', lines = '';
     if(!outcome){
       var tg = null, gid = '';
       if(it.kind === 'gate'){ tg = it.id; gid = String(it.id).slice(String(it.id).lastIndexOf(':') + 1); chips = ctlChips('gate', tg, gid); }
+      else if(closeable){ tg = it.id; chips = ctlChips('closeout', tg, ''); }
       else { var ag = ctlAgentFor(it.id); if(ag){ tg = ag.id; chips = ctlChips('agent', tg, ''); } }
       if(tg !== null) lines = ctlLines(tg);
     }
-    var html = '<div class="secrow secitem" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
+    var html = '<div class="secrow secitem' + (it.kind === 'branch_gone' ? ' secgrey' : '') + '" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
       '<span class="secitemtxt"><span class="dim">' + esc(txt) + '</span> <b>' + esc(it.title) + '</b>' +
-      (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') + '</span>' +
+      (detail ? ' <span class="dim">' + (plain ? esc(detail) : esc(it.detail)) + '</span>' : '') +
+      (cost ? ' <span class="dim">' + esc(cost) + '</span>' : '') + '</span>' +
       '<span class="secitemmeta">' + esc(outcome ? age + ' ago' : 'waiting ' + age) + ' ' +
       link(it.spec_path, plain ? 'request' : 'spec', plain ? 'no request' : 'no spec') + ' ' +
-      link(it.result_path, 'result', 'no result yet') + chips + '</span></div>' + lines;
+      link(it.result_path, 'result', 'no result yet') + note + chips + '</span></div>' + lines;
     return html;
   }
   // Every item is a row, never cut off: the list sits in .seclist, which is
@@ -3677,11 +3720,30 @@ body.plain #mapOverlay{font-size:13.5px}
   // scrollbar off (like the ticker): it is one list, not the page. The header
   // carries the total (secCount).
   function secList(rows){ return rows ? '<div class="seclist">' + rows + '</div>' : ''; }
-  function secCount(n){ return n ? ' (' + n + ')' : ''; }  function secBodyWaits(snap){
+  function secCount(n){ return n ? ' (' + n + ')' : ''; }  var SEC_TIERS = [['blocked','Blocked','Stuck, needs you'], ['your_turn','Your turn','Your turn'],
+    ['done','Done, needs close-out','Done, needs close-out']];
+  function secTier(it){
+    if(it.kind === 'close_out' || it.kind === 'can_close' || it.kind === 'branch_gone') return 'done';
+    if(it.group === 'your_turn') return 'your_turn';
+    return it.group === 'done' ? 'done' : 'blocked';
+  }
+  function secBodyWaits(snap){
     var w = snap.wait_items || [], html = secAged(snap) ? secAgedLine() : '';
     if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'Nothing waits on you.') + '</div>';
     var rows = '';
-    w.forEach(function(it){ rows += secItemRow(it, false); });
+    SEC_TIERS.forEach(function(t){
+      var part = '', n = 0, head = t[secState.plain ? 2 : 1], co = 0;
+      // One Done tier: close_out rows first, then can_close rows. Its header names
+      // Foreman only when a close_out row is in it.
+      w.forEach(function(it){ if(it.kind === 'close_out') co++; });
+      var cc = 0;
+      w.forEach(function(it){ if(it.kind === 'can_close') cc++; });
+      if(t[0] === 'done' && !co) head = cc ? 'Done, can be closed' : 'Done, check by hand';
+      (t[0] === 'done' ? [true, false] : [null]).forEach(function(first){
+        w.forEach(function(it){ if(secTier(it) === t[0] && (first === null || (it.kind === 'close_out') === first)){ part += secItemRow(it, false); n++; } });
+      });
+      if(n) rows += '<div class="sectier ' + t[0] + '" data-tier="' + t[0] + '">' + esc(head + ' (' + n + ')') + '</div>' + part;
+    });
     html += secList(rows);
     return html;
   }
@@ -3723,7 +3785,8 @@ body.plain #mapOverlay{font-size:13.5px}
       var c = v.counts || {};
       function n(k, one, many){ return '<b>' + k + '</b> ' + esc(k === 1 ? one : many); }
       html = '<div>' + n(c.sessions || 0, 'session', 'sessions') + ', ' + n(c.subagents || 0, plain ? 'helper' : 'subagent', plain ? 'helpers' : 'subagents') +
-        ', <b>' + (c.waiting || 0) + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') + '</div>';
+        ', <b>' + (secReading.snapshot && secReading.snapshot.wait_counts ? secWaitCounts().blocked : (c.waiting || 0)) + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') +
+        (secReading.snapshot && secReading.snapshot.wait_counts && secWaitCounts().your_turn ? ' <span class="dim">' + secWaitCounts().your_turn + ' your turn</span>' : '') + '</div>';
       var groups = v.groups || [];
       groups.slice(0, 3).forEach(function(g){
         html += '<div class="secrow"><span><b>' + esc(g.label) + '</b>' + (g.status ? ' <span class="dim">' + esc(g.status) + '</span>' : '') + '</span>' +
@@ -3913,7 +3976,7 @@ body.plain #mapOverlay{font-size:13.5px}
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space' };
     secReading = p.reading || { status:'missing', age_seconds:0 };
     var cp = p.controls || {};
-    ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {} };
+    ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {}, foreman:!!cp.foreman };
     secAgentMap = p.agent_map || null;
     secRender();
     if(mapOpen && mapSource === 'live') mapFetch();
@@ -4080,7 +4143,7 @@ body.plain #mapOverlay{font-size:13.5px}
   }
   function mapPillClass(b){
     if(b.waits_on_you) return 'wait';
-    if(b.kind === 'session' || b.kind === 'sub') return /idle|dormant/.test(b.pill || '') ? '' : 'busy';
+    if(b.kind === 'session' || b.kind === 'sub') { var pl = b.pill || ''; return /idle|dormant|your turn|can be closed/.test(pl) ? (/idle|dormant/.test(pl) ? '' : 'quiet') : 'busy'; }
     return '';
   }
 
@@ -4122,6 +4185,7 @@ body.plain #mapOverlay{font-size:13.5px}
     if(L && L.counts){
       var c = L.counts;
       count = c.sessions + (c.sessions === 1 ? ' session, ' : ' sessions, ') + c.subagents + (plain ? (c.subagents === 1 ? ' helper' : ' helpers') : (c.subagents === 1 ? ' subagent' : ' subagents'));
+      count += ', ' + (c.waiting || 0) + (plain ? ' waiting for you, ' : ' waiting on you, ') + (c.your_turn || 0) + ' your turn';
     }
     document.getElementById('mapSrc').textContent = src;
     document.getElementById('mapCount').textContent = count;
@@ -4149,6 +4213,8 @@ body.plain #mapOverlay{font-size:13.5px}
     }
     (L.columns || []).forEach(function(name, i){
       html += '<div class="mapcolh" style="left:' + g.x(i) + 'px">' + esc(name) + '</div>';
+      var cn = (L.column_notes || [])[i];
+      if(cn) html += '<div class="mapcoln" style="left:' + g.x(i) + 'px">' + esc(cn) + '</div>';
     });
     var framePos = {};
     (L.frames || []).forEach(function(f){
@@ -4160,7 +4226,8 @@ body.plain #mapOverlay{font-size:13.5px}
         '<div class="mapframehead" title="' + esc(f.explain) + '"><b>' + esc(f.label) + '</b><span>' + esc(f.status || '') + '</span><span class="ex">' + esc(f.explain) + '</span></div></div>';
     });
     // Lines are drawn first (the svg sits under the boxes in the DOM order of the stage).
-    boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column), y: b.kind === 'you' ? g.youY : g.rowY[b.row] }; });
+    // A subagent of a subagent steps 16 px right inside its column, one step per level.
+    boxes.forEach(function(b){ pos[b.id] = { x: g.x(b.column) + (b.depth > 1 ? 16 * (b.depth - 1) : 0), y: b.kind === 'you' ? g.youY : g.rowY[b.row] }; });
     var related = {};
     (L.lines || []).forEach(function(ln){
       if(ln.from === mapSel || ln.to === mapSel){ related[ln.from] = true; related[ln.to] = true; }
@@ -4177,11 +4244,13 @@ body.plain #mapOverlay{font-size:13.5px}
       else if(framePos[ln.from]){ x1 = framePos[ln.from].x; y1 = framePos[ln.from].y; }
       if(x1 === undefined || !b) return;
       var x2 = b.x, y2 = b.y + MAP.BOXH / 2, dx = Math.max(30, (x2 - x1) / 2);
+      // A line that runs back (a subagent reporting to its session) leaves the left edge and lands on the right edge.
+      if(a && b.x < a.x){ x1 = a.x; x2 = b.x + MAP.BOXW; dx = -Math.max(30, (x1 - x2) / 2); }
       var hl = mapSel && (ln.from === mapSel || ln.to === mapSel);
-      var cls = 'mapline' + (ln.you ? ' you' : '') + (hl ? ' hl' : (mapSel ? ' dim' : ''));
+      var cls = 'mapline' + (ln.you ? ' you' : '') + (ln.style === 'dotted' ? ' dotted' : '') + (hl ? ' hl' : (mapSel ? ' dim' : ''));
       svg += '<path class="' + cls + '" d="M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ' ' + (x2 - dx) + ' ' + y2 + ' ' + x2 + ' ' + y2 +
         '" marker-end="url(#' + (ln.you ? 'mapArrYou' : 'mapArr') + ')"/>';
-      var key = ln.you ? ln.word + '>' + ln.to : ln.word + '<' + ln.from;
+      var key = (ln.you || ln.style === 'dotted') ? ln.word + '>' + ln.to : ln.word + '<' + ln.from;
       if(hl || !said[key]){
         said[key] = true;
         svg += '<text class="mapword' + (ln.you ? ' you' : '') + '" x="' + ((x1 + x2) / 2) + '" y="' + (((y1 + y2) / 2) - 5) + '">' + esc(ln.word) + '</text>';
@@ -4193,7 +4262,7 @@ body.plain #mapOverlay{font-size:13.5px}
       var cls = 'mapbox ' + b.kind + (b.waits_on_you ? ' wait' : '') + (b.id === mapSel ? ' sel' : '') + (mapSel && b.id !== mapSel && !related[b.id] ? ' dim' : '');
       html += '<button type="button" class="' + cls + '" data-box="' + esc(b.id) + '" aria-pressed="' + (b.id === mapSel ? 'true' : 'false') + '" ' +
         'style="left:' + pos[b.id].x + 'px;top:' + pos[b.id].y + 'px;width:' + MAP.BOXW + 'px;height:' + MAP.BOXH + 'px">' +
-        '<span class="t">' + esc(b.title) + '</span>' + '<span class="pr">' + (b.pill ? '<span class="p ' + mapPillClass(b) + '">' + esc(b.pill) + '</span>' : '') +
+        (b.tag ? '<span class="tag">' + esc(b.tag) + '</span>' : '') + '<span class="t">' + esc(b.title) + '</span>' + '<span class="pr">' + (b.pill ? '<span class="p ' + mapPillClass(b) + '">' + esc(b.pill) + '</span>' : '') +
         (b.tool ? '<span class="tl" title="' + esc(secState.plain ? 'what it is running now' : 'tool running now') + '">' + esc(b.tool) + '</span>' : '') + '</span>' +
         (b.line ? '<span class="l">' + esc(b.line) + '</span>' : '') + '</button>';
     });

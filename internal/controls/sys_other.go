@@ -25,6 +25,10 @@ func (ExecRunner) Run(ctx context.Context, argv []string, dir string) (int, stri
 	return -1, "", errUnsupported
 }
 
+func (ExecRunner) RunLast(ctx context.Context, argv []string, dir string) (int, string, error) {
+	return -1, "", errUnsupported
+}
+
 func (ExecRunner) Start(argv []string) error { return errUnsupported }
 
 // Elevated is always false off Windows.

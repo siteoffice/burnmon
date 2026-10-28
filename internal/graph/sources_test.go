@@ -196,7 +196,7 @@ func TestReadForemanRealRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, s := range sprints {
-		t.Logf("sprint %s status %s worktree %q main %q log entries %d", s.ID, s.Status, s.WorktreePath, sprintMainRepo(s.WorktreePath), len(s.LogTimes))
+		t.Logf("sprint %s status %s worktree %q main %q log entries %d", s.ID, s.Status, s.WorktreePath, SprintMainRepo(s.WorktreePath), len(s.LogTimes))
 	}
 	t.Logf("%d sprints, %d flows", len(sprints), len(flows))
 }

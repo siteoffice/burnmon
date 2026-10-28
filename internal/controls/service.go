@@ -35,6 +35,9 @@ type Env struct {
 	Elevated    func() bool
 	Runner      Runner
 	AuditPath   string
+	// Merged says whether branch is in the main branch of repo. known is false
+	// when it cannot be told; the Close control then refuses.
+	Merged func(repo, branch string) (merged, known bool)
 }
 
 // Service ties previews, fresh checks, the audit file and the runner together.
@@ -88,6 +91,8 @@ type RunResult struct {
 type Availability struct {
 	Ready map[string]bool   `json:"ready"`
 	Why   map[string]string `json:"why,omitempty"`
+	// Foreman is true when foreman_root is set: the Foreman parts exist.
+	Foreman bool `json:"foreman"`
 }
 
 const (
@@ -108,7 +113,7 @@ func libDirOf(root string) string { return filepath.Join(root, "flows", "_lib") 
 // assess works out, once, which controls are usable now and the Self that
 // the decision used. A Self that came with an error is never returned.
 func (s *Service) assess() (Availability, Self) {
-	a := Availability{Ready: map[string]bool{}, Why: map[string]string{}}
+	a := Availability{Ready: map[string]bool{}, Why: map[string]string{}, Foreman: s.Env.ForemanRoot != ""}
 	var self Self
 	global := ""
 	switch {
@@ -150,6 +155,9 @@ func (s *Service) assess() (Availability, Self) {
 }
 
 func (s *Service) unusable(c string) string {
+	if c == CloseSprint {
+		return s.unusableClose()
+	}
 	if !isGate(c) {
 		switch {
 		case s.Env.ClaudePath == "":
@@ -178,6 +186,24 @@ func (s *Service) unusable(c string) string {
 	return ""
 }
 
+// unusableClose says why the Close control cannot be used, "" when it can.
+func (s *Service) unusableClose() string {
+	switch {
+	case s.Env.ForemanRoot == "":
+		return "needs foreman_root in burnmon.json"
+	case s.Env.PythonPath == "":
+		if s.Env.PythonWhy != "" {
+			return s.Env.PythonWhy
+		}
+		return whyPython
+	}
+	fi, err := os.Lstat(SprintScript(s.Env.ForemanRoot))
+	if err != nil || !fi.Mode().IsRegular() {
+		return "needs sprints\\_lib\\sprint_step.py under foreman_root"
+	}
+	return ""
+}
+
 // Availability reports which controls are ready: switch on and usable.
 func (s *Service) Availability() Availability {
 	a, _ := s.assess()
@@ -193,11 +219,14 @@ func known(c string) bool {
 	return false
 }
 
-func insideFlows(root, dir string) bool {
+func insideFlows(root, dir string) bool { return insideDir(filepath.Join(root, "flows"), dir) }
+
+// insideDir reports whether dir is an absolute path strictly inside base.
+func insideDir(base, dir string) bool {
 	if dir == "" || !filepath.IsAbs(dir) {
 		return false
 	}
-	rel, err := filepath.Rel(filepath.Join(root, "flows"), dir)
+	rel, err := filepath.Rel(base, dir)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return false
 	}
@@ -219,6 +248,17 @@ func (s *Service) freshAgents() ([]waits.AgentEntry, error) {
 		return nil, fmt.Errorf("cannot read the agent view: %w", err)
 	}
 	return fresh, nil
+}
+
+func (s *Service) freshSprints() ([]graph.Sprint, error) {
+	if s.Env.ReadForeman == nil {
+		return nil, errors.New("cannot read Foreman")
+	}
+	sprints, _, err := s.Env.ReadForeman(s.Env.ForemanRoot)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read Foreman: %w", err)
+	}
+	return sprints, nil
 }
 
 func (s *Service) freshFlows() ([]graph.Flow, error) {
@@ -256,6 +296,8 @@ func (s *Service) Preview(req PreviewRequest) (PreviewResult, error) {
 	)
 	if isGate(req.Control) {
 		t, argv, err = s.previewGate(req, rd.Snapshot)
+	} else if req.Control == CloseSprint {
+		t, argv, err = s.previewSprint(req, rd.Snapshot)
 	} else {
 		t, argv, err = s.previewAgent(req, rd.Snapshot, self)
 	}
@@ -369,6 +411,39 @@ func (s *Service) previewGate(req PreviewRequest, snap *snapshot.Snapshot) (Targ
 	return Target{}, nil, errors.New("the flow is no longer listed")
 }
 
+// previewSprint checks a close-out item against a fresh Foreman read and a fresh
+// merge check, and builds the close argv from the fresh values only.
+func (s *Service) previewSprint(req PreviewRequest, snap *snapshot.Snapshot) (Target, []string, error) {
+	var item *waits.Item
+	for i := range snap.WaitItems {
+		w := &snap.WaitItems[i]
+		if w.Kind == waits.KindCloseOut && w.ID == req.Target && w.SprintID != "" {
+			item = w
+			break
+		}
+	}
+	if item == nil {
+		return Target{}, nil, errors.New("the sprint is not a listed close-out item")
+	}
+	sprints, err := s.freshSprints()
+	if err != nil {
+		return Target{}, nil, err
+	}
+	t := Target{Control: CloseSprint, SprintID: item.SprintID}
+	for _, f := range sprints {
+		if f.ID == item.SprintID {
+			t.SprintDir, t.Branch, t.Title = f.Dir, f.Branch, f.Slug
+			if t.Title == "" {
+				t.Title = f.ID
+			}
+		}
+	}
+	if err := CheckSprint(t, sprints, s.Env.Merged, s.Env.ForemanRoot); err != nil {
+		return Target{}, nil, err
+	}
+	return t, CloseArgv(s.Env.PythonPath, s.Env.ForemanRoot, t.SprintDir), nil
+}
+
 // flowLabel names a flow from the fresh read: its slug, else its id.
 func flowLabel(f graph.Flow) string {
 	if f.Slug != "" {
@@ -387,6 +462,9 @@ func lastFolder(p string) string {
 }
 
 func auditTarget(t Target) string {
+	if t.SprintID != "" {
+		return "sprint:" + t.SprintID
+	}
 	if t.AgentID != "" {
 		return t.AgentID
 	}
@@ -504,6 +582,11 @@ func (s *Service) Run(token string) (RunResult, error) {
 		if flows, ferr = s.freshFlows(); ferr == nil {
 			ferr = CheckGate(pe.Target, flows)
 		}
+	} else if pe.Target.Control == CloseSprint {
+		var sprints []graph.Sprint
+		if sprints, ferr = s.freshSprints(); ferr == nil {
+			ferr = CheckSprint(pe.Target, sprints, s.Env.Merged, s.Env.ForemanRoot)
+		}
 	} else {
 		var fresh []waits.AgentEntry
 		if fresh, ferr = s.freshAgents(); ferr == nil {
@@ -533,8 +616,15 @@ func (s *Service) Run(token string) (RunResult, error) {
 		if isGate(pe.Target.Control) {
 			timeout, dir = runGateTimeout, libDirOf(s.Env.ForemanRoot)
 		}
+		if pe.Target.Control == CloseSprint {
+			timeout, dir = runGateTimeout, filepath.Dir(SprintScript(s.Env.ForemanRoot))
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		code, first, rerr := s.Env.Runner.Run(ctx, pe.Argv, dir)
+		run := s.Env.Runner.Run
+		if ll, ok := s.Env.Runner.(LastLineRunner); ok && pe.Target.Control == CloseSprint {
+			run = ll.RunLast
+		}
+		code, first, rerr := run(ctx, pe.Argv, dir)
 		cancel()
 		switch {
 		case rerr != nil:
@@ -547,6 +637,12 @@ func (s *Service) Run(token string) (RunResult, error) {
 					res.Refused = "the gate changed or was already decided"
 				case GateExitVerdict:
 					res.Refused = "the verdict is not valid for this gate"
+				}
+			}
+			if pe.Target.Control == CloseSprint && code == 1 {
+				res.Refused = closeRefused
+				if l := lastLine(first, closeReasonMax); l != "" {
+					res.Refused += ": " + l
 				}
 			}
 		default:

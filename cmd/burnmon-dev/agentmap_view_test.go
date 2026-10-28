@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"burnmon/internal/agentmap"
+	"burnmon/internal/graph"
 	"burnmon/internal/schema"
 	"burnmon/internal/sections"
 	"burnmon/internal/store"
@@ -178,5 +179,39 @@ func TestAgentMapHistoryBadForemanRoot(t *testing.T) {
 	}
 	if !strings.Contains(p.Note, "Foreman") {
 		t.Errorf("no note about Foreman state: %q", p.Note)
+	}
+}
+
+// The history map has no snapshot: it runs the same count over its own graph.
+func TestHistoryMapUsesCountOf(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	at := now.Add(-3 * time.Hour)
+	proj := `C:\w\repo`
+	if err := st.UpsertEvents([]schema.Event{
+		{Vendor: "anthropic", Agent: "claude-code", Surface: "cli", SessionID: "S1", RequestID: "r1", Model: "m", Project: proj, At: at, Input: 1, Output: 1},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sid := graph.SessionID("anthropic", "S1")
+	if _, err := st.RecordGraph(
+		[]store.GraphNode{{ID: "person:you", Kind: graph.KindPerson, Label: "You", Source: graph.SourceStore}},
+		[]store.GraphEdge{{From: sid, To: "person:you", Kind: graph.KindWaitsOn, Basis: graph.BasisVendor, Source: graph.SourceAgentView}},
+		at); err != nil {
+		t.Fatal(err)
+	}
+	p, err := agentMapFor(agentMapEnv{DataDir: t.TempDir(), St: st}, agentMapRequest{Source: "history", Hours: 24}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Layout.Counts.Waiting != 1 {
+		t.Fatalf("history counts %+v, want one blocked session", p.Layout.Counts)
+	}
+	if y, ok := boxIn(p.Layout, "you"); !ok || !strings.HasPrefix(y.Line, "1 waiting on you") {
+		t.Errorf("history You box %+v (found %v)", y, ok)
 	}
 }

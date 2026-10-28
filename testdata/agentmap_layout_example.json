@@ -2,9 +2,16 @@
   "columns": [
     "Tool",
     "Session",
-    "Subagent",
+    "Subagents",
     "Programs and servers",
     "You"
+  ],
+  "column_notes": [
+    "",
+    "",
+    "",
+    "",
+    ""
   ],
   "boxes": [
     {
@@ -29,7 +36,8 @@
           "label": "Source",
           "value": "sysmon"
         }
-      ]
+      ],
+      "tag": "tool"
     },
     {
       "id": "session:anthropic:example-parent",
@@ -95,7 +103,9 @@
           "label": "Branch",
           "value": "sprint/example"
         }
-      ]
+      ],
+      "tag": "session",
+      "wait": "blocked"
     },
     {
       "id": "mcp:example-server@session:anthropic:example-parent",
@@ -124,7 +134,8 @@
           "label": "Listens on",
           "value": "8765"
         }
-      ]
+      ],
+      "tag": "MCP"
     },
     {
       "id": "programs:session:anthropic:example-parent",
@@ -157,7 +168,8 @@
           "label": "Command lines",
           "value": "never recorded"
         }
-      ]
+      ],
+      "tag": "programs"
     },
     {
       "id": "session:anthropic:example-sub",
@@ -206,14 +218,17 @@
           "label": "Works for",
           "value": "sprint-example (named by Foreman)"
         }
-      ]
+      ],
+      "depth": 1,
+      "tag": "subagent",
+      "wait": "done"
     },
     {
       "id": "you",
       "kind": "you",
       "title": "You",
       "pill": "waits on you",
-      "line": "1 waiting on you",
+      "line": "1 waiting on you, 0 your turn",
       "column": 4,
       "row": 0,
       "waits_on_you": true,
@@ -222,7 +237,8 @@
           "label": "agent",
           "value": "project (20 s old)"
         }
-      ]
+      ],
+      "tag": "you"
     }
   ],
   "lines": [
@@ -231,35 +247,40 @@
       "to": "mcp:example-server@session:anthropic:example-parent",
       "word": "uses",
       "basis": "inferred",
-      "you": false
+      "you": false,
+      "style": "solid"
     },
     {
       "from": "session:anthropic:example-parent",
       "to": "programs:session:anthropic:example-parent",
       "word": "started",
       "basis": "vendor",
-      "you": false
+      "you": false,
+      "style": "solid"
     },
     {
       "from": "session:anthropic:example-parent",
       "to": "session:anthropic:example-sub",
-      "word": "started",
+      "word": "starts",
       "basis": "vendor",
-      "you": false
+      "you": false,
+      "style": "solid"
     },
     {
       "from": "harness:claude",
       "to": "session:anthropic:example-parent",
       "word": "runs",
       "basis": "vendor",
-      "you": false
+      "you": false,
+      "style": "solid"
     },
     {
       "from": "session:anthropic:example-parent",
       "to": "you",
       "word": "waits on",
       "basis": "vendor",
-      "you": true
+      "you": true,
+      "style": "solid"
     }
   ],
   "frames": [
@@ -283,6 +304,7 @@
     "sessions": 1,
     "subagents": 1,
     "waiting": 1,
+    "your_turn": 0,
     "sprints": 1,
     "flows": 0
   },

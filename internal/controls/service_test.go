@@ -199,6 +199,17 @@ func (r *rig) last() map[string]any {
 
 func (r *rig) gateTarget() string { return "gate:example__flow__2:G2" }
 
+// gateItem is the example's flow 2 gate in a snapshot's wait list. B6 ranks
+// the list (Done items last), so the gate is no longer the last entry.
+func gateItem(s *snapshot.Snapshot) int {
+	for i, it := range s.WaitItems {
+		if it.ID == "gate:example__flow__2:G2" {
+			return i
+		}
+	}
+	panic("example snapshot has no flow 2 gate")
+}
+
 func TestPreviewShowsExactStopCommand(t *testing.T) {
 	r := newRig(t)
 	p, err := r.preview(Stop, "ab12")
@@ -568,7 +579,7 @@ func TestGateTokenForAIsNeverRunForB(t *testing.T) {
 	r.flows = append(r.flows, graph.Flow{ID: "example__flow__3", Gate: "G2", GatePending: true, GateToken: "t3",
 		Dir: filepath.Join(r.root, "flows", "example", "other")})
 	r.snap = func(s *snapshot.Snapshot) {
-		s.WaitItems = append(s.WaitItems, s.WaitItems[len(s.WaitItems)-1])
+		s.WaitItems = append(s.WaitItems, s.WaitItems[gateItem(s)])
 		s.WaitItems[len(s.WaitItems)-1].ID = "gate:example__flow__3:G2"
 	}
 	pa, err := r.preview(Approve, r.gateTarget())
@@ -594,7 +605,7 @@ func TestGateTokenForAIsNeverRunForB(t *testing.T) {
 func TestGateControlsNotOffered(t *testing.T) {
 	r := newRig(t)
 	r.snap = func(s *snapshot.Snapshot) {
-		w := s.WaitItems[len(s.WaitItems)-1]
+		w := s.WaitItems[gateItem(s)]
 		w.ID = "gate:example__flow__2:G3"
 		s.WaitItems = append(s.WaitItems, w)
 	}

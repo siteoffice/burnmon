@@ -32,6 +32,8 @@ type Target struct {
 	Project   string
 	// Foreman gate
 	FlowID, Gate, GateToken, FlowDir, Title string
+	// Foreman sprint close
+	SprintID, SprintDir, Branch string
 }
 
 // Key identifies the control and target; a new preview with the same key
@@ -39,6 +41,9 @@ type Target struct {
 func (t Target) Key() string {
 	if t.AgentID != "" {
 		return t.Control + "|" + t.AgentID
+	}
+	if t.SprintID != "" {
+		return t.Control + "|sprint:" + strconv.Itoa(len(t.SprintID)) + ":" + t.SprintID
 	}
 	// Flow ids and gates are not validated in this package, so the flow id is
 	// length-prefixed: no id or gate containing ":" can collide with another.
@@ -49,6 +54,9 @@ func (t Target) Key() string {
 func (t Target) Label() string {
 	if t.AgentID != "" {
 		return t.Project + " (" + t.AgentID + ")"
+	}
+	if t.SprintID != "" {
+		return t.Title
 	}
 	return t.Title + " gate " + t.Gate + " (" + t.FlowID + ")"
 }

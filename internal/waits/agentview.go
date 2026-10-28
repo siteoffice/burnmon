@@ -35,6 +35,10 @@ func (e AgentEntry) Waiting() bool {
 	return (e.Status == "waiting" && e.WaitingFor != "") || e.State == "blocked"
 }
 
+// YourTurn reports whether the entry is idle: its turn ended and it does
+// not wait on a prompt.
+func (e AgentEntry) YourTurn() bool { return e.Status == "idle" && !e.Waiting() }
+
 // ParseAgentView parses the output of `claude agents --json`. Anything that
 // is not a JSON array (a warning line before it, nothing, an object) is an
 // error.

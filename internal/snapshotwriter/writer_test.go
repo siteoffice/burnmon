@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"burnmon/internal/graph"
+	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
 	"burnmon/internal/snapshot"
@@ -285,11 +286,11 @@ func TestSnapshotOnceWritesForemanItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.WaitItems) != 2 || got.WaitItems[0].ID != "sprint:p__waiting__1" || got.WaitItems[1].ID != "gate:p__f__1:G4" {
+	if len(got.WaitItems) != 2 || got.WaitItems[0].ID != "gate:p__f__1:G4" || got.WaitItems[1].ID != "sprint:p__waiting__1" {
 		t.Fatalf("wait items: %+v", got.WaitItems)
 	}
-	if p := got.WaitItems[0].Parked; len(p) != 1 || p[0].Reason != "needs a key" {
-		t.Fatalf("parked: %+v", got.WaitItems[0])
+	if p := got.WaitItems[1].Parked; len(p) != 1 || p[0].Reason != "needs a key" {
+		t.Fatalf("parked: %+v", got.WaitItems[1])
 	}
 	if len(got.OutcomeItems) != 1 || got.OutcomeItems[0].ID != "sprint:p__done__1" {
 		t.Fatalf("outcome items: %+v", got.OutcomeItems)
@@ -351,5 +352,14 @@ func TestForemanReadAtIsTheTimeOfTheRead(t *testing.T) {
 		if g := sourceNamed(got, "claude_pids"); g.ReadAt != c.at.UTC().Format(time.RFC3339) {
 			t.Fatalf("tick %d: claude_pids read_at %s", i, g.ReadAt)
 		}
+	}
+}
+
+func TestFlatSessionsCopiesAskOpen(t *testing.T) {
+	ss := []*live.Session{{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", AskOpen: true,
+		Subagents: []*live.Session{{Vendor: "anthropic", Agent: "claude-code", SessionID: "agent-k"}}}}
+	flat := snapshotwriter.FlatSessions(ss)
+	if len(flat) != 2 || !flat[0].AskOpen || flat[1].AskOpen || flat[1].ParentID != "s1" {
+		t.Fatalf("FlatSessions = %+v", flat)
 	}
 }

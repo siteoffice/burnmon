@@ -30,6 +30,7 @@ const (
 	KindFlow     = "flow"
 	KindSprint   = "sprint"
 	KindGate     = "gate"
+	KindCheck    = "check"
 	KindPerson   = "person"
 )
 
@@ -54,15 +55,27 @@ const (
 	BasisInferred = "inferred" // BurnMon joined two facts that do not name each other
 )
 
+// Wait states of a top-level session, node attr "wait".
+const (
+	WaitBlocked  = "blocked"   // only the person can unblock it: a prompt, a question, a plan approval
+	WaitYourTurn = "your_turn" // the turn ended and nothing runs
+	WaitWorking  = "working"   // anything is running, a running subagent included
+)
+
 // Source names, the same names the snapshot lists in sources[].
 const (
 	SourceStore      = "store"
 	SourceSysmon     = "sysmon"
 	SourceClaudePids = "claude_pids"
-	SourceForeman    = "foreman"
-	SourceMCPConfig  = "mcp_config"
-	SourceNetTables  = "net_tables"
-	SourceGit        = "git"
+	// SourceTranscriptAsk is the source of a waits_on edge drawn from an open
+	// question or plan approval in a transcript. It differs from SourceStore so
+	// the history map can tell it from the pre-B6 stage-waiting edge, which
+	// used SourceStore with the same basis.
+	SourceTranscriptAsk = "transcript_ask"
+	SourceForeman       = "foreman"
+	SourceMCPConfig     = "mcp_config"
+	SourceNetTables     = "net_tables"
+	SourceGit           = "git"
 )
 
 const (
@@ -122,6 +135,18 @@ type Session struct {
 	// Tool is the name of the tool the session is running now ("" when none),
 	// from the stage the core works out. The name only, never its arguments.
 	Tool string
+	// AskOpen is true when the newest tool call is AskUserQuestion or
+	// ExitPlanMode, belongs to the newest turn and has no result yet.
+	AskOpen bool
+}
+
+// AgentState is one entry of `claude agents --json`, the fields the wait
+// state needs. SessionID is the bare session id.
+type AgentState struct {
+	SessionID, State, Status, WaitingFor string
+	// Key is the wait item id (waits.AgentEntry.Key), used for a Blocked entry
+	// with no SessionID.
+	Key string
 }
 
 // Proc is one process from the process walk. Cmdline is used for matching
@@ -180,6 +205,15 @@ type Sprint struct {
 	Test, Verify *Check
 	// LastParkedAt is the newest task_parked entry in the action log.
 	LastParkedAt time.Time
+	// ReportPath is the sprint folder's report.md when that regular file exists ("" when
+	// not), and ParkedLines the parked lines of its Close-out block. Both are
+	// read only for a sprint that is waiting on you.
+	ReportPath  string
+	ParkedLines int
+	// CloseOK and CloseReason are CloseOutVerdict for the sprint folder: whether
+	// Foreman's close-out gate would accept, and why not. Read with ReportPath.
+	CloseOK     bool
+	CloseReason string
 }
 
 // Check is one recorded test or verify result.
@@ -202,9 +236,9 @@ type ParkedTask struct {
 // and still count as written while the session was active.
 const linkGrace = 10 * time.Minute
 
-// sprintMainRepo is the repo a sprint's worktree hangs off: the folder before
+// SprintMainRepo is the repo a sprint's worktree hangs off: the folder before
 // ".worktrees". It is "" for a path that is not under one.
-func sprintMainRepo(worktree string) string {
+func SprintMainRepo(worktree string) string {
 	p := strings.TrimRight(worktree, `\/`)
 	low := strings.ToLower(strings.ReplaceAll(p, "/", `\`))
 	i := strings.Index(low, `\.worktrees\`)
@@ -260,6 +294,20 @@ type Input struct {
 	Sprints     []Sprint
 	Flows       []Flow
 	SubagentFor func(parent, id string) (SubagentInfo, bool)
+	// Agents is the agent view, for the Blocked state. Tick is the snapshot
+	// tick; a subagent is running when its last turn is within two ticks
+	// (0 means 5 s).
+	Agents []AgentState
+	Tick   time.Duration
+	// MergedFor says whether branch is in the trunk of repo (merged) and
+	// whether that could be read at all (known). nil: nothing is merged.
+	MergedFor func(repo, branch string) (merged, known bool)
+	// BranchGone says the sprint branch has no ref any more (deleted after
+	// the merge). MergedByMessage then looks for a merge commit that names
+	// it in the trunk's recent history. Both nil: a deleted branch is not
+	// told apart from any other unknown.
+	BranchGone      func(repo, branch string) bool
+	MergedByMessage func(repo, branch string) (found, known bool)
 }
 
 // harnessOfAgent maps a store agent name to sysmon's harness names, so a
@@ -505,24 +553,13 @@ func Build(in Input) Graph {
 		}
 	}
 
-	// Waits on you: Claude Code's own idle status first, else the stage.
-	for _, s := range in.Sessions {
-		id := SessionID(s.Vendor, s.ID)
-		if pf, ok := idle[id]; ok {
-			b.person()
-			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceClaudePids, AgeSeconds: b.age(pf.UpdatedAt)})
-		} else if s.State == "waiting" && s.ParentID == "" {
-			// A subagent whose turn ended has finished; it asks no one anything.
-			b.person()
-			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisInferred, Source: SourceStore, AgeSeconds: b.age(s.LastActivity)})
-		}
-	}
-	for id, pf := range idle {
-		if _, ok := b.edges[id+"|"+KindWaitsOn+"|"+personID]; !ok {
-			b.person()
-			b.edge(Edge{From: id, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceClaudePids, AgeSeconds: b.age(pf.UpdatedAt)})
-		}
-	}
+	// Wait states. Precedence, once: Blocked, then Working, then Your turn.
+	// Blocked is a prompt, question or plan approval only the person can
+	// answer (agent view, or an open AskUserQuestion or ExitPlanMode call for
+	// Claude Code and Cowork). Working is anything running, a running
+	// subagent included. Your turn is a session whose turn ended and nothing
+	// runs. Only Blocked draws the line to You. A subagent never waits.
+	b.waitStates(byID, idle)
 
 	// Listening ports of kept processes.
 	for _, l := range in.Listens {
@@ -542,6 +579,7 @@ func Build(in Input) Graph {
 		sessionIDs = append(sessionIDs, id)
 	}
 	sort.Strings(sessionIDs)
+	repoOf := map[string]Repo{}
 	if in.RepoFor != nil {
 		for _, id := range sessionIDs {
 			s := byID[id]
@@ -552,6 +590,7 @@ func Build(in Input) Graph {
 			if !ok {
 				continue
 			}
+			repoOf[id] = r
 			for _, e := range b.repoNodes(r, SourceGit) {
 				b.edge(Edge{From: id, To: e, Kind: KindTouches, Basis: BasisInferred, Source: SourceGit})
 			}
@@ -560,15 +599,17 @@ func Build(in Input) Graph {
 
 	// Foreman: sprints and flows linked to a session, and gates or sprints
 	// that wait on you.
+	closeoutSet, goneSet := map[string]bool{}, map[string]bool{}
 	for _, sp := range in.Sprints {
 		sid := "sprint:" + sp.ID
 		waiting := sp.Status == "waiting-on-you"
+		closeout, branchGone := false, false
 		// A session links to a sprint when its folder is the sprint's worktree
 		// or its main repo and it was active while the sprint's own action log
 		// was being written. An attended sprint's agents run in the main repo.
 		// With no log to say when, only the worktree folder links, as before.
 		var linked []string
-		main := sprintMainRepo(sp.WorktreePath)
+		main := SprintMainRepo(sp.WorktreePath)
 		for _, id := range sessionIDs {
 			s := byID[id]
 			inWT := sp.WorktreePath != "" && pathKey(s.Project) == pathKey(sp.WorktreePath)
@@ -582,18 +623,38 @@ func Build(in Input) Graph {
 				linked = append(linked, id)
 			}
 		}
-		if len(linked) == 0 && !waiting {
+		if len(linked) == 0 && !waiting && !stoppedWithFailedCheck(sp) {
 			continue
 		}
-		b.node(Node{ID: sid, Kind: KindSprint, Label: sp.Slug, Attrs: map[string]string{"phase": sp.Phase, "status": sp.Status},
+		// A waiting sprint whose branch is already in main needs closing out,
+		// not an answer: it leaves Blocked. Unknown stays Blocked.
+		if waiting && in.MergedFor != nil && main != "" && sp.Branch != "" {
+			m, known := in.MergedFor(main, sp.Branch)
+			closeout = m && known
+		}
+		// The branch ref is gone (deleted after the merge): a merge commit in
+		// the trunk's recent history that names it makes the sprint close-out;
+		// no such commit makes it "branch gone, check by hand", never Blocked.
+		// A history that cannot be read leaves the sprint Blocked.
+		if waiting && !closeout && in.BranchGone != nil && in.MergedByMessage != nil && main != "" && sp.Branch != "" &&
+			in.BranchGone(main, sp.Branch) {
+			if found, known := in.MergedByMessage(main, sp.Branch); known {
+				closeout, branchGone = found, !found
+			}
+		}
+		attrs := map[string]string{"phase": sp.Phase, "status": sp.Status}
+		if closeout {
+			attrs["closeout"] = "true"
+		}
+		if branchGone {
+			attrs["branch_gone"] = "true"
+		}
+		b.node(Node{ID: sid, Kind: KindSprint, Label: sp.Slug, Attrs: attrs,
 			Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		for _, id := range linked {
 			b.edge(Edge{From: id, To: sid, Kind: KindWorksFor, Basis: BasisInferred, Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
 		}
-		if waiting {
-			b.person()
-			b.edge(Edge{From: sid, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(sp.UpdatedAt)})
-		}
+		closeoutSet[sid], goneSet[sid] = closeout, branchGone
 		if sp.WorktreePath != "" {
 			wt := "worktree:" + pathKey(sp.WorktreePath)
 			b.node(Node{ID: wt, Kind: KindWorktree, Label: baseLabel(sp.WorktreePath), Source: SourceForeman})
@@ -616,11 +677,66 @@ func Build(in Input) Graph {
 			gid := "gate:" + f.ID + ":" + f.Gate
 			b.node(Node{ID: gid, Kind: KindGate, Label: f.Gate, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
 			b.edge(Edge{From: gid, To: fid, Kind: KindPartOf, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
-			b.person()
-			b.edge(Edge{From: gid, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: b.age(f.UpdatedAt)})
 		}
 	}
+	// The one decision: every Foreman thing that waits on you gets a box and
+	// one waits_on edge to You.
+	for _, bl := range ForemanBlockers(in.Sprints, in.Flows, closeoutSet, goneSet) {
+		var at time.Time
+		switch bl.Kind {
+		case BlockerGate:
+			for _, f := range in.Flows {
+				if f.ID == bl.FlowID {
+					at = f.UpdatedAt
+				}
+			}
+		default:
+			for _, sp := range in.Sprints {
+				if sp.ID == bl.SprintID {
+					at = sp.UpdatedAt
+				}
+			}
+		}
+		age := b.age(at)
+		if bl.Kind == BlockerCheck {
+			b.node(Node{ID: bl.NodeID, Kind: KindCheck, Label: bl.Check, Source: SourceForeman, AgeSeconds: age})
+			b.edge(Edge{From: bl.NodeID, To: "sprint:" + bl.SprintID, Kind: KindPartOf, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: age})
+		}
+		b.person()
+		b.edge(Edge{From: bl.NodeID, To: personID, Kind: KindWaitsOn, Basis: BasisVendor, Source: SourceForeman, AgeSeconds: age})
+	}
+	b.markCanClose(sessionIDs, byID, repoOf)
 	return b.g
+}
+
+// markCanClose sets attr "can_close" on a Your turn top-level session in a
+// linked worktree whose branch was merged into the main repo's trunk and that
+// no Foreman sprint speaks for. A Blocked session never becomes can_close: a
+// pending question must always reach the person, so it keeps its waits_on
+// edge.
+func (b *builder) markCanClose(ids []string, byID map[string]Session, repoOf map[string]Repo) {
+	if b.in.MergedFor == nil {
+		return
+	}
+	sprinted := map[string]bool{}
+	for _, e := range b.g.Edges {
+		if e.Kind == KindWorksFor && strings.HasPrefix(e.To, "sprint:") {
+			sprinted[e.From] = true
+		}
+	}
+	for _, id := range ids {
+		r, ok := repoOf[id]
+		i, has := b.nodes[id]
+		if !ok || !has || byID[id].ParentID != "" || r.Main == "" || r.Branch == "" || sprinted[id] {
+			continue
+		}
+		if b.g.Nodes[i].Attrs["wait"] != WaitYourTurn {
+			continue
+		}
+		if m, known := b.in.MergedFor(r.Main, r.Branch); m && known {
+			b.g.Nodes[i].Attrs["can_close"] = "true"
+		}
+	}
 }
 
 // repoNodes adds the worktree or repo node, its main repo and its branch,
