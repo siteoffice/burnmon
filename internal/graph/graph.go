@@ -643,6 +643,11 @@ func Build(in Input) Graph {
 			}
 		}
 		attrs := map[string]string{"phase": sp.Phase, "status": sp.Status}
+		for k, v := range map[string]string{"project": sp.Project, "spec_path": sp.SpecPath, "result_path": sp.ResultPath} {
+			if v != "" {
+				attrs[k] = v
+			}
+		}
 		if closeout {
 			attrs["closeout"] = "true"
 		}

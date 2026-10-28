@@ -82,6 +82,12 @@ type Idle struct {
 	Gate       string `json:"gate,omitempty"`
 	WaitsOnYou bool   `json:"waits_on_you"`
 	AgeSeconds int64  `json:"age_seconds"`
+	// Project, SpecPath, ResultPath and CloseOut come from the sprint node, for
+	// the idle table on the map. CloseOut is a merged sprint waiting to close.
+	Project    string `json:"project,omitempty"`
+	SpecPath   string `json:"spec_path,omitempty"`
+	ResultPath string `json:"result_path,omitempty"`
+	CloseOut   bool   `json:"close_out,omitempty"`
 }
 
 // View is what the page draws.
@@ -259,7 +265,8 @@ func Build(nodes []graph.Node, edges []graph.Edge) View {
 			continue
 		}
 		v.Idle = append(v.Idle, Idle{ID: id, Kind: n.Kind, Label: n.Label, Status: n.Attrs["status"], Phase: n.Attrs["phase"],
-			Gate: m.gateOf[id], WaitsOnYou: m.waiters[id], AgeSeconds: n.AgeSeconds})
+			Gate: m.gateOf[id], WaitsOnYou: m.waiters[id], AgeSeconds: n.AgeSeconds,
+			Project: n.Attrs["project"], SpecPath: n.Attrs["spec_path"], ResultPath: n.Attrs["result_path"], CloseOut: n.Attrs["closeout"] == "true"})
 	}
 	sort.SliceStable(v.Idle, func(i, j int) bool {
 		a, b := v.Idle[i], v.Idle[j]

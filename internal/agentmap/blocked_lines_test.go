@@ -28,11 +28,17 @@ func blockedFrame(n int) ([]graph.Node, []graph.Edge) {
 	return nodes, edges
 }
 
+// amberLines counts the Blocked items the amber lines into You stand for: a
+// folded box's line carries its waiters in Count (1 when absent).
 func amberLines(l Layout) int {
 	n := 0
 	for _, ln := range l.Lines {
 		if ln.You {
-			n++
+			if ln.Count > 1 {
+				n += ln.Count
+			} else {
+				n++
+			}
 		}
 	}
 	return n
@@ -46,10 +52,26 @@ func TestFrameWaitingAndHoldingBlockedSessionDrawsBoth(t *testing.T) {
 	}
 }
 
-func TestFoldedGroupDrawsOneLinePerWaiter(t *testing.T) {
+func TestFoldedGroupKeepsWaitersOneLine(t *testing.T) {
 	nodes, edges := blockedFrame(2)
 	l := BuildLayout(LayoutInput{Nodes: nodes, Edges: edges, MaxBoxes: 1})
+	var amber []Line
+	for _, ln := range l.Lines {
+		if ln.You {
+			amber = append(amber, ln)
+		}
+	}
+	if len(amber) != 1 || amber[0].Count != 3 || amber[0].Word != "3 waiting" {
+		t.Fatalf("amber lines %+v, want one folded line with Count 3 and word %q", amber, "3 waiting")
+	}
 	if got := amberLines(l); got != 3 {
-		t.Errorf("%d amber lines, want 3 (the gate and two sessions)", got)
+		t.Errorf("amber count %d, want 3 (the gate and two sessions)", got)
+	}
+	var folded bool
+	for _, f := range l.Frames {
+		folded = folded || f.Folded
+	}
+	if !folded {
+		t.Error("the group did not fold")
 	}
 }

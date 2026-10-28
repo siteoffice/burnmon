@@ -107,7 +107,7 @@ func checkBlockedAgainstCount(t *testing.T, tab string, ly agentmap.Layout, item
 	amber := 0
 	for _, l := range ly.Lines {
 		if l.You {
-			amber++
+			amber += max(l.Count, 1)
 		}
 	}
 	if amber != c.Blocked {
@@ -223,7 +223,7 @@ func TestAgentEntryWithoutSessionDrawsLine(t *testing.T) {
 	amber := 0
 	for _, l := range ly.Lines {
 		if l.You {
-			amber++
+			amber += max(l.Count, 1)
 		}
 	}
 	if c.Blocked != 1 || amber != 1 {
