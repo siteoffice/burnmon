@@ -153,9 +153,18 @@ func TestHandlesAndSharesInPage(t *testing.T) {
 		t.Fatal("applyPanelFit not found")
 	}
 	body := page[s : s+e]
-	for _, want := range []string{"fitApplyShares(", "fitPlaceHandles("} {
+	for _, want := range []string{"fitApplyShares(", "fitPlaceHandles(", "fitDrawLists(", "host_lists"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("applyPanelFit lacks %q", want)
 		}
+	}
+	// B7.1 iteration 2: a drag may take from the host lists, a handle without room is hidden.
+	for _, want := range []string{"function fitDrawLists(", "function fitHostAvail(", "function fitColHasShares(", "hdl-off", "hidden: h.classList.contains('hdl-off')", "merged.host_lists"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if !strings.Contains(rule(".hdl.hdl-off{"), "display:none") {
+		t.Error(".hdl-off rule lacks display:none")
 	}
 }

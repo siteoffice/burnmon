@@ -102,7 +102,11 @@ type State struct {
 
 // HeightKeys are layout keys, not part ids: the Activity and Heatmap halves
 // share one row, and the System part draws a CPU box and a chart.
-var HeightKeys = []string{"burn_30min", "vendor_strip", "activity_heatmap", "turn_ticker", "system_chart", "process_groups"}
+// host_lists is not a part: it is the fraction of the host lists' shrink range
+// (natural height down to three rows) that a drag took from the Waits,
+// Outcomes and Sessions lists. It lives in the same map so an old file and an
+// older reader see nothing new.
+var HeightKeys = []string{"burn_30min", "vendor_strip", "activity_heatmap", "turn_ticker", "system_chart", "process_groups", "host_lists"}
 
 // cleanHeights keeps known keys with a finite value in (0, 1]; empty gives nil.
 func cleanHeights(h map[string]float64) map[string]float64 {

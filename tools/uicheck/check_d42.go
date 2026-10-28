@@ -10,36 +10,48 @@ import (
 	"time"
 )
 
-// d42: the drag handles (B7.1, spec 2026-10-28, item 5), through real mouse
-// input. Standard, Overall scrollbar off, the frozen example with long lists
-// (d42Snapshot: d34Snapshot(true) plus 24 turns for the ticker), with the status\r
-// parts, Processes and To Do off so the columns have free height (with every\r
-// part on, 1920x1080 is already short of room and every range is 0): at 1280x800 when a handle has room there, else at
-// 1920x1080 (at 1280x800 every part sits at its floor and every range is 0),
-// with a resize leg to the other of the two sizes (SKIPPED when this screen
-// cannot hold it). With the plain example every handle range
-// is zero, so a drag would prove nothing: step 1 fails unless some handle has
-// at least 12 px of room.
+// d42: the drag handles (B7.1, spec 2026-10-28, item 5 and the iteration 2
+// decision), through real mouse input and a real page reload. Standard,
+// Overall scrollbar off, the frozen example with long lists (d42Snapshot:
+// d34Snapshot(true) plus 24 turns for the ticker), EVERY part on, at
+// 1920x1080. A drag may take height from its partner down to the partner's
+// floor and then from the Waits, Outcomes and Sessions lists down to their
+// three-row floor; a handle with no room even then is hidden (display none).
+// This check never switches a part off to make room, and it never skips: a
+// screen that cannot hold 1920x1080 or 1800x1050 is a failure, not a note.
 //   1  reset the saved heights through the real binding, apply the payload,
-//      read every keyed part and every handle range (R0); no handle is a failure
-//   2  pick the handle with the most room; dy is half of it (6 to 60 px)
-//   3  drag the handle with the real mouse (dragSelector); the part above
-//      changes by dy and the part below by -dy within 2 px, no other keyed part
-//      moves more than 1 px, nothing overflows (R1)
-//   4  burnmon-dev-view.json has heights_standard with both keys in (0, 1] and
-//      no heights_plain; the real binding bdevSections returns the same map
-//   5  "reload": the saved map is applied again as a payload; every height
-//      equals R1 within 2 px (R2)
-//   6  resize to the other size: the saved shares still hold (R3), back at the drag size
-//      the heights equal R1 again (R4)
-//   7  real clicks on the gear and on Reset heights: the heights equal R0
-//      within 2 px (R5), the file has no heights_standard and the page state is null
+//      read every keyed part, the three lists and every handle (R0). Every
+//      handle that is shown must have 12 px or more of room somewhere; the
+//      handles reported hidden must be hidden in the DOM and the shown ones
+//      drawn; at least one handle must be shown
+//   2  pick the shown handle with the most room; dy is half of it (6 to 60 px)
+//   3  drag the handle with the real mouse (dragSelector): the growing part
+//      changes by dy within 2 px; its partner loses what it could give and the
+//      host lists lose the rest (partner plus lists add up to dy within 2 px);
+//      the other keyed parts of the column stay within 2 px; the other column
+//      takes the height the lists gave; nothing overflows (R1)
+//   4  burnmon-dev-view.json has heights_standard with the column's keys in
+//      (0, 1], host_lists when the lists gave, and no heights_plain; the real
+//      binding bdevSections returns the same map
+//   5  reload: the page is reloaded for real (evalReload loads the embedded page again; a marker set on
+//      window before it must be gone after). The reloaded page loads its own
+//      state through bdevSections and that state must equal the file; then the
+//      payload is applied with the heights the reloaded page holds. The live
+//      sampler parts (Processes, Process groups) are not replaced by the frozen
+//      example, so the room can differ from the dragged page and pixels cannot be
+//      compared. What survives is proportions: the share of the dragged pair in
+//      its column is within 0.03 of the saved share, and the lists give
+//      host_lists times their shrink range (or what they have above the floor),
+//      within 3 px, measured against the same page's own default layout (R2a)
+//   6  resize to 1800x1050: the saved map is unchanged in the file and the
+//      page; the share of the dragged part is within 0.03 of the saved share,
+//      or every list sits at its floor (says which); back at
+//      1920x1080 the heights equal the reloaded layout (R2) within 2 px (R4)
+//   7  real clicks on the gear and on Reset heights: the heights equal the default
+//      layout of the reloaded page (R2a) within 2 px (R5), the file has no heights_standard and the page state is null
 // The heights are written into the real view file; the wrapper script restores
 // it byte for byte afterwards, and the check sends reset_heights on the way out.
 // Screenshot d42-drag-<size> after step 3.
-
-// d42Off switches the status parts, Processes and To Do off, so the two columns own the page and have free height to hand over.
-var d42Off = map[string]bool{"waits": true, "outcomes": true, "burn": true, "git": true, "agents_map": true, "sessions": true, "processes": true, "todo": true}
 
 var d42Keys = []string{"burn_30min", "vendor_strip", "activity_heatmap", "turn_ticker", "system_chart", "process_groups"}
 
@@ -55,21 +67,48 @@ const d42ReadJS = `(function(){
     var e = document.querySelector(sel[k]);
     h[k] = (e && e.getClientRects().length > 0) ? e.getBoundingClientRect().height : -1;
   });
-  return {handles: window.__bdevFitHandles ? window.__bdevFitHandles() : [], h: h,
-    state: window.__bdevSections.state().heightsStandard};
+  var lists = {};
+  Array.prototype.forEach.call(document.querySelectorAll('#secHost .seclist'), function(e){
+    if(e.getClientRects().length > 0 && !e.closest('.sec-off')) lists[(e.closest('[data-sec]') || e).getAttribute('data-sec') || 'list'] = e.getBoundingClientRect().height;
+  });
+  var ps = document.getElementById('pageScroll'), f = window.__bdevFit || {};
+  var drawn = 0;
+  Array.prototype.forEach.call(document.querySelectorAll('.zonebody > .hdl'), function(e){ if(e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none') drawn++; });
+  return {handles: window.__bdevFitHandles ? window.__bdevFitHandles() : [], drawn: drawn, h: h, lists: lists,
+    state: window.__bdevSections.state().heightsStandard, fitScroll: !!f.fitScroll, items: f.items || [],
+    bodyOver: document.body.scrollHeight - document.body.clientHeight, pageOver: ps.scrollHeight - ps.clientHeight,
+    vw: window.innerWidth, vh: window.innerHeight, psh: ps.clientHeight};
 })()`
 
 type d42Handle struct {
-	Above string `json:"above"`
-	Below string `json:"below"`
-	Min   int    `json:"min"`
-	Max   int    `json:"max"`
+	Above  string `json:"above"`
+	Below  string `json:"below"`
+	Min    int    `json:"min"`
+	Max    int    `json:"max"`
+	Hidden bool   `json:"hidden"`
+}
+
+type d42Item struct {
+	ID    string  `json:"id"`
+	Kind  string  `json:"kind"`
+	H     float64 `json:"h"`
+	Floor float64 `json:"floor"`
+	Nat   float64 `json:"nat"`
 }
 
 type d42Read struct {
-	Handles []d42Handle        `json:"handles"`
-	H       map[string]float64 `json:"h"`
-	State   map[string]float64 `json:"state"`
+	Handles   []d42Handle        `json:"handles"`
+	Drawn     int                `json:"drawn"`
+	H         map[string]float64 `json:"h"`
+	Lists     map[string]float64 `json:"lists"`
+	State     map[string]float64 `json:"state"`
+	FitScroll bool               `json:"fitScroll"`
+	Items     []d42Item          `json:"items"`
+	BodyOver  float64            `json:"bodyOver"`
+	PageOver  float64            `json:"pageOver"`
+	VW        float64            `json:"vw"`
+	VH        float64            `json:"vh"`
+	PSH       float64            `json:"psh"`
 }
 
 func d42Read1() (d42Read, error) {
@@ -162,7 +201,20 @@ func d42MaxDiff(a, b d42Read) (string, float64) {
 			worst, key = d, k
 		}
 	}
+	for k, v := range a.Lists {
+		if d := math.Abs(v - b.Lists[k]); d > worst {
+			worst, key = d, "list "+k
+		}
+	}
 	return key, worst
+}
+
+func d42Sum(m map[string]float64) float64 {
+	s := 0.0
+	for _, v := range m {
+		s += v
+	}
+	return s
 }
 
 func init() {
@@ -178,61 +230,64 @@ func init() {
 		if err != nil {
 			return err
 		}
-		// 1. clean start through the real binding, then the first size that gives a handle room
+		// 1. clean start through the real binding, every part on, at the size Wilco uses
 		if _, err := evalRaw(`(window.bdevSetSections({reset_heights: true}), true)`); err != nil {
 			return err
 		}
 		time.Sleep(500 * time.Millisecond)
-		base := d29Opts{Status: "ok", Snap: snap, Scrollbar: false, StandardOff: d42Off}
+		base := d29Opts{Status: "ok", Snap: snap, Scrollbar: false}
 		payload := d29Payload(base)
-		sizes := [][2]int32{{1280, 800}, {1920, 1080}}
-		var r0 d42Read
+		const dragW, dragH, otherW, otherH = 1920, 1080, 1800, 1050
+		dragTag, otherTag := fmt.Sprintf("%dx%d", dragW, dragH), fmt.Sprintf("%dx%d", otherW, otherH)
+		if err := ensureWindowSizeWH(hwnd, dragW, dragH); err != nil {
+			return err
+		}
+		if windowCapped {
+			return fail("this screen cannot hold %s, so the drag cannot be proven here (a skip would hide that)", dragTag)
+		}
+		time.Sleep(500 * time.Millisecond)
+		if _, err := d34Apply(payload, snap); err != nil {
+			return err
+		}
+		r0, err := d42Read1()
+		if err != nil {
+			return err
+		}
+		if len(r0.H) == 0 || r0.H["burn_30min"] < 0 || r0.H["vendor_strip"] < 0 || r0.H["activity_heatmap"] < 0 || r0.H["turn_ticker"] < 0 || r0.H["system_chart"] < 0 || r0.H["process_groups"] < 0 {
+			return fail("not every part is drawn at %s: %s", dragTag, d42Heights(r0))
+		}
+		if len(r0.Lists) < 3 {
+			return fail("the Waits, Outcomes and Sessions lists are not all drawn (%v)", r0.Lists)
+		}
+		shown, best := 0, -1
 		var hdl d42Handle
-		best := -1
-		dragTag, otherTag := "", ""
-		var otherW, otherH int32
-		for _, sz := range sizes {
-			if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
-				return err
+		for _, h := range r0.Handles {
+			room := h.Max
+			if -h.Min > room {
+				room = -h.Min
 			}
-			tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
-			if windowCapped {
-				fmt.Printf("uicheck: d42: SKIPPED %s, this screen is too small\n", tag)
+			fmt.Printf("uicheck: d42: %s handle %s / %s range %d to %d px, hidden %v\n", dragTag, h.Above, h.Below, h.Min, h.Max, h.Hidden)
+			if h.Hidden {
+				if h.Max-h.Min >= 1 {
+					return fail("handle %s / %s is hidden but has a range of %d to %d px", h.Above, h.Below, h.Min, h.Max)
+				}
 				continue
 			}
-			time.Sleep(500 * time.Millisecond)
-			if _, err := d34Apply(payload, snap); err != nil {
-				return err
+			shown++
+			if h.Max-h.Min < 1 {
+				return fail("handle %s / %s is drawn as a dead bar (range %d to %d px)", h.Above, h.Below, h.Min, h.Max)
 			}
-			r, err := d42Read1()
-			if err != nil {
-				return err
+			if room > best {
+				best, hdl = room, h
 			}
-			if len(r.Handles) == 0 {
-				return fail("there are no drag handles on the page at %s", tag)
-			}
-			bst, bh := -1, d42Handle{}
-			for _, h := range r.Handles {
-				room := h.Max
-				if -h.Min > room {
-					room = -h.Min
-				}
-				if room > bst {
-					bst, bh = room, h
-				}
-				fmt.Printf("uicheck: d42: %s handle %s / %s range %d to %d px\n", tag, h.Above, h.Below, h.Min, h.Max)
-			}
-			if bst >= 12 {
-				r0, hdl, best, dragTag = r, bh, bst, tag
-				o := [2]int32{1600, 900} // a size between the two, so the resize leg moves real room
-				otherW, otherH, otherTag = o[0], o[1], fmt.Sprintf("%dx%d", o[0], o[1])
-				break
-			}
-			fmt.Printf("uicheck: d42: %s has no handle with 12 px of room (largest %d px), trying the next size\n", tag, bst)
 		}
-		if best < 12 {
-			return fail("no handle has room at any size: a zero-range handle proves nothing")
+		if r0.Drawn != shown {
+			return fail("the page draws %d handles, __bdevFitHandles reports %d shown", r0.Drawn, shown)
 		}
+		if shown == 0 || best < 12 {
+			return fail("with every part on at %s no handle has 12 px of room (shown %d, largest %d px)", dragTag, shown, best)
+		}
+		fmt.Printf("uicheck: d42: PASS handles at %s with every part on: %d shown, %d hidden, widest room %d px; %s\n", dragTag, shown, len(r0.Handles)-shown, best, d42Heights(r0))
 		// 2. the drag distance
 		dy := math.Max(6, math.Min(60, math.Round(float64(best)/2)))
 		if -hdl.Min > hdl.Max {
@@ -251,36 +306,55 @@ func init() {
 		if err != nil {
 			return err
 		}
-		var p1 d34Page
-		if err := evalInto(d34ReadJS, &p1); err != nil {
-			return err
-		}
 		if _, err := screenshot(hwnd, "d42-drag-"+dragTag); err != nil {
 			return err
 		}
 		fmt.Printf("uicheck: d42: after the drag: %s\n", d42Heights(r1))
+		grow, part := hdl.Above, hdl.Below
+		if dy < 0 {
+			grow, part = hdl.Below, hdl.Above
+		}
+		g := math.Abs(dy)
+		dGrow := r1.H[grow] - r0.H[grow]
+		dPart := r1.H[part] - r0.H[part]
+		dLists := d42Sum(r1.Lists) - d42Sum(r0.Lists)
 		var bad []string
-		if d := r1.H[hdl.Above] - r0.H[hdl.Above]; math.Abs(d-dy) > 2 {
-			bad = append(bad, fmt.Sprintf("%s changed by %.1f px, want %+.0f", hdl.Above, d, dy))
+		if math.Abs(dGrow-g) > 2 {
+			bad = append(bad, fmt.Sprintf("%s grew by %.1f px, want %.0f", grow, dGrow, g))
 		}
-		if d := r1.H[hdl.Below] - r0.H[hdl.Below]; math.Abs(d+dy) > 2 {
-			bad = append(bad, fmt.Sprintf("%s changed by %.1f px, want %+.0f", hdl.Below, d, -dy))
+		if dPart > 1 || dPart < -g-2 {
+			bad = append(bad, fmt.Sprintf("%s changed by %.1f px, want between %.0f and 0", part, dPart, -g))
 		}
+		if math.Abs((-dPart)+(-dLists)-g) > 2 {
+			bad = append(bad, fmt.Sprintf("partner %.1f px and lists %.1f px do not add up to %.0f", -dPart, -dLists, g))
+		}
+		if dLists > 1 {
+			bad = append(bad, fmt.Sprintf("the lists grew by %.1f px during a drag", dLists))
+		}
+		otherCol := 0.0
 		for _, k := range d42Keys {
 			if k == hdl.Above || k == hdl.Below {
 				continue
 			}
-			if d := math.Abs(r1.H[k] - r0.H[k]); d > 1 {
-				bad = append(bad, fmt.Sprintf("%s moved %.1f px but is not part of the drag", k, d))
+			d := r1.H[k] - r0.H[k]
+			if d42Column[k] == d42Column[hdl.Above] {
+				if math.Abs(d) > 2 {
+					bad = append(bad, fmt.Sprintf("%s moved %.1f px but is not part of the drag", k, d))
+				}
+			} else {
+				otherCol += d
 			}
 		}
-		if p1.BodyOver > 1 {
-			bad = append(bad, fmt.Sprintf("the page overflows by %.1f px", p1.BodyOver))
+		if math.Abs(otherCol-(-dLists)) > 3 {
+			bad = append(bad, fmt.Sprintf("the other column changed by %.1f px but the lists gave %.1f px", otherCol, -dLists))
+		}
+		if r1.BodyOver > 1 {
+			bad = append(bad, fmt.Sprintf("the page overflows by %.1f px", r1.BodyOver))
 		}
 		if len(bad) > 0 {
 			return fail("drag: %s", strings.Join(bad, "; "))
 		}
-		fmt.Printf("uicheck: d42: PASS drag (%s by %+.0f, %s by %+.0f, others within 1 px, overflow %.1f px)\n", hdl.Above, r1.H[hdl.Above]-r0.H[hdl.Above], hdl.Below, r1.H[hdl.Below]-r0.H[hdl.Below], p1.BodyOver)
+		fmt.Printf("uicheck: d42: PASS drag at %s (%s +%.1f, %s %.1f, lists %.1f, other column %+.1f, overflow %.1f px)\n", dragTag, grow, dGrow, part, dPart, dLists, otherCol, r1.BodyOver)
 		// 4. on disk and through the binding
 		file, plain, err := d42FileHeights(func(s map[string]float64, _ bool) bool { return s != nil })
 		if err != nil {
@@ -292,6 +366,11 @@ func init() {
 		for _, k := range []string{hdl.Above, hdl.Below} {
 			if v, ok := file[k]; !ok || !(v > 0 && v <= 1) {
 				return fail("heights_standard[%s] = %v, want a value in (0, 1]", k, v)
+			}
+		}
+		if dLists < -1 {
+			if v, ok := file["host_lists"]; !ok || !(v > 0 && v <= 1) {
+				return fail("the lists gave %.1f px but heights_standard[host_lists] = %v", -dLists, v)
 			}
 		}
 		if plain {
@@ -324,8 +403,74 @@ func init() {
 			}
 		}
 		fmt.Printf("uicheck: d42: PASS saved (file and bdevSections agree: %v, no heights_plain)\n", file)
-		// 5. "reload": the saved map applied again
-		withSaved, err := d41Payload(base, map[string]any{"heights_standard": viaGo})
+		// 5. a real reload of the page; the reloaded page must load the saved state by itself
+		if _, err := evalRaw(`(window.__d42Marker = 'before the reload', true)`); err != nil {
+			return err
+		}
+		if err := evalReload(); err != nil {
+			return err
+		}
+		var reloaded struct {
+			Marker string             `json:"marker"`
+			Ready  bool               `json:"ready"`
+			State  map[string]float64 `json:"state"`
+		}
+		deadline := time.Now().Add(20 * time.Second)
+		time.Sleep(600 * time.Millisecond)
+		var lastErr error
+		for time.Now().Before(deadline) {
+			reloaded.Ready = false
+			lastErr = evalInto(`(function(){ var s = window.__bdevSections ? window.__bdevSections.state() : null; return {marker: window.__d42Marker || '', ready: !!s, state: s ? s.heightsStandard : null}; })()`, &reloaded)
+			if lastErr == nil && reloaded.Ready && reloaded.State != nil {
+				break
+			}
+			time.Sleep(300 * time.Millisecond)
+		}
+		if reloaded.Marker != "" {
+			return fail("the page was not reloaded: window.__d42Marker is still %q", reloaded.Marker)
+		}
+		if !reloaded.Ready {
+			var diag string
+			_ = evalInto(`(location.href.slice(0, 40) + ' | ' + document.documentElement.outerHTML.length + ' | ' + typeof window.__bdevSections)`, &diag)
+			return fail("the page did not come back after location.reload within 20 s (last eval error %v, page says %q)", lastErr, diag)
+		}
+		if reloaded.State == nil {
+			return fail("the reloaded page loaded no heights_standard from the view file")
+		}
+		if len(reloaded.State) != len(file) {
+			return fail("the reloaded page holds %v, the file %v", reloaded.State, file)
+		}
+		for k, v := range file {
+			if math.Abs(reloaded.State[k]-v) > 1e-9 {
+				return fail("the reloaded page holds heights[%s] = %v, the file %v", k, reloaded.State[k], v)
+			}
+		}
+		fileAfter, _, err := d42FileHeights(func(s map[string]float64, _ bool) bool { return s != nil })
+		if err != nil {
+			return err
+		}
+		for k, v := range file {
+			if math.Abs(fileAfter[k]-v) > 1e-9 {
+				return fail("the file changed by the reload: %v, was %v", fileAfter, file)
+			}
+		}
+		// The Processes and Process groups parts show the live sampler, which the frozen
+		// example does not replace, so their rows (and with them the room the columns
+		// have) can differ between the page before and the page after the reload. The
+		// reloaded page is therefore compared with its own default layout (r2a, no
+		// saved heights), not with the pixels of the page that was dragged.
+		noHeights, err := d41Payload(base, map[string]any{})
+		if err != nil {
+			return err
+		}
+		if _, err := d34Apply(noHeights, snap); err != nil {
+			return err
+		}
+		r2a, err := d42Read1()
+		if err != nil {
+			return err
+		}
+		withSaved, err := d41Payload(base, map[string]any{"heights_standard": reloaded.State})
 		if err != nil {
 			return err
 		}
@@ -336,69 +481,118 @@ func init() {
 		if err != nil {
 			return err
 		}
-		if k, d := d42MaxDiff(r1, r2); d > 2 {
-			return fail("after the reload %s differs by %.1f px from the dragged height", k, d)
+		// What survives a reload is the saved proportions, not pixels: the share of
+		// each part in its column and the fraction of the lists' shrink range the
+		// drag took. So the checks are on those, against this page's own default.
+		colSum := func(r d42Read) float64 {
+			s := 0.0
+			for _, k := range d42Keys {
+				if d42Column[k] == d42Column[hdl.Above] && r.H[k] > 0 {
+					s += r.H[k]
+				}
+			}
+			return s
 		}
-		fmt.Printf("uicheck: d42: PASS reload (%s)\n", d42Heights(r2))
-		// 6. resize to the other size and back
-		sizeW := func(t string) int32 { var w, h int32; fmt.Sscanf(t, "%dx%d", &w, &h); return w }
-		sizeH := func(t string) int32 { var w, h int32; fmt.Sscanf(t, "%dx%d", &w, &h); return h }
+		savedColSum := 0.0
+		for _, k := range d42Keys {
+			if d42Column[k] == d42Column[hdl.Above] {
+				savedColSum += file[k]
+			}
+		}
+		var badReload []string
+		for _, k := range []string{hdl.Above, hdl.Below} {
+			want, got := file[k]/savedColSum, r2.H[k]/colSum(r2)
+			if math.Abs(got-want) > 0.03 {
+				badReload = append(badReload, fmt.Sprintf("%s has share %.4f of its column, saved %.4f", k, got, want))
+			}
+		}
+		rng, availDefault := 0.0, 0.0
+		for _, it := range r2a.Items {
+			if it.Kind == "seclist" {
+				rng += it.Nat - it.Floor
+				availDefault += math.Max(0, it.H-it.Floor)
+			}
+		}
+		wantLists := 0.0
+		if f, ok := file["host_lists"]; ok {
+			wantLists = math.Min(f*rng, availDefault)
+		}
+		gotLists := d42Sum(r2a.Lists) - d42Sum(r2.Lists)
+		if math.Abs(gotLists-wantLists) > 3 {
+			badReload = append(badReload, fmt.Sprintf("the lists gave %.1f px relative to the default, host_lists %.4f of a %.0f px range with %.0f px available gives %.1f px", gotLists, file["host_lists"], rng, availDefault, wantLists))
+		}
+		if gotGrow := r2.H[grow] - r2a.H[grow]; gotGrow < 3 {
+			badReload = append(badReload, fmt.Sprintf("%s is only %.1f px taller than its default, the saved layout is not visible", grow, gotGrow))
+		}
+		if len(badReload) > 0 {
+			return fail("after the reload: %s (default: %s; saved layout: %s; saved %v; list items default %s, saved %s; viewport %.0fx%.0f)", strings.Join(badReload, "; "), d42Heights(r2a), d42Heights(r2), reloaded.State, d42Items(r2a), d42Items(r2), r2.VW, r2.VH)
+		}
+		_, drift := d42MaxDiff(r1, r2)
+		fmt.Printf("uicheck: d42: PASS reload (page reloaded, state read from the reloaded page equals the file; shares kept within 0.03, lists gave %.1f px (expected %.1f); %s; largest difference to the dragged page %.1f px)\n", gotLists, wantLists, d42Heights(r2), drift)
+		// 6. resize to a smaller size and back
 		if err := ensureWindowSizeWH(hwnd, otherW, otherH); err != nil {
-			return err
+			return fail("the resize leg could not run: %v", err)
 		}
 		if windowCapped {
-			fmt.Printf("uicheck: d42: SKIPPED the %s resize leg, this screen is too small\n", otherTag)
-		} else {
-			time.Sleep(800 * time.Millisecond)
-			r3, err := d42Read1()
-			if err != nil {
-				return err
-			}
-			sum := 0.0
-			for _, k := range d42Keys {
-				if d42Column[k] == d42Column[hdl.Above] && r3.H[k] > 0 {
-					sum += r3.H[k]
-				}
-			}
-			share := r3.H[hdl.Above] / sum
-			saved := viaGo[hdl.Above]
-			ratio := r3.H[hdl.Above] / r3.H[hdl.Below]
-			savedRatio := viaGo[hdl.Above] / viaGo[hdl.Below]
-			bound := ""
-			for _, h := range r3.Handles {
-				if h.Above == hdl.Above && h.Below == hdl.Below && (h.Min == 0 || h.Max == 0) {
-					bound = "a floor or cap binds (a handle range edge is 0)"
-				}
-			}
-			if hdl.Above == "vendor_strip" || hdl.Above == "process_groups" || hdl.Below == "vendor_strip" || hdl.Below == "process_groups" {
-				if bound == "" {
-					bound = "a list part is in the pair and its cap can bind"
-				}
-			}
-			okShare := math.Abs(share-saved) <= 0.03
-			okRatio := math.Abs(ratio-savedRatio) <= 0.05*savedRatio
-			fmt.Printf("uicheck: d42: %s: %s share %.4f (saved %.4f), ratio %.3f (saved %.3f), %s\n", otherTag, hdl.Above, share, saved, ratio, savedRatio, d42Heights(r3))
-			if (!okShare || !okRatio) && bound == "" {
-				return fail("after the resize the share is %.4f (saved %.4f) and the ratio %.3f (saved %.3f), and no floor or cap binds", share, saved, ratio, savedRatio)
-			}
-			if okShare && okRatio {
-				fmt.Printf("uicheck: d42: PASS resize (share and ratio kept)\n")
-			} else {
-				fmt.Printf("uicheck: d42: NOTE resize leg is not a pass: %s\n", bound)
-			}
-			if err := ensureWindowSizeWH(hwnd, sizeW(dragTag), sizeH(dragTag)); err != nil {
-				return err
-			}
-			time.Sleep(800 * time.Millisecond)
-			r4, err := d42Read1()
-			if err != nil {
-				return err
-			}
-			if k, d := d42MaxDiff(r1, r4); d > 2 {
-				return fail("back at %s %s differs by %.1f px from the dragged height", dragTag, k, d)
-			}
-			fmt.Printf("uicheck: d42: PASS back at %s (%s)\n", dragTag, d42Heights(r4))
+			return fail("the resize leg could not run: this screen cannot hold %s", otherTag)
 		}
+		time.Sleep(800 * time.Millisecond)
+		r3, err := d42Read1()
+		if err != nil {
+			return err
+		}
+		var onDisk map[string]float64
+		if onDisk, _, err = d42FileHeights(func(s map[string]float64, _ bool) bool { return s != nil }); err != nil {
+			return err
+		}
+		for k, v := range file {
+			if math.Abs(onDisk[k]-v) > 1e-9 || math.Abs(r3.State[k]-v) > 1e-9 {
+				return fail("the resize changed the saved heights: file %v, page %v, saved %v", onDisk, r3.State, file)
+			}
+		}
+		sum := 0.0
+		for _, k := range d42Keys {
+			if d42Column[k] == d42Column[hdl.Above] && r3.H[k] > 0 {
+				sum += r3.H[k]
+			}
+		}
+		share, savedSum := r3.H[hdl.Above]/sum, 0.0
+		for _, k := range d42Keys {
+			if d42Column[k] == d42Column[hdl.Above] {
+				savedSum += file[k]
+			}
+		}
+		saved := file[hdl.Above] / savedSum
+		listsAtFloor, nLists := true, 0
+		for _, it := range r3.Items {
+			if it.Kind == "seclist" {
+				nLists++
+				if it.H > it.Floor+1 {
+					listsAtFloor = false
+				}
+			}
+		}
+		fmt.Printf("uicheck: d42: %s: %s share %.4f (saved %.4f), %s\n", otherTag, hdl.Above, share, saved, d42Heights(r3))
+		switch {
+		case math.Abs(share-saved) <= 0.03:
+			fmt.Printf("uicheck: d42: PASS resize to %s (share kept within 0.03)\n", otherTag)
+		case nLists > 0 && listsAtFloor:
+			fmt.Printf("uicheck: d42: PASS resize to %s (share %.4f differs from %.4f because every list sits at its floor and the saved draw cannot be honored in full)\n", otherTag, share, saved)
+		default:
+			return fail("after the resize the share is %.4f (saved %.4f) and the lists are not at their floor", share, saved)
+		}
+		if err := ensureWindowSizeWH(hwnd, dragW, dragH); err != nil {
+			return err
+		}
+		time.Sleep(800 * time.Millisecond)
+		r4, err := d42Read1()
+		if err != nil {
+			return err
+		}
+		if k, d := d42MaxDiff(r2, r4); d > 2 {
+			return fail("back at %s %s differs by %.1f px from the reloaded layout", dragTag, k, d)
+		}
+		fmt.Printf("uicheck: d42: PASS back at %s (%s)\n", dragTag, d42Heights(r4))
 		// 7. Reset heights with real clicks
 		bringToFront(hwnd)
 		time.Sleep(200 * time.Millisecond)
@@ -416,8 +610,8 @@ func init() {
 		}
 		bringToFront(hwnd)
 		_ = pressKey(vkEscape)
-		if k, d := d42MaxDiff(r0, r5); d > 2 {
-			return fail("after Reset heights %s differs by %.1f px from the default", k, d)
+		if k, d := d42MaxDiff(r2a, r5); d > 2 {
+			return fail("after Reset heights %s differs by %.1f px from the default layout (default %s, after Reset %s)", k, d, d42Heights(r2a), d42Heights(r5))
 		}
 		after, plainAfter, err := d42FileHeights(func(s map[string]float64, _ bool) bool { return s == nil })
 		if err != nil {
@@ -438,6 +632,23 @@ func d42Heights(r d42Read) string {
 	var b []string
 	for _, k := range d42Keys {
 		b = append(b, fmt.Sprintf("%s %.0f", k, r.H[k]))
+	}
+	var l []string
+	for _, k := range []string{"waits", "outcomes", "sessions"} {
+		if v, ok := r.Lists[k]; ok {
+			l = append(l, fmt.Sprintf("%s %.0f", k, v))
+		}
+	}
+	return strings.Join(b, ", ") + " | lists " + strings.Join(l, ", ")
+}
+
+// d42Items prints the fit items (id h/floor/nat) of the host lists, for a failure message.
+func d42Items(r d42Read) string {
+	var b []string
+	for _, it := range r.Items {
+		if it.Kind == "seclist" {
+			b = append(b, fmt.Sprintf("%s %.0f/%.0f/%.0f", it.ID, it.H, it.Floor, it.Nat))
+		}
 	}
 	return strings.Join(b, ", ")
 }

@@ -134,6 +134,7 @@ main{flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; pad
 .zonebody{flex:1; min-height:0; padding:4px; display:flex; flex-direction:column; gap:4px; overflow:hidden; position:relative}
 .hdl{position:absolute; left:4px; right:4px; height:4px; cursor:row-resize; background:transparent; z-index:3; touch-action:none}
 .hdl:hover, .hdl.drag{background:var(--amber)}
+.hdl.hdl-off{display:none}
 .hdl:focus-visible{outline:2px solid var(--amber2)}
 /* overflow:hidden is a blanket no-scroll patch section 3 backstop: any
    panel squeezed below its own content's natural size (a genuinely tiny
@@ -3241,6 +3242,10 @@ body.plain #mapOverlay{font-size:13.5px}
   //   the same line; To Do and Processes sit below both.
   //   The host lists (Waits on you, Outcomes, Sessions) give last, after every
   //   legacy part, down to three rows each, scrollbar off only (B7.1).
+  //   A drag on a handle is an explicit choice and overrides that order: the part
+  //   that grows takes from its partner, then from the host lists (fitDragRange),
+  //   and the fraction of the lists' range taken is saved as host_lists next to the
+  //   shares; a handle with no room even then is hidden (iteration 2).
   //   Every part at its floor and still too tall: body.fit-scroll lets the page
   //   scroll. Nothing is hidden, so window.__bdevFit.hidden is always [].
   // Every pass starts from the CSS layout again: fitUndo gives the inline sizes back.
@@ -3434,17 +3439,40 @@ body.plain #mapOverlay{font-size:13.5px}
     fitLast.keys.forEach(function(k){ fitLast.cols[k].items.forEach(function(it){ if(it.key === key) r = it; }); });
     return r;
   }
-  function fitDragRange(A, B, hA, hB){
+  // The range of one handle in px. The part that grows takes first from its partner (down to the
+  // partner's floor), then from the host lists (Waits, Outcomes, Sessions) down to their three-row
+  // floor: avail is what the lists can give. A drag is an explicit choice, so it may take from the
+  // lists although the automatic fit pass lets them give last (B7.1, iteration 2).
+  function fitDragRange(A, B, hA, hB, avail){
+    avail = avail || 0;
     var capA = A.kind === 'list' ? Math.max(A.nat, hA) : Infinity, capB = B.kind === 'list' ? Math.max(B.nat, hB) : Infinity;
-    return { min: Math.max(A.floor - hA, hB - capB), max: Math.min(capA - hA, hB - B.floor) };
+    return { min: Math.max(A.floor - hA - avail, hB - capB), max: Math.min(capA - hA, hB - B.floor + avail) };
+  }
+  // Pure: the host list heights after taking y px from them, in proportion to the room each has above its floor.
+  function fitDrawLists(items, hs, y){
+    var rooms = items.map(function(it, i){ return Math.max(0, hs[i] - it.floor); }), sum = 0;
+    rooms.forEach(function(r){ sum += r; });
+    if(sum <= 0.5 || y <= 0) return hs.slice();
+    var g = Math.min(y, sum);
+    return hs.map(function(h, i){ return h - g * rooms[i] / sum; });
+  }
+  function fitColHasShares(c, sh){
+    var its = c.items.filter(function(it){ return it.key; });
+    return its.length >= 2 && its.every(function(it){ return sh[it.key] > 0; });
+  }
+  function fitHostAvail(){
+    if(!fitLast || !fitLast.canDraw) return 0;
+    var s = 0;
+    fitLast.host.forEach(function(it){ s += Math.max(0, fitLiveH(it) - it.floor); });
+    return s;
   }
   function fitClearHandles(){
     Array.prototype.forEach.call(document.querySelectorAll('.zonebody > .hdl'), function(h){ h.parentNode.removeChild(h); });
   }
   // One 4 px bar over the row gap between two neighbouring resizable parts of a column.
-  function fitPlaceHandles(cols, keys){
+  function fitPlaceHandles(cols, keys, host, hostX, hostR, canDraw){
     fitClearHandles();
-    fitLast = { cols: cols, keys: keys };
+    fitLast = { cols: cols, keys: keys, host: host, X: hostX, R: hostR, canDraw: canDraw };
     keys.forEach(function(k){
       var c = cols[k], bodyEl = c.bodyEl, bodyRect = bodyEl.getBoundingClientRect(), groups = [];
       Array.prototype.forEach.call(bodyEl.children, function(el){
@@ -3463,6 +3491,12 @@ body.plain #mapOverlay{font-size:13.5px}
         h.setAttribute('aria-label', 'Resize ' + g1.key + ' and ' + g2.key);
         h.style.top = Math.round(r1.bottom - bodyRect.top + (r2.top - r1.bottom - 4) / 2) + 'px';
         bodyEl.appendChild(h);
+        // No room even with the host lists at their floor: not drawn, not a dead bar.
+        var A = fitFind(g1.key), B = fitFind(g2.key);
+        if(A && B){
+          var rg = fitDragRange(A, B, fitLiveH(A), fitLiveH(B), fitHostAvail());
+          if(rg.max - rg.min < 1) h.classList.add('hdl-off');
+        }
       }
     });
   }
@@ -3473,7 +3507,9 @@ body.plain #mapOverlay{font-size:13.5px}
     var A = fitFind(h.getAttribute('data-above')), B = fitFind(h.getAttribute('data-below'));
     if(!A || !B) return;
     var hA = fitLiveH(A), hB = fitLiveH(B);
-    fitDrag = { h: h, A: A, B: B, hA: hA, hB: hB, y0: e.clientY, top0: parseFloat(h.style.top) || 0, r: fitDragRange(A, B, hA, hB), d: 0 };
+    var host = (fitLast && fitLast.canDraw) ? fitLast.host.map(function(it){ return { it: it, h0: fitLiveH(it) }; }) : [];
+    fitDrag = { h: h, A: A, B: B, hA: hA, hB: hB, y0: e.clientY, top0: parseFloat(h.style.top) || 0,
+      r: fitDragRange(A, B, hA, hB, fitHostAvail()), d: 0, y: 0, host: host, X0: fitLast ? fitLast.X : 0, R0: fitLast ? fitLast.R : 0 };
     h.classList.add('drag');
     try { h.setPointerCapture(e.pointerId); } catch(err) {}
     e.preventDefault();
@@ -3482,8 +3518,15 @@ body.plain #mapOverlay{font-size:13.5px}
     if(!fitDrag) return;
     var d = Math.max(fitDrag.r.min, Math.min(fitDrag.r.max, e.clientY - fitDrag.y0));
     fitDrag.d = d;
-    fitSetPx(fitDrag.A.el, fitDrag.hA + d);
-    fitSetPx(fitDrag.B.el, fitDrag.hB - d);
+    // The growing part takes from its partner down to the partner's floor, the rest from the host lists.
+    var up = d > 0, g = Math.abs(d), G = up ? fitDrag.A : fitDrag.B, S = up ? fitDrag.B : fitDrag.A;
+    var hG = up ? fitDrag.hA : fitDrag.hB, hS = up ? fitDrag.hB : fitDrag.hA;
+    var take = Math.max(0, Math.min(g, hS - S.floor));
+    fitDrag.y = g - take;
+    fitSetPx(G.el, hG + g);
+    fitSetPx(S.el, hS - take);
+    var nh = fitDrawLists(fitDrag.host.map(function(x){ return x.it; }), fitDrag.host.map(function(x){ return x.h0; }), fitDrag.y);
+    fitDrag.host.forEach(function(x, i){ fitSetPx(x.it.el, nh[i]); });
     fitDrag.h.style.top = Math.round(fitDrag.top0 + d) + 'px';
   });
   function fitDragEnd(){
@@ -3499,6 +3542,10 @@ body.plain #mapOverlay{font-size:13.5px}
     var cur = secState.plain ? secState.heightsPlain : secState.heightsStandard, merged = {};
     if(cur) Object.keys(cur).forEach(function(k){ merged[k] = cur[k]; });
     its.forEach(function(it){ merged[it.key] = Math.round(fitLiveH(it) / sum * 10000) / 10000; });
+    // What the drag took from the host lists, as a fraction of their shrink range (nat down to floor).
+    var X = (dr.X0 || 0) + (dr.y || 0);
+    if(X >= 1 && dr.R0 > 0) merged.host_lists = Math.max(0.0001, Math.min(1, Math.round(X / dr.R0 * 10000) / 10000));
+    else delete merged.host_lists;
     if(secState.plain) secState.heightsPlain = merged; else secState.heightsStandard = merged;
     secSend({ heights_mode: secState.plain ? 'plain' : 'standard', heights: merged });
     applyPanelFit();
@@ -3513,8 +3560,8 @@ body.plain #mapOverlay{font-size:13.5px}
     Array.prototype.forEach.call(document.querySelectorAll('.zonebody > .hdl'), function(h){
       var a = h.getAttribute('data-above'), b = h.getAttribute('data-below'), A = fitFind(a), B = fitFind(b);
       if(!A || !B) return;
-      var r = fitDragRange(A, B, fitLiveH(A), fitLiveH(B));
-      out.push({ above: a, below: b, min: cl(r.min), max: cl(r.max) });
+      var r = fitDragRange(A, B, fitLiveH(A), fitLiveH(B), fitHostAvail());
+      out.push({ above: a, below: b, min: cl(r.min), max: cl(r.max), hidden: h.classList.contains('hdl-off') });
     });
     return out;
   };
@@ -3647,6 +3694,26 @@ body.plain #mapOverlay{font-size:13.5px}
         }
         if(!keys.length && below.length) fitAbsorb(below, B - total());
       }
+      // A drag took height from the host lists (B7.1 iteration 2): shrink them by the saved fraction of
+      // their range, down to their floor, and give the same height to every column (two side by side
+      // end on one line; one column takes it alone). Stacked columns do not take part, the freed height
+      // could not be told apart between them. The automatic order above is untouched: this runs only
+      // when a column carries saved shares.
+      var hostX = 0, hostR = 0;
+      hostItems.forEach(function(it){ hostR += it.nat - it.floor; });
+      var canDraw = hostItems.length > 0 && lgOn && keys.length > 0 && (two || keys.length === 1);
+      var shm = secState.plain ? secState.heightsPlain : secState.heightsStandard;
+      if(canDraw && shm && shm.host_lists > 0 && hostR > 0 && keys.some(function(k){ return fitColHasShares(cols[k], shm); })){
+        var avail0 = 0;
+        hostItems.forEach(function(it){ avail0 += Math.max(0, it.h - it.floor); });
+        hostX = Math.min(shm.host_lists * hostR, avail0);
+        if(hostX >= 1){
+          var nh = fitDrawLists(hostItems, hostItems.map(function(it){ return it.h; }), hostX);
+          hostItems.forEach(function(it, i){ it.h = nh[i]; });
+          keys.forEach(function(k){ fitAbsorb(cols[k].items, hostX); });
+          B += hostX;
+        } else hostX = 0;
+      }
       fitApplyShares(cols, keys);
       // Apply the sizes.
       all.forEach(function(it){
@@ -3663,7 +3730,7 @@ body.plain #mapOverlay{font-size:13.5px}
         lg.style.flex = '0 0 auto';
         if(scroll) lg.style.height = Math.ceil(total()) + 'px';
       }
-      fitPlaceHandles(cols, keys);
+      fitPlaceHandles(cols, keys, hostItems, hostX, hostR, canDraw);
       keys.forEach(function(k){
         var g = cols[k].items.filter(function(it){ return it.kind === 'chart' || it.kind === 'ticker'; })[0];
         fit.columns.push({ name: k, free: Math.round(B - total()), grower: g ? (g.el.id || g.kind) : '' });

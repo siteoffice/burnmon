@@ -595,3 +595,14 @@ func TestSetSectionsHeightsFromPage(t *testing.T) {
 		t.Errorf("reset left %v / %v", got.HeightsStandard, got.HeightsPlain)
 	}
 }
+
+func TestSetSectionsHeightsAcceptsHostLists(t *testing.T) {
+	dir := t.TempDir()
+	h := map[string]float64{"burn_30min": 0.4, "turn_ticker": 0.6, "host_lists": 0.25}
+	if err := applySectionsChange(dir, sectionsChange{HeightsMode: "standard", Heights: h}); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadSections(dir).HeightsStandard; got["host_lists"] != 0.25 || len(got) != 3 {
+		t.Fatalf("saved %v", got)
+	}
+}

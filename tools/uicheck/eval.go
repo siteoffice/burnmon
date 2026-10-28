@@ -59,6 +59,34 @@ func evalRaw(script string) (json.RawMessage, error) {
 	return resp.Value, nil
 }
 
+// evalReload asks burnmon-dev's eval server to load the page again from the
+// embedded document, the way the window started (location.reload would land on
+// about:blank because the page is made with SetHtml). It returns once the
+// request is accepted; the caller polls until the new page answers.
+func evalReload() error {
+	conn, err := net.DialTimeout("tcp", currentEvalAddr, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(15 * time.Second))
+	if _, err := conn.Write([]byte("{\"reload\":true}\n")); err != nil {
+		return err
+	}
+	line, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		return err
+	}
+	var resp evalResponse
+	if err := json.Unmarshal([]byte(line), &resp); err != nil {
+		return fmt.Errorf("bad response %q: %w", line, err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("reload refused: %s", resp.Error)
+	}
+	return nil
+}
+
 func evalString(script string) (string, error) {
 	raw, err := evalRaw(script)
 	if err != nil {

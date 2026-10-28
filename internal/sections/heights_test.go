@@ -96,3 +96,26 @@ func TestHeightsDoNotDisturbOtherSwitches(t *testing.T) {
 		t.Fatalf("WithPlain lost heights: %v", got)
 	}
 }
+
+func TestHostListsKeyRoundTripAndOldMapLoads(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "view.json")
+	// An older file: heights without host_lists loads as it is.
+	if err := writeRaw(p, `{"heights_standard": {"burn_30min": 0.4, "turn_ticker": 0.6}}`); err != nil {
+		t.Fatal(err)
+	}
+	old := Load(p)
+	if len(old.HeightsStandard) != 2 || old.HeightsStandard["host_lists"] != 0 {
+		t.Fatalf("old heights = %v", old.HeightsStandard)
+	}
+	h := map[string]float64{"burn_30min": 0.4, "turn_ticker": 0.6, "host_lists": 0.3}
+	if err := Save(p, Default().WithHeights("standard", h)); err != nil {
+		t.Fatal(err)
+	}
+	if got := Load(p).HeightsStandard; !reflect.DeepEqual(got, h) {
+		t.Fatalf("round trip = %v, want %v", got, h)
+	}
+	// host_lists alone is a valid key with the same range rule as the shares.
+	if got := Default().WithHeights("standard", map[string]float64{"host_lists": 1.2}).HeightsStandard; got != nil {
+		t.Fatalf("host_lists 1.2 kept: %v", got)
+	}
+}

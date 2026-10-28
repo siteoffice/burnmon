@@ -40,7 +40,9 @@ import (
 //     columns both columns end on the same line (within 2 px).
 // The drag handles (.hdl, B7.1) are 4 px bars laid over the row gap: the gap
 // measures ignore them, and each handle is checked for its own rectangle (4 px
-// tall, inside its zonebody, not over a part).
+// tall, inside its zonebody, not over a part). A handle with no room (iteration 2:
+// even with the host lists at their floor) is hidden, so at fit-scroll, where every
+// part and list sits at its floor, no handle may be drawn: a drawn dead bar fails.
 // A probe proves the measure can fail: a 100 px gap is pushed into a column
 // and the same read must report it (d34Probe), once per run.
 // A window size the screen cannot hold prints SKIPPED and is not a pass.
@@ -248,6 +250,9 @@ func d34Verify(p d34Page, scrollbar, wantTodo, caseE bool) []string {
 	}
 	if p.HandleBad != "" {
 		bad = append(bad, "drag handles: "+p.HandleBad)
+	}
+	if p.FitScroll && p.Handles != 0 {
+		bad = append(bad, fmt.Sprintf("%d drag handle(s) are drawn although every part sits at its floor (a handle without room must be hidden)", p.Handles))
 	}
 	if caseE {
 		long := 0
