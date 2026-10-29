@@ -232,8 +232,12 @@ func fmtDur(sec int64) string {
 
 // programsOf counts every process started, directly or not, by the processes a
 // session runs in, and how many there are per image name. Command lines are
-// never read.
+// never read. The answer is kept: the model does not change after newModel,
+// and the fold loop counts the same sessions many times.
 func (m *model) programsOf(session string) (int, map[string]int) {
+	if p, ok := m.programs[session]; ok {
+		return p.n, p.names
+	}
 	names := map[string]int{}
 	seen := map[string]bool{}
 	count := 0
@@ -253,6 +257,7 @@ func (m *model) programsOf(session string) (int, map[string]int) {
 			walk(e.To)
 		}
 	}
+	m.programs[session] = programCount{n: count, names: names}
 	return count, names
 }
 

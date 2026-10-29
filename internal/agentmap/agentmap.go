@@ -110,6 +110,12 @@ type model struct {
 	waiters  map[string]bool   // ids that wait on a person, a gate counted as its flow
 	visited  map[string]bool
 	groupFor map[string]bool // sprint or flow ids that took a card
+	programs map[string]programCount // programsOf per session; the fold loop asks again and again
+}
+
+type programCount struct {
+	n     int
+	names map[string]int
 }
 
 func isAgent(n graph.Node) bool { return n.Kind == graph.KindSession || n.Kind == graph.KindSubagent }
@@ -119,7 +125,7 @@ func isAgent(n graph.Node) bool { return n.Kind == graph.KindSession || n.Kind =
 func newModel(nodes []graph.Node, edges []graph.Edge) *model {
 	m := &model{nodes: map[string]graph.Node{}, out: map[string][]graph.Edge{}, spawned: map[string][]string{},
 		hasPar: map[string]bool{}, gateOf: map[string]string{}, waiters: map[string]bool{},
-		visited: map[string]bool{}, groupFor: map[string]bool{}}
+		visited: map[string]bool{}, groupFor: map[string]bool{}, programs: map[string]programCount{}}
 	for _, n := range nodes {
 		if _, dup := m.nodes[n.ID]; !dup {
 			m.nodes[n.ID] = n

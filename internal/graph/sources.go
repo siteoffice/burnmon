@@ -79,10 +79,41 @@ type SubagentMeta struct {
 	root  string
 	mu    sync.Mutex
 	cache map[string]SubagentInfo
+	// subDir is the subagents folder a parent was found in; a session's
+	// folder does not move, so later subagents of it skip the scan.
+	subDir map[string]string
 }
 
 func NewSubagentMeta(projectsRoot string) *SubagentMeta {
-	return &SubagentMeta{root: projectsRoot, cache: map[string]SubagentInfo{}}
+	return &SubagentMeta{root: projectsRoot, cache: map[string]SubagentInfo{}, subDir: map[string]string{}}
+}
+
+// metaPath finds agent-<id>.meta.json under <root>\<project>\<parent>\subagents.
+// It stats one candidate per project folder instead of a Glob, which lists
+// every project folder (thousands of transcripts) on every call. Same order
+// as the Glob it replaces: project folders sorted by name, first hit wins.
+func (m *SubagentMeta) metaPath(parent, id string) string {
+	file := "agent-" + id + ".meta.json"
+	if dir, ok := m.subDir[parent]; ok {
+		if fi, err := os.Stat(filepath.Join(dir, file)); err == nil && !fi.IsDir() {
+			return filepath.Join(dir, file)
+		}
+	}
+	entries, err := os.ReadDir(m.root)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(m.root, e.Name(), parent, "subagents")
+		if fi, err := os.Stat(filepath.Join(dir, file)); err == nil && !fi.IsDir() {
+			m.subDir[parent] = dir
+			return filepath.Join(dir, file)
+		}
+	}
+	return ""
 }
 
 func (m *SubagentMeta) Lookup(parent, id string) (SubagentInfo, bool) {
@@ -92,11 +123,11 @@ func (m *SubagentMeta) Lookup(parent, id string) (SubagentInfo, bool) {
 	if info, ok := m.cache[key]; ok {
 		return info, true
 	}
-	matches, _ := filepath.Glob(filepath.Join(m.root, "*", parent, "subagents", "agent-"+id+".meta.json"))
-	if len(matches) == 0 {
+	path := m.metaPath(parent, id)
+	if path == "" {
 		return SubagentInfo{}, false
 	}
-	b, err := os.ReadFile(matches[0])
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return SubagentInfo{}, false
 	}

@@ -76,6 +76,16 @@ func TestSubagentMeta(t *testing.T) {
 	if _, ok := m.Lookup("parent-1", "zz"); ok {
 		t.Fatal("found a meta file that does not exist")
 	}
+	// A subagent that starts later is found through the remembered folder,
+	// and a parent in another project folder still through the scan.
+	write(t, filepath.Join(root, "C--w", "parent-1", "subagents", "agent-a2.meta.json"), `{"agentType":"Plan","model":"opus"}`)
+	write(t, filepath.Join(root, "C--x", "parent-2", "subagents", "agent-b1.meta.json"), `{"agentType":"general","model":"haiku"}`)
+	if info, ok := m.Lookup("parent-1", "a2"); !ok || info.AgentType != "Plan" {
+		t.Fatalf("later subagent = %+v, %v", info, ok)
+	}
+	if info, ok := m.Lookup("parent-2", "b1"); !ok || info.Model != "haiku" {
+		t.Fatalf("other project = %+v, %v", info, ok)
+	}
 }
 
 func TestMCPConfig(t *testing.T) {
