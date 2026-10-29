@@ -61,10 +61,7 @@ func caseD11(hwnd uintptr, args []string) error {
 
 	time.Sleep(30 * time.Second)
 
-	type mark struct {
-		Name string  `json:"name"`
-		T    float64 `json:"t"`
-	}
+	type mark = d11Mark
 	var log []mark
 	if err := evalInto(`window.__bdevPaintLog || []`, &log); err != nil {
 		return fmt.Errorf("read paint log: %w", err)
@@ -134,6 +131,20 @@ func caseD11(hwnd uintptr, args []string) error {
 			return fmt.Errorf("tick %d: panel paints spread over %.1fms (want within ~%.0fms, one frame) - some panel is painting outside the shared requestAnimationFrame", i, spread, frameToleranceMs)
 		}
 	}
+
+	// The fit pass gets its own budget (B7.2 spec scope item 9), since the
+	// spread above leaves it out.
+	var fitMax float64
+	for i, t := range ticks {
+		ms, err := d11CheckFitPass(i, t)
+		if err != nil {
+			return err
+		}
+		if ms > fitMax {
+			fitMax = ms
+		}
+	}
+	fmt.Printf("uicheck: d11: slowest fit pass %.1fms over %d ticks (budget %.0fms)\n", fitMax, len(ticks), d11FitBudgetMs)
 
 	// Consecutive ticks should land close to refresh_ms apart (default
 	// 1000ms as of phase 5b). Using each tick's own tickEnd timestamp as its instant.
@@ -206,6 +217,39 @@ func caseD11(hwnd uintptr, args []string) error {
 	fmt.Printf("uicheck: d11: %d complete ticks in 30s, all panels paint within %.0fms of each other, cadence holds around %.0fms\n",
 		len(ticks), frameToleranceMs, refreshMs)
 	return nil
+}
+
+// d11Mark is one entry of window.__bdevPaintLog.
+type d11Mark struct {
+	Name string  `json:"name"`
+	T    float64 `json:"t"`
+}
+
+// d11FitBudgetMs is what the fit pass alone may take in one tick (Wilco,
+// B7.2 spec scope item 9).
+const d11FitBudgetMs = 250.0
+
+// d11CheckFitPass times applyPanelFit in one tick. paintTick marks 'todo'
+// right before applyPanelFit and 'tickEnd' right after it (page.html
+// paintTick), so the gap between those two marks is the fit pass alone.
+func d11CheckFitPass(i int, tick []d11Mark) (float64, error) {
+	todo, end := -1, -1
+	for j, m := range tick {
+		switch m.Name {
+		case "todo":
+			todo = j
+		case "tickEnd":
+			end = j
+		}
+	}
+	if todo < 0 || end < todo {
+		return 0, fmt.Errorf("d11: tick %d: no todo mark before tickEnd, cannot time the fit pass", i)
+	}
+	ms := tick[end].T - tick[todo].T
+	if ms > d11FitBudgetMs {
+		return ms, fmt.Errorf("d11: tick %d: fit pass took %.0f ms, budget %.0f ms", i, ms, d11FitBudgetMs)
+	}
+	return ms, nil
 }
 
 // charts/d12: moved from check_d12.go.
