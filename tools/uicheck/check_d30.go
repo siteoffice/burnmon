@@ -183,6 +183,19 @@ func caseD30(hwnd uintptr, args []string) error {
 	if err != nil {
 		return err
 	}
+	// One count (B6 scope item 8): Go puts the snapshot's wait_counts into the
+	// overview's counts (cmd\burnmon-dev\sections_view.go, sectionsPayloadWith),
+	// and the page reads wait_counts first, so the overview shows the
+	// snapshot's numbers, not the example map's own count.
+	var wc struct {
+		Counts struct {
+			Blocked  int `json:"blocked"`
+			YourTurn int `json:"your_turn"`
+		} `json:"wait_counts"`
+	}
+	if err := json.Unmarshal(snap, &wc); err != nil {
+		return err
+	}
 	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
 		return err
 	}
@@ -199,7 +212,16 @@ func caseD30(hwnd uintptr, args []string) error {
 			return "", err
 		}
 		if withSnap {
-			m["agent_map"] = json.RawMessage(view)
+			var v map[string]any
+			if err := json.Unmarshal(view, &v); err != nil {
+				return "", err
+			}
+			c, _ := v["counts"].(map[string]any)
+			if c == nil {
+				return "", d30Fail("agentmap_example.json has no counts")
+			}
+			c["waiting"], c["your_turn"] = wc.Counts.Blocked, wc.Counts.YourTurn
+			m["agent_map"] = v
 		} else {
 			m["agent_map"] = nil
 		}
@@ -240,7 +262,8 @@ func caseD30(hwnd uintptr, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := d30Has("overview", p.Overview, "1 session,", "1 subagent,", "1 waiting on you", "sprint-example", "Open the full map"); err != nil {
+	if err := d30Has("overview", p.Overview, "1 session,", "1 subagent,", fmt.Sprintf("%d waiting on you", wc.Counts.Blocked),
+		fmt.Sprintf("%d your turn", wc.Counts.YourTurn), "sprint-example", "Open the full map"); err != nil {
 		return err
 	}
 	if p.HasBoxes || p.Anims > 0 || p.MapOn {
@@ -372,28 +395,30 @@ func caseD30(hwnd uintptr, args []string) error {
 	// these hold depends on the machine, so this asserts the shape and prints
 	// the counts. The answer comes back as a promise: stash it, then poll.
 	real := func(req string) (struct {
-		Err     string          `json:"err"`
-		Status  string          `json:"status"`
-		Hours   int             `json:"hours"`
-		Note    string          `json:"note"`
-		Layout  json.RawMessage `json:"layout"`
-		Boxes   int             `json:"boxes"`
-		Frames  int             `json:"frames"`
-		Folded  int             `json:"folded"`
-		Session int             `json:"sessions"`
-		Sub     int             `json:"subagents"`
+		Err       string          `json:"err"`
+		Status    string          `json:"status"`
+		Hours     int             `json:"hours"`
+		Note      string          `json:"note"`
+		Layout    json.RawMessage `json:"layout"`
+		Boxes     int             `json:"boxes"`
+		Frames    int             `json:"frames"`
+		Folded    int             `json:"folded"`
+		Session   int             `json:"sessions"`
+		Sub       int             `json:"subagents"`
+		OpenMulti int             `json:"openMulti"`
 	}, error) {
 		var out struct {
-			Err     string          `json:"err"`
-			Status  string          `json:"status"`
-			Hours   int             `json:"hours"`
-			Note    string          `json:"note"`
-			Layout  json.RawMessage `json:"layout"`
-			Boxes   int             `json:"boxes"`
-			Frames  int             `json:"frames"`
-			Folded  int             `json:"folded"`
-			Session int             `json:"sessions"`
-			Sub     int             `json:"subagents"`
+			Err       string          `json:"err"`
+			Status    string          `json:"status"`
+			Hours     int             `json:"hours"`
+			Note      string          `json:"note"`
+			Layout    json.RawMessage `json:"layout"`
+			Boxes     int             `json:"boxes"`
+			Frames    int             `json:"frames"`
+			Folded    int             `json:"folded"`
+			Session   int             `json:"sessions"`
+			Sub       int             `json:"subagents"`
+			OpenMulti int             `json:"openMulti"`
 		}
 		if err := d30Eval(`(function(){ window.__d30 = null; window.bdevAgentMap(` + req + `).then(function(r){ window.__d30 = r; }, function(e){ window.__d30 = {err: String(e)}; }); })()`); err != nil {
 			return out, err
@@ -402,7 +427,8 @@ func caseD30(hwnd uintptr, args []string) error {
 			raw, err := evalRaw(`(function(){ var r = window.__d30; if(!r) return null; if(r.err) return {err: r.err};
 				  var L = r.layout || {}; return {status: r.status, hours: r.hours, note: r.note || '', layout: L, boxes: (L.boxes || []).length,
 				  frames: (L.frames || []).length, folded: (L.frames || []).filter(function(f){ return f.folded; }).length,
-				  sessions: (L.counts || {}).sessions || 0, subagents: (L.counts || {}).subagents || 0}; })()`)
+				  sessions: (L.counts || {}).sessions || 0, subagents: (L.counts || {}).subagents || 0,
+				  openMulti: (L.frames || []).filter(function(f){ return !f.folded && f.count > 1; }).length}; })()`)
 			if err != nil {
 				return out, err
 			}
@@ -439,8 +465,16 @@ func caseD30(hwnd uintptr, args []string) error {
 	if p, err = show("history", 168, histReal.Note, histReal.Layout, "168"); err != nil {
 		return err
 	}
-	if len(p.Boxes) == 0 || len(p.Boxes) > 40 || p.Overlap != 0 || p.BodyOver > 1 {
-		return d30Fail("real history draws %d boxes (want 1 to 40), %d overlapping, body overflow %.0f px", len(p.Boxes), p.Overlap, p.BodyOver)
+	// Above 40 boxes groups fold, largest first, until 40 or until no group
+	// of two or more boxes is left open (internal\agentmap\layout.go
+	// BuildLayout): a group of one box cannot shrink, and since B7 scope
+	// item 8 every folder is its own group, so a week with more than about
+	// 38 folders draws more than 40 boxes. Over 40, nothing foldable may stay open.
+	if len(p.Boxes) == 0 || p.Overlap != 0 || p.BodyOver > 1 {
+		return d30Fail("real history draws %d boxes (want at least 1), %d overlapping, body overflow %.0f px", len(p.Boxes), p.Overlap, p.BodyOver)
+	}
+	if len(p.Boxes) > 40 && histReal.OpenMulti > 0 {
+		return d30Fail("real history draws %d boxes (over 40) with %d group(s) of two or more boxes still open", len(p.Boxes), histReal.OpenMulti)
 	}
 	if _, err := screenshot(hwnd, "d30-map-real"); err != nil {
 		return err
@@ -491,7 +525,7 @@ func caseD30(hwnd uintptr, args []string) error {
 	if p, err = apply(true, "ok", true); err != nil {
 		return err
 	}
-	if err := d30Has("plain overview", p.Overview, "1 helper,", "waiting for you"); err != nil {
+	if err := d30Has("plain overview", p.Overview, "1 helper,", fmt.Sprintf("%d waiting for you", wc.Counts.Blocked)); err != nil {
 		return err
 	}
 	if err := d30Eval(`document.getElementById('secAgentsSlot').click()`); err != nil {
