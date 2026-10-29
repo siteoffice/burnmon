@@ -52,11 +52,39 @@ func fileExists(path string) bool {
 // burnmon-cli.exe already use: burnmon-dev.exe's own log and burnmon-dev.db
 // land next to burnmon.db and burnmon.json, not in a folder of their own,
 // since it reads and writes the same shared store (design doc section 1).
-func appDataDir() string {
+// It is a var so a test can point it at a temp dir and never touch the real
+// folder.
+var appDataDir = func() string {
 	if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
 		return filepath.Join(lad, "burnmon")
 	}
 	return filepath.Join(os.TempDir(), "burnmon")
+}
+
+// settingsDirEnv names the folder for this app's own per-user settings. uicheck
+// sets it to a fresh temp folder, so a test run never changes the real view.
+const settingsDirEnv = "BURNMON_DEV_SETTINGS_DIR"
+
+// settingsDir is BURNMON_DEV_SETTINGS_DIR when set (created if missing), else
+// appDataDir(). The split:
+//   - settingsDir: burnmon-dev-view.json, burnmon-dev-window.json, writes of
+//     burnmon-dev.json (the station theme), the wv2-dev WebView2 profile and
+//     the header EXPORT button's exports folder.
+//   - appDataDir: burnmon.db, burnmon-dev.db, the snapshot, the msgraph token,
+//     burnmon.json, burnmon-dev-app.log and the CLI export's redact_salt, all
+//     shared data, so uicheck still runs against the real stores.
+//
+// burnmon-dev.json is read from the settings folder when a copy exists there,
+// else from appDataDir (devConfigReadPath). A failed MkdirAll still returns the
+// variable's folder: falling back to appDataDir would write the real files.
+func settingsDir() string {
+	if d := os.Getenv(settingsDirEnv); d != "" {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			log.Println("settings folder:", err)
+		}
+		return d
+	}
+	return appDataDir()
 }
 
 func setupLog(dataDir string) {
@@ -433,10 +461,20 @@ type devConfig struct {
 	StationTheme string `json:"station_theme"`
 }
 
+// devConfigReadPath is burnmon-dev.json in dir, except when dir is the
+// BURNMON_DEV_SETTINGS_DIR folder and has no copy yet: then the real one in
+// appDataDir, so retention and To Do keep their real values under uicheck.
+func devConfigReadPath(dir string) string {
+	path := filepath.Join(dir, "burnmon-dev.json")
+	if env := os.Getenv(settingsDirEnv); env != "" && filepath.Clean(env) == filepath.Clean(dir) && !fileExists(path) {
+		return filepath.Join(appDataDir(), "burnmon-dev.json")
+	}
+	return path
+}
+
 func loadDevConfig(dataDir string) devConfig {
 	cfg := devConfig{RetentionDays: 7, RefreshMs: 1000, StationTheme: "space"}
-	path := filepath.Join(dataDir, "burnmon-dev.json")
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(devConfigReadPath(dataDir))
 	if err != nil {
 		return cfg
 	}
