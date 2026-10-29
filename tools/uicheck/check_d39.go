@@ -9,7 +9,8 @@ import (
 
 // d39: Waits on you is the ranked your-move queue (B6). The two control
 // bindings are REPLACED by recorders, so no real control is ever pressed. Fed
-// the frozen example (wait_counts blocked 7, your_turn 1, done 2) it proves:
+// the frozen example (wait_counts blocked 7, your_turn 1, done 2), its
+// close_out row marked close_ok (Foreman would accept), it proves:
 //   - the tier headers come in the order Blocked, Your turn, Done needs
 //     close-out (one Done tier holding the close_out and the can_close row),
 //     and the panel header count is 7;
@@ -81,16 +82,22 @@ func caseD39(hwnd uintptr, args []string) error {
 		if err := json.Unmarshal([]byte(d29Payload(d29Opts{Plain: false, Scrollbar: true, Status: "ok", Snap: raw})), &m); err != nil {
 			panic(err)
 		}
-		if drop != "" {
-			snap, _ := m["reading"].(map[string]any)["snapshot"].(map[string]any)
-			var keep []any
-			for _, it := range snap["wait_items"].([]any) {
-				if it.(map[string]any)["kind"] != drop {
-					keep = append(keep, it)
-				}
+		snap, _ := m["reading"].(map[string]any)["snapshot"].(map[string]any)
+		var keep []any
+		for _, it := range snap["wait_items"].([]any) {
+			item := it.(map[string]any)
+			if item["kind"] == drop {
+				continue
 			}
-			snap["wait_items"] = keep
+			// The Close chip shows only when Foreman would accept the close
+			// (page.html secItemRow closeable, since 087452c); the frozen
+			// example's close_out row has a report but no close_ok.
+			if item["kind"] == "close_out" {
+				item["close_ok"] = true
+			}
+			keep = append(keep, it)
 		}
+		snap["wait_items"] = keep
 		ready, why := on, map[string]string{}
 		if !foreman {
 			ready = map[string]bool{}
