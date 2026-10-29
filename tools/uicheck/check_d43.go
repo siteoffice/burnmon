@@ -45,7 +45,6 @@ type d43Read struct {
 }
 
 func caseD43(hwnd uintptr, args []string) error {
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	extra := map[string]any{"controls": map[string]any{
 		"on": map[string]bool{}, "ready": map[string]bool{},
 		"why": map[string]string{

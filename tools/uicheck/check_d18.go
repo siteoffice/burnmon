@@ -108,7 +108,6 @@ func caseD18(hwnd uintptr, args []string) error {
 		GroupsSame bool `json:"groupsSame"`
 		GroupsLen  int  `json:"groupsLen"`
 	}
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	if err := evalInto(script, &out); err != nil {
 		return fmt.Errorf("d18: eval delta-vs-full paint: %w", err)
 	}

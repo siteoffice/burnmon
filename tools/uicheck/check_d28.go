@@ -162,13 +162,12 @@ func caseD28(hwnd uintptr, args []string) error {
 		return err
 	}
 	time.Sleep(300 * time.Millisecond)
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	if _, err := evalRaw(d28FakeJS); err != nil {
 		return fmt.Errorf("d28: fake paint: %w", err)
 	}
 	bringToFront(hwnd)
-	if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
-		fmt.Println("uicheck: d28: could not click .logo to establish focus:", err)
+	if err := clickSelectorAt(hwnd, "header .logo", 0.5, 0.5); err != nil {
+		fmt.Println("uicheck: d28: could not click header .logo to establish focus:", err)
 	}
 	var errs []string
 	// checkHover finds the long-project agent, wiggles the pointer over it

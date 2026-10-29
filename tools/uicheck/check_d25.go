@@ -126,13 +126,12 @@ func caseD25(hwnd uintptr, args []string) error {
 		return err
 	}
 	time.Sleep(300 * time.Millisecond)
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	if _, err := evalRaw(d23FakeJS); err != nil {
 		return fmt.Errorf("d25: fake paint: %w", err)
 	}
 	bringToFront(hwnd)
-	if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
-		fmt.Println("uicheck: d25: could not click .logo to establish focus:", err)
+	if err := clickSelectorAt(hwnd, "header .logo", 0.5, 0.5); err != nil {
+		fmt.Println("uicheck: d25: could not click header .logo to establish focus:", err)
 	}
 	var errs []string
 	fail := func(where string, probs []string) {
@@ -140,14 +139,6 @@ func caseD25(hwnd uintptr, args []string) error {
 			errs = append(errs, fmt.Sprintf("%s: %s", where, m))
 		}
 	}
-	// The page leaves light mode whatever happens, the stored choice included.
-	defer func() {
-		if s, err := d24Read(); err == nil && s.Attr == "light" {
-			_ = pressKey(vkL)
-			time.Sleep(300 * time.Millisecond)
-		}
-	}()
-
 	// checkCard runs the two clicks of one case: next to the middle of the
 	// window, then in the bottom right corner where the card must be pushed back in.
 	checkCard := func(where string) error {

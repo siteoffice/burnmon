@@ -99,7 +99,6 @@ func caseD15(hwnd uintptr, args []string) error {
 	// __bdevEnterFakeMode already ran) would otherwise return early and
 	// leave the real page's own tick timer stopped forever. The guard
 	// inside is a no-op if fake mode was never actually entered.
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 
 	var early struct {
 		EarlyLateChart string `json:"earlyLateChart"`

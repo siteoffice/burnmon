@@ -92,6 +92,7 @@ func TestWChecksAreNotDev(t *testing.T) {
 // A group runs its cases in order, backwards on "reverse", passes other args
 // through, and stops at the first failure naming group/case.
 func TestRunDevGroup(t *testing.T) {
+	stubApplyStart(t, func(uintptr, startState) error { return nil })
 	var ran []string
 	var gotArgs [][]string
 	mk := func(name string, fail bool) devCase {
@@ -104,7 +105,7 @@ func TestRunDevGroup(t *testing.T) {
 			return nil
 		}}
 	}
-	g := devGroup{"g", []devCase{mk("a", false), mk("b", false), mk("c", false)}}
+	g := devGroup{"g", []devCase{mk("a", false), mk("b", false), mk("c", false)}, appStart()}
 
 	if err := runDevGroup(0, g, []string{"x"}); err != nil {
 		t.Fatalf("run: %v", err)
@@ -131,7 +132,7 @@ func TestRunDevGroup(t *testing.T) {
 	}
 
 	ran = nil
-	g2 := devGroup{"g", []devCase{mk("a", false), mk("b", true), mk("c", false)}}
+	g2 := devGroup{"g", []devCase{mk("a", false), mk("b", true), mk("c", false)}, appStart()}
 	err := runDevGroup(0, g2, nil)
 	if err == nil || !strings.HasPrefix(err.Error(), "g/b: ") {
 		t.Fatalf("err = %v, want it to start with g/b: ", err)

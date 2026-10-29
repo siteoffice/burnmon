@@ -152,7 +152,6 @@ func caseD17(hwnd uintptr, args []string) error {
 	// __bdevEnterFakeMode already ran) would otherwise return early and
 	// leave the real page's own tick timer stopped forever. The guard
 	// inside is a no-op if fake mode was never actually entered.
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 
 	if err := evalInto(script, &out); err != nil {
 		return fmt.Errorf("d17: eval fake-history paint: %w", err)

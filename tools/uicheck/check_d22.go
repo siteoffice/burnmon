@@ -24,7 +24,6 @@ func caseD22(hwnd uintptr, args []string) error {
 	}
 	time.Sleep(300 * time.Millisecond)
 	errs := []string{}
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	for _, wifi := range []bool{true, false} {
 		script := fmt.Sprintf(`(function(wifiOn){
   var nowMs = Date.now(), windowMs = 30 * 60 * 1000, ws = nowMs - windowMs, sys = [], chart = [];

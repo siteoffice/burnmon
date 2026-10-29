@@ -49,8 +49,8 @@ import (
 //      1920x1080 the heights equal the reloaded layout (R2) within 2 px (R4)
 //   7  real clicks on the gear and on Reset heights: the heights equal the default
 //      layout of the reloaded page (R2a) within 2 px (R5), the file has no heights_standard and the page state is null
-// The heights are written into the real view file; the wrapper script restores
-// it byte for byte afterwards, and the check sends reset_heights on the way out.
+// The heights are written into the run's own view file (scripts\uicheck-dev.ps1
+// makes a temp settings folder); applyStart starts each case with none saved.
 // Screenshot d42-drag-<size> after step 3.
 
 var d42Keys = []string{"burn_30min", "vendor_strip", "activity_heatmap", "turn_ticker", "system_chart", "process_groups"}
@@ -219,21 +219,11 @@ func d42Sum(m map[string]float64) float64 {
 
 func caseD42(hwnd uintptr, args []string) error {
 	fail := func(format string, a ...any) error { return fmt.Errorf("d42: "+format, a...) }
-	defer func() {
-		_, _ = evalRaw(`(window.bdevSetSections({reset_heights: true}), true)`)
-		time.Sleep(400 * time.Millisecond)
-		_, _ = evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		_ = ensureWindowSizeWH(hwnd, 1152, 2048)
-	}()
 	snap, err := d42Snapshot()
 	if err != nil {
 		return err
 	}
-	// 1. clean start through the real binding, every part on, at the size Wilco uses
-	if _, err := evalRaw(`(window.bdevSetSections({reset_heights: true}), true)`); err != nil {
-		return err
-	}
-	time.Sleep(500 * time.Millisecond)
+	// 1. clean start (applyStart: no saved heights, every part on), at the size Wilco uses
 	base := d29Opts{Status: "ok", Snap: snap, Scrollbar: false}
 	payload := d29Payload(base)
 	const dragW, dragH, otherW, otherH = 1920, 1080, 1800, 1050

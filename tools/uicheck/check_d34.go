@@ -401,7 +401,6 @@ func d34Snapshot(extended bool) ([]byte, error) {
 	return json.Marshal(snapMap)
 }
 func caseD34(hwnd uintptr, args []string) error {
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	snap, err := d34Snapshot(false)
 	if err != nil {
 		return err

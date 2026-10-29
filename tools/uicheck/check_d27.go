@@ -99,7 +99,6 @@ func caseD27(hwnd uintptr, args []string) error {
 		return err
 	}
 	time.Sleep(300 * time.Millisecond)
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	if _, err := evalRaw(d23FakeJS); err != nil {
 		return fmt.Errorf("d27: fake paint: %w", err)
 	}

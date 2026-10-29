@@ -66,7 +66,6 @@ func caseD20(hwnd uintptr, args []string) error {
 		Cells     int     `json:"cells"`
 		CellsLeft float64 `json:"cellsLeft"`
 	}
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	if err := evalInto(script, &rows); err != nil {
 		return fmt.Errorf("d20: eval harness labels: %w", err)
 	}

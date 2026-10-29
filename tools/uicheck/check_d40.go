@@ -133,10 +133,7 @@ func caseD40(hwnd uintptr, args []string) error {
 	if err := json.Unmarshal(raw, &L); err != nil {
 		return err
 	}
-	// Own starting state: d34 leaves the page in Plain. Leave fake mode, then Standard with every part on.
-	if _, err := evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`); err != nil {
-		return fail("leave fake mode: %w", err)
-	}
+	// The frozen example, Standard with every part on (applyStart has already left fake mode).
 	if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
 		return fail("set the starting state: %w", err)
 	}

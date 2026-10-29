@@ -26,7 +26,6 @@ func caseD19(hwnd uintptr, args []string) error {
 	}{{1600, 1000, true, false}, {1920, 1080, true, false}, {2560, 1300, true, false}, {1920, 1080, false, false}, {1280, 860, true, true}}
 	var errs []string
 	skipped := 0
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	// Own starting state, so the order of checks does not matter: d29 leaves
 	// the page in Plain with a stale reading. Standard, every part on,
 	// Overall scrollbar off, a fresh reading.

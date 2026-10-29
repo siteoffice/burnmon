@@ -500,7 +500,7 @@ type d29Saved struct {
 
 // d29Persist drives the real Go side: the toggle, one part in each mode and the
 // scrollbar through the bindings, and one tick through the gear's own checkbox.
-// Each must land where it belongs only. It puts back every value it found.
+// Each must land where it belongs only. The next case's applyStart resets them.
 func d29Persist() error {
 	read := func() (d29Saved, error) {
 		var st d29Saved
@@ -524,19 +524,6 @@ func d29Persist() error {
 		time.Sleep(400 * time.Millisecond)
 		return err
 	}
-	orig, err := read()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		for _, id := range d29Parts {
-			_ = send(fmt.Sprintf(`{mode:'standard',section:%s,on:%t}`, jsString(id), orig.Standard[id]))
-			_ = send(fmt.Sprintf(`{mode:'plain',section:%s,on:%t}`, jsString(id), orig.PlainSet[id]))
-		}
-		_ = send(fmt.Sprintf(`{scrollbar:%t}`, orig.Scrollbar))
-		_ = send(fmt.Sprintf(`{plain:%t}`, orig.Plain))
-	}()
-
 	// Start from Standard: git on in Standard and off in Plain, turn_ticker on in Standard and off in Plain.
 	for _, c := range []string{
 		`{plain:false}`,

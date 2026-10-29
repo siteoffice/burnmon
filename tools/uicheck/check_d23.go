@@ -154,7 +154,6 @@ func caseD23(hwnd uintptr, args []string) error {
 		return err
 	}
 	time.Sleep(300 * time.Millisecond)
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	if _, err := evalRaw(d23FakeJS); err != nil {
 		return fmt.Errorf("d23: fake paint: %w", err)
 	}
@@ -166,8 +165,8 @@ func caseD23(hwnd uintptr, args []string) error {
 	bringToFront(hwnd)
 	// A real click grants the window input focus before the key presses
 	// (d7's own finding).
-	if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
-		fmt.Println("uicheck: d23: could not click .logo to establish focus:", err)
+	if err := clickSelectorAt(hwnd, "header .logo", 0.5, 0.5); err != nil {
+		fmt.Println("uicheck: d23: could not click header .logo to establish focus:", err)
 	}
 	var errs []string
 	step := func(name string, vk uint16, ok func(d23State) bool) d23State {

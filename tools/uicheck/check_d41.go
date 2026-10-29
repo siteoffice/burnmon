@@ -114,7 +114,6 @@ func d41PressO(hwnd uintptr, want bool) error {
 }
 
 func caseD41(hwnd uintptr, args []string) error {
-	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 	snap, err := d34Snapshot(false)
 	if err != nil {
 		return err

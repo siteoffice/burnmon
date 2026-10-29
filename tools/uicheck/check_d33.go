@@ -212,5 +212,5 @@ func caseD33(hwnd uintptr, args []string) error {
 			return err
 		}
 	}
-	return ensureWindowSizeWH(hwnd, 1152, 2048)
+	return nil
 }
