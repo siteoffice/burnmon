@@ -3778,9 +3778,10 @@ body.plain #mapOverlay{font-size:13.5px}
   // each mode. The choice is stored by the Go side (bdevSetSections, written
   // to burnmon-dev-view.json); this code only draws it. The numbers come from
   // %USERPROFILE%\.burnmon\snapshot.json through bdevSections, never from a
-  // port. A stale or missing file is shown as "BurnMon is not running" and
-  // its old numbers are not drawn. Plain Mode means plain words, a page that
-  // fits the window and the Plain list of sections; it makes no model call.
+  // port. The line about the file comes from Go (snapshot_line: writer state
+  // plus file age); a file that is not current draws no old numbers. Plain
+  // Mode means plain words, a page that fits the window and the Plain list
+  // of sections; it makes no model call.
   var SEC_ORDER = ['waits','outcomes','burn','git','agents_map','sessions'];
   var SEC_TITLE = {
     waits:['Waits on you','Needs you'], outcomes:['Outcomes','Results'], burn:['Burn','Token use'],
@@ -3794,6 +3795,10 @@ body.plain #mapOverlay{font-size:13.5px}
   };
   var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', heightsStandard:null, heightsPlain:null };
   var secReading = { status:'missing', age_seconds:0 };
+  // secLine is Go's sentence about the snapshot. The window opens before the
+  // first payload, so it starts as the starting line; null means the last
+  // payload carried no line and secHeadline composes one itself.
+  var secLine = { text:'Starting up: writing the first snapshot.', warn:false };
   var secAgentMap = null; // the live agent map from the payload; null unless the snapshot is current
   var secLastJSON = '';
   var secLastSig = '';
@@ -3837,14 +3842,16 @@ body.plain #mapOverlay{font-size:13.5px}
       '<div class="panelhead">' + esc(secTitle(id) + secPanelCount(id)) + secPanelExtra(id) + '</div><div class="secbody">' + body + '</div></section>';
   }
 
-  // secHeadline is the one sentence about the snapshot: its age in the
-  // header, and a plain statement when BurnMon is not running.
+  // secHeadline is the one sentence about the snapshot, for the header, the
+  // box below it and the map. Go's line wins; the switch is only the fallback
+  // for a payload without one and says what is known: the file's age.
   function secHeadline(r){
+    if(secLine) return { text:secLine.text, down:!!secLine.warn };
     var age = secDur(r.age_seconds);
     switch(r.status){
       case 'ok': return { text:'snapshot ' + age + ' old', down:false };
-      case 'stale': return { text:'BurnMon is not running (last snapshot ' + age + ' old)', down:true };
-      case 'missing': return { text:'BurnMon is not running (no snapshot file)', down:true };
+      case 'stale': return { text:'No process has written the snapshot for ' + age + '.', down:true };
+      case 'missing': return { text:'No snapshot file yet.', down:true };
       case 'unsupported_version': return { text:'snapshot is a newer version than this window reads', down:true };
     }
     return { text:'snapshot file cannot be read' + (r.error ? ': ' + r.error : ''), down:true };
@@ -4256,19 +4263,22 @@ body.plain #mapOverlay{font-size:13.5px}
     secRenderSettings();
     secControlsSync();
     var notice = document.getElementById('secNotice');
-    notice.innerHTML = head.down ? '<div class="secnotice warn">' + esc(head.text + '. No current numbers are shown.') + '</div>' : '';
+    // The box shows whenever the numbers are withheld; only a warning says so
+    // and turns amber (starting up is not a warning).
+    var ntext = head.text + (head.down ? (/\.$/.test(head.text) ? '' : '.') + ' No current numbers are shown.' : '');
+    notice.innerHTML = r.status !== 'ok' ? '<div class="secnotice' + (head.down ? ' warn' : '') + '">' + esc(ntext) + '</div>' : '';
     var row1 = '', rest = '';
     SEC_ORDER.forEach(function(id, n){
       if(!secPartOn(id)) return;
       var body;
-      if(SEC_NEEDS_SNAPSHOT[id] && !snap) body = secStub(secState.plain ? 'No current numbers. Start BurnMon to see them.' : 'No current snapshot.');
+      if(SEC_NEEDS_SNAPSHOT[id] && !snap) body = secStub(secState.plain ? 'No current numbers yet.' : 'No current snapshot.');
       else body = SEC_BODY[id](snap);
       var p = secPanel(id, body, id === 'sessions');
       if(n < 5) row1 += p; else rest += p;
     });
     var ph = document.getElementById('processesHost');
     if(ph){
-      var pbody = !secPartOn('processes') ? '' : (!snap ? secStub(secState.plain ? 'No current numbers. Start BurnMon to see them.' : 'No current snapshot.') : SEC_BODY.processes(snap));
+      var pbody = !secPartOn('processes') ? '' : (!snap ? secStub(secState.plain ? 'No current numbers yet.' : 'No current snapshot.') : SEC_BODY.processes(snap));
       ph.innerHTML = secPartOn('processes') ? secPanel('processes', pbody, true) : '';
     }
     document.getElementById('secPanels').innerHTML = (row1 ? '<div class="secrow1" id="secRow1">' + row1 + '</div>' : '') + rest;
@@ -4334,6 +4344,7 @@ body.plain #mapOverlay{font-size:13.5px}
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space',
       heightsStandard:p.heights_standard || null, heightsPlain:p.heights_plain || null };
     secReading = p.reading || { status:'missing', age_seconds:0 };
+    secLine = p.snapshot_line || null;
     var cp = p.controls || {};
     ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {}, foreman:!!cp.foreman };
     secAgentMap = p.agent_map || null;

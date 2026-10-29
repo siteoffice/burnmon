@@ -25,8 +25,8 @@ import (
 //   - the gear lists four groups of parts, Overall scrollbar on top, the
 //     "Station starts as" pair below; choosing a Station theme calls the
 //     binding and does not switch the Station that is open;
-//   - a stale or missing snapshot says BurnMon is not running and draws no old
-//     numbers;
+//   - a stale or missing snapshot shows the payload's snapshot_line in the
+//     header and the notice (never "not running") and draws no old numbers;
 //   - the toggle, the scrollbar and a tick saved through the real bindings land
 //     where they belong. Survival of a restart is the Go test of
 //     internal\sections, not a real restart of the exe.
@@ -72,6 +72,15 @@ func d29Payload(o d29Opts) string {
 	if o.Snap != nil {
 		reading["snapshot"] = o.Snap
 	}
+	// The line Go sends for an unknown writer state (B7.3 sentence table),
+	// with the age of 7 s used above.
+	line := map[string]any{"text": "snapshot 7 s old", "warn": false}
+	switch o.Status {
+	case "stale":
+		line = map[string]any{"text": "No process has written the snapshot for 7 s.", "warn": true}
+	case "missing":
+		line = map[string]any{"text": "No snapshot file yet.", "warn": true}
+	}
 	theme := o.StationTheme
 	if theme == "" {
 		theme = "space"
@@ -95,6 +104,7 @@ func d29Payload(o d29Opts) string {
 		"mode":  map[bool]string{true: "plain", false: "standard"}[o.Plain],
 		"parts": current, "parts_standard": standard, "parts_plain": plainSet,
 		"groups": groups, "station_theme": theme, "reading": reading,
+		"writer": map[string]any{"state": ""}, "snapshot_line": line,
 	})
 	return string(b)
 }
@@ -457,14 +467,20 @@ func init() {
 			return err
 		}
 
-		// Stale and missing: say so, draw no old numbers.
+		// Stale and missing: the header and the notice carry Go's line, never
+		// "not running", and no old numbers are drawn.
+		lines := map[string]string{"stale": "No process has written the snapshot for 7 s.", "missing": "No snapshot file yet."}
 		for _, status := range []string{"stale", "missing"} {
 			p, err = d29Apply(d29Payload(d29Opts{Plain: true, Status: status}))
 			if err != nil {
 				return err
 			}
-			if !strings.Contains(p.Notice, "not running") || !strings.Contains(p.Header, "not running") {
-				return d29Fail("%s: header %q notice %q do not say BurnMon is not running", status, p.Header, p.Notice)
+			want := lines[status]
+			if p.Header != want || !strings.Contains(p.Notice, want) {
+				return d29Fail("%s: header %q notice %q do not carry the line %q", status, p.Header, p.Notice, want)
+			}
+			if strings.Contains(p.Header, "not running") || strings.Contains(p.Notice, "not running") {
+				return d29Fail("%s: header %q notice %q still say not running", status, p.Header, p.Notice)
 			}
 			if strings.Contains(p.Text, "tokens") && strings.Contains(p.Text, "120") {
 				return d29Fail("%s: old numbers are still drawn", status)
