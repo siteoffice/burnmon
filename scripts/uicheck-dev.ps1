@@ -34,6 +34,27 @@ $logPath = "$env:LOCALAPPDATA\burnmon\burnmon-dev-app.log"
 $logBytesBefore = 0
 if (Test-Path $logPath) { $logBytesBefore = (Get-Item $logPath).Length }
 
+# A run keeps its own settings (view, window, dev config, wv2-dev, exports)
+# in a fresh temp folder via BURNMON_DEV_SETTINGS_DIR (cmd\burnmon-dev\app.go
+# settingsDir), so checks that resize, toggle or drag never touch Wilco's
+# real files. The env var reaches both the exe and every "go run" below.
+# The real files are hashed before and after as the guard that this holds.
+$realSettingsDir = "$env:LOCALAPPDATA\burnmon"
+$guardedFiles = @("burnmon-dev-view.json", "burnmon-dev-window.json", "burnmon-dev.json")
+function Get-SettingsHashes {
+    $h = [ordered]@{}
+    foreach ($f in $guardedFiles) {
+        $p = Join-Path $realSettingsDir $f
+        if (Test-Path $p) { $h[$f] = (Get-FileHash -Algorithm SHA256 -Path $p).Hash } else { $h[$f] = "missing" }
+    }
+    return $h
+}
+$hashesBefore = Get-SettingsHashes
+$tempSettingsDir = Join-Path $env:TEMP ("burnmon-uicheck\" + [guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Force -Path $tempSettingsDir | Out-Null
+$env:BURNMON_DEV_SETTINGS_DIR = $tempSettingsDir
+Write-Host "uicheck: settings folder $tempSettingsDir"
+
 $env:BURNMON_DEV_UICHECK = "1"
 $proc = Start-Process -FilePath $exe -PassThru
 try {
@@ -113,5 +134,33 @@ try {
     Remove-Item Env:\BURNMON_DEV_UICHECK -ErrorAction SilentlyContinue
     if (-not $proc.HasExited) {
         Stop-Process -Id $proc.Id -Force
+    }
+    [void]$proc.WaitForExit(10000)
+
+    $hashesAfter = Get-SettingsHashes
+    $changed = @()
+    foreach ($f in $guardedFiles) {
+        Write-Host "uicheck: real $f before $($hashesBefore[$f])"
+        Write-Host "uicheck: real $f after  $($hashesAfter[$f])"
+        if ($hashesBefore[$f] -ne $hashesAfter[$f]) { $changed += $f }
+    }
+    if (Test-Path $tempSettingsDir) {
+        Write-Host "uicheck: settings folder held: $((Get-ChildItem $tempSettingsDir | ForEach-Object Name) -join ', ')"
+    }
+
+    # WebView2 child processes can hold wv2-dev for a moment after the exe
+    # is gone, so retry the removal briefly instead of failing on the first try.
+    Remove-Item Env:\BURNMON_DEV_SETTINGS_DIR -ErrorAction SilentlyContinue
+    for ($i = 0; $i -lt 10 -and (Test-Path $tempSettingsDir); $i++) {
+        Remove-Item -Recurse -Force $tempSettingsDir -ErrorAction SilentlyContinue
+        if (Test-Path $tempSettingsDir) { Start-Sleep -Seconds 1 }
+    }
+    if (Test-Path $tempSettingsDir) {
+        Write-Host "uicheck: could not remove $tempSettingsDir; delete it by hand."
+    }
+
+    if ($changed.Count -gt 0) {
+        foreach ($f in $changed) { Write-Host "real BurnMon Dev settings changed: $f" }
+        exit 1
     }
 }

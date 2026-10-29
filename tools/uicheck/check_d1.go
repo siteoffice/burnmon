@@ -43,11 +43,11 @@ func init() {
 			return fmt.Errorf("export did not report success within 30s, last status: %q", status)
 		}
 
-		lad := os.Getenv("LOCALAPPDATA")
-		if lad == "" {
-			return fmt.Errorf("LOCALAPPDATA not set; cannot locate the exports folder")
+		sd, err := devSettingsDir()
+		if err != nil {
+			return err
 		}
-		exportsDir := filepath.Join(lad, "burnmon", "exports")
+		exportsDir := filepath.Join(sd, "exports")
 		entries, err := os.ReadDir(exportsDir)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", exportsDir, err)

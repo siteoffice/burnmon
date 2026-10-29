@@ -158,11 +158,11 @@ func d42Snapshot() ([]byte, error) {
 	return json.Marshal(m)
 }
 func d42ViewFile() (map[string]json.RawMessage, error) {
-	lad := os.Getenv("LOCALAPPDATA")
-	if lad == "" {
-		return nil, fmt.Errorf("LOCALAPPDATA not set")
+	sd, err := devSettingsDir()
+	if err != nil {
+		return nil, err
 	}
-	raw, err := os.ReadFile(filepath.Join(lad, "burnmon", "burnmon-dev-view.json"))
+	raw, err := os.ReadFile(filepath.Join(sd, "burnmon-dev-view.json"))
 	if err != nil {
 		return nil, err
 	}
