@@ -89,8 +89,17 @@ func caseD11(hwnd uintptr, args []string) error {
 		if !names["tickEnd"] {
 			return fmt.Errorf("tick %d has no tickEnd mark", i)
 		}
-		sorted := make([]mark, len(t))
-		copy(sorted, t)
+		// The spread runs over the panel marks only. tickEnd is marked after
+		// applyPanelFit (page.html paintTick), the layout pass that B7 and
+		// B7.1 grew into a shrink loop; it is not a panel paint, and under
+		// load it alone took up to ~110ms of a 278ms tick. A panel painting
+		// on another tick still lands ~refresh_ms away from the rest.
+		var sorted []mark
+		for _, m := range t {
+			if m.Name != "tickEnd" {
+				sorted = append(sorted, m)
+			}
+		}
 		sort.Slice(sorted, func(a, b int) bool { return sorted[a].T < sorted[b].T })
 		spread := sorted[len(sorted)-1].T - sorted[0].T
 		if spread > frameToleranceMs {
