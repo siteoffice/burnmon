@@ -80,7 +80,9 @@ func caseD35(hwnd uintptr, args []string) error {
 			return err
 		}
 		time.Sleep(500 * time.Millisecond)
-		if _, err := evalRaw(`window.__bdevMap.close(); window.__bdevMap.open('live'); window.__bdevMap.setPayload(` + payload + `, 'live')`); err != nil {
+		// The dev eval server wraps a script as return (...), so a statement
+		// list goes in a function or it never parses and the call times out.
+		if _, err := evalRaw(`(function(){ window.__bdevMap.close(); window.__bdevMap.open('live'); window.__bdevMap.setPayload(` + payload + `, 'live'); return true; })()`); err != nil {
 			return err
 		}
 		p, err := read()
