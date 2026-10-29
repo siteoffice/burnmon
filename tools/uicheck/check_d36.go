@@ -10,7 +10,9 @@ import (
 // Fed the UNMODIFIED frozen example (testdata\snapshot_example.json, the gate is not moved
 // to the front) it proves:
 //   - every wait item is a row in the DOM (the list scrolls inside the panel, none is
-//     cut off), the header carries the count ("Waits on you (6)"), no +k more line;
+//     cut off), no +k more line; the header carries the Blocked count from
+//     wait_counts, not the row total (B6 scope item 8, one count everywhere):
+//     "Waits on you (7)" plus "1 your turn";
 //   - Standard: the Waits rows are the example's wait_items and the Outcomes
 //     rows its outcome_items, in order; the gate row reads "gate G4", the
 //     prompt row "permission prompt", the sprint row "2 tasks parked"; every
@@ -20,7 +22,7 @@ import (
 //   - a reading older than two ticks marks both panels aged with the age;
 //     at age 7 neither is;
 //   - empty lists read the empty texts;
-//   - a click on the gate's spec link calls bdevOpenItemFile with that path
+//   - a click on the first gate's spec link calls bdevOpenItemFile with that path
 //     (the binding is replaced by a recorder and put back).
 //
 // Screenshots: d36-standard, d36-plain, d36-aged.
@@ -63,14 +65,19 @@ const d36ReadJS = `(function(){
     wAged: !!w && w.classList.contains('sec-aged'), oAged: !!o && o.classList.contains('sec-aged') };
 })()`
 
-const d36ClickJS = `(function(){
+// d36ClickJS clicks the first link (the spec) of the row with data-id id. The
+// example holds two gates (G4 and the B4 G2 row), so the row is picked by id.
+func d36ClickJS(id string) string {
+	q, _ := json.Marshal(id)
+	return `(function(){
   var old = window.bdevOpenItemFile, got = [];
   window.bdevOpenItemFile = function(p){ got.push(p); return Promise.resolve(); };
-  var a = document.querySelector('[data-sec=waits] .secitem[data-kind=gate] .secfile');
+  var a = document.querySelector('[data-sec=waits] .secitem[data-id="' + ` + string(q) + ` + '"] .secfile');
   if(a) a.click();
   window.bdevOpenItemFile = old;
   return got;
 })()`
+}
 
 func caseD36(hwnd uintptr, args []string) error {
 	raw, err := readFixture("snapshot_example.json")
@@ -80,11 +87,18 @@ func caseD36(hwnd uintptr, args []string) error {
 	var ex struct {
 		Wait    []d36Item `json:"wait_items"`
 		Outcome []d36Item `json:"outcome_items"`
+		Counts  *struct {
+			Blocked  int `json:"blocked"`
+			YourTurn int `json:"your_turn"`
+		} `json:"wait_counts"`
 	}
 	if err := json.Unmarshal(raw, &ex); err != nil {
 		return err
 	}
 	fail := func(format string, a ...any) error { return fmt.Errorf("d36: "+format, a...) }
+	if ex.Counts == nil || ex.Counts.Blocked == 0 {
+		return fail("the example has no wait_counts with a Blocked count")
+	}
 	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
 		return err
 	}
@@ -133,9 +147,13 @@ func caseD36(hwnd uintptr, args []string) error {
 	if err := sameRows("standard outcomes", p.Outcomes, ex.Outcome); err != nil {
 		return err
 	}
-	// Nothing is cut off: every wait item is a row (sameRows above), the header
-	// carries the total and there is no +k more line.
-	if want := fmt.Sprintf("Waits on you (%d)", len(ex.Wait)); !strings.Contains(p.WaitsTxt, want) {
+	// Nothing is cut off: every wait item is a row (sameRows above) and there is
+	// no +k more line. The header count is the Blocked count (B6 item 8), with
+	// Your turn beside it.
+	if want := fmt.Sprintf("Waits on you (%d)", ex.Counts.Blocked); !strings.Contains(p.WaitsTxt, want) {
+		return fail("standard Waits header lacks %q", want)
+	}
+	if want := fmt.Sprintf("%d your turn", ex.Counts.YourTurn); ex.Counts.YourTurn > 0 && !strings.Contains(p.WaitsTxt, want) {
 		return fail("standard Waits header lacks %q", want)
 	}
 	if strings.Contains(p.WaitsTxt, " more") || strings.Contains(p.OutTxt, " more") {
@@ -162,7 +180,7 @@ func caseD36(hwnd uintptr, args []string) error {
 	if err := sameRows("plain waits", p.Waits, ex.Wait); err != nil {
 		return err
 	}
-	if want := fmt.Sprintf("Needs you (%d)", len(ex.Wait)); !strings.Contains(p.WaitsTxt, want) {
+	if want := fmt.Sprintf("Needs you (%d)", ex.Counts.Blocked); !strings.Contains(p.WaitsTxt, want) {
 		return fail("plain Waits header lacks %q", want)
 	}
 	for _, want := range []string{"Decision needed", "Approval needed", "Question for you", "Job paused, needs you", "2 tasks need you"} {
@@ -227,15 +245,16 @@ func caseD36(hwnd uintptr, args []string) error {
 	}
 	var gate d36Item
 	for _, it := range ex.Wait {
-		if it.Kind == "gate" {
+		if it.Kind == "gate" && it.SpecPath != "" {
 			gate = it
+			break
 		}
 	}
 	if gate.SpecPath == "" {
 		return fail("the example has no gate with a spec path")
 	}
 	var got []string
-	if err := evalInto(d36ClickJS, &got); err != nil {
+	if err := evalInto(d36ClickJS(gate.ID), &got); err != nil {
 		return err
 	}
 	if len(got) != 1 || got[0] != gate.SpecPath {
