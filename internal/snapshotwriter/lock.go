@@ -35,6 +35,9 @@ type Lock struct {
 // NewLock returns a lock on path. It takes nothing until TryAcquire.
 func NewLock(path string) *Lock { return &Lock{path: path} }
 
+// Path is the lock file path, where ReadOwner finds the owner text.
+func (l *Lock) Path() string { return l.path }
+
 // Held reports whether this Lock holds the OS lock.
 func (l *Lock) Held() bool { return l.f != nil }
 

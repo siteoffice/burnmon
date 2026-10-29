@@ -102,7 +102,7 @@ func TestPayloadCarriesControls(t *testing.T) {
 		}
 	}
 	// Nothing saved: every switch is off in the payload.
-	p := sectionsPayloadWith(dir, snapPath, now, stub)
+	p := sectionsPayloadWith(dir, snapPath, now, stub, nil)
 	for _, id := range controls.All {
 		if p.Controls.On[id] {
 			t.Errorf("control %s is on in a fresh payload", id)
@@ -117,7 +117,7 @@ func TestPayloadCarriesControls(t *testing.T) {
 	if err := applySectionsChange(dir, sectionsChange{Control: "stop", On: boolp(true)}); err != nil {
 		t.Fatal(err)
 	}
-	p = sectionsPayloadWith(dir, snapPath, now, stub)
+	p = sectionsPayloadWith(dir, snapPath, now, stub, nil)
 	if !p.Controls.On["stop"] || p.Controls.Ready["stop"] {
 		t.Errorf("a switch on does not make a control ready by itself: %+v", p.Controls)
 	}
@@ -287,12 +287,12 @@ func TestPageWithoutForemanRoot(t *testing.T) {
 	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
 	pyLook := func(string) (string, error) { return `C:\example\python.exe`, nil }
 	svc := newControlServiceWith(pricing.Config{}, dir, snap, filepath.Join(dir, "store", "burnmon.db"), pyLook)
-	p := sectionsPayloadWith(dir, snap, now, svc.Availability)
+	p := sectionsPayloadWith(dir, snap, now, svc.Availability, nil)
 	if p.Controls.Foreman || p.Controls.Ready[controls.CloseSprint] {
 		t.Errorf("without foreman_root: foreman %v, close ready %v", p.Controls.Foreman, p.Controls.Ready[controls.CloseSprint])
 	}
 	withRoot := newControlServiceWith(pricing.Config{ForemanRoot: `C:\example\foreman`}, dir, snap, filepath.Join(dir, "store", "burnmon.db"), pyLook)
-	if q := sectionsPayloadWith(dir, snap, now, withRoot.Availability); !q.Controls.Foreman {
+	if q := sectionsPayloadWith(dir, snap, now, withRoot.Availability, nil); !q.Controls.Foreman {
 		t.Error("with foreman_root the payload says foreman false")
 	}
 	if !strings.Contains(pageHTML, `<div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint">`) {

@@ -205,7 +205,7 @@ func main() {
 
 	a := &app{
 		sys: sys, sampler: sysmon.NewSampler(), procSampler: sysmon.NewProcessSampler(),
-		st: st, cfg: cfg, initialCollectDone: make(chan struct{}),
+		st: st, cfg: cfg, initialCollectDone: make(chan struct{}), started: progStart,
 	}
 	a.cache.Store = st
 	a.perf.startPerfLog()
@@ -372,7 +372,7 @@ func main() {
 	}
 	ctlSvc := newControlService(cfg, dataDir, snapPath, storePath)
 	if err := w.Bind("bdevSections", func() sectionsPayload {
-		return sectionsPayloadWith(dataDir, snapPath, time.Now(), ctlSvc.Availability)
+		return sectionsPayloadWith(dataDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
 	}); err != nil {
 		log.Println("could not bind bdevSections:", err)
 	}
@@ -415,7 +415,7 @@ func main() {
 		a.mu.Lock()
 		root := a.cfg.ForemanRoot
 		a.mu.Unlock()
-		p, err := agentMapFor(agentMapEnv{DataDir: dataDir, SnapPath: snapPath, St: st, ForemanRoot: root}, req, time.Now())
+		p, err := agentMapFor(agentMapEnv{DataDir: dataDir, SnapPath: snapPath, St: st, ForemanRoot: root, Writer: a.snapStatus.View}, req, time.Now())
 		if err != nil {
 			log.Println("bdevAgentMap:", err)
 		}

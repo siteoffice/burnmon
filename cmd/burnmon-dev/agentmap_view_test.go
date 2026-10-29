@@ -12,6 +12,7 @@ import (
 	"burnmon/internal/graph"
 	"burnmon/internal/schema"
 	"burnmon/internal/sections"
+	"burnmon/internal/snapshotwriter"
 	"burnmon/internal/store"
 )
 
@@ -79,8 +80,9 @@ func TestAgentMapLiveFromFrozenExample(t *testing.T) {
 	}
 }
 
-// A stale or missing snapshot draws no old boxes and says BurnMon is not running.
-func TestAgentMapLiveNotRunning(t *testing.T) {
+// A stale or missing snapshot draws no old boxes; with no writer state the
+// note carries the unknown-state sentence and never says "not running".
+func TestAgentMapLiveNotCurrent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join("..", "..", "testdata", "snapshot_example.json")
 	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
@@ -89,15 +91,44 @@ func TestAgentMapLiveNotRunning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stale.Status != "stale" || len(stale.Layout.Boxes) != 0 || !strings.Contains(stale.Note, "not running") {
+	want := "No process has written the snapshot for " + fmtAge(stale.AgeSeconds) + ". No current boxes are shown."
+	if stale.Status != "stale" || len(stale.Layout.Boxes) != 0 || stale.Note != want || strings.Contains(stale.Note, "not running") {
 		t.Errorf("stale: status %q, %d boxes, note %q", stale.Status, len(stale.Layout.Boxes), stale.Note)
 	}
 	missing, err := agentMapFor(agentMapEnv{DataDir: dir, SnapPath: filepath.Join(dir, "none.json")}, agentMapRequest{Source: "live"}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if missing.Status != "missing" || len(missing.Layout.Boxes) != 0 || !strings.Contains(missing.Note, "not running") {
+	if missing.Status != "missing" || len(missing.Layout.Boxes) != 0 || missing.Note != "No snapshot file yet. No current boxes are shown." ||
+		strings.Contains(missing.Note, "not running") {
 		t.Errorf("missing: status %q, note %q", missing.Status, missing.Note)
+	}
+}
+
+// While this window starts up, an old file draws no boxes and the note says
+// so; a current file draws as usual, since its numbers are current.
+func TestAgentMapLiveStarting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join("..", "..", "testdata", "snapshot_example.json")
+	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
+	starting := func() snapshotwriter.StatusView {
+		return snapshotwriter.StatusView{State: snapshotwriter.StateStarting}
+	}
+	env := agentMapEnv{DataDir: dir, SnapPath: path, Writer: starting}
+
+	old, err := agentMapFor(env, agentMapRequest{Source: "live"}, now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(old.Layout.Boxes) != 0 || old.Note != "Starting up: writing the first snapshot. No current boxes are shown." {
+		t.Errorf("starting, stale: %d boxes, note %q", len(old.Layout.Boxes), old.Note)
+	}
+	cur, err := agentMapFor(env, agentMapRequest{Source: "live"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cur.Status != "ok" || len(cur.Layout.Boxes) == 0 || cur.Note != "" {
+		t.Errorf("starting, ok: status %q, %d boxes, note %q", cur.Status, len(cur.Layout.Boxes), cur.Note)
 	}
 }
 

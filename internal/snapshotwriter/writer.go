@@ -22,8 +22,8 @@ import (
 )
 
 // Tick is how often the snapshot file is rewritten (R4, agent control
-// plan). snapshot.StaleAfterTicks of these old and a reader says BurnMon is
-// not running.
+// plan). snapshot.StaleAfterTicks of these old and a reader reports the file
+// as stale.
 const Tick = 5 * time.Second
 
 // foremanEvery is how often the Foreman state files are read again. One read
@@ -212,6 +212,11 @@ type Writer struct {
 	Procs  func() ([]sysmon.ProcessGroupSample, error)
 	Graph  *GraphReaders    // nil: device node only
 	Now    func() time.Time // nil: time.Now
+	// Status is updated on every lock attempt and write (nil: not tracked).
+	Status *Status
+	// Started is when the process started, for the first-write log line
+	// (zero: when Run began).
+	Started time.Time
 }
 
 // Run is the writer loop. Every w.Tick, a process that does not hold lock
@@ -220,20 +225,37 @@ type Writer struct {
 // takes over there. Run returns when stop closes (a nil stop never does),
 // releasing the lock.
 func (w *Writer) Run(lock *Lock, exe string, stop <-chan struct{}) {
+	started := w.Started
+	if started.IsZero() {
+		started = time.Now()
+	}
+	wrote := false
 	defer lock.Release()
 	ticker := time.NewTicker(w.Tick)
 	defer ticker.Stop()
+	// The first attempt and write run before the first ticker wait, so a
+	// fresh window does not show the old file for a whole tick.
 	for {
 		if !lock.Held() {
 			if ok, err := lock.TryAcquire(exe); err != nil {
 				log.Println("snapshot: lock failed:", err)
+				w.Status.setLockError(err)
 			} else if ok {
 				log.Println("snapshot: this process writes the snapshot")
+			} else {
+				w.Status.setOther(ReadOwner(lock.Path()))
 			}
 		}
 		if lock.Held() {
 			if err := w.Once(); err != nil {
 				log.Println("snapshot: write failed:", err)
+				w.Status.setFailed(err)
+			} else {
+				w.Status.setWrote(time.Now())
+				if !wrote {
+					wrote = true
+					log.Printf("snapshot: first write %d ms after start", time.Since(started).Milliseconds())
+				}
 			}
 		}
 		select {
