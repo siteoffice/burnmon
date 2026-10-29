@@ -36,14 +36,13 @@ import (
 // __bdevPaintFake ticks. Read from the trend <path>'s own "d" attribute
 // (counting "M" moveto commands - one per subpath) rather than a debug hook,
 // since the sparkline has none.
-func init() {
-	checks["d17"] = func(hwnd uintptr, args []string) error {
-		if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-			return err
-		}
-		time.Sleep(300 * time.Millisecond)
+func caseD17(hwnd uintptr, args []string) error {
+	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
 
-		script := `(function(){
+	script := `(function(){
   // Read off the real, already-running page before touching fake mode at
   // all: the last real paintTick's own HIST_GAP_MS, set from the real
   // bdevSnapshotNow's own hist_gap_ms field (main.go/app.go), not a
@@ -134,95 +133,94 @@ func init() {
   };
 })()`
 
-		var out struct {
-			RealHistGapMs float64 `json:"realHistGapMs"`
-			Debug         struct {
-				W        float64 `json:"w"`
-				Segments [][]struct {
-					X float64 `json:"x"`
-					T float64 `json:"t"`
-				} `json:"segments"`
-			} `json:"debug"`
-			SparkNoBreakD     string `json:"sparkNoBreakD"`
-			SparkNoBreakMoves int    `json:"sparkNoBreakMoves"`
-			SparkBreakD       string `json:"sparkBreakD"`
-			SparkBreakMoves   int    `json:"sparkBreakMoves"`
-		}
-		// Deferred unconditionally, not after the eval/screenshot calls
-		// below: a JS exception partway through script (after
-		// __bdevEnterFakeMode already ran) would otherwise return early and
-		// leave the real page's own tick timer stopped forever. The guard
-		// inside is a no-op if fake mode was never actually entered.
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-
-		if err := evalInto(script, &out); err != nil {
-			return fmt.Errorf("d17: eval fake-history paint: %w", err)
-		}
-		time.Sleep(300 * time.Millisecond)
-		if _, err := screenshot(hwnd, "d17-hist-gap-threshold"); err != nil {
-			return err
-		}
-
-		var errs []string
-
-		// 0. The real, already-running page's own last live tick used a
-		// HIST_GAP_MS of exactly 25000 - app.go's histGapThreshold
-		// (hiddenSampleInterval * 5 / 2, 10000 * 5 / 2) reached the page
-		// through the real bdevSnapshotNow, not just this check's own fake
-		// snap.hist_gap_ms. If app.go's constants ever change, this
-		// expected value needs updating alongside it.
-		const wantRealHistGapMs = 25000
-		fmt.Printf("uicheck: d17: real page's own live HIST_GAP_MS = %.0f (want %d)\n", out.RealHistGapMs, wantRealHistGapMs)
-		if out.RealHistGapMs != wantRealHistGapMs {
-			errs = append(errs, fmt.Sprintf("real page's own live HIST_GAP_MS was %.0f, want %d (app.go's histGapThreshold did not reach the page through bdevSnapshotNow)", out.RealHistGapMs, wantRealHistGapMs))
-		}
-
-		// 1. System chart: exactly 2 segments - the 5min@1s and 5min@10s
-		// stretches stay one continuous line (the bug this item fixes: the
-		// old 5000ms threshold would have broken every 10s step in the
-		// second stretch, producing far more than 2 segments here), and
-		// only the deliberate 60s gap breaks it.
-		if len(out.Debug.Segments) != 2 {
-			errs = append(errs, fmt.Sprintf("system chart: expected 2 line segments (continuous across 1s+10s, one break at the 60s gap), got %d", len(out.Debug.Segments)))
-		} else {
-			seg0, seg1 := out.Debug.Segments[0], out.Debug.Segments[1]
-			if len(seg0) != 331 {
-				errs = append(errs, fmt.Sprintf("system chart: first segment has %d points, want 331 (300 at 1s + 31 at 10s, unbroken)", len(seg0)))
-			}
-			if len(seg1) != 61 {
-				errs = append(errs, fmt.Sprintf("system chart: second segment has %d points, want 61 (1 minute at 1s after the gap)", len(seg1)))
-			}
-			gapStart := seg0[len(seg0)-1].T
-			gapEnd := seg1[0].T
-			gapSec := (gapEnd - gapStart) / 1000
-			fmt.Printf("uicheck: d17: system chart gap = %.0fs (want ~60s), segments = %d+%d points\n", gapSec, len(seg0), len(seg1))
-			if gapSec < 55 || gapSec > 65 {
-				errs = append(errs, fmt.Sprintf("system chart: segment gap was %.0fs, want ~60s", gapSec))
-			}
-		}
-
-		// 2. Sparkline: a 24s gap (under the 25000ms threshold) must not
-		// break the line - one subpath, one "M".
-		fmt.Printf("uicheck: d17: sparkline 24s-gap path = %q (%d move(s), want 1)\n", out.SparkNoBreakD, out.SparkNoBreakMoves)
-		if out.SparkNoBreakD == "" {
-			errs = append(errs, "sparkline 24s-gap case: trend path rendered empty")
-		} else if out.SparkNoBreakMoves != 1 {
-			errs = append(errs, fmt.Sprintf("sparkline 24s-gap case: %d moveto command(s) in %q, want 1 (continuous)", out.SparkNoBreakMoves, out.SparkNoBreakD))
-		}
-
-		// 3. Sparkline: a 26s gap (over the 25000ms threshold) must break
-		// the line - two subpaths, two "M"s.
-		fmt.Printf("uicheck: d17: sparkline 26s-gap path = %q (%d move(s), want 2)\n", out.SparkBreakD, out.SparkBreakMoves)
-		if out.SparkBreakD == "" {
-			errs = append(errs, "sparkline 26s-gap case: trend path rendered empty")
-		} else if out.SparkBreakMoves != 2 {
-			errs = append(errs, fmt.Sprintf("sparkline 26s-gap case: %d moveto command(s) in %q, want 2 (broken once)", out.SparkBreakMoves, out.SparkBreakD))
-		}
-
-		if len(errs) > 0 {
-			return fmt.Errorf("d17: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
-		}
-		fmt.Println("uicheck: d17: hist-gap threshold check clean (real page's own HIST_GAP_MS reached 25000 through bdevSnapshotNow; system chart continuous across 1s+10s cadence, breaks once at 60s; sparkline holds at 24s, breaks at 26s)")
-		return nil
+	var out struct {
+		RealHistGapMs float64 `json:"realHistGapMs"`
+		Debug         struct {
+			W        float64 `json:"w"`
+			Segments [][]struct {
+				X float64 `json:"x"`
+				T float64 `json:"t"`
+			} `json:"segments"`
+		} `json:"debug"`
+		SparkNoBreakD     string `json:"sparkNoBreakD"`
+		SparkNoBreakMoves int    `json:"sparkNoBreakMoves"`
+		SparkBreakD       string `json:"sparkBreakD"`
+		SparkBreakMoves   int    `json:"sparkBreakMoves"`
 	}
+	// Deferred unconditionally, not after the eval/screenshot calls
+	// below: a JS exception partway through script (after
+	// __bdevEnterFakeMode already ran) would otherwise return early and
+	// leave the real page's own tick timer stopped forever. The guard
+	// inside is a no-op if fake mode was never actually entered.
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+
+	if err := evalInto(script, &out); err != nil {
+		return fmt.Errorf("d17: eval fake-history paint: %w", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, err := screenshot(hwnd, "d17-hist-gap-threshold"); err != nil {
+		return err
+	}
+
+	var errs []string
+
+	// 0. The real, already-running page's own last live tick used a
+	// HIST_GAP_MS of exactly 25000 - app.go's histGapThreshold
+	// (hiddenSampleInterval * 5 / 2, 10000 * 5 / 2) reached the page
+	// through the real bdevSnapshotNow, not just this check's own fake
+	// snap.hist_gap_ms. If app.go's constants ever change, this
+	// expected value needs updating alongside it.
+	const wantRealHistGapMs = 25000
+	fmt.Printf("uicheck: d17: real page's own live HIST_GAP_MS = %.0f (want %d)\n", out.RealHistGapMs, wantRealHistGapMs)
+	if out.RealHistGapMs != wantRealHistGapMs {
+		errs = append(errs, fmt.Sprintf("real page's own live HIST_GAP_MS was %.0f, want %d (app.go's histGapThreshold did not reach the page through bdevSnapshotNow)", out.RealHistGapMs, wantRealHistGapMs))
+	}
+
+	// 1. System chart: exactly 2 segments - the 5min@1s and 5min@10s
+	// stretches stay one continuous line (the bug this item fixes: the
+	// old 5000ms threshold would have broken every 10s step in the
+	// second stretch, producing far more than 2 segments here), and
+	// only the deliberate 60s gap breaks it.
+	if len(out.Debug.Segments) != 2 {
+		errs = append(errs, fmt.Sprintf("system chart: expected 2 line segments (continuous across 1s+10s, one break at the 60s gap), got %d", len(out.Debug.Segments)))
+	} else {
+		seg0, seg1 := out.Debug.Segments[0], out.Debug.Segments[1]
+		if len(seg0) != 331 {
+			errs = append(errs, fmt.Sprintf("system chart: first segment has %d points, want 331 (300 at 1s + 31 at 10s, unbroken)", len(seg0)))
+		}
+		if len(seg1) != 61 {
+			errs = append(errs, fmt.Sprintf("system chart: second segment has %d points, want 61 (1 minute at 1s after the gap)", len(seg1)))
+		}
+		gapStart := seg0[len(seg0)-1].T
+		gapEnd := seg1[0].T
+		gapSec := (gapEnd - gapStart) / 1000
+		fmt.Printf("uicheck: d17: system chart gap = %.0fs (want ~60s), segments = %d+%d points\n", gapSec, len(seg0), len(seg1))
+		if gapSec < 55 || gapSec > 65 {
+			errs = append(errs, fmt.Sprintf("system chart: segment gap was %.0fs, want ~60s", gapSec))
+		}
+	}
+
+	// 2. Sparkline: a 24s gap (under the 25000ms threshold) must not
+	// break the line - one subpath, one "M".
+	fmt.Printf("uicheck: d17: sparkline 24s-gap path = %q (%d move(s), want 1)\n", out.SparkNoBreakD, out.SparkNoBreakMoves)
+	if out.SparkNoBreakD == "" {
+		errs = append(errs, "sparkline 24s-gap case: trend path rendered empty")
+	} else if out.SparkNoBreakMoves != 1 {
+		errs = append(errs, fmt.Sprintf("sparkline 24s-gap case: %d moveto command(s) in %q, want 1 (continuous)", out.SparkNoBreakMoves, out.SparkNoBreakD))
+	}
+
+	// 3. Sparkline: a 26s gap (over the 25000ms threshold) must break
+	// the line - two subpaths, two "M"s.
+	fmt.Printf("uicheck: d17: sparkline 26s-gap path = %q (%d move(s), want 2)\n", out.SparkBreakD, out.SparkBreakMoves)
+	if out.SparkBreakD == "" {
+		errs = append(errs, "sparkline 26s-gap case: trend path rendered empty")
+	} else if out.SparkBreakMoves != 2 {
+		errs = append(errs, fmt.Sprintf("sparkline 26s-gap case: %d moveto command(s) in %q, want 2 (broken once)", out.SparkBreakMoves, out.SparkBreakD))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("d17: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d17: hist-gap threshold check clean (real page's own HIST_GAP_MS reached 25000 through bdevSnapshotNow; system chart continuous across 1s+10s cadence, breaks once at 60s; sparkline holds at 24s, breaks at 26s)")
+	return nil
 }

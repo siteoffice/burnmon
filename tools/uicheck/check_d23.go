@@ -149,161 +149,159 @@ func d23Wait(ok func(d23State) bool) (d23State, bool, error) {
 	return s, false, nil
 }
 
-func init() {
-	checks["d23"] = func(hwnd uintptr, args []string) error {
-		if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-			return err
-		}
-		time.Sleep(300 * time.Millisecond)
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		if _, err := evalRaw(d23FakeJS); err != nil {
-			return fmt.Errorf("d23: fake paint: %w", err)
-		}
-		start, err := evalString(`window.BM_STATION_THEME`)
-		if err != nil || (start != "site" && start != "space") {
-			return fmt.Errorf("d23: startup theme read %q: %v", start, err)
-		}
-		other := d23Other(start)
-		bringToFront(hwnd)
-		// A real click grants the window input focus before the key presses
-		// (d7's own finding).
-		if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
-			fmt.Println("uicheck: d23: could not click .logo to establish focus:", err)
-		}
-		var errs []string
-		step := func(name string, vk uint16, ok func(d23State) bool) d23State {
-			if vk != 0 {
-				if err := pressKey(vk); err != nil {
-					errs = append(errs, fmt.Sprintf("%s: press: %v", name, err))
-					return d23State{}
-				}
-			}
-			s, good, err := d23Wait(ok)
-			if err != nil {
-				errs = append(errs, fmt.Sprintf("%s: eval: %v", name, err))
-			} else if !good {
-				errs = append(errs, fmt.Sprintf("%s: got %+v", name, s))
-			}
-			fmt.Printf("uicheck: d23 %s: %+v\n", name, s)
-			return s
-		}
-
-		step("P opens the full Station and it draws", vkP, func(s d23State) bool {
-			return s.Overlay && s.FullCanvas && s.Lit > 500 && strings.Contains(s.Hud, "3 agents") &&
-				d23Theme(s, start)
-		})
-		// The fake agents walk in from the airlock; give them time to reach their
-		// rooms and sit, so the shots show the settled pose (alpha.10 follow-up).
-		time.Sleep(12 * time.Second)
-		bringToFront(hwnd) // focus can drift during a long wait; the key presses below need it
-		if err := d23Shot(hwnd, "d23-station-full"); err != nil {
-			return err
-		}
-		step("T switches the Station to the space theme", vkT, func(s d23State) bool {
-			return s.Overlay && s.Lit > 500 && d23Theme(s, other)
-		})
-		if err := d23Shot(hwnd, "d23-station-space"); err != nil {
-			return err
-		}
-		step("T again switches back to the site theme", vkT, func(s d23State) bool {
-			return s.Overlay && s.Lit > 500 && d23Theme(s, start)
-		})
-		if _, err := evalRaw(`(window.__bdevStationClick('fake-st-1'), true)`); err != nil {
-			errs = append(errs, fmt.Sprintf("station click: %v", err))
-		}
-		step("a Station click opens the turn popup above it", 0, func(s d23State) bool {
-			return s.Popup && s.Overlay && s.PopupZ > s.OverlayZ
-		})
-		step("Esc closes the popup first, the Station stays", vkEscape, func(s d23State) bool {
-			return !s.Popup && s.Overlay
-		})
-		step("Esc again closes the Station", vkEscape, func(s d23State) bool {
-			return !s.Overlay && !s.FullCanvas && s.BarsShown
-		})
-		// A "nothing happens" check must wait before it reads, or it passes
-		// before the key press has even been handled.
-		if err := pressKey(vkT); err != nil {
-			errs = append(errs, fmt.Sprintf("T closed: press: %v", err))
-		}
-		time.Sleep(500 * time.Millisecond)
-		step("T with the Station closed changes nothing", 0, func(s d23State) bool {
-			return !s.Overlay && s.Theme == start
-		})
-		step("O swaps the chart for the plan view and it draws", vkO, func(s d23State) bool {
-			return s.Panel && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH > 0 && s.PanelH <= s.ZoneH && s.Lit > 500 && strings.Contains(s.Hud, "3 agents")
-		})
-		if err := d23Shot(hwnd, "d23-station-panel"); err != nil {
-			return err
-		}
-		// T works in the plan view too (the Station is mounted in the burn zone).
-		step("T switches the plan view to the space theme", vkT, func(s d23State) bool {
-			return s.Panel && s.Lit > 500 && d23Theme(s, other)
-		})
-		if err := d23Shot(hwnd, "d23-station-panel-space"); err != nil {
-			return err
-		}
-		step("T again switches the plan view back to the site theme", vkT, func(s d23State) bool {
-			return s.Panel && s.Lit > 500 && d23Theme(s, start)
-		})
-		// Esc closes the plan view (O) and the 3D view (I) after a turn popup
-		// and before fullscreen: a spy on bdevExitFullscreen counts the calls
-		// (F11 itself is a global hotkey, so the Esc path is the only one a
-		// key press in the page can reach).
-		if _, err := evalRaw(`(window.__bdevExitCalls = 0, window.__bdevExitOrig = window.bdevExitFullscreen, window.bdevExitFullscreen = function(){ window.__bdevExitCalls++; }, true)`); err != nil {
-			errs = append(errs, fmt.Sprintf("exit spy: %v", err))
-		}
-		defer evalRaw(`(window.__bdevExitOrig && (window.bdevExitFullscreen = window.__bdevExitOrig), true)`)
-		escOrder := func(name string, open func(d23State) bool) {
-			if _, err := evalRaw(`(window.__bdevStationClick('fake-st-1'), true)`); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: station click: %v", name, err))
-			}
-			step(name+": a Station click opens the turn popup", 0, func(s d23State) bool { return s.Popup && open(s) })
-			step(name+": Esc closes the popup first, the view stays, fullscreen is left alone", vkEscape, func(s d23State) bool {
-				return !s.Popup && open(s) && s.ExitCalls == 0
-			})
-			step(name+": Esc again closes the view, the chart is back, fullscreen is still left alone", vkEscape, func(s d23State) bool {
-				return !s.Popup && !s.Panel && !s.Overlay && s.BarsShown && s.TickerShown && s.ExitCalls == 0
-			})
-			step(name+": Esc with nothing open reaches fullscreen", vkEscape, func(s d23State) bool { return s.ExitCalls == 1 })
-			_, _ = evalRaw(`(window.__bdevExitCalls = 0, true)`)
-		}
-		step("O again brings the chart back", vkO, func(s d23State) bool {
-			return !s.Panel && s.BarsShown && s.AxisShown && s.TickerShown && !s.Overlay
-		})
-		step("O opens the plan view for the Esc check", vkO, func(s d23State) bool { return s.Panel && s.View == "top" && s.Lit > 500 })
-		escOrder("O", func(s d23State) bool { return s.Panel && s.View == "top" })
-
-		// I (3D Station in the burn zone, 2026-10-05): the same zone and
-		// frame as O, the isometric projection instead of the plan.
-		step("I swaps the chart for the 3D Station and it draws", vkI, func(s d23State) bool {
-			return s.Panel && s.View == "iso" && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH > 0 && s.PanelH <= s.ZoneH && s.Lit > 500 &&
-				strings.Contains(s.Hud, "3 agents") && !s.Overlay
-		})
-		if err := d23Shot(hwnd, "d23-station-iso"); err != nil {
-			return err
-		}
-		step("T switches the 3D view to the space theme", vkT, func(s d23State) bool {
-			return s.Panel && s.View == "iso" && s.Lit > 500 && d23Theme(s, other)
-		})
-		if err := d23Shot(hwnd, "d23-station-iso-space"); err != nil {
-			return err
-		}
-		step("T again switches the 3D view back to the site theme", vkT, func(s d23State) bool {
-			return s.Panel && s.View == "iso" && s.Lit > 500 && d23Theme(s, start)
-		})
-		step("O while the 3D view is open swaps to the plan view", vkO, func(s d23State) bool {
-			return s.Panel && s.View == "top" && s.Lit > 500
-		})
-		step("I swaps back to the 3D view", vkI, func(s d23State) bool { return s.Panel && s.View == "iso" && s.Lit > 500 })
-		escOrder("I", func(s d23State) bool { return s.Panel && s.View == "iso" })
-		step("I opens the 3D view once more", vkI, func(s d23State) bool { return s.Panel && s.View == "iso" && s.Lit > 500 })
-		step("I again brings the chart back", vkI, func(s d23State) bool {
-			return !s.Panel && s.BarsShown && s.AxisShown && s.TickerShown && !s.Overlay
-		})
-		if len(errs) > 0 {
-			return fmt.Errorf("d23: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
-		}
-		fmt.Println("uicheck: d23: Station opens on P, O and I, draws in all three, popup above it, Esc order popup then Station then fullscreen, T flips site and space only while open")
-		return nil
+func caseD23(hwnd uintptr, args []string) error {
+	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
+		return err
 	}
+	time.Sleep(300 * time.Millisecond)
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	if _, err := evalRaw(d23FakeJS); err != nil {
+		return fmt.Errorf("d23: fake paint: %w", err)
+	}
+	start, err := evalString(`window.BM_STATION_THEME`)
+	if err != nil || (start != "site" && start != "space") {
+		return fmt.Errorf("d23: startup theme read %q: %v", start, err)
+	}
+	other := d23Other(start)
+	bringToFront(hwnd)
+	// A real click grants the window input focus before the key presses
+	// (d7's own finding).
+	if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
+		fmt.Println("uicheck: d23: could not click .logo to establish focus:", err)
+	}
+	var errs []string
+	step := func(name string, vk uint16, ok func(d23State) bool) d23State {
+		if vk != 0 {
+			if err := pressKey(vk); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: press: %v", name, err))
+				return d23State{}
+			}
+		}
+		s, good, err := d23Wait(ok)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: eval: %v", name, err))
+		} else if !good {
+			errs = append(errs, fmt.Sprintf("%s: got %+v", name, s))
+		}
+		fmt.Printf("uicheck: d23 %s: %+v\n", name, s)
+		return s
+	}
+
+	step("P opens the full Station and it draws", vkP, func(s d23State) bool {
+		return s.Overlay && s.FullCanvas && s.Lit > 500 && strings.Contains(s.Hud, "3 agents") &&
+			d23Theme(s, start)
+	})
+	// The fake agents walk in from the airlock; give them time to reach their
+	// rooms and sit, so the shots show the settled pose (alpha.10 follow-up).
+	time.Sleep(12 * time.Second)
+	bringToFront(hwnd) // focus can drift during a long wait; the key presses below need it
+	if err := d23Shot(hwnd, "d23-station-full"); err != nil {
+		return err
+	}
+	step("T switches the Station to the space theme", vkT, func(s d23State) bool {
+		return s.Overlay && s.Lit > 500 && d23Theme(s, other)
+	})
+	if err := d23Shot(hwnd, "d23-station-space"); err != nil {
+		return err
+	}
+	step("T again switches back to the site theme", vkT, func(s d23State) bool {
+		return s.Overlay && s.Lit > 500 && d23Theme(s, start)
+	})
+	if _, err := evalRaw(`(window.__bdevStationClick('fake-st-1'), true)`); err != nil {
+		errs = append(errs, fmt.Sprintf("station click: %v", err))
+	}
+	step("a Station click opens the turn popup above it", 0, func(s d23State) bool {
+		return s.Popup && s.Overlay && s.PopupZ > s.OverlayZ
+	})
+	step("Esc closes the popup first, the Station stays", vkEscape, func(s d23State) bool {
+		return !s.Popup && s.Overlay
+	})
+	step("Esc again closes the Station", vkEscape, func(s d23State) bool {
+		return !s.Overlay && !s.FullCanvas && s.BarsShown
+	})
+	// A "nothing happens" check must wait before it reads, or it passes
+	// before the key press has even been handled.
+	if err := pressKey(vkT); err != nil {
+		errs = append(errs, fmt.Sprintf("T closed: press: %v", err))
+	}
+	time.Sleep(500 * time.Millisecond)
+	step("T with the Station closed changes nothing", 0, func(s d23State) bool {
+		return !s.Overlay && s.Theme == start
+	})
+	step("O swaps the chart for the plan view and it draws", vkO, func(s d23State) bool {
+		return s.Panel && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH > 0 && s.PanelH <= s.ZoneH && s.Lit > 500 && strings.Contains(s.Hud, "3 agents")
+	})
+	if err := d23Shot(hwnd, "d23-station-panel"); err != nil {
+		return err
+	}
+	// T works in the plan view too (the Station is mounted in the burn zone).
+	step("T switches the plan view to the space theme", vkT, func(s d23State) bool {
+		return s.Panel && s.Lit > 500 && d23Theme(s, other)
+	})
+	if err := d23Shot(hwnd, "d23-station-panel-space"); err != nil {
+		return err
+	}
+	step("T again switches the plan view back to the site theme", vkT, func(s d23State) bool {
+		return s.Panel && s.Lit > 500 && d23Theme(s, start)
+	})
+	// Esc closes the plan view (O) and the 3D view (I) after a turn popup
+	// and before fullscreen: a spy on bdevExitFullscreen counts the calls
+	// (F11 itself is a global hotkey, so the Esc path is the only one a
+	// key press in the page can reach).
+	if _, err := evalRaw(`(window.__bdevExitCalls = 0, window.__bdevExitOrig = window.bdevExitFullscreen, window.bdevExitFullscreen = function(){ window.__bdevExitCalls++; }, true)`); err != nil {
+		errs = append(errs, fmt.Sprintf("exit spy: %v", err))
+	}
+	defer evalRaw(`(window.__bdevExitOrig && (window.bdevExitFullscreen = window.__bdevExitOrig), true)`)
+	escOrder := func(name string, open func(d23State) bool) {
+		if _, err := evalRaw(`(window.__bdevStationClick('fake-st-1'), true)`); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: station click: %v", name, err))
+		}
+		step(name+": a Station click opens the turn popup", 0, func(s d23State) bool { return s.Popup && open(s) })
+		step(name+": Esc closes the popup first, the view stays, fullscreen is left alone", vkEscape, func(s d23State) bool {
+			return !s.Popup && open(s) && s.ExitCalls == 0
+		})
+		step(name+": Esc again closes the view, the chart is back, fullscreen is still left alone", vkEscape, func(s d23State) bool {
+			return !s.Popup && !s.Panel && !s.Overlay && s.BarsShown && s.TickerShown && s.ExitCalls == 0
+		})
+		step(name+": Esc with nothing open reaches fullscreen", vkEscape, func(s d23State) bool { return s.ExitCalls == 1 })
+		_, _ = evalRaw(`(window.__bdevExitCalls = 0, true)`)
+	}
+	step("O again brings the chart back", vkO, func(s d23State) bool {
+		return !s.Panel && s.BarsShown && s.AxisShown && s.TickerShown && !s.Overlay
+	})
+	step("O opens the plan view for the Esc check", vkO, func(s d23State) bool { return s.Panel && s.View == "top" && s.Lit > 500 })
+	escOrder("O", func(s d23State) bool { return s.Panel && s.View == "top" })
+
+	// I (3D Station in the burn zone, 2026-10-05): the same zone and
+	// frame as O, the isometric projection instead of the plan.
+	step("I swaps the chart for the 3D Station and it draws", vkI, func(s d23State) bool {
+		return s.Panel && s.View == "iso" && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH > 0 && s.PanelH <= s.ZoneH && s.Lit > 500 &&
+			strings.Contains(s.Hud, "3 agents") && !s.Overlay
+	})
+	if err := d23Shot(hwnd, "d23-station-iso"); err != nil {
+		return err
+	}
+	step("T switches the 3D view to the space theme", vkT, func(s d23State) bool {
+		return s.Panel && s.View == "iso" && s.Lit > 500 && d23Theme(s, other)
+	})
+	if err := d23Shot(hwnd, "d23-station-iso-space"); err != nil {
+		return err
+	}
+	step("T again switches the 3D view back to the site theme", vkT, func(s d23State) bool {
+		return s.Panel && s.View == "iso" && s.Lit > 500 && d23Theme(s, start)
+	})
+	step("O while the 3D view is open swaps to the plan view", vkO, func(s d23State) bool {
+		return s.Panel && s.View == "top" && s.Lit > 500
+	})
+	step("I swaps back to the 3D view", vkI, func(s d23State) bool { return s.Panel && s.View == "iso" && s.Lit > 500 })
+	escOrder("I", func(s d23State) bool { return s.Panel && s.View == "iso" })
+	step("I opens the 3D view once more", vkI, func(s d23State) bool { return s.Panel && s.View == "iso" && s.Lit > 500 })
+	step("I again brings the chart back", vkI, func(s d23State) bool {
+		return !s.Panel && s.BarsShown && s.AxisShown && s.TickerShown && !s.Overlay
+	})
+	if len(errs) > 0 {
+		return fmt.Errorf("d23: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d23: Station opens on P, O and I, draws in all three, popup above it, Esc order popup then Station then fullscreen, T flips site and space only while open")
+	return nil
 }

@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -68,109 +66,107 @@ type d39Page struct {
 	Prevs      []map[string]any `json:"prevs"`
 }
 
-func init() {
-	checks["d39"] = func(hwnd uintptr, args []string) error {
-		raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
-		if err != nil {
-			return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
-		}
-		fail := func(format string, a ...any) error { return fmt.Errorf("d39: "+format, a...) }
-		if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-			return err
-		}
-		on := map[string]bool{"close_sprint": true}
-		payload := func(foreman bool, drop string) string {
-			var m map[string]any
-			if err := json.Unmarshal([]byte(d29Payload(d29Opts{Plain: false, Scrollbar: true, Status: "ok", Snap: raw})), &m); err != nil {
-				panic(err)
-			}
-			if drop != "" {
-				snap, _ := m["reading"].(map[string]any)["snapshot"].(map[string]any)
-				var keep []any
-				for _, it := range snap["wait_items"].([]any) {
-					if it.(map[string]any)["kind"] != drop {
-						keep = append(keep, it)
-					}
-				}
-				snap["wait_items"] = keep
-			}
-			ready, why := on, map[string]string{}
-			if !foreman {
-				ready = map[string]bool{}
-				for _, c := range []string{"approve", "send_back", "close_sprint"} {
-					why[c] = "needs foreman_root in burnmon.json"
-				}
-			}
-			m["controls"] = map[string]any{"foreman": foreman, "on": on, "ready": ready, "why": why}
-			b, _ := json.Marshal(m)
-			return string(b)
-		}
-		read := func() (d39Page, error) {
-			var p d39Page
-			time.Sleep(150 * time.Millisecond)
-			err := evalInto(d39ReadJS, &p)
-			return p, err
-		}
-		if _, err := evalRaw(d39Recorders); err != nil {
-			return err
-		}
-		if _, err := d29Apply(payload(true, "")); err != nil {
-			return err
-		}
-		p, err := read()
-		if err != nil {
-			return err
-		}
-		wantTiers := []string{"Blocked (7)", "Your turn (1)", "Done, needs close-out (2)"}
-		if strings.Join(p.Tiers, "|") != strings.Join(wantTiers, "|") {
-			return fail("tiers %v, want %v", p.Tiers, wantTiers)
-		}
-		if !strings.Contains(p.Head, "(7)") || !strings.Contains(p.Head, "1 your turn") {
-			return fail("panel header %q, want the count 7 and 1 your turn", p.Head)
-		}
-		if len(p.Chips) != 1 || p.Chips[0] != "closeout:example__sprint__9" {
-			return fail("Close chips on %v, want only closeout:example__sprint__9", p.Chips)
-		}
-		if p.GearShown == nil || !*p.GearShown || p.GearCount != 3 {
-			return fail("the Foreman gear lines (%d) are not all shown with foreman true", p.GearCount)
-		}
-		if _, err := screenshot(hwnd, "d39-waits"); err != nil {
-			return err
-		}
-		if _, err := evalRaw(`document.querySelector('[data-sec=waits] .ctl[data-ctl=close_sprint]').click()`); err != nil {
-			return err
-		}
-		if p, err = read(); err != nil {
-			return err
-		}
-		if len(p.Prevs) != 1 || len(p.Prevs[0]) != 2 || p.Prevs[0]["control"] != "close_sprint" || p.Prevs[0]["target"] != "closeout:example__sprint__9" {
-			return fail("press sent %v, want exactly {close_sprint, closeout:example__sprint__9}", p.Prevs)
-		}
-
-		// No Foreman: no Close chip, no close-out tier, the gear line hidden, no error text.
-		if _, err := d29Apply(payload(false, "close_out")); err != nil {
-			return err
-		}
-		if p, err = read(); err != nil {
-			return err
-		}
-		if len(p.Chips) != 0 {
-			return fail("Close chips %v without foreman_root", p.Chips)
-		}
-		if len(p.Tiers) == 0 || p.Tiers[len(p.Tiers)-1] != "Done, can be closed (1)" {
-			return fail("tiers %v without foreman_root, want the last to be Done, can be closed (1)", p.Tiers)
-		}
-		for _, t := range p.Tiers {
-			if strings.Contains(t, "close-out") {
-				return fail("close-out tier %q without foreman_root", t)
-			}
-		}
-		if p.GearHidden == nil || !*p.GearHidden || p.GearCount != 3 {
-			return fail("a Foreman gear line (%d) is shown without foreman_root", p.GearCount)
-		}
-		if len(p.Errs) != 0 {
-			return fail("error text visible without foreman_root: %v", p.Errs)
-		}
-		return nil
+func caseD39(hwnd uintptr, args []string) error {
+	raw, err := readFixture("snapshot_example.json")
+	if err != nil {
+		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
 	}
-}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d39: "+format, a...) }
+	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
+		return err
+	}
+	on := map[string]bool{"close_sprint": true}
+	payload := func(foreman bool, drop string) string {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(d29Payload(d29Opts{Plain: false, Scrollbar: true, Status: "ok", Snap: raw})), &m); err != nil {
+			panic(err)
+		}
+		if drop != "" {
+			snap, _ := m["reading"].(map[string]any)["snapshot"].(map[string]any)
+			var keep []any
+			for _, it := range snap["wait_items"].([]any) {
+				if it.(map[string]any)["kind"] != drop {
+					keep = append(keep, it)
+				}
+			}
+			snap["wait_items"] = keep
+		}
+		ready, why := on, map[string]string{}
+		if !foreman {
+			ready = map[string]bool{}
+			for _, c := range []string{"approve", "send_back", "close_sprint"} {
+				why[c] = "needs foreman_root in burnmon.json"
+			}
+		}
+		m["controls"] = map[string]any{"foreman": foreman, "on": on, "ready": ready, "why": why}
+		b, _ := json.Marshal(m)
+		return string(b)
+	}
+	read := func() (d39Page, error) {
+		var p d39Page
+		time.Sleep(150 * time.Millisecond)
+		err := evalInto(d39ReadJS, &p)
+		return p, err
+	}
+	if _, err := evalRaw(d39Recorders); err != nil {
+		return err
+	}
+	if _, err := d29Apply(payload(true, "")); err != nil {
+		return err
+	}
+	p, err := read()
+	if err != nil {
+		return err
+	}
+	wantTiers := []string{"Blocked (7)", "Your turn (1)", "Done, needs close-out (2)"}
+	if strings.Join(p.Tiers, "|") != strings.Join(wantTiers, "|") {
+		return fail("tiers %v, want %v", p.Tiers, wantTiers)
+	}
+	if !strings.Contains(p.Head, "(7)") || !strings.Contains(p.Head, "1 your turn") {
+		return fail("panel header %q, want the count 7 and 1 your turn", p.Head)
+	}
+	if len(p.Chips) != 1 || p.Chips[0] != "closeout:example__sprint__9" {
+		return fail("Close chips on %v, want only closeout:example__sprint__9", p.Chips)
+	}
+	if p.GearShown == nil || !*p.GearShown || p.GearCount != 3 {
+		return fail("the Foreman gear lines (%d) are not all shown with foreman true", p.GearCount)
+	}
+	if _, err := screenshot(hwnd, "d39-waits"); err != nil {
+		return err
+	}
+	if _, err := evalRaw(`document.querySelector('[data-sec=waits] .ctl[data-ctl=close_sprint]').click()`); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if len(p.Prevs) != 1 || len(p.Prevs[0]) != 2 || p.Prevs[0]["control"] != "close_sprint" || p.Prevs[0]["target"] != "closeout:example__sprint__9" {
+		return fail("press sent %v, want exactly {close_sprint, closeout:example__sprint__9}", p.Prevs)
+	}
+
+	// No Foreman: no Close chip, no close-out tier, the gear line hidden, no error text.
+	if _, err := d29Apply(payload(false, "close_out")); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if len(p.Chips) != 0 {
+		return fail("Close chips %v without foreman_root", p.Chips)
+	}
+	if len(p.Tiers) == 0 || p.Tiers[len(p.Tiers)-1] != "Done, can be closed (1)" {
+		return fail("tiers %v without foreman_root, want the last to be Done, can be closed (1)", p.Tiers)
+	}
+	for _, t := range p.Tiers {
+		if strings.Contains(t, "close-out") {
+			return fail("close-out tier %q without foreman_root", t)
+		}
+	}
+	if p.GearHidden == nil || !*p.GearHidden || p.GearCount != 3 {
+		return fail("a Foreman gear line (%d) is shown without foreman_root", p.GearCount)
+	}
+	if len(p.Errs) != 0 {
+		return fail("error text visible without foreman_root: %v", p.Errs)
+	}
+	return nil
+}

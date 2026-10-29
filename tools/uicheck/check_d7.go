@@ -23,15 +23,13 @@ import (
 // leaves the window in a normal state for whatever check runs next in the
 // same `uicheck-dev.ps1 d7 d2 d3 ...` sequence, rather than stuck
 // fullscreen).
-func init() {
-	checks["d7"] = func(hwnd uintptr, args []string) error {
-		for _, size := range [][2]int32{{1152, 2048}, {2560, 1440}} {
-			if err := d7once(hwnd, size[0], size[1]); err != nil {
-				return err
-			}
+func caseD7(hwnd uintptr, args []string) error {
+	for _, size := range [][2]int32{{1152, 2048}, {2560, 1440}} {
+		if err := d7once(hwnd, size[0], size[1]); err != nil {
+			return err
 		}
-		return nil
 	}
+	return nil
 }
 
 type dims struct {

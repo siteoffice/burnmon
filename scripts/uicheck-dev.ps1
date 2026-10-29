@@ -1,10 +1,12 @@
 # Starts burnmon-dev.exe with its own dev-only eval channel open
 # (BURNMON_DEV_UICHECK=1, never set by release builds or the README), runs
-# one or more tools\uicheck "d*" checks against the real running window,
-# then stops the exe. Mirrors scripts\uicheck.ps1's own w-mode flow one
-# exe, one port (9334, not 9333) and one window title ("BurnMon Dev", not
-# "BurnMon") over; called by uicheck.ps1 itself when any target check
-# starts with "d", not normally invoked directly.
+# one or more tools\uicheck d checks (a group, group/case or old d name)
+# against the real running window, then stops the exe. Mirrors
+# scripts\uicheck.ps1's own w-mode flow one exe, one port (9334, not 9333)
+# and one window title ("BurnMon Dev", not "BurnMon") over; called by
+# uicheck.ps1 itself for any d check, not normally invoked directly. No
+# names runs the seven groups; "reverse" runs the targets backwards and
+# hands "reverse" to each group, which then runs its cases backwards.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
 
@@ -14,9 +16,15 @@ if (-not (Test-Path $exe)) {
     exit 1
 }
 
-$targetChecks = $args
+# Same order as devGroups in tools\uicheck\groups.go.
+$devGroups = @("fit", "charts", "station", "layout", "map", "waits", "shell")
+$reverse = $args -contains "reverse"
+$targetChecks = @($args | Where-Object { $_ -ne "reverse" })
 if ($targetChecks.Count -eq 0) {
-    $targetChecks = @("d0", "d1", "d2", "d3")
+    $targetChecks = @($devGroups)
+}
+if ($reverse) {
+    [array]::Reverse($targetChecks)
 }
 
 # Tracked by byte offset, not line count: setupLog (app.go) rotates the log
@@ -119,8 +127,10 @@ try {
     Push-Location tools\uicheck
     try {
         foreach ($check in $targetChecks) {
-            Write-Host "--- uicheck $check ---"
-            go run . $check
+            $goArgs = @($check)
+            if ($reverse -and ($devGroups -contains $check)) { $goArgs += "reverse" }
+            Write-Host "--- uicheck $($goArgs -join ' ') ---"
+            go run . @goArgs
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "uicheck $check FAILED"
                 exit $LASTEXITCODE

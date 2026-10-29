@@ -122,85 +122,83 @@ func d24Wait(ok func(d24State) bool) (d24State, bool, error) {
 	return s, false, nil
 }
 
-func init() {
-	checks["d24"] = func(hwnd uintptr, args []string) error {
-		if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-			return err
-		}
-		time.Sleep(300 * time.Millisecond)
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		if _, err := evalRaw(d24FakeJS); err != nil {
-			return fmt.Errorf("d24: fake paint: %w", err)
-		}
-		bringToFront(hwnd)
-		// A real click grants the window input focus before the key presses
-		// (d7's own finding).
-		if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
-			fmt.Println("uicheck: d24: could not click .logo to establish focus:", err)
-		}
-		var errs []string
-		step := func(name string, vk uint16, ok func(d24State) bool) d24State {
-			if vk != 0 {
-				if err := pressKey(vk); err != nil {
-					errs = append(errs, fmt.Sprintf("%s: press: %v", name, err))
-					return d24State{}
-				}
-			}
-			s, good, err := d24Wait(ok)
-			if err != nil {
-				errs = append(errs, fmt.Sprintf("%s: eval: %v", name, err))
-			} else if !good {
-				errs = append(errs, fmt.Sprintf("%s: got %+v", name, s))
-			}
-			fmt.Printf("uicheck: d24 %s: %+v\n", name, s)
-			return s
-		}
-		// The check leaves the page dark whatever happens, the stored choice
-		// included, so a failed run cannot make the next start light.
-		defer func() {
-			if s, err := d24Read(); err == nil && s.Attr == "light" {
-				_ = pressKey(vkL)
-				time.Sleep(300 * time.Millisecond)
-			}
-		}()
-
-		start, _, err := d24Wait(func(d24State) bool { return true })
-		if err != nil {
-			return fmt.Errorf("d24: first read: %w", err)
-		}
-		if start.Attr == "light" {
-			fmt.Println("uicheck: d24: page started light (remembered choice), pressing L once to get to the dark baseline")
-			start = step("L to the dark baseline", vkL, func(s d24State) bool { return s.Attr == "" })
-		}
-		isDark := func(s d24State) bool { return s.Attr == "" && s.BodyLum < 0.1 && s.TxtLum > 0.5 }
-		if !isDark(start) || len(start.Colours) == 0 {
-			errs = append(errs, fmt.Sprintf("dark baseline: got %+v", start))
-		}
-		if _, err := screenshot(hwnd, "d24-dark-start"); err != nil {
-			return err
-		}
-
-		step("L turns the page light", vkL, func(s d24State) bool {
-			return s.Attr == "light" && s.BodyLum > 0.8 && s.HeaderLum > 0.8 && s.TxtLum < 0.2 && s.PanelLum > 0.8 &&
-				len(s.Colours) > 0 && s.MinContrast >= 3 && s.Binding
-		})
-		time.Sleep(300 * time.Millisecond)
-		if _, err := screenshot(hwnd, "d24-light"); err != nil {
-			return err
-		}
-
-		step("L again restores the dark theme exactly", vkL, func(s d24State) bool {
-			return isDark(s) && s.BodyBg == start.BodyBg && strings.Join(s.Colours, "|") == strings.Join(start.Colours, "|")
-		})
-		time.Sleep(300 * time.Millisecond)
-		if _, err := screenshot(hwnd, "d24-dark"); err != nil {
-			return err
-		}
-
-		if len(errs) > 0 {
-			return fmt.Errorf("d24: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
-		}
-		fmt.Println("uicheck: d24: L switches dark and light, light colours hold 3:1 on the panel, dark restored exactly")
-		return nil
+func caseD24(hwnd uintptr, args []string) error {
+	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
+		return err
 	}
+	time.Sleep(300 * time.Millisecond)
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	if _, err := evalRaw(d24FakeJS); err != nil {
+		return fmt.Errorf("d24: fake paint: %w", err)
+	}
+	bringToFront(hwnd)
+	// A real click grants the window input focus before the key presses
+	// (d7's own finding).
+	if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
+		fmt.Println("uicheck: d24: could not click .logo to establish focus:", err)
+	}
+	var errs []string
+	step := func(name string, vk uint16, ok func(d24State) bool) d24State {
+		if vk != 0 {
+			if err := pressKey(vk); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: press: %v", name, err))
+				return d24State{}
+			}
+		}
+		s, good, err := d24Wait(ok)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: eval: %v", name, err))
+		} else if !good {
+			errs = append(errs, fmt.Sprintf("%s: got %+v", name, s))
+		}
+		fmt.Printf("uicheck: d24 %s: %+v\n", name, s)
+		return s
+	}
+	// The check leaves the page dark whatever happens, the stored choice
+	// included, so a failed run cannot make the next start light.
+	defer func() {
+		if s, err := d24Read(); err == nil && s.Attr == "light" {
+			_ = pressKey(vkL)
+			time.Sleep(300 * time.Millisecond)
+		}
+	}()
+
+	start, _, err := d24Wait(func(d24State) bool { return true })
+	if err != nil {
+		return fmt.Errorf("d24: first read: %w", err)
+	}
+	if start.Attr == "light" {
+		fmt.Println("uicheck: d24: page started light (remembered choice), pressing L once to get to the dark baseline")
+		start = step("L to the dark baseline", vkL, func(s d24State) bool { return s.Attr == "" })
+	}
+	isDark := func(s d24State) bool { return s.Attr == "" && s.BodyLum < 0.1 && s.TxtLum > 0.5 }
+	if !isDark(start) || len(start.Colours) == 0 {
+		errs = append(errs, fmt.Sprintf("dark baseline: got %+v", start))
+	}
+	if _, err := screenshot(hwnd, "d24-dark-start"); err != nil {
+		return err
+	}
+
+	step("L turns the page light", vkL, func(s d24State) bool {
+		return s.Attr == "light" && s.BodyLum > 0.8 && s.HeaderLum > 0.8 && s.TxtLum < 0.2 && s.PanelLum > 0.8 &&
+			len(s.Colours) > 0 && s.MinContrast >= 3 && s.Binding
+	})
+	time.Sleep(300 * time.Millisecond)
+	if _, err := screenshot(hwnd, "d24-light"); err != nil {
+		return err
+	}
+
+	step("L again restores the dark theme exactly", vkL, func(s d24State) bool {
+		return isDark(s) && s.BodyBg == start.BodyBg && strings.Join(s.Colours, "|") == strings.Join(start.Colours, "|")
+	})
+	time.Sleep(300 * time.Millisecond)
+	if _, err := screenshot(hwnd, "d24-dark"); err != nil {
+		return err
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("d24: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d24: L switches dark and light, light colours hold 3:1 on the panel, dark restored exactly")
+	return nil
 }

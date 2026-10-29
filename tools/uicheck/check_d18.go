@@ -18,14 +18,13 @@ import (
 // the final paint of each is compared: the canvas bitmap (toDataURL), the
 // chart's own gap segments (__bdevHistDebug), #harnessHeatmap and
 // #processGroups markup.
-func init() {
-	checks["d18"] = func(hwnd uintptr, args []string) error {
-		if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-			return err
-		}
-		time.Sleep(300 * time.Millisecond)
+func caseD18(hwnd uintptr, args []string) error {
+	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
 
-		script := `(function(){
+	script := `(function(){
   var nowMs = Math.floor(Date.now() / 1000) * 1000;
   var startMs = nowMs - 70 * 60 * 1000;
   var windowMs = 30 * 60 * 1000;
@@ -96,50 +95,49 @@ func init() {
   };
 })()`
 
-		var out struct {
-			Paints     int  `json:"paints"`
-			SysRows    int  `json:"sysRows"`
-			GroupRows  int  `json:"groupRows"`
-			CanvasSame bool `json:"canvasSame"`
-			CanvasLen  int  `json:"canvasLen"`
-			SegsSame   bool `json:"segsSame"`
-			SegCount   int  `json:"segCount"`
-			HeatSame   bool `json:"heatSame"`
-			HeatLen    int  `json:"heatLen"`
-			GroupsSame bool `json:"groupsSame"`
-			GroupsLen  int  `json:"groupsLen"`
-		}
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		if err := evalInto(script, &out); err != nil {
-			return fmt.Errorf("d18: eval delta-vs-full paint: %w", err)
-		}
-		time.Sleep(300 * time.Millisecond)
-		if _, err := screenshot(hwnd, "d18-delta-history"); err != nil {
-			return err
-		}
-		fmt.Printf("uicheck: d18: %d sys rows, %d group rows, delta run %d paints; canvas %d chars, %d chart segments, heatmap %d chars, process groups %d chars\n",
-			out.SysRows, out.GroupRows, out.Paints, out.CanvasLen, out.SegCount, out.HeatLen, out.GroupsLen)
-
-		var errs []string
-		if !out.CanvasSame {
-			errs = append(errs, "System chart canvas differs between full and delta delivery")
-		}
-		if !out.SegsSame {
-			errs = append(errs, "System chart gap segments differ between full and delta delivery")
-		}
-		if !out.HeatSame {
-			errs = append(errs, "#harnessHeatmap differs between full and delta delivery")
-		}
-		if !out.GroupsSame {
-			errs = append(errs, "#processGroups differs between full and delta delivery")
-		}
-		if out.SegCount < 2 || out.HeatLen == 0 || out.GroupsLen == 0 {
-			errs = append(errs, fmt.Sprintf("fixture did not render enough to compare (segments=%d heatmap=%d groups=%d)", out.SegCount, out.HeatLen, out.GroupsLen))
-		}
-		if len(errs) > 0 {
-			return fmt.Errorf("d18: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
-		}
-		fmt.Println("uicheck: d18: delta history renders the same as full history (chart bitmap, gap segments, harness heatmap, process groups)")
-		return nil
+	var out struct {
+		Paints     int  `json:"paints"`
+		SysRows    int  `json:"sysRows"`
+		GroupRows  int  `json:"groupRows"`
+		CanvasSame bool `json:"canvasSame"`
+		CanvasLen  int  `json:"canvasLen"`
+		SegsSame   bool `json:"segsSame"`
+		SegCount   int  `json:"segCount"`
+		HeatSame   bool `json:"heatSame"`
+		HeatLen    int  `json:"heatLen"`
+		GroupsSame bool `json:"groupsSame"`
+		GroupsLen  int  `json:"groupsLen"`
 	}
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	if err := evalInto(script, &out); err != nil {
+		return fmt.Errorf("d18: eval delta-vs-full paint: %w", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, err := screenshot(hwnd, "d18-delta-history"); err != nil {
+		return err
+	}
+	fmt.Printf("uicheck: d18: %d sys rows, %d group rows, delta run %d paints; canvas %d chars, %d chart segments, heatmap %d chars, process groups %d chars\n",
+		out.SysRows, out.GroupRows, out.Paints, out.CanvasLen, out.SegCount, out.HeatLen, out.GroupsLen)
+
+	var errs []string
+	if !out.CanvasSame {
+		errs = append(errs, "System chart canvas differs between full and delta delivery")
+	}
+	if !out.SegsSame {
+		errs = append(errs, "System chart gap segments differ between full and delta delivery")
+	}
+	if !out.HeatSame {
+		errs = append(errs, "#harnessHeatmap differs between full and delta delivery")
+	}
+	if !out.GroupsSame {
+		errs = append(errs, "#processGroups differs between full and delta delivery")
+	}
+	if out.SegCount < 2 || out.HeatLen == 0 || out.GroupsLen == 0 {
+		errs = append(errs, fmt.Sprintf("fixture did not render enough to compare (segments=%d heatmap=%d groups=%d)", out.SegCount, out.HeatLen, out.GroupsLen))
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("d18: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d18: delta history renders the same as full history (chart bitmap, gap segments, harness heatmap, process groups)")
+	return nil
 }

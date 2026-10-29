@@ -107,157 +107,155 @@ const d26CanvasJS = `(function(){
   return {c: c, x: r.left + r.width / 2, y: r.top + r.height / 2};
 })()`
 
-func init() {
-	checks["d26"] = func(hwnd uintptr, args []string) error {
-		tag := os.Getenv("UICHECK_TAG")
-		if tag == "" {
-			tag = "run"
+func caseD26(hwnd uintptr, args []string) error {
+	tag := os.Getenv("UICHECK_TAG")
+	if tag == "" {
+		tag = "run"
+	}
+	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	if _, err := evalRaw(d23FakeJS); err != nil {
+		return fmt.Errorf("d26: fake paint: %w", err)
+	}
+	if _, err := evalRaw(d26SpyJS); err != nil {
+		return fmt.Errorf("d26: spy: %w", err)
+	}
+	bringToFront(hwnd)
+	var errs, lines []string
+	key := func(k string) {
+		if _, err := evalRaw(fmt.Sprintf(d26KeyJS, k)); err != nil {
+			errs = append(errs, fmt.Sprintf("key %s: %v", k, err))
 		}
-		if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-			return err
+	}
+	theme := func(want string) {
+		var cur string
+		if err := evalInto(`(window.__bdevStationTheme ? (window.__bdevStationTheme() || '') : '')`, &cur); err != nil {
+			errs = append(errs, fmt.Sprintf("theme read: %v", err))
+			return
 		}
-		time.Sleep(300 * time.Millisecond)
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		if _, err := evalRaw(d23FakeJS); err != nil {
-			return fmt.Errorf("d26: fake paint: %w", err)
+		if cur != want {
+			key("t")
 		}
-		if _, err := evalRaw(d26SpyJS); err != nil {
-			return fmt.Errorf("d26: spy: %w", err)
+	}
+	// camera drives the Station canvas with synthetic events.
+	camera := func(js string) {
+		if _, err := evalRaw(`(function(){ var q = ` + d26CanvasJS + `, c = q.c, x = q.x, y = q.y; ` + js + ` return true; })()`); err != nil {
+			errs = append(errs, fmt.Sprintf("camera: %v", err))
 		}
-		bringToFront(hwnd)
-		var errs, lines []string
-		key := func(k string) {
-			if _, err := evalRaw(fmt.Sprintf(d26KeyJS, k)); err != nil {
-				errs = append(errs, fmt.Sprintf("key %s: %v", k, err))
-			}
-		}
-		theme := func(want string) {
-			var cur string
-			if err := evalInto(`(window.__bdevStationTheme ? (window.__bdevStationTheme() || '') : '')`, &cur); err != nil {
-				errs = append(errs, fmt.Sprintf("theme read: %v", err))
-				return
-			}
-			if cur != want {
-				key("t")
-			}
-		}
-		// camera drives the Station canvas with synthetic events.
-		camera := func(js string) {
-			if _, err := evalRaw(`(function(){ var q = ` + d26CanvasJS + `, c = q.c, x = q.x, y = q.y; ` + js + ` return true; })()`); err != nil {
-				errs = append(errs, fmt.Sprintf("camera: %v", err))
-			}
-		}
-		// zoomIn anchors the wheel on the deck's bottom corner (read back from
-		// the last glow fill), so the corner stays on screen while it scales.
-		zoomIn := func() {
-			camera(`var k = window.__glow.calls[window.__glow.calls.length - 1].a, r = c.getBoundingClientRect();
+	}
+	// zoomIn anchors the wheel on the deck's bottom corner (read back from
+	// the last glow fill), so the corner stays on screen while it scales.
+	zoomIn := func() {
+		camera(`var k = window.__glow.calls[window.__glow.calls.length - 1].a, r = c.getBoundingClientRect();
 				x = r.left + k[0]; y = r.top + k[1] - 2 * 34 * k[5] / 260;
 				c.dispatchEvent(new WheelEvent('wheel', {deltaY: -400, clientX: x, clientY: y, bubbles: true, cancelable: true}));`)
-		}
-		pan := func() {
-			camera(`c.dispatchEvent(new MouseEvent('mousedown', {clientX: x, clientY: y, bubbles: true}));
+	}
+	pan := func() {
+		camera(`c.dispatchEvent(new MouseEvent('mousedown', {clientX: x, clientY: y, bubbles: true}));
 				c.dispatchEvent(new MouseEvent('mousemove', {clientX: x - 170, clientY: y - 110, bubbles: true}));
 				window.dispatchEvent(new MouseEvent('mouseup', {clientX: x - 170, clientY: y - 110, bubbles: true}));`)
-		}
-		// measure waits for the floor to be rebuilt after the last change,
-		// then shoots and reads. kind is "assert" (the glow must be whole),
-		// "record" (print only) or "same" (the plan view never builds the
-		// isometric floor: neither counter may move).
-		var prevBuilds, prevGlows int
-		measure := func(label, kind string) {
-			time.Sleep(900 * time.Millisecond)
-			bringToFront(hwnd)
-			if _, err := screenshot(hwnd, "d26-"+tag+"-"+label); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: screenshot: %v", label, err))
-			}
-			var r d26Read
-			if err := evalInto(d26ReadJS, &r); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: read: %v", label, err))
-				return
-			}
-			// The glow numbers belong to the last glow fill; a build with no new
-			// fill (site theme, plan view) has none of its own.
-			fresh := r.Glows > prevGlows
-			cover := "n/a"
-			if r.Cover != nil && fresh {
-				cover = fmt.Sprint(*r.Cover)
-			} else {
-				r.Cols, r.MaxDelta = 0, 0
-			}
-			hash := r.Hash
-			if kind == "same" {
-				hash = "n/a"
-			}
-			line := fmt.Sprintf("d26 %-18s hash=%s size=%dx%d builds=%d glows=%d cover=%s cols=%d maxDelta=%d", label, hash, r.W, r.H, r.Builds, r.Glows, cover, r.Cols, r.MaxDelta)
-			if r.MaxDelta > 3 {
-				line += fmt.Sprintf(" worstDX=%d profile=%v", r.WorstX, r.Profile)
-			}
-			fmt.Println("uicheck: " + line)
-			lines = append(lines, line)
-			if kind == "same" {
-				if r.Builds != prevBuilds || r.Glows != prevGlows {
-					errs = append(errs, fmt.Sprintf("%s: the plan view ran buildFloor (builds %d to %d, glows %d to %d)", label, prevBuilds, r.Builds, prevGlows, r.Glows))
-				}
-			} else if r.Builds <= prevBuilds {
-				errs = append(errs, fmt.Sprintf("%s: the floor was not rebuilt (builds %d)", label, r.Builds))
-			}
-			prevBuilds, prevGlows = r.Builds, r.Glows
-			if kind == "assert" {
-				switch {
-				case !fresh || r.Cover == nil:
-					errs = append(errs, fmt.Sprintf("%s: no glow fill recorded for this build", label))
-				case !*r.Cover:
-					errs = append(errs, fmt.Sprintf("%s: the glow fill does not cover its gradient square", label))
-				}
-				if r.Cols < 20 {
-					errs = append(errs, fmt.Sprintf("%s: only %d glow-only columns read, the edge measure is vacuous", label, r.Cols))
-				} else if r.MaxDelta > 3 {
-					errs = append(errs, fmt.Sprintf("%s: hard edge, alpha steps by %d across the old rect top", label, r.MaxDelta))
-				}
-			}
-		}
-
-		// P, the full-window 3D view: site first (no glow), then space.
-		key("p")
-		time.Sleep(700 * time.Millisecond)
-		theme("site")
-		measure("P-site-fit", "record")
-		theme("space")
-		measure("P-space-fit", "assert")
-		zoomIn()
-		measure("P-space-zoomin", "assert")
-		pan()
-		measure("P-space-zoomin-pan", "assert")
-		key("p")
-		time.Sleep(400 * time.Millisecond)
-
-		// O, the plan view in the burn zone: it must not touch the floor code.
-		key("o")
-		time.Sleep(700 * time.Millisecond)
-		theme("space")
-		measure("O-space-fit", "same")
-		theme("site")
-		measure("O-site-fit", "same")
-		key("o")
-		time.Sleep(400 * time.Millisecond)
-
-		// I, the 3D view in the burn zone: recorded, not asserted.
-		key("i")
-		time.Sleep(700 * time.Millisecond)
-		theme("space")
-		measure("I-space-fit", "record")
-		theme("site")
-		measure("I-site-fit", "record")
-		key("i")
-
-		dir := filepath.Join("..", "..", "testdata", "uicheck", "out")
-		if err := os.MkdirAll(dir, 0o755); err == nil {
-			_ = os.WriteFile(filepath.Join(dir, "d26-"+tag+".txt"), []byte(strings.Join(lines, "\n")+"\n"), 0o644)
-		}
-		if len(errs) > 0 {
-			return fmt.Errorf("d26: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
-		}
-		fmt.Println("uicheck: d26: the engine glow is whole at three camera states in the P view, space theme")
-		return nil
 	}
+	// measure waits for the floor to be rebuilt after the last change,
+	// then shoots and reads. kind is "assert" (the glow must be whole),
+	// "record" (print only) or "same" (the plan view never builds the
+	// isometric floor: neither counter may move).
+	var prevBuilds, prevGlows int
+	measure := func(label, kind string) {
+		time.Sleep(900 * time.Millisecond)
+		bringToFront(hwnd)
+		if _, err := screenshot(hwnd, "d26-"+tag+"-"+label); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: screenshot: %v", label, err))
+		}
+		var r d26Read
+		if err := evalInto(d26ReadJS, &r); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: read: %v", label, err))
+			return
+		}
+		// The glow numbers belong to the last glow fill; a build with no new
+		// fill (site theme, plan view) has none of its own.
+		fresh := r.Glows > prevGlows
+		cover := "n/a"
+		if r.Cover != nil && fresh {
+			cover = fmt.Sprint(*r.Cover)
+		} else {
+			r.Cols, r.MaxDelta = 0, 0
+		}
+		hash := r.Hash
+		if kind == "same" {
+			hash = "n/a"
+		}
+		line := fmt.Sprintf("d26 %-18s hash=%s size=%dx%d builds=%d glows=%d cover=%s cols=%d maxDelta=%d", label, hash, r.W, r.H, r.Builds, r.Glows, cover, r.Cols, r.MaxDelta)
+		if r.MaxDelta > 3 {
+			line += fmt.Sprintf(" worstDX=%d profile=%v", r.WorstX, r.Profile)
+		}
+		fmt.Println("uicheck: " + line)
+		lines = append(lines, line)
+		if kind == "same" {
+			if r.Builds != prevBuilds || r.Glows != prevGlows {
+				errs = append(errs, fmt.Sprintf("%s: the plan view ran buildFloor (builds %d to %d, glows %d to %d)", label, prevBuilds, r.Builds, prevGlows, r.Glows))
+			}
+		} else if r.Builds <= prevBuilds {
+			errs = append(errs, fmt.Sprintf("%s: the floor was not rebuilt (builds %d)", label, r.Builds))
+		}
+		prevBuilds, prevGlows = r.Builds, r.Glows
+		if kind == "assert" {
+			switch {
+			case !fresh || r.Cover == nil:
+				errs = append(errs, fmt.Sprintf("%s: no glow fill recorded for this build", label))
+			case !*r.Cover:
+				errs = append(errs, fmt.Sprintf("%s: the glow fill does not cover its gradient square", label))
+			}
+			if r.Cols < 20 {
+				errs = append(errs, fmt.Sprintf("%s: only %d glow-only columns read, the edge measure is vacuous", label, r.Cols))
+			} else if r.MaxDelta > 3 {
+				errs = append(errs, fmt.Sprintf("%s: hard edge, alpha steps by %d across the old rect top", label, r.MaxDelta))
+			}
+		}
+	}
+
+	// P, the full-window 3D view: site first (no glow), then space.
+	key("p")
+	time.Sleep(700 * time.Millisecond)
+	theme("site")
+	measure("P-site-fit", "record")
+	theme("space")
+	measure("P-space-fit", "assert")
+	zoomIn()
+	measure("P-space-zoomin", "assert")
+	pan()
+	measure("P-space-zoomin-pan", "assert")
+	key("p")
+	time.Sleep(400 * time.Millisecond)
+
+	// O, the plan view in the burn zone: it must not touch the floor code.
+	key("o")
+	time.Sleep(700 * time.Millisecond)
+	theme("space")
+	measure("O-space-fit", "same")
+	theme("site")
+	measure("O-site-fit", "same")
+	key("o")
+	time.Sleep(400 * time.Millisecond)
+
+	// I, the 3D view in the burn zone: recorded, not asserted.
+	key("i")
+	time.Sleep(700 * time.Millisecond)
+	theme("space")
+	measure("I-space-fit", "record")
+	theme("site")
+	measure("I-site-fit", "record")
+	key("i")
+
+	dir := filepath.Join("..", "..", "testdata", "uicheck", "out")
+	if err := os.MkdirAll(dir, 0o755); err == nil {
+		_ = os.WriteFile(filepath.Join(dir, "d26-"+tag+".txt"), []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("d26: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d26: the engine glow is whole at three camera states in the P view, space theme")
+	return nil
 }

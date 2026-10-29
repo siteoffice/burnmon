@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -62,55 +60,53 @@ func d35Check(tag string, p d35Page) error {
 	return nil
 }
 
-func init() {
-	checks["d35"] = func(hwnd uintptr, args []string) error {
-		layout, err := os.ReadFile(filepath.Join("..", "..", "testdata", "agentmap_layout_example.json"))
-		if err != nil {
-			return fmt.Errorf("read the layout example (uicheck runs from the tools folder): %w", err)
-		}
-		payload := fmt.Sprintf(`{"source":"live","hours":0,"status":"ok","age_seconds":7,"note":"","layout":%s}`, layout)
-		if !json.Valid([]byte(payload)) {
-			return fmt.Errorf("d35: the layout example is not valid JSON")
-		}
-		read := func() (d35Page, error) {
-			var p d35Page
-			time.Sleep(400 * time.Millisecond)
-			err := evalInto(d35ReadJS, &p)
-			return p, err
-		}
-		for _, sz := range [][2]int32{{1280, 860}, {1920, 1080}} {
-			if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
-				return err
-			}
-			time.Sleep(500 * time.Millisecond)
-			if _, err := evalRaw(`window.__bdevMap.close(); window.__bdevMap.open('live'); window.__bdevMap.setPayload(` + payload + `, 'live')`); err != nil {
-				return err
-			}
-			p, err := read()
-			if err != nil {
-				return err
-			}
-			tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
-			if err := d35Check(tag, p); err != nil {
-				return err
-			}
-			if _, err := screenshot(hwnd, fmt.Sprintf("d35-map-%d", sz[0])); err != nil {
-				return err
-			}
-			if p.First == "" {
-				return fmt.Errorf("d35: %s: no session box in the map", tag)
-			}
-			if _, err := evalRaw(`window.__bdevMap.select(` + jsString(p.First) + `)`); err != nil {
-				return err
-			}
-			if p, err = read(); err != nil {
-				return err
-			}
-			if err := d35Check(tag+" with the side panel", p); err != nil {
-				return err
-			}
-		}
-		_, err = evalRaw(`window.__bdevMap.close()`)
-		return err
+func caseD35(hwnd uintptr, args []string) error {
+	layout, err := readFixture("agentmap_layout_example.json")
+	if err != nil {
+		return fmt.Errorf("read the layout example (uicheck runs from the tools folder): %w", err)
 	}
+	payload := fmt.Sprintf(`{"source":"live","hours":0,"status":"ok","age_seconds":7,"note":"","layout":%s}`, layout)
+	if !json.Valid([]byte(payload)) {
+		return fmt.Errorf("d35: the layout example is not valid JSON")
+	}
+	read := func() (d35Page, error) {
+		var p d35Page
+		time.Sleep(400 * time.Millisecond)
+		err := evalInto(d35ReadJS, &p)
+		return p, err
+	}
+	for _, sz := range [][2]int32{{1280, 860}, {1920, 1080}} {
+		if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
+			return err
+		}
+		time.Sleep(500 * time.Millisecond)
+		if _, err := evalRaw(`window.__bdevMap.close(); window.__bdevMap.open('live'); window.__bdevMap.setPayload(` + payload + `, 'live')`); err != nil {
+			return err
+		}
+		p, err := read()
+		if err != nil {
+			return err
+		}
+		tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
+		if err := d35Check(tag, p); err != nil {
+			return err
+		}
+		if _, err := screenshot(hwnd, fmt.Sprintf("d35-map-%d", sz[0])); err != nil {
+			return err
+		}
+		if p.First == "" {
+			return fmt.Errorf("d35: %s: no session box in the map", tag)
+		}
+		if _, err := evalRaw(`window.__bdevMap.select(` + jsString(p.First) + `)`); err != nil {
+			return err
+		}
+		if p, err = read(); err != nil {
+			return err
+		}
+		if err := d35Check(tag+" with the side panel", p); err != nil {
+			return err
+		}
+	}
+	_, err = evalRaw(`window.__bdevMap.close()`)
+	return err
 }

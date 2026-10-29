@@ -44,93 +44,91 @@ type d43Read struct {
 	Texts  []d43Text `json:"texts"`
 }
 
-func init() {
-	checks["d43"] = func(hwnd uintptr, args []string) error {
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		extra := map[string]any{"controls": map[string]any{
-			"on": map[string]bool{}, "ready": map[string]bool{},
-			"why": map[string]string{
-				"stop": "needs claude_path in burnmon.json", "attach": "needs agent_view in burnmon.json",
-				"approve": "needs python on PATH", "send_back": "needs python on PATH", "close_sprint": "needs foreman_root",
-			},
-			"verdicts": map[string]any{}, "foreman": true}}
-		payload, err := d41Payload(d29Opts{Status: "ok"}, extra)
+func caseD43(hwnd uintptr, args []string) error {
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	extra := map[string]any{"controls": map[string]any{
+		"on": map[string]bool{}, "ready": map[string]bool{},
+		"why": map[string]string{
+			"stop": "needs claude_path in burnmon.json", "attach": "needs agent_view in burnmon.json",
+			"approve": "needs python on PATH", "send_back": "needs python on PATH", "close_sprint": "needs foreman_root",
+		},
+		"verdicts": map[string]any{}, "foreman": true}}
+	payload, err := d41Payload(d29Opts{Status: "ok"}, extra)
+	if err != nil {
+		return err
+	}
+	var fails []string
+	ran := 0
+	for _, sz := range [][2]int32{{1280, 800}, {1920, 1080}} {
+		tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
+		if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
+			return err
+		}
+		if windowCapped {
+			fmt.Printf("uicheck: d43: SKIPPED %s, this screen is too small\n", tag)
+			continue
+		}
+		time.Sleep(500 * time.Millisecond)
+		if _, err := evalRaw(`(document.getElementById('secSettings').classList.remove('open'), window.__bdevSections.apply(` + payload + `), true)`); err != nil {
+			return err
+		}
+		time.Sleep(500 * time.Millisecond)
+		if err := clickSelector(hwnd, "#secGear"); err != nil {
+			return err
+		}
+		time.Sleep(500 * time.Millisecond)
+		var r d43Read
+		err := evalInto(d43ReadJS, &r)
+		_, shotErr := screenshot(hwnd, "d43-gear-"+tag)
+		bringToFront(hwnd)
+		_ = pressKey(vkEscape)
+		time.Sleep(300 * time.Millisecond)
 		if err != nil {
 			return err
 		}
-		var fails []string
-		ran := 0
-		for _, sz := range [][2]int32{{1280, 800}, {1920, 1080}} {
-			tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
-			if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
-				return err
+		if shotErr != nil {
+			return shotErr
+		}
+		var bad []string
+		if !r.Open {
+			bad = append(bad, "the gear did not open")
+		}
+		if len(r.Texts) != 6 {
+			bad = append(bad, fmt.Sprintf("%d text elements, want 6 (explanation and five needs lines)", len(r.Texts)))
+		}
+		var ws []string
+		for _, t := range r.Texts {
+			ws = append(ws, fmt.Sprintf("%s %.0f", t.Name, t.W))
+			if t.W < r.Hist-2 || t.W > r.Hist+2 {
+				bad = append(bad, fmt.Sprintf("%s is %.1f px wide, the History block %.1f px", t.Name, t.W, r.Hist))
 			}
-			if windowCapped {
-				fmt.Printf("uicheck: d43: SKIPPED %s, this screen is too small\n", tag)
-				continue
+			if r.Hist > 320 && t.W <= 320 {
+				bad = append(bad, fmt.Sprintf("%s is %.1f px wide, not over 320", t.Name, t.W))
 			}
-			time.Sleep(500 * time.Millisecond)
-			if _, err := evalRaw(`(document.getElementById('secSettings').classList.remove('open'), window.__bdevSections.apply(` + payload + `), true)`); err != nil {
-				return err
-			}
-			time.Sleep(500 * time.Millisecond)
-			if err := clickSelector(hwnd, "#secGear"); err != nil {
-				return err
-			}
-			time.Sleep(500 * time.Millisecond)
-			var r d43Read
-			err := evalInto(d43ReadJS, &r)
-			_, shotErr := screenshot(hwnd, "d43-gear-"+tag)
-			bringToFront(hwnd)
-			_ = pressKey(vkEscape)
-			time.Sleep(300 * time.Millisecond)
-			if err != nil {
-				return err
-			}
-			if shotErr != nil {
-				return shotErr
-			}
-			var bad []string
-			if !r.Open {
-				bad = append(bad, "the gear did not open")
-			}
-			if len(r.Texts) != 6 {
-				bad = append(bad, fmt.Sprintf("%d text elements, want 6 (explanation and five needs lines)", len(r.Texts)))
-			}
-			var ws []string
-			for _, t := range r.Texts {
-				ws = append(ws, fmt.Sprintf("%s %.0f", t.Name, t.W))
-				if t.W < r.Hist-2 || t.W > r.Hist+2 {
-					bad = append(bad, fmt.Sprintf("%s is %.1f px wide, the History block %.1f px", t.Name, t.W, r.Hist))
-				}
-				if r.Hist > 320 && t.W <= 320 {
-					bad = append(bad, fmt.Sprintf("%s is %.1f px wide, not over 320", t.Name, t.W))
-				}
-				if !t.Clip {
-					bad = append(bad, t.Name+" is clipped")
-				}
-			}
-			if r.Dialog >= r.Win-20 {
-				bad = append(bad, fmt.Sprintf("dialog %.0f px is not narrower than window %.0f minus 20", r.Dialog, r.Win))
-			}
-			ran++
-			if len(bad) == 0 {
-				fmt.Printf("uicheck: d43: PASS %s (grid width %.0f px, dialog %.0f px, text widths: %s)\n", tag, r.Hist, r.Dialog, strings.Join(ws, ", "))
-			} else {
-				msg := fmt.Sprintf("%s: %s", tag, strings.Join(bad, "; "))
-				fmt.Println("uicheck: d43: FAIL " + msg)
-				fails = append(fails, msg)
+			if !t.Clip {
+				bad = append(bad, t.Name+" is clipped")
 			}
 		}
-		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-			return err
+		if r.Dialog >= r.Win-20 {
+			bad = append(bad, fmt.Sprintf("dialog %.0f px is not narrower than window %.0f minus 20", r.Dialog, r.Win))
 		}
-		if len(fails) > 0 {
-			return fmt.Errorf("d43: %d case(s) failed, first: %s", len(fails), fails[0])
+		ran++
+		if len(bad) == 0 {
+			fmt.Printf("uicheck: d43: PASS %s (grid width %.0f px, dialog %.0f px, text widths: %s)\n", tag, r.Hist, r.Dialog, strings.Join(ws, ", "))
+		} else {
+			msg := fmt.Sprintf("%s: %s", tag, strings.Join(bad, "; "))
+			fmt.Println("uicheck: d43: FAIL " + msg)
+			fails = append(fails, msg)
 		}
-		if ran == 0 {
-			return fmt.Errorf("d43: no size ran")
-		}
-		return nil
 	}
+	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
+		return err
+	}
+	if len(fails) > 0 {
+		return fmt.Errorf("d43: %d case(s) failed, first: %s", len(fails), fails[0])
+	}
+	if ran == 0 {
+		return fmt.Errorf("d43: no size ran")
+	}
+	return nil
 }

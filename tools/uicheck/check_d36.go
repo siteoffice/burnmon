@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -74,176 +72,174 @@ const d36ClickJS = `(function(){
   return got;
 })()`
 
-func init() {
-	checks["d36"] = func(hwnd uintptr, args []string) error {
-		raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
-		if err != nil {
-			return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
-		}
-		var ex struct {
-			Wait    []d36Item `json:"wait_items"`
-			Outcome []d36Item `json:"outcome_items"`
-		}
-		if err := json.Unmarshal(raw, &ex); err != nil {
-			return err
-		}
-		fail := func(format string, a ...any) error { return fmt.Errorf("d36: "+format, a...) }
-		if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-			return err
-		}
-		apply := func(plain bool, snap []byte, age string) (d36Page, error) {
-			var p d36Page
-			payload := d29Payload(d29Opts{Plain: plain, Scrollbar: true, Status: "ok", Snap: snap})
-			payload = strings.Replace(payload, `"age_seconds":7`, `"age_seconds":`+age, 1)
-			if _, err := d29Apply(payload); err != nil {
-				return p, err
-			}
-			err := evalInto(d36ReadJS, &p)
+func caseD36(hwnd uintptr, args []string) error {
+	raw, err := readFixture("snapshot_example.json")
+	if err != nil {
+		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
+	}
+	var ex struct {
+		Wait    []d36Item `json:"wait_items"`
+		Outcome []d36Item `json:"outcome_items"`
+	}
+	if err := json.Unmarshal(raw, &ex); err != nil {
+		return err
+	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d36: "+format, a...) }
+	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
+		return err
+	}
+	apply := func(plain bool, snap []byte, age string) (d36Page, error) {
+		var p d36Page
+		payload := d29Payload(d29Opts{Plain: plain, Scrollbar: true, Status: "ok", Snap: snap})
+		payload = strings.Replace(payload, `"age_seconds":7`, `"age_seconds":`+age, 1)
+		if _, err := d29Apply(payload); err != nil {
 			return p, err
 		}
-		sameRows := func(label string, rows []d36Row, items []d36Item) error {
-			if len(rows) != len(items) {
-				return fail("%s: %d rows, want %d", label, len(rows), len(items))
+		err := evalInto(d36ReadJS, &p)
+		return p, err
+	}
+	sameRows := func(label string, rows []d36Row, items []d36Item) error {
+		if len(rows) != len(items) {
+			return fail("%s: %d rows, want %d", label, len(rows), len(items))
+		}
+		for i, it := range items {
+			r := rows[i]
+			if r.ID != it.ID {
+				return fail("%s row %d is %q, want %q", label, i, r.ID, it.ID)
 			}
-			for i, it := range items {
-				r := rows[i]
-				if r.ID != it.ID {
-					return fail("%s row %d is %q, want %q", label, i, r.ID, it.ID)
-				}
-				if r.Height > r.LineH*1.6 {
-					return fail("%s row %q is %.0f px high for a %.0f px line", label, it.ID, r.Height, r.LineH)
-				}
-				var want []string
-				for _, p := range []string{it.SpecPath, it.ResultPath} {
-					if p != "" {
-						want = append(want, p)
-					}
-				}
-				if strings.Join(r.Links, "|") != strings.Join(want, "|") {
-					return fail("%s row %q links %v, want %v", label, it.ID, r.Links, want)
-				}
+			if r.Height > r.LineH*1.6 {
+				return fail("%s row %q is %.0f px high for a %.0f px line", label, it.ID, r.Height, r.LineH)
 			}
-			return nil
-		}
-
-		p, err := apply(false, raw, "7")
-		if err != nil {
-			return err
-		}
-		if err := sameRows("standard waits", p.Waits, ex.Wait); err != nil {
-			return err
-		}
-		if err := sameRows("standard outcomes", p.Outcomes, ex.Outcome); err != nil {
-			return err
-		}
-		// Nothing is cut off: every wait item is a row (sameRows above), the header
-		// carries the total and there is no +k more line.
-		if want := fmt.Sprintf("Waits on you (%d)", len(ex.Wait)); !strings.Contains(p.WaitsTxt, want) {
-			return fail("standard Waits header lacks %q", want)
-		}
-		if strings.Contains(p.WaitsTxt, " more") || strings.Contains(p.OutTxt, " more") {
-			return fail("a list still ends in a more line")
-		}
-		if strings.Contains(p.WaitsTxt, "permission prompt project permission prompt") {
-			return fail("standard prompt row repeats its kind word")
-		}
-		for _, want := range []string{"gate G4", "permission prompt", "2 tasks parked", "no result yet"} {
-			if !strings.Contains(p.WaitsTxt, want) {
-				return fail("standard Waits lacks %q", want)
-			}
-		}
-		if p.WAged || p.OAged {
-			return fail("age 7 marks the panels aged")
-		}
-		if _, err := screenshot(hwnd, "d36-standard"); err != nil {
-			return err
-		}
-
-		if p, err = apply(true, raw, "7"); err != nil {
-			return err
-		}
-		if err := sameRows("plain waits", p.Waits, ex.Wait); err != nil {
-			return err
-		}
-		if want := fmt.Sprintf("Needs you (%d)", len(ex.Wait)); !strings.Contains(p.WaitsTxt, want) {
-			return fail("plain Waits header lacks %q", want)
-		}
-		for _, want := range []string{"Decision needed", "Approval needed", "Question for you", "Job paused, needs you", "2 tasks need you"} {
-			if !strings.Contains(p.WaitsTxt, want) {
-				return fail("plain Waits lacks %q", want)
-			}
-		}
-		if !strings.Contains(p.OutTxt, "Done") {
-			return fail("plain Outcomes lacks Done")
-		}
-		for _, bad := range []string{"permission prompt", "failed check"} {
-			if strings.Contains(p.WaitsTxt, bad) {
-				return fail("plain Waits shows %q", bad)
-			}
-		}
-		for _, r := range append(append([]d36Row{}, p.Waits...), p.Outcomes...) {
-			for _, lt := range r.LinkText {
-				if lt != "request" && lt != "result" {
-					return fail("plain link text %q", lt)
+			var want []string
+			for _, p := range []string{it.SpecPath, it.ResultPath} {
+				if p != "" {
+					want = append(want, p)
 				}
 			}
-		}
-		if _, err := screenshot(hwnd, "d36-plain"); err != nil {
-			return err
-		}
-
-		if p, err = apply(false, raw, "12"); err != nil {
-			return err
-		}
-		const aged = "snapshot 12 s old, this list may be behind"
-		if !p.WAged || !p.OAged || !strings.Contains(p.WaitsTxt, aged) || !strings.Contains(p.OutTxt, aged) {
-			return fail("age 12 does not mark both panels aged: %+v", p)
-		}
-		if _, err := screenshot(hwnd, "d36-aged"); err != nil {
-			return err
-		}
-
-		var m map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &m); err != nil {
-			return err
-		}
-		m["wait_items"], m["outcome_items"] = json.RawMessage("[]"), json.RawMessage("[]")
-		empty, err := json.Marshal(m)
-		if err != nil {
-			return err
-		}
-		if p, err = apply(false, empty, "7"); err != nil {
-			return err
-		}
-		if !strings.Contains(p.WaitsTxt, "Nothing waits on you.") || !strings.Contains(p.OutTxt, "Nothing finished or failed in the last 24 hours.") {
-			return fail("standard empty texts wrong: %q / %q", p.WaitsTxt, p.OutTxt)
-		}
-		if p, err = apply(true, empty, "7"); err != nil {
-			return err
-		}
-		if !strings.Contains(p.WaitsTxt, "Nothing is waiting for you.") || !strings.Contains(p.OutTxt, "Nothing finished in the last 24 hours.") {
-			return fail("plain empty texts wrong: %q / %q", p.WaitsTxt, p.OutTxt)
-		}
-
-		if _, err := apply(false, raw, "7"); err != nil {
-			return err
-		}
-		var gate d36Item
-		for _, it := range ex.Wait {
-			if it.Kind == "gate" {
-				gate = it
+			if strings.Join(r.Links, "|") != strings.Join(want, "|") {
+				return fail("%s row %q links %v, want %v", label, it.ID, r.Links, want)
 			}
-		}
-		if gate.SpecPath == "" {
-			return fail("the example has no gate with a spec path")
-		}
-		var got []string
-		if err := evalInto(d36ClickJS, &got); err != nil {
-			return err
-		}
-		if len(got) != 1 || got[0] != gate.SpecPath {
-			return fail("click sent %v, want [%s]", got, gate.SpecPath)
 		}
 		return nil
 	}
+
+	p, err := apply(false, raw, "7")
+	if err != nil {
+		return err
+	}
+	if err := sameRows("standard waits", p.Waits, ex.Wait); err != nil {
+		return err
+	}
+	if err := sameRows("standard outcomes", p.Outcomes, ex.Outcome); err != nil {
+		return err
+	}
+	// Nothing is cut off: every wait item is a row (sameRows above), the header
+	// carries the total and there is no +k more line.
+	if want := fmt.Sprintf("Waits on you (%d)", len(ex.Wait)); !strings.Contains(p.WaitsTxt, want) {
+		return fail("standard Waits header lacks %q", want)
+	}
+	if strings.Contains(p.WaitsTxt, " more") || strings.Contains(p.OutTxt, " more") {
+		return fail("a list still ends in a more line")
+	}
+	if strings.Contains(p.WaitsTxt, "permission prompt project permission prompt") {
+		return fail("standard prompt row repeats its kind word")
+	}
+	for _, want := range []string{"gate G4", "permission prompt", "2 tasks parked", "no result yet"} {
+		if !strings.Contains(p.WaitsTxt, want) {
+			return fail("standard Waits lacks %q", want)
+		}
+	}
+	if p.WAged || p.OAged {
+		return fail("age 7 marks the panels aged")
+	}
+	if _, err := screenshot(hwnd, "d36-standard"); err != nil {
+		return err
+	}
+
+	if p, err = apply(true, raw, "7"); err != nil {
+		return err
+	}
+	if err := sameRows("plain waits", p.Waits, ex.Wait); err != nil {
+		return err
+	}
+	if want := fmt.Sprintf("Needs you (%d)", len(ex.Wait)); !strings.Contains(p.WaitsTxt, want) {
+		return fail("plain Waits header lacks %q", want)
+	}
+	for _, want := range []string{"Decision needed", "Approval needed", "Question for you", "Job paused, needs you", "2 tasks need you"} {
+		if !strings.Contains(p.WaitsTxt, want) {
+			return fail("plain Waits lacks %q", want)
+		}
+	}
+	if !strings.Contains(p.OutTxt, "Done") {
+		return fail("plain Outcomes lacks Done")
+	}
+	for _, bad := range []string{"permission prompt", "failed check"} {
+		if strings.Contains(p.WaitsTxt, bad) {
+			return fail("plain Waits shows %q", bad)
+		}
+	}
+	for _, r := range append(append([]d36Row{}, p.Waits...), p.Outcomes...) {
+		for _, lt := range r.LinkText {
+			if lt != "request" && lt != "result" {
+				return fail("plain link text %q", lt)
+			}
+		}
+	}
+	if _, err := screenshot(hwnd, "d36-plain"); err != nil {
+		return err
+	}
+
+	if p, err = apply(false, raw, "12"); err != nil {
+		return err
+	}
+	const aged = "snapshot 12 s old, this list may be behind"
+	if !p.WAged || !p.OAged || !strings.Contains(p.WaitsTxt, aged) || !strings.Contains(p.OutTxt, aged) {
+		return fail("age 12 does not mark both panels aged: %+v", p)
+	}
+	if _, err := screenshot(hwnd, "d36-aged"); err != nil {
+		return err
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+	m["wait_items"], m["outcome_items"] = json.RawMessage("[]"), json.RawMessage("[]")
+	empty, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	if p, err = apply(false, empty, "7"); err != nil {
+		return err
+	}
+	if !strings.Contains(p.WaitsTxt, "Nothing waits on you.") || !strings.Contains(p.OutTxt, "Nothing finished or failed in the last 24 hours.") {
+		return fail("standard empty texts wrong: %q / %q", p.WaitsTxt, p.OutTxt)
+	}
+	if p, err = apply(true, empty, "7"); err != nil {
+		return err
+	}
+	if !strings.Contains(p.WaitsTxt, "Nothing is waiting for you.") || !strings.Contains(p.OutTxt, "Nothing finished in the last 24 hours.") {
+		return fail("plain empty texts wrong: %q / %q", p.WaitsTxt, p.OutTxt)
+	}
+
+	if _, err := apply(false, raw, "7"); err != nil {
+		return err
+	}
+	var gate d36Item
+	for _, it := range ex.Wait {
+		if it.Kind == "gate" {
+			gate = it
+		}
+	}
+	if gate.SpecPath == "" {
+		return fail("the example has no gate with a spec path")
+	}
+	var got []string
+	if err := evalInto(d36ClickJS, &got); err != nil {
+		return err
+	}
+	if len(got) != 1 || got[0] != gate.SpecPath {
+		return fail("click sent %v, want [%s]", got, gate.SpecPath)
+	}
+	return nil
 }

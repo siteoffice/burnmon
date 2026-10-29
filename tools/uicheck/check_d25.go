@@ -121,123 +121,121 @@ func d25Problems(c d25Card, ax, ay float64) []string {
 	return p
 }
 
-func init() {
-	checks["d25"] = func(hwnd uintptr, args []string) error {
-		if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-			return err
+func caseD25(hwnd uintptr, args []string) error {
+	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	if _, err := evalRaw(d23FakeJS); err != nil {
+		return fmt.Errorf("d25: fake paint: %w", err)
+	}
+	bringToFront(hwnd)
+	if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
+		fmt.Println("uicheck: d25: could not click .logo to establish focus:", err)
+	}
+	var errs []string
+	fail := func(where string, probs []string) {
+		for _, m := range probs {
+			errs = append(errs, fmt.Sprintf("%s: %s", where, m))
 		}
-		time.Sleep(300 * time.Millisecond)
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		if _, err := evalRaw(d23FakeJS); err != nil {
-			return fmt.Errorf("d25: fake paint: %w", err)
+	}
+	// The page leaves light mode whatever happens, the stored choice included.
+	defer func() {
+		if s, err := d24Read(); err == nil && s.Attr == "light" {
+			_ = pressKey(vkL)
+			time.Sleep(300 * time.Millisecond)
 		}
-		bringToFront(hwnd)
-		if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
-			fmt.Println("uicheck: d25: could not click .logo to establish focus:", err)
-		}
-		var errs []string
-		fail := func(where string, probs []string) {
-			for _, m := range probs {
-				errs = append(errs, fmt.Sprintf("%s: %s", where, m))
-			}
-		}
-		// The page leaves light mode whatever happens, the stored choice included.
-		defer func() {
-			if s, err := d24Read(); err == nil && s.Attr == "light" {
-				_ = pressKey(vkL)
-				time.Sleep(300 * time.Millisecond)
-			}
-		}()
+	}()
 
-		// checkCard runs the two clicks of one case: next to the middle of the
-		// window, then in the bottom right corner where the card must be pushed back in.
-		checkCard := func(where string) error {
-			c, err := d25Click(700, 300)
-			if err != nil {
-				return fmt.Errorf("%s: %w", where, err)
-			}
-			fmt.Printf("uicheck: d25 %s middle: %+v\n", where, c)
-			fail(where+" middle click", d25Problems(c, 700, 300))
-			if err := d23Shot(hwnd, "d25-"+strings.ReplaceAll(where, " ", "-")); err != nil {
-				return err
-			}
-			c, err = d25Click(1595, 895)
-			if err != nil {
-				return fmt.Errorf("%s: %w", where, err)
-			}
-			fmt.Printf("uicheck: d25 %s corner: %+v\n", where, c)
-			fail(where+" corner click", d25Problems(c, 1595, 895))
-			_, err = evalRaw(`document.getElementById('turnPopupClose').click()`)
+	// checkCard runs the two clicks of one case: next to the middle of the
+	// window, then in the bottom right corner where the card must be pushed back in.
+	checkCard := func(where string) error {
+		c, err := d25Click(700, 300)
+		if err != nil {
+			return fmt.Errorf("%s: %w", where, err)
+		}
+		fmt.Printf("uicheck: d25 %s middle: %+v\n", where, c)
+		fail(where+" middle click", d25Problems(c, 700, 300))
+		if err := d23Shot(hwnd, "d25-"+strings.ReplaceAll(where, " ", "-")); err != nil {
 			return err
 		}
-		openView := func(name string, vk uint16, ok func(d23State) bool) bool {
-			if err := pressKey(vk); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: press: %v", name, err))
-				return false
-			}
-			s, good, err := d23Wait(ok)
-			if err != nil || !good {
-				errs = append(errs, fmt.Sprintf("%s did not open: %+v %v", name, s, err))
-				return false
-			}
-			time.Sleep(1500 * time.Millisecond) // the first frame, so the shot is not blank
-			return true
+		c, err = d25Click(1595, 895)
+		if err != nil {
+			return fmt.Errorf("%s: %w", where, err)
 		}
-		views := []struct {
-			name string
-			vk   uint16
-			ok   func(d23State) bool
-		}{
-			{"P", vkP, func(s d23State) bool { return s.Overlay && s.Lit > 500 }},
-			{"O", vkO, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
-			{"I", vkI, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
+		fmt.Printf("uicheck: d25 %s corner: %+v\n", where, c)
+		fail(where+" corner click", d25Problems(c, 1595, 895))
+		_, err = evalRaw(`document.getElementById('turnPopupClose').click()`)
+		return err
+	}
+	openView := func(name string, vk uint16, ok func(d23State) bool) bool {
+		if err := pressKey(vk); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: press: %v", name, err))
+			return false
 		}
-		runViews := func(page string, themes []string) error {
-			for _, v := range views {
-				if !openView(v.name, v.vk, v.ok) {
-					continue
-				}
-				for i, th := range themes {
-					if i > 0 {
-						if err := pressKey(vkT); err != nil {
-							return err
-						}
-						time.Sleep(600 * time.Millisecond)
-					}
-					if err := checkCard(strings.TrimSpace(v.name + " " + th + " " + page)); err != nil {
-						return err
-					}
-				}
-				if len(themes) > 1 { // back to site for the next view
+		s, good, err := d23Wait(ok)
+		if err != nil || !good {
+			errs = append(errs, fmt.Sprintf("%s did not open: %+v %v", name, s, err))
+			return false
+		}
+		time.Sleep(1500 * time.Millisecond) // the first frame, so the shot is not blank
+		return true
+	}
+	views := []struct {
+		name string
+		vk   uint16
+		ok   func(d23State) bool
+	}{
+		{"P", vkP, func(s d23State) bool { return s.Overlay && s.Lit > 500 }},
+		{"O", vkO, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
+		{"I", vkI, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
+	}
+	runViews := func(page string, themes []string) error {
+		for _, v := range views {
+			if !openView(v.name, v.vk, v.ok) {
+				continue
+			}
+			for i, th := range themes {
+				if i > 0 {
 					if err := pressKey(vkT); err != nil {
 						return err
 					}
-					time.Sleep(400 * time.Millisecond)
+					time.Sleep(600 * time.Millisecond)
 				}
-				if err := pressKey(v.vk); err != nil { // the same key closes the view
+				if err := checkCard(strings.TrimSpace(v.name + " " + th + " " + page)); err != nil {
 					return err
 				}
-				if _, good, err := d23Wait(func(s d23State) bool { return !s.Overlay && !s.Panel }); err != nil || !good {
-					errs = append(errs, fmt.Sprintf("%s did not close on its own key", v.name))
-					_ = pressKey(vkEscape)
-				}
 			}
-			return nil
+			if len(themes) > 1 { // back to site for the next view
+				if err := pressKey(vkT); err != nil {
+					return err
+				}
+				time.Sleep(400 * time.Millisecond)
+			}
+			if err := pressKey(v.vk); err != nil { // the same key closes the view
+				return err
+			}
+			if _, good, err := d23Wait(func(s d23State) bool { return !s.Overlay && !s.Panel }); err != nil || !good {
+				errs = append(errs, fmt.Sprintf("%s did not close on its own key", v.name))
+				_ = pressKey(vkEscape)
+			}
 		}
-		if err := runViews("dark page", []string{"site", "space"}); err != nil {
-			return err
-		}
-		if err := pressKey(vkL); err != nil {
-			return err
-		}
-		time.Sleep(500 * time.Millisecond)
-		if err := runViews("light page", []string{"site"}); err != nil {
-			return err
-		}
-		if len(errs) > 0 {
-			return fmt.Errorf("d25: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
-		}
-		fmt.Println("uicheck: d25: the Station click card is compact, next to the click, wraps long values and stays inside the window in P, O and I, both Station themes and the light page")
 		return nil
 	}
+	if err := runViews("dark page", []string{"site", "space"}); err != nil {
+		return err
+	}
+	if err := pressKey(vkL); err != nil {
+		return err
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := runViews("light page", []string{"site"}); err != nil {
+		return err
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("d25: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d25: the Station click card is compact, next to the click, wraps long values and stays inside the window in P, O and I, both Station themes and the light page")
+	return nil
 }

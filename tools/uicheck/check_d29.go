@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -221,277 +219,275 @@ func d29Eval(js string) error {
 
 func d29Fail(format string, args ...any) error { return fmt.Errorf("d29: "+format, args...) }
 
-func init() {
-	checks["d29"] = func(hwnd uintptr, args []string) error {
-		snap, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+func caseD29(hwnd uintptr, args []string) error {
+	snap, err := readFixture("snapshot_example.json")
+	if err != nil {
+		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
+	}
+	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
+		return err
+	}
+	time.Sleep(500 * time.Millisecond)
+	std := func(off map[string]bool) d29Opts {
+		return d29Opts{Scrollbar: true, StandardOff: off, Status: "ok", Snap: snap}
+	}
+	wantAll := strings.Join(d29Parts, ",")
+
+	// Standard, every part on, scrollbar on: all shown, none dropped, the page scrolls.
+	p, err := d29Apply(d29Payload(std(nil)))
+	if err != nil {
+		return err
+	}
+	if got := strings.Join(p.shown(), ","); got != wantAll {
+		return d29Fail("standard shows %v, want all 15", p.shown())
+	}
+	if p.Plain || p.Toggle != "Plain: off" || p.ToggleOn || !p.BodyStandard || !p.BurnZone || !p.SystemZone {
+		return d29Fail("standard shape wrong: %+v", p)
+	}
+	if !p.Scrolls || p.OverflowY != "auto" {
+		return d29Fail("standard page does not scroll (scrolls %v, overflow-y %s)", p.Scrolls, p.OverflowY)
+	}
+	if p.BodyOver > 1 {
+		return d29Fail("standard: the body itself overflows by %.0f px", p.BodyOver)
+	}
+	if !strings.Contains(p.Header, "snapshot 7 s old") {
+		return d29Fail("header %q does not show the snapshot age", p.Header)
+	}
+	for _, want := range []string{"project", "API price equivalent", "Plan limits", "Not built yet", "G4", "120"} {
+		if !strings.Contains(p.Text, want) {
+			return d29Fail("panels do not show %q from the example", want)
+		}
+	}
+	if !p.AgentsSlot {
+		return d29Fail("agents map has no slot for R7")
+	}
+	if p.StripClip > 1 {
+		return d29Fail("standard: the vendor strip is clipped by %.0f px", p.StripClip)
+	}
+	if _, err := screenshot(hwnd, "d29-standard"); err != nil {
+		return err
+	}
+
+	// One part off at a time: only that part goes.
+	for _, id := range d29Parts {
+		p, err := d29Apply(d29Payload(std(map[string]bool{id: true})))
 		if err != nil {
-			return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
-		}
-		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
 			return err
 		}
-		time.Sleep(500 * time.Millisecond)
-		std := func(off map[string]bool) d29Opts {
-			return d29Opts{Scrollbar: true, StandardOff: off, Status: "ok", Snap: snap}
-		}
-		wantAll := strings.Join(d29Parts, ",")
-
-		// Standard, every part on, scrollbar on: all shown, none dropped, the page scrolls.
-		p, err := d29Apply(d29Payload(std(nil)))
-		if err != nil {
-			return err
-		}
-		if got := strings.Join(p.shown(), ","); got != wantAll {
-			return d29Fail("standard shows %v, want all 15", p.shown())
-		}
-		if p.Plain || p.Toggle != "Plain: off" || p.ToggleOn || !p.BodyStandard || !p.BurnZone || !p.SystemZone {
-			return d29Fail("standard shape wrong: %+v", p)
-		}
-		if !p.Scrolls || p.OverflowY != "auto" {
-			return d29Fail("standard page does not scroll (scrolls %v, overflow-y %s)", p.Scrolls, p.OverflowY)
-		}
-		if p.BodyOver > 1 {
-			return d29Fail("standard: the body itself overflows by %.0f px", p.BodyOver)
-		}
-		if !strings.Contains(p.Header, "snapshot 7 s old") {
-			return d29Fail("header %q does not show the snapshot age", p.Header)
-		}
-		for _, want := range []string{"project", "API price equivalent", "Plan limits", "Not built yet", "G4", "120"} {
-			if !strings.Contains(p.Text, want) {
-				return d29Fail("panels do not show %q from the example", want)
+		var want []string
+		for _, x := range d29Parts {
+			if x != id {
+				want = append(want, x)
 			}
 		}
-		if !p.AgentsSlot {
-			return d29Fail("agents map has no slot for R7")
+		if got := strings.Join(p.shown(), ","); got != strings.Join(want, ",") {
+			return d29Fail("switching %s off left parts %v", id, p.shown())
 		}
-		if p.StripClip > 1 {
-			return d29Fail("standard: the vendor strip is clipped by %.0f px", p.StripClip)
-		}
-		if _, err := screenshot(hwnd, "d29-standard"); err != nil {
-			return err
-		}
+	}
+	// The older zones follow their parts.
+	burnOff := map[string]bool{"burn_30min": true, "vendor_strip": true, "activity": true, "heatmap": true, "turn_ticker": true}
+	if p, err = d29Apply(d29Payload(std(burnOff))); err != nil {
+		return err
+	}
+	if p.BurnZone || !p.SystemZone {
+		return d29Fail("five burn-zone parts off: burn zone %v, system zone %v", p.BurnZone, p.SystemZone)
+	}
+	sysOff := map[string]bool{"system": true, "process_groups": true}
+	if p, err = d29Apply(d29Payload(std(sysOff))); err != nil {
+		return err
+	}
+	if p.SystemZone || !p.BurnZone {
+		return d29Fail("system and process_groups off: burn zone %v, system zone %v", p.BurnZone, p.SystemZone)
+	}
 
-		// One part off at a time: only that part goes.
-		for _, id := range d29Parts {
-			p, err := d29Apply(d29Payload(std(map[string]bool{id: true})))
-			if err != nil {
-				return err
-			}
-			var want []string
-			for _, x := range d29Parts {
-				if x != id {
-					want = append(want, x)
-				}
-			}
-			if got := strings.Join(p.shown(), ","); got != strings.Join(want, ",") {
-				return d29Fail("switching %s off left parts %v", id, p.shown())
-			}
-		}
-		// The older zones follow their parts.
-		burnOff := map[string]bool{"burn_30min": true, "vendor_strip": true, "activity": true, "heatmap": true, "turn_ticker": true}
-		if p, err = d29Apply(d29Payload(std(burnOff))); err != nil {
-			return err
-		}
-		if p.BurnZone || !p.SystemZone {
-			return d29Fail("five burn-zone parts off: burn zone %v, system zone %v", p.BurnZone, p.SystemZone)
-		}
-		sysOff := map[string]bool{"system": true, "process_groups": true}
-		if p, err = d29Apply(d29Payload(std(sysOff))); err != nil {
-			return err
-		}
-		if p.SystemZone || !p.BurnZone {
-			return d29Fail("system and process_groups off: burn zone %v, system zone %v", p.BurnZone, p.SystemZone)
-		}
+	// Every part off: an empty host, no zones, no error.
+	allOff := map[string]bool{}
+	for _, id := range d29Parts {
+		allOff[id] = true
+	}
+	if p, err = d29Apply(d29Payload(std(allOff))); err != nil {
+		return d29Fail("all 15 parts off raised: %v", err)
+	}
+	if len(p.shown()) != 0 || p.MainShown || p.BurnZone || p.SystemZone {
+		return d29Fail("all parts off: shown %v, main %v", p.shown(), p.MainShown)
+	}
 
-		// Every part off: an empty host, no zones, no error.
-		allOff := map[string]bool{}
-		for _, id := range d29Parts {
-			allOff[id] = true
+	// Plain, scrollbar off: the Plain list, plain words, no older zones, fits the window.
+	plain := func(o d29Opts) d29Opts {
+		o.Plain, o.Status, o.Snap = true, "ok", snap
+		return o
+	}
+	if p, err = d29Apply(d29Payload(plain(d29Opts{}))); err != nil {
+		return err
+	}
+	if got := strings.Join(p.shown(), ","); got != "waits,outcomes,burn,agents_map,sessions" {
+		return d29Fail("plain shows %v", p.shown())
+	}
+	if !p.Plain || p.Toggle != "Plain: on" || !p.ToggleOn || p.BodyStandard || p.BurnZone || p.SystemZone {
+		return d29Fail("plain shape wrong: %+v", p)
+	}
+	if p.OverflowY != "hidden" {
+		return d29Fail("plain page can scroll (overflow-y %s)", p.OverflowY)
+	}
+	if p.HostOver > 1 {
+		return d29Fail("plain at this size: host overflow %.0f px", p.HostOver)
+	}
+	for _, jargon := range []string{"tokens/min", "API price equiv."} {
+		if strings.Contains(p.Text, jargon) {
+			return d29Fail("plain mode still shows %q", jargon)
 		}
-		if p, err = d29Apply(d29Payload(std(allOff))); err != nil {
-			return d29Fail("all 15 parts off raised: %v", err)
-		}
-		if len(p.shown()) != 0 || p.MainShown || p.BurnZone || p.SystemZone {
-			return d29Fail("all parts off: shown %v, main %v", p.shown(), p.MainShown)
-		}
+	}
+	if !strings.Contains(p.Text, "waiting for you") {
+		return d29Fail("plain mode did not put the state in plain words")
+	}
+	if _, err := screenshot(hwnd, "d29-plain"); err != nil {
+		return err
+	}
 
-		// Plain, scrollbar off: the Plain list, plain words, no older zones, fits the window.
-		plain := func(o d29Opts) d29Opts {
-			o.Plain, o.Status, o.Snap = true, "ok", snap
-			return o
-		}
-		if p, err = d29Apply(d29Payload(plain(d29Opts{}))); err != nil {
-			return err
-		}
-		if got := strings.Join(p.shown(), ","); got != "waits,outcomes,burn,agents_map,sessions" {
-			return d29Fail("plain shows %v", p.shown())
-		}
-		if !p.Plain || p.Toggle != "Plain: on" || !p.ToggleOn || p.BodyStandard || p.BurnZone || p.SystemZone {
-			return d29Fail("plain shape wrong: %+v", p)
-		}
-		if p.OverflowY != "hidden" {
-			return d29Fail("plain page can scroll (overflow-y %s)", p.OverflowY)
-		}
-		if p.HostOver > 1 {
-			return d29Fail("plain at this size: host overflow %.0f px", p.HostOver)
-		}
-		for _, jargon := range []string{"tokens/min", "API price equiv."} {
-			if strings.Contains(p.Text, jargon) {
-				return d29Fail("plain mode still shows %q", jargon)
-			}
-		}
-		if !strings.Contains(p.Text, "waiting for you") {
-			return d29Fail("plain mode did not put the state in plain words")
-		}
-		if _, err := screenshot(hwnd, "d29-plain"); err != nil {
-			return err
-		}
+	// A burn-zone part in the Plain list shows the zone with only those parts.
+	if p, err = d29Apply(d29Payload(plain(d29Opts{PlainOn: map[string]bool{"burn_30min": true, "turn_ticker": true}}))); err != nil {
+		return err
+	}
+	if got := strings.Join(p.shown(), ","); got != "waits,outcomes,burn,agents_map,sessions,burn_30min,turn_ticker" || !p.BurnZone || p.SystemZone {
+		return d29Fail("plain with two burn parts: shown %v, burn zone %v, system zone %v", p.shown(), p.BurnZone, p.SystemZone)
+	}
 
-		// A burn-zone part in the Plain list shows the zone with only those parts.
-		if p, err = d29Apply(d29Payload(plain(d29Opts{PlainOn: map[string]bool{"burn_30min": true, "turn_ticker": true}}))); err != nil {
-			return err
-		}
-		if got := strings.Join(p.shown(), ","); got != "waits,outcomes,burn,agents_map,sessions,burn_30min,turn_ticker" || !p.BurnZone || p.SystemZone {
-			return d29Fail("plain with two burn parts: shown %v, burn zone %v, system zone %v", p.shown(), p.BurnZone, p.SystemZone)
-		}
+	// B7: everything on in a small window hides nothing. Parts shrink to their floors and the page scrolls.
+	if err := ensureWindowSizeWH(hwnd, 1024, 480); err != nil {
+		return err
+	}
+	time.Sleep(500 * time.Millisecond)
+	if p, err = d29Apply(d29Payload(plain(d29Opts{PlainAll: true}))); err != nil {
+		return err
+	}
+	if len(p.shown()) < len(d29Parts) {
+		return d29Fail("plain at 1024x480 with all parts hid some: shown %v", p.shown())
+	}
+	if p.BodyOver > 1 || p.OverflowY != "auto" {
+		return d29Fail("plain at 1024x480: body overflow %.0f px, overflow-y %s (want the page to scroll)", p.BodyOver, p.OverflowY)
+	}
+	if _, err := screenshot(hwnd, "d29-plain-small"); err != nil {
+		return err
+	}
+	// Standard at the same size drops nothing either: it scrolls.
+	if p, err = d29Apply(d29Payload(std(nil))); err != nil {
+		return err
+	}
+	if strings.Join(p.shown(), ",") != wantAll || !p.Scrolls {
+		return d29Fail("standard at 1024x480: shown %v, scrolls %v", p.shown(), p.Scrolls)
+	}
+	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
+		return err
+	}
+	time.Sleep(500 * time.Millisecond)
 
-		// B7: everything on in a small window hides nothing. Parts shrink to their floors and the page scrolls.
-		if err := ensureWindowSizeWH(hwnd, 1024, 480); err != nil {
-			return err
-		}
-		time.Sleep(500 * time.Millisecond)
-		if p, err = d29Apply(d29Payload(plain(d29Opts{PlainAll: true}))); err != nil {
-			return err
-		}
-		if len(p.shown()) < len(d29Parts) {
-			return d29Fail("plain at 1024x480 with all parts hid some: shown %v", p.shown())
-		}
-		if p.BodyOver > 1 || p.OverflowY != "auto" {
-			return d29Fail("plain at 1024x480: body overflow %.0f px, overflow-y %s (want the page to scroll)", p.BodyOver, p.OverflowY)
-		}
-		if _, err := screenshot(hwnd, "d29-plain-small"); err != nil {
-			return err
-		}
-		// Standard at the same size drops nothing either: it scrolls.
-		if p, err = d29Apply(d29Payload(std(nil))); err != nil {
-			return err
-		}
-		if strings.Join(p.shown(), ",") != wantAll || !p.Scrolls {
-			return d29Fail("standard at 1024x480: shown %v, scrolls %v", p.shown(), p.Scrolls)
-		}
-		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-			return err
-		}
-		time.Sleep(500 * time.Millisecond)
-
-		// The toggle's text flips with each press.
-		if _, err = d29Apply(d29Payload(std(nil))); err != nil {
-			return err
-		}
-		for i, want := range []string{"Plain: on", "Plain: off", "Plain: on"} {
-			if err := d29Eval(`document.getElementById('plainToggle').click()`); err != nil {
-				return err
-			}
-			if p, err = d29Read(); err != nil {
-				return err
-			}
-			if p.Toggle != want || p.ToggleOn != (want == "Plain: on") {
-				return d29Fail("toggle press %d reads %q (on %v), want %q", i+1, p.Toggle, p.ToggleOn, want)
-			}
-		}
-
-		// The gear: four groups, Overall scrollbar on top, ticks from the payload, the Station pair.
-		if p, err = d29Apply(d29Payload(std(map[string]bool{"git": true}))); err != nil {
-			return err
-		}
-		if err := d29Eval(`document.getElementById('secGear').click()`); err != nil {
+	// The toggle's text flips with each press.
+	if _, err = d29Apply(d29Payload(std(nil))); err != nil {
+		return err
+	}
+	for i, want := range []string{"Plain: on", "Plain: off", "Plain: on"} {
+		if err := d29Eval(`document.getElementById('plainToggle').click()`); err != nil {
 			return err
 		}
 		if p, err = d29Read(); err != nil {
 			return err
 		}
-		wantHeads := "Status,Sessions last 30 min,Processes last 30 min,Microsoft To Do"
-		if !p.GearOpen || strings.Join(p.Headings, ",") != wantHeads {
-			return d29Fail("gear: open %v, group headings %v", p.GearOpen, p.Headings)
+		if p.Toggle != want || p.ToggleOn != (want == "Plain: on") {
+			return d29Fail("toggle press %d reads %q (on %v), want %q", i+1, p.Toggle, p.ToggleOn, want)
 		}
-		if p.LabelRows != 15 || p.Checkboxes != 30 {
-			return d29Fail("gear: %d part rows and %d checkboxes, want 15 and 30", p.LabelRows, p.Checkboxes)
+	}
+
+	// The gear: four groups, Overall scrollbar on top, ticks from the payload, the Station pair.
+	if p, err = d29Apply(d29Payload(std(map[string]bool{"git": true}))); err != nil {
+		return err
+	}
+	if err := d29Eval(`document.getElementById('secGear').click()`); err != nil {
+		return err
+	}
+	if p, err = d29Read(); err != nil {
+		return err
+	}
+	wantHeads := "Status,Sessions last 30 min,Processes last 30 min,Microsoft To Do"
+	if !p.GearOpen || strings.Join(p.Headings, ",") != wantHeads {
+		return d29Fail("gear: open %v, group headings %v", p.GearOpen, p.Headings)
+	}
+	if p.LabelRows != 15 || p.Checkboxes != 30 {
+		return d29Fail("gear: %d part rows and %d checkboxes, want 15 and 30", p.LabelRows, p.Checkboxes)
+	}
+	if !p.ScrollFirst || !p.ScrollTick {
+		return d29Fail("gear: Overall scrollbar first %v, ticked %v", p.ScrollFirst, p.ScrollTick)
+	}
+	if len(p.Ticks) != 19 {
+		return d29Fail("gear: %d ticks, want 19 (14 standard without git, 5 plain)", len(p.Ticks))
+	}
+	for _, t := range p.Ticks {
+		if t == "standard:git" || t == "plain:git" || t == "plain:processes" {
+			return d29Fail("gear ticked %s, which is off in the payload", t)
 		}
-		if !p.ScrollFirst || !p.ScrollTick {
-			return d29Fail("gear: Overall scrollbar first %v, ticked %v", p.ScrollFirst, p.ScrollTick)
-		}
-		if len(p.Ticks) != 19 {
-			return d29Fail("gear: %d ticks, want 19 (14 standard without git, 5 plain)", len(p.Ticks))
-		}
-		for _, t := range p.Ticks {
-			if t == "standard:git" || t == "plain:git" || t == "plain:processes" {
-				return d29Fail("gear ticked %s, which is off in the payload", t)
-			}
-		}
-		if p.Radio != "space" {
-			return d29Fail("gear: Station starts as %q, want space", p.Radio)
-		}
-		siteOpts := std(nil)
-		siteOpts.StationTheme = "site"
-		if p, err = d29Apply(d29Payload(siteOpts)); err != nil {
-			return err
-		}
-		if p.Radio != "site" {
-			return d29Fail("gear: payload says site, radio reads %q", p.Radio)
-		}
-		if _, err := screenshot(hwnd, "d29-gear"); err != nil {
-			return err
-		}
-		// Choosing a Station theme calls the binding and leaves the open Station alone.
-		if _, err = d29Apply(d29Payload(std(nil))); err != nil {
-			return err
-		}
-		if err := d29Eval(`(function(){
+	}
+	if p.Radio != "space" {
+		return d29Fail("gear: Station starts as %q, want space", p.Radio)
+	}
+	siteOpts := std(nil)
+	siteOpts.StationTheme = "site"
+	if p, err = d29Apply(d29Payload(siteOpts)); err != nil {
+		return err
+	}
+	if p.Radio != "site" {
+		return d29Fail("gear: payload says site, radio reads %q", p.Radio)
+	}
+	if _, err := screenshot(hwnd, "d29-gear"); err != nil {
+		return err
+	}
+	// Choosing a Station theme calls the binding and leaves the open Station alone.
+	if _, err = d29Apply(d29Payload(std(nil))); err != nil {
+		return err
+	}
+	if err := d29Eval(`(function(){
   window.__d29Real = window.bdevSetStationTheme; window.__d29Calls = []; window.__d29Start = window.BM_STATION_THEME;
   window.bdevSetStationTheme = function(v){ window.__d29Calls.push(v); return Promise.resolve(); };
   document.querySelector('input[name="secStationStart"][value="site"]').click();
   return 1;
 })()`); err != nil {
-			return err
-		}
-		calls, cerr := evalString(`JSON.stringify(window.__d29Calls)`)
-		same, serr := evalString(`String(window.BM_STATION_THEME === window.__d29Start)`)
-		_ = d29Eval(`(window.bdevSetStationTheme = window.__d29Real, 1)`)
-		if cerr != nil || serr != nil {
-			return d29Fail("radio step could not read back: %v %v", cerr, serr)
-		}
-		if calls != `["site"]` || same != "true" {
-			return d29Fail("radio: binding calls %s, Station theme unchanged %s, want [\"site\"] and true", calls, same)
-		}
-		if err := d29Eval(`document.getElementById('secGear').click()`); err != nil {
-			return err
-		}
-
-		// Stale and missing: the header and the notice carry Go's line, never
-		// "not running", and no old numbers are drawn.
-		lines := map[string]string{"stale": "No process has written the snapshot for 7 s.", "missing": "No snapshot file yet."}
-		for _, status := range []string{"stale", "missing"} {
-			p, err = d29Apply(d29Payload(d29Opts{Plain: true, Status: status}))
-			if err != nil {
-				return err
-			}
-			want := lines[status]
-			if p.Header != want || !strings.Contains(p.Notice, want) {
-				return d29Fail("%s: header %q notice %q do not carry the line %q", status, p.Header, p.Notice, want)
-			}
-			if strings.Contains(p.Header, "not running") || strings.Contains(p.Notice, "not running") {
-				return d29Fail("%s: header %q notice %q still say not running", status, p.Header, p.Notice)
-			}
-			if strings.Contains(p.Text, "tokens") && strings.Contains(p.Text, "120") {
-				return d29Fail("%s: old numbers are still drawn", status)
-			}
-		}
-		if _, err := screenshot(hwnd, "d29-not-running"); err != nil {
-			return err
-		}
-
-		return d29Persist()
+		return err
 	}
+	calls, cerr := evalString(`JSON.stringify(window.__d29Calls)`)
+	same, serr := evalString(`String(window.BM_STATION_THEME === window.__d29Start)`)
+	_ = d29Eval(`(window.bdevSetStationTheme = window.__d29Real, 1)`)
+	if cerr != nil || serr != nil {
+		return d29Fail("radio step could not read back: %v %v", cerr, serr)
+	}
+	if calls != `["site"]` || same != "true" {
+		return d29Fail("radio: binding calls %s, Station theme unchanged %s, want [\"site\"] and true", calls, same)
+	}
+	if err := d29Eval(`document.getElementById('secGear').click()`); err != nil {
+		return err
+	}
+
+	// Stale and missing: the header and the notice carry Go's line, never
+	// "not running", and no old numbers are drawn.
+	lines := map[string]string{"stale": "No process has written the snapshot for 7 s.", "missing": "No snapshot file yet."}
+	for _, status := range []string{"stale", "missing"} {
+		p, err = d29Apply(d29Payload(d29Opts{Plain: true, Status: status}))
+		if err != nil {
+			return err
+		}
+		want := lines[status]
+		if p.Header != want || !strings.Contains(p.Notice, want) {
+			return d29Fail("%s: header %q notice %q do not carry the line %q", status, p.Header, p.Notice, want)
+		}
+		if strings.Contains(p.Header, "not running") || strings.Contains(p.Notice, "not running") {
+			return d29Fail("%s: header %q notice %q still say not running", status, p.Header, p.Notice)
+		}
+		if strings.Contains(p.Text, "tokens") && strings.Contains(p.Text, "120") {
+			return d29Fail("%s: old numbers are still drawn", status)
+		}
+	}
+	if _, err := screenshot(hwnd, "d29-not-running"); err != nil {
+		return err
+	}
+
+	return d29Persist()
 }
 
 type d29Saved struct {

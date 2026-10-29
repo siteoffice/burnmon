@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -80,213 +78,211 @@ type d37Page struct {
 	Prevs    []map[string]any  `json:"prevs"`
 }
 
-func init() {
-	checks["d37"] = func(hwnd uintptr, args []string) error {
-		raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
-		if err != nil {
-			return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
-		}
-		fail := func(format string, a ...any) error { return fmt.Errorf("d37: "+format, a...) }
-		if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-			return err
-		}
-		all := map[string]bool{"stop": true, "attach": true, "approve": true, "send_back": true}
-		none := map[string]bool{"stop": false, "attach": false, "approve": false, "send_back": false}
-		verdicts := map[string]map[string]string{
-			"approve":   {"G1": "approve", "G2": "approve", "G3": "proceed"},
-			"send_back": {"G1": "reject", "G2": "reject"},
-		}
-		payload := func(plain bool, on, ready map[string]bool, why map[string]string) string {
-			var m map[string]any
-			if err := json.Unmarshal([]byte(d29Payload(d29Opts{Plain: plain, Scrollbar: true, Status: "ok", Snap: raw})), &m); err != nil {
-				panic(err)
-			}
-			m["controls"] = map[string]any{"on": on, "ready": ready, "why": why, "verdicts": verdicts}
-			b, _ := json.Marshal(m)
-			return string(b)
-		}
-		read := func() (d37Page, error) {
-			var p d37Page
-			time.Sleep(150 * time.Millisecond)
-			err := evalInto(d37ReadJS, &p)
-			return p, err
-		}
-		apply := func(pl string) (d37Page, error) {
-			if _, err := d29Apply(pl); err != nil {
-				return d37Page{}, err
-			}
-			return read()
-		}
-		click := func(js string) error { _, err := evalRaw(js); time.Sleep(80 * time.Millisecond); return err }
-		chip := func(c, t string) string {
-			return `document.querySelector('[data-sec=waits] .ctl[data-ctl="` + c + `"][data-target="` + t + `"]').click()`
-		}
-		if _, err := evalRaw(d37Recorders); err != nil {
-			return err
-		}
-
-		// Off, or on but not ready: no chip; the gear says why.
-		p, err := apply(payload(false, none, none, nil))
-		if err != nil {
-			return err
-		}
-		if p.All != 0 {
-			return fail("%d chips with every switch off", p.All)
-		}
-		why := map[string]string{"stop": "needs claude.exe: set claude_path in burnmon.json", "approve": "BurnMon Dev runs as administrator: controls are off"}
-		if p, err = apply(payload(false, all, none, why)); err != nil {
-			return err
-		}
-		if p.All != 0 {
-			return fail("%d chips when on but not ready", p.All)
-		}
-		if p.Gear["stop"] != why["stop"] || p.Gear["approve"] != why["approve"] {
-			return fail("gear reasons %v, want %v", p.Gear, why)
-		}
-
-		// On and ready: chips only where offered.
-		if p, err = apply(payload(false, all, all, nil)); err != nil {
-			return err
-		}
-		want := map[string]string{"agentview:ab12": "stop,attach", "session:anthropic:example-sub": "stop,attach",
-			"gate:example__flow__2:G2": "approve,send back", "gate:example__flow__1:G4": "", "session:anthropic:example-parent": ""}
-		for id, w := range want {
-			if p.Rows[id] != w {
-				return fail("row %q has chips %q, want %q", id, p.Rows[id], w)
-			}
-		}
-		if p.Outcome != 0 {
-			return fail("%d chips on outcome rows", p.Outcome)
-		}
-		if _, err := screenshot(hwnd, "d37-chips"); err != nil {
-			return err
-		}
-
-		// One press previews only; the command is text; Confirm is disabled at first.
-		if err := click(chip("stop", "ab12")); err != nil {
-			return err
-		}
-		if p, err = read(); err != nil {
-			return err
-		}
-		if len(p.Prevs) != 1 || len(p.Prevs[0]) != 2 || p.Prevs[0]["control"] != "stop" || p.Prevs[0]["target"] != "ab12" || len(p.Runs) != 0 {
-			return fail("first press sent preview %v and runs %v, want exactly {control, target} and no run", p.Prevs, p.Runs)
-		}
-		if !strings.Contains(p.Cmd, "claude.exe stop ab12") || !strings.Contains(p.PrevText, "again within 5 s") || p.CmdKids != 0 {
-			return fail("preview line %q / %q", p.Cmd, p.PrevText)
-		}
-		if !p.GoDis {
-			return fail("Confirm is enabled in the first 400 ms")
-		}
-		if _, err := screenshot(hwnd, "d37-preview"); err != nil {
-			return err
-		}
-		time.Sleep(450 * time.Millisecond)
-
-		// Two Confirm presses 50 ms apart: one run, the token only.
-		if _, err := evalRaw(`(function(){ var b = document.querySelector('[data-sec=waits] .ctlgo'); b.click();
-			setTimeout(function(){ var c = document.querySelector('[data-sec=waits] .ctlgo'); if(c) c.click(); }, 50); return true; })()`); err != nil {
-			return err
-		}
-		time.Sleep(300 * time.Millisecond)
-		if p, err = read(); err != nil {
-			return err
-		}
-		if len(p.Runs) != 1 || p.Runs[0] != "tok-ab12" {
-			return fail("double press sent runs %v, want exactly [tok-ab12]", p.Runs)
-		}
-		if p.Result != "stop: exit 0, stopped ab12" || p.GoCount != 0 {
-			return fail("result %q, confirm buttons %d", p.Result, p.GoCount)
-		}
-
-		// A preview left for 5 s expires and loses Confirm.
-		if err := click(chip("attach", "ab12")); err != nil {
-			return err
-		}
-		time.Sleep(5400 * time.Millisecond)
-		if p, err = read(); err != nil {
-			return err
-		}
-		if p.GoCount != 0 || !strings.Contains(p.Result, "expired") {
-			return fail("after 5 s: %d confirm buttons, result %q", p.GoCount, p.Result)
-		}
-
-		// Two previews survive a re-apply; each Confirm sends its own token.
-		if err := click(chip("stop", "ab12")); err != nil {
-			return err
-		}
-		if err := click(chip("approve", "gate:example__flow__2:G2")); err != nil {
-			return err
-		}
-		time.Sleep(450 * time.Millisecond)
-		if p, err = apply(payload(false, all, all, nil)); err != nil {
-			return err
-		}
-		if p.GoCount != 2 {
-			return fail("%d confirm buttons after a poll, want 2", p.GoCount)
-		}
-		if _, err := evalRaw(`window.__d37run.length = 0; document.querySelector('.ctlgo[data-ctlgo=approve]').click()`); err != nil {
-			return err
-		}
-		time.Sleep(150 * time.Millisecond)
-		if p, err = read(); err != nil {
-			return err
-		}
-		if len(p.Runs) != 1 || p.Runs[0] != "tok-gate:example__flow__2:G2" {
-			return fail("approve sent runs %v", p.Runs)
-		}
-
-		// A refusal is shown as text.
-		if _, err := evalRaw(`window.__d37fail = 'the session changed since the preview, press again'`); err != nil {
-			return err
-		}
-		if err := click(`document.querySelector('.ctlgo[data-ctlgo=stop]').click()`); err != nil {
-			return err
-		}
-		if p, err = read(); err != nil {
-			return err
-		}
-		if !strings.Contains(p.Result, "refused: the session changed since the preview") {
-			return fail("refusal shown as %q", p.Result)
-		}
-		if _, err := evalRaw(`window.__d37fail = null`); err != nil {
-			return err
-		}
-
-		// Plain words.
-		if p, err = apply(payload(true, all, all, nil)); err != nil {
-			return err
-		}
-		if p.Rows["agentview:ab12"] != "Stop,Open" || p.Rows["gate:example__flow__2:G2"] != "Approve,Send back" {
-			return fail("plain chips %q / %q", p.Rows["agentview:ab12"], p.Rows["gate:example__flow__2:G2"])
-		}
-		time.Sleep(500 * time.Millisecond)
-		if err := click(chip("stop", "ab12")); err != nil {
-			return err
-		}
-		if p, err = read(); err != nil {
-			return err
-		}
-		if !strings.Contains(p.PrevText, "again within 5 seconds") {
-			return fail("plain preview text %q", p.PrevText)
-		}
-
-		// Hostile label: literal text, no element.
-		if _, err := evalRaw(`window.__d37label = 'a<b "c" & d \\ <img src=x>'`); err != nil {
-			return err
-		}
-		if p, err = apply(payload(false, all, all, nil)); err != nil {
-			return err
-		}
-		if err := click(chip("attach", "ab12")); err != nil {
-			return err
-		}
-		if p, err = read(); err != nil {
-			return err
-		}
-		if !strings.Contains(p.PrevText, `a<b "c" & d \ <img src=x>`) || p.Imgs != 0 {
-			return fail("hostile label shown as %q with %d images", p.PrevText, p.Imgs)
-		}
-		return nil
+func caseD37(hwnd uintptr, args []string) error {
+	raw, err := readFixture("snapshot_example.json")
+	if err != nil {
+		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
 	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d37: "+format, a...) }
+	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
+		return err
+	}
+	all := map[string]bool{"stop": true, "attach": true, "approve": true, "send_back": true}
+	none := map[string]bool{"stop": false, "attach": false, "approve": false, "send_back": false}
+	verdicts := map[string]map[string]string{
+		"approve":   {"G1": "approve", "G2": "approve", "G3": "proceed"},
+		"send_back": {"G1": "reject", "G2": "reject"},
+	}
+	payload := func(plain bool, on, ready map[string]bool, why map[string]string) string {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(d29Payload(d29Opts{Plain: plain, Scrollbar: true, Status: "ok", Snap: raw})), &m); err != nil {
+			panic(err)
+		}
+		m["controls"] = map[string]any{"on": on, "ready": ready, "why": why, "verdicts": verdicts}
+		b, _ := json.Marshal(m)
+		return string(b)
+	}
+	read := func() (d37Page, error) {
+		var p d37Page
+		time.Sleep(150 * time.Millisecond)
+		err := evalInto(d37ReadJS, &p)
+		return p, err
+	}
+	apply := func(pl string) (d37Page, error) {
+		if _, err := d29Apply(pl); err != nil {
+			return d37Page{}, err
+		}
+		return read()
+	}
+	click := func(js string) error { _, err := evalRaw(js); time.Sleep(80 * time.Millisecond); return err }
+	chip := func(c, t string) string {
+		return `document.querySelector('[data-sec=waits] .ctl[data-ctl="` + c + `"][data-target="` + t + `"]').click()`
+	}
+	if _, err := evalRaw(d37Recorders); err != nil {
+		return err
+	}
+
+	// Off, or on but not ready: no chip; the gear says why.
+	p, err := apply(payload(false, none, none, nil))
+	if err != nil {
+		return err
+	}
+	if p.All != 0 {
+		return fail("%d chips with every switch off", p.All)
+	}
+	why := map[string]string{"stop": "needs claude.exe: set claude_path in burnmon.json", "approve": "BurnMon Dev runs as administrator: controls are off"}
+	if p, err = apply(payload(false, all, none, why)); err != nil {
+		return err
+	}
+	if p.All != 0 {
+		return fail("%d chips when on but not ready", p.All)
+	}
+	if p.Gear["stop"] != why["stop"] || p.Gear["approve"] != why["approve"] {
+		return fail("gear reasons %v, want %v", p.Gear, why)
+	}
+
+	// On and ready: chips only where offered.
+	if p, err = apply(payload(false, all, all, nil)); err != nil {
+		return err
+	}
+	want := map[string]string{"agentview:ab12": "stop,attach", "session:anthropic:example-sub": "stop,attach",
+		"gate:example__flow__2:G2": "approve,send back", "gate:example__flow__1:G4": "", "session:anthropic:example-parent": ""}
+	for id, w := range want {
+		if p.Rows[id] != w {
+			return fail("row %q has chips %q, want %q", id, p.Rows[id], w)
+		}
+	}
+	if p.Outcome != 0 {
+		return fail("%d chips on outcome rows", p.Outcome)
+	}
+	if _, err := screenshot(hwnd, "d37-chips"); err != nil {
+		return err
+	}
+
+	// One press previews only; the command is text; Confirm is disabled at first.
+	if err := click(chip("stop", "ab12")); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if len(p.Prevs) != 1 || len(p.Prevs[0]) != 2 || p.Prevs[0]["control"] != "stop" || p.Prevs[0]["target"] != "ab12" || len(p.Runs) != 0 {
+		return fail("first press sent preview %v and runs %v, want exactly {control, target} and no run", p.Prevs, p.Runs)
+	}
+	if !strings.Contains(p.Cmd, "claude.exe stop ab12") || !strings.Contains(p.PrevText, "again within 5 s") || p.CmdKids != 0 {
+		return fail("preview line %q / %q", p.Cmd, p.PrevText)
+	}
+	if !p.GoDis {
+		return fail("Confirm is enabled in the first 400 ms")
+	}
+	if _, err := screenshot(hwnd, "d37-preview"); err != nil {
+		return err
+	}
+	time.Sleep(450 * time.Millisecond)
+
+	// Two Confirm presses 50 ms apart: one run, the token only.
+	if _, err := evalRaw(`(function(){ var b = document.querySelector('[data-sec=waits] .ctlgo'); b.click();
+			setTimeout(function(){ var c = document.querySelector('[data-sec=waits] .ctlgo'); if(c) c.click(); }, 50); return true; })()`); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
+	if p, err = read(); err != nil {
+		return err
+	}
+	if len(p.Runs) != 1 || p.Runs[0] != "tok-ab12" {
+		return fail("double press sent runs %v, want exactly [tok-ab12]", p.Runs)
+	}
+	if p.Result != "stop: exit 0, stopped ab12" || p.GoCount != 0 {
+		return fail("result %q, confirm buttons %d", p.Result, p.GoCount)
+	}
+
+	// A preview left for 5 s expires and loses Confirm.
+	if err := click(chip("attach", "ab12")); err != nil {
+		return err
+	}
+	time.Sleep(5400 * time.Millisecond)
+	if p, err = read(); err != nil {
+		return err
+	}
+	if p.GoCount != 0 || !strings.Contains(p.Result, "expired") {
+		return fail("after 5 s: %d confirm buttons, result %q", p.GoCount, p.Result)
+	}
+
+	// Two previews survive a re-apply; each Confirm sends its own token.
+	if err := click(chip("stop", "ab12")); err != nil {
+		return err
+	}
+	if err := click(chip("approve", "gate:example__flow__2:G2")); err != nil {
+		return err
+	}
+	time.Sleep(450 * time.Millisecond)
+	if p, err = apply(payload(false, all, all, nil)); err != nil {
+		return err
+	}
+	if p.GoCount != 2 {
+		return fail("%d confirm buttons after a poll, want 2", p.GoCount)
+	}
+	if _, err := evalRaw(`window.__d37run.length = 0; document.querySelector('.ctlgo[data-ctlgo=approve]').click()`); err != nil {
+		return err
+	}
+	time.Sleep(150 * time.Millisecond)
+	if p, err = read(); err != nil {
+		return err
+	}
+	if len(p.Runs) != 1 || p.Runs[0] != "tok-gate:example__flow__2:G2" {
+		return fail("approve sent runs %v", p.Runs)
+	}
+
+	// A refusal is shown as text.
+	if _, err := evalRaw(`window.__d37fail = 'the session changed since the preview, press again'`); err != nil {
+		return err
+	}
+	if err := click(`document.querySelector('.ctlgo[data-ctlgo=stop]').click()`); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if !strings.Contains(p.Result, "refused: the session changed since the preview") {
+		return fail("refusal shown as %q", p.Result)
+	}
+	if _, err := evalRaw(`window.__d37fail = null`); err != nil {
+		return err
+	}
+
+	// Plain words.
+	if p, err = apply(payload(true, all, all, nil)); err != nil {
+		return err
+	}
+	if p.Rows["agentview:ab12"] != "Stop,Open" || p.Rows["gate:example__flow__2:G2"] != "Approve,Send back" {
+		return fail("plain chips %q / %q", p.Rows["agentview:ab12"], p.Rows["gate:example__flow__2:G2"])
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := click(chip("stop", "ab12")); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if !strings.Contains(p.PrevText, "again within 5 seconds") {
+		return fail("plain preview text %q", p.PrevText)
+	}
+
+	// Hostile label: literal text, no element.
+	if _, err := evalRaw(`window.__d37label = 'a<b "c" & d \\ <img src=x>'`); err != nil {
+		return err
+	}
+	if p, err = apply(payload(false, all, all, nil)); err != nil {
+		return err
+	}
+	if err := click(chip("attach", "ab12")); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if !strings.Contains(p.PrevText, `a<b "c" & d \ <img src=x>`) || p.Imgs != 0 {
+		return fail("hostile label shown as %q with %d images", p.PrevText, p.Imgs)
+	}
+	return nil
 }

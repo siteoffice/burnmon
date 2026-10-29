@@ -5,34 +5,65 @@
 # via Win32 (PrintWindow, SendInput); only DOM reads/evals go through the
 # BURNMON_UICHECK channel, since only burnmon.exe itself can run JS in its
 # own page. Run from the repo root in PowerShell:
-#   .\scripts\uicheck.ps1                 # runs every registered check
+#   .\scripts\uicheck.ps1                 # w0 to w8, then the seven d groups
+#   .\scripts\uicheck.ps1 dev             # the seven d groups only
+#   .\scripts\uicheck.ps1 reverse         # as no args, d groups and their cases backwards
 #   .\scripts\uicheck.ps1 w0 w1           # runs only the named checks
-#   .\scripts\uicheck.ps1 d0 d1 d2 d3     # runs burnmon-dev.exe's own checks
+#   .\scripts\uicheck.ps1 layout d0       # a d group, an old d name or group/case
 #
-# A "d"-prefixed check targets burnmon-dev.exe instead: its own dev eval
-# channel (BURNMON_DEV_UICHECK=1, cmd\burnmon-dev\uicheck_devserver.go),
-# port 9334 (not burnmon.exe's 9333) and window title "BurnMon Dev" (not
-# "BurnMon"), so either exe can be driven without the other's channel or
-# window getting in the way (the design doc's own normal case: both running
-# at once). This script only runs one exe's checks per invocation; do not
-# mix a "w" and a "d" check in the same call.
+# A d check (one of the seven groups in tools\uicheck\groups.go, a
+# group/case such as layout/d34, or an old name such as d34) targets
+# burnmon-dev.exe instead: its own dev eval channel (BURNMON_DEV_UICHECK=1,
+# cmd\burnmon-dev\uicheck_devserver.go), port 9334 (not burnmon.exe's 9333)
+# and window title "BurnMon Dev" (not "BurnMon"), so either exe can be
+# driven without the other's channel or window getting in the way (the
+# design doc's own normal case: both running at once). Named checks run one
+# exe per invocation; do not mix a w and a d check in the same call. With no
+# names the two exes run one after the other, as two separate launches.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
 
-$targetChecks = $args
-if ($targetChecks.Count -eq 0) {
-    $targetChecks = @("w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8")
+# Same order as devGroups in tools\uicheck\groups.go. Matched by name, not by
+# prefix: "waits" starts with "w".
+$devGroups = @("fit", "charts", "station", "layout", "map", "waits", "shell")
+function Test-DevCheck([string]$name) {
+    return ($devGroups -contains $name) -or ($name -match '^[a-z]+/') -or ($name -match '^d\d+$')
 }
 
-$devChecks = $targetChecks | Where-Object { $_.StartsWith("d") }
-$otherChecks = $targetChecks | Where-Object { -not $_.StartsWith("d") }
+$reverse = $args -contains "reverse"
+$devOnly = $args -contains "dev"
+$targetChecks = @($args | Where-Object { $_ -ne "reverse" -and $_ -ne "dev" })
+$devPass = @()
+if ($reverse) { $devPass = @("reverse") }
+
+if ($targetChecks.Count -eq 0) {
+    if ($devOnly) {
+        & "$PSScriptRoot\uicheck-dev.ps1" @devGroups @devPass
+        exit $LASTEXITCODE
+    }
+    # Two separate launches; the d groups run even when a w check failed, and
+    # the run fails when either did.
+    & $PSCommandPath w0 w1 w2 w3 w4 w5 w6 w7 w8
+    $wExit = $LASTEXITCODE
+    & "$PSScriptRoot\uicheck-dev.ps1" @devGroups @devPass
+    $dExit = $LASTEXITCODE
+    Write-Host "uicheck: burnmon.exe checks exit $wExit, burnmon-dev.exe groups exit $dExit"
+    if ($wExit -ne 0) { exit $wExit }
+    exit $dExit
+}
+
+$devChecks = @($targetChecks | Where-Object { Test-DevCheck $_ })
+$otherChecks = @($targetChecks | Where-Object { -not (Test-DevCheck $_) })
 if ($devChecks.Count -gt 0 -and $otherChecks.Count -gt 0) {
     Write-Host "uicheck: cannot mix a burnmon-dev.exe check ($($devChecks -join ', ')) with a burnmon.exe check ($($otherChecks -join ', ')) in one call; run them separately."
     exit 1
 }
 if ($devChecks.Count -gt 0) {
-    & "$PSScriptRoot\uicheck-dev.ps1" @targetChecks
+    & "$PSScriptRoot\uicheck-dev.ps1" @targetChecks @devPass
     exit $LASTEXITCODE
+}
+if ($reverse) {
+    Write-Host "uicheck: reverse applies to the d groups only; running the w checks in order."
 }
 
 $exe = Join-Path (Get-Location) "burnmon.exe"

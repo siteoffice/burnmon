@@ -12,10 +12,8 @@ import (
 // than the viewport is silently clipped rather than shown with a
 // scrollbar, and that clipping is exactly what "fits with no scrolling"
 // rules out.
-func init() {
-	checks["d2"] = func(hwnd uintptr, args []string) error {
-		return checkViewportFits(hwnd, "d2", 1152, 2048)
-	}
+func caseD2(hwnd uintptr, args []string) error {
+	return checkViewportFits(hwnd, "d2", 1152, 2048)
 }
 
 // checkViewportFits sets the window to width x height (outer, physical

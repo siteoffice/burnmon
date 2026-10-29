@@ -113,121 +113,119 @@ func d41PressO(hwnd uintptr, want bool) error {
 	return fmt.Errorf("d41: O had no effect after 4 tries (the window did not take input focus), want the Station box present=%v", want)
 }
 
-func init() {
-	checks["d41"] = func(hwnd uintptr, args []string) error {
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		snap, err := d34Snapshot(false)
-		if err != nil {
+func caseD41(hwnd uintptr, args []string) error {
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	snap, err := d34Snapshot(false)
+	if err != nil {
+		return err
+	}
+	shares := map[string]any{"burn_30min": 0.25, "vendor_strip": 0.15, "activity_heatmap": 0.3, "turn_ticker": 0.3, "system_chart": 0.6, "process_groups": 0.4}
+	variants := []struct {
+		name  string
+		off   map[string]bool
+		extra map[string]any
+	}{
+		{"all", nil, nil},
+		{"no-ticker", map[string]bool{"turn_ticker": true}, nil},
+		{"saved-shares", nil, map[string]any{"heights_standard": shares}},
+	}
+	var fails []string
+	ran := 0
+	for _, sz := range [][2]int32{{1280, 800}, {1920, 1080}} {
+		tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
+		if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
 			return err
 		}
-		shares := map[string]any{"burn_30min": 0.25, "vendor_strip": 0.15, "activity_heatmap": 0.3, "turn_ticker": 0.3, "system_chart": 0.6, "process_groups": 0.4}
-		variants := []struct {
-			name  string
-			off   map[string]bool
-			extra map[string]any
-		}{
-			{"all", nil, nil},
-			{"no-ticker", map[string]bool{"turn_ticker": true}, nil},
-			{"saved-shares", nil, map[string]any{"heights_standard": shares}},
+		if windowCapped {
+			fmt.Printf("uicheck: d41: SKIPPED %s, this screen is too small\n", tag)
+			continue
 		}
-		var fails []string
-		ran := 0
-		for _, sz := range [][2]int32{{1280, 800}, {1920, 1080}} {
-			tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
-			if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
+		time.Sleep(500 * time.Millisecond)
+		for _, v := range variants {
+			payload, err := d41Payload(d29Opts{Status: "ok", Snap: snap, StandardOff: v.off}, v.extra)
+			if err != nil {
 				return err
 			}
-			if windowCapped {
-				fmt.Printf("uicheck: d41: SKIPPED %s, this screen is too small\n", tag)
-				continue
+			if _, err := d34Apply(payload, snap); err != nil {
+				return err
 			}
-			time.Sleep(500 * time.Millisecond)
-			for _, v := range variants {
-				payload, err := d41Payload(d29Opts{Status: "ok", Snap: snap, StandardOff: v.off}, v.extra)
-				if err != nil {
-					return err
-				}
-				if _, err := d34Apply(payload, snap); err != nil {
-					return err
-				}
-				var r0, r1, r2 d41Read
-				if err := evalInto(d41ReadJS, &r0); err != nil {
-					return err
-				}
-				if err := d41PressO(hwnd, true); err != nil {
-					return err
-				}
-				time.Sleep(700 * time.Millisecond)
-				err = evalInto(d41ReadJS, &r1)
-				_, shotErr := screenshot(hwnd, fmt.Sprintf("d41-station-%s-%s", tag, v.name))
-				if err == nil {
-					err = shotErr
-				}
-				// Close the Station even when a read failed.
-				if kerr := d41PressO(hwnd, false); err == nil {
-					err = kerr
-				}
-				time.Sleep(700 * time.Millisecond)
-				if err != nil {
-					return err
-				}
-				if err := evalInto(d41ReadJS, &r2); err != nil {
-					return err
-				}
-				var bad []string
-				if len(r0.Parts) == 0 || r0.Span <= 0 {
-					bad = append(bad, "no parts in the burn zone before the swap")
-				}
-				if r1.Box <= 0 || !d41Close(r1.Box, r0.Span, 2) {
-					diag, _ := evalString(`"focus " + document.hasFocus() + ", view " + window.__bdevStationView() + ", active " + (document.activeElement ? document.activeElement.tagName + "#" + document.activeElement.id : "-")`)
-					bad = append(bad, fmt.Sprintf("box %.1f px vs span %.1f px (%s)", r1.Box, r0.Span, diag))
-				}
-				for _, p := range []struct {
-					n    string
-					a, b d41Box
-				}{{"burn zone", r0.Burn, r1.Burn}, {"system zone", r0.Sys, r1.Sys}, {"main", r0.Main, r1.Main}} {
-					if !d41Close(p.a.Top, p.b.Top, 1) || !d41Close(p.a.H, p.b.H, 1) {
-						bad = append(bad, fmt.Sprintf("%s moved (top %.1f to %.1f, height %.1f to %.1f)", p.n, p.a.Top, p.b.Top, p.a.H, p.b.H))
-					}
-				}
-				if !d41Close(r0.Hist, r1.Hist, 1) {
-					bad = append(bad, fmt.Sprintf("System chart height %.1f to %.1f", r0.Hist, r1.Hist))
-				}
-				if !r1.Label {
-					bad = append(bad, "the zone label is hidden")
-				}
-				if r2.Box != 0 {
-					bad = append(bad, "the box is still there after the second O")
-				}
-				if len(r2.Parts) != len(r0.Parts) {
-					bad = append(bad, fmt.Sprintf("%d parts back, want %d", len(r2.Parts), len(r0.Parts)))
-				} else {
-					for i := range r0.Parts {
-						a, b := r0.Parts[i], r2.Parts[i]
-						if !d41Close(a.Top, b.Top, 1) || !d41Close(a.H, b.H, 1) {
-							bad = append(bad, fmt.Sprintf("part %s back at top %.1f height %.1f, was %.1f and %.1f", a.ID, b.Top, b.H, a.Top, a.H))
-						}
-					}
-				}
-				ran++
-				if len(bad) == 0 {
-					fmt.Printf("uicheck: d41: PASS %s %s (%d parts, span %.1f px, box %.1f px, burn zone %.1f px, main %.1f px, label shown, parts back)\n", tag, v.name, len(r0.Parts), r0.Span, r1.Box, r1.Burn.H, r1.Main.H)
-				} else {
-					msg := fmt.Sprintf("%s %s: %s", tag, v.name, strings.Join(bad, "; "))
-					fmt.Println("uicheck: d41: FAIL " + msg)
-					fails = append(fails, msg)
+			var r0, r1, r2 d41Read
+			if err := evalInto(d41ReadJS, &r0); err != nil {
+				return err
+			}
+			if err := d41PressO(hwnd, true); err != nil {
+				return err
+			}
+			time.Sleep(700 * time.Millisecond)
+			err = evalInto(d41ReadJS, &r1)
+			_, shotErr := screenshot(hwnd, fmt.Sprintf("d41-station-%s-%s", tag, v.name))
+			if err == nil {
+				err = shotErr
+			}
+			// Close the Station even when a read failed.
+			if kerr := d41PressO(hwnd, false); err == nil {
+				err = kerr
+			}
+			time.Sleep(700 * time.Millisecond)
+			if err != nil {
+				return err
+			}
+			if err := evalInto(d41ReadJS, &r2); err != nil {
+				return err
+			}
+			var bad []string
+			if len(r0.Parts) == 0 || r0.Span <= 0 {
+				bad = append(bad, "no parts in the burn zone before the swap")
+			}
+			if r1.Box <= 0 || !d41Close(r1.Box, r0.Span, 2) {
+				diag, _ := evalString(`"focus " + document.hasFocus() + ", view " + window.__bdevStationView() + ", active " + (document.activeElement ? document.activeElement.tagName + "#" + document.activeElement.id : "-")`)
+				bad = append(bad, fmt.Sprintf("box %.1f px vs span %.1f px (%s)", r1.Box, r0.Span, diag))
+			}
+			for _, p := range []struct {
+				n    string
+				a, b d41Box
+			}{{"burn zone", r0.Burn, r1.Burn}, {"system zone", r0.Sys, r1.Sys}, {"main", r0.Main, r1.Main}} {
+				if !d41Close(p.a.Top, p.b.Top, 1) || !d41Close(p.a.H, p.b.H, 1) {
+					bad = append(bad, fmt.Sprintf("%s moved (top %.1f to %.1f, height %.1f to %.1f)", p.n, p.a.Top, p.b.Top, p.a.H, p.b.H))
 				}
 			}
+			if !d41Close(r0.Hist, r1.Hist, 1) {
+				bad = append(bad, fmt.Sprintf("System chart height %.1f to %.1f", r0.Hist, r1.Hist))
+			}
+			if !r1.Label {
+				bad = append(bad, "the zone label is hidden")
+			}
+			if r2.Box != 0 {
+				bad = append(bad, "the box is still there after the second O")
+			}
+			if len(r2.Parts) != len(r0.Parts) {
+				bad = append(bad, fmt.Sprintf("%d parts back, want %d", len(r2.Parts), len(r0.Parts)))
+			} else {
+				for i := range r0.Parts {
+					a, b := r0.Parts[i], r2.Parts[i]
+					if !d41Close(a.Top, b.Top, 1) || !d41Close(a.H, b.H, 1) {
+						bad = append(bad, fmt.Sprintf("part %s back at top %.1f height %.1f, was %.1f and %.1f", a.ID, b.Top, b.H, a.Top, a.H))
+					}
+				}
+			}
+			ran++
+			if len(bad) == 0 {
+				fmt.Printf("uicheck: d41: PASS %s %s (%d parts, span %.1f px, box %.1f px, burn zone %.1f px, main %.1f px, label shown, parts back)\n", tag, v.name, len(r0.Parts), r0.Span, r1.Box, r1.Burn.H, r1.Main.H)
+			} else {
+				msg := fmt.Sprintf("%s %s: %s", tag, v.name, strings.Join(bad, "; "))
+				fmt.Println("uicheck: d41: FAIL " + msg)
+				fails = append(fails, msg)
+			}
 		}
-		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-			return err
-		}
-		if len(fails) > 0 {
-			return fmt.Errorf("d41: %d case(s) failed, first: %s", len(fails), fails[0])
-		}
-		if ran == 0 {
-			return fmt.Errorf("d41: no size ran")
-		}
-		return nil
 	}
+	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
+		return err
+	}
+	if len(fails) > 0 {
+		return fmt.Errorf("d41: %d case(s) failed, first: %s", len(fails), fails[0])
+	}
+	if ran == 0 {
+		return fmt.Errorf("d41: no size ran")
+	}
+	return nil
 }

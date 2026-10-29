@@ -58,135 +58,133 @@ const d31FilterJS = `(function(label){
     note: document.getElementById('mapNote').textContent};
 })`
 
-func init() {
-	checks["d31"] = func(hwnd uintptr, args []string) error {
-		label := "znd-skills"
-		if v := os.Getenv("D31_FRAME"); v != "" {
-			label = v
+func caseD31(hwnd uintptr, args []string) error {
+	label := "znd-skills"
+	if v := os.Getenv("D31_FRAME"); v != "" {
+		label = v
+	}
+	source, hours := "live", 0
+	if v := os.Getenv("D31_HOURS"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d", &hours); err != nil || hours <= 0 {
+			return fmt.Errorf("d31: D31_HOURS %q is not a number of hours", v)
 		}
-		source, hours := "live", 0
-		if v := os.Getenv("D31_HOURS"); v != "" {
-			if _, err := fmt.Sscanf(v, "%d", &hours); err != nil || hours <= 0 {
-				return fmt.Errorf("d31: D31_HOURS %q is not a number of hours", v)
-			}
-			source = "history"
-		}
-		if err := ensureWindowSizeWH(hwnd, 1280, 900); err != nil {
+		source = "history"
+	}
+	if err := ensureWindowSizeWH(hwnd, 1280, 900); err != nil {
+		return err
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := d30Eval(`window.__bdevMap.open('live')`); err != nil {
+		return err
+	}
+	if err := d30Eval(`(function(){ window.__d31 = null; window.bdevAgentMap({source:` + fmt.Sprintf("%q", source) + `, hours:` + fmt.Sprint(hours) + `, open:[]}).then(function(r){ window.__d31 = r; }, function(e){ window.__d31 = {err: String(e)}; }); })()`); err != nil {
+		return err
+	}
+	var raw json.RawMessage
+	for i := 0; ; i++ {
+		r, err := evalRaw(`window.__d31`)
+		if err != nil {
 			return err
 		}
-		time.Sleep(500 * time.Millisecond)
-		if err := d30Eval(`window.__bdevMap.open('live')`); err != nil {
-			return err
+		if string(r) != "null" {
+			raw = r
+			break
 		}
-		if err := d30Eval(`(function(){ window.__d31 = null; window.bdevAgentMap({source:` + fmt.Sprintf("%q", source) + `, hours:` + fmt.Sprint(hours) + `, open:[]}).then(function(r){ window.__d31 = r; }, function(e){ window.__d31 = {err: String(e)}; }); })()`); err != nil {
-			return err
+		if i >= 30 {
+			return fmt.Errorf("d31: bdevAgentMap gave no answer in 30 s")
 		}
-		var raw json.RawMessage
-		for i := 0; ; i++ {
-			r, err := evalRaw(`window.__d31`)
-			if err != nil {
-				return err
-			}
-			if string(r) != "null" {
-				raw = r
-				break
-			}
-			if i >= 30 {
-				return fmt.Errorf("d31: bdevAgentMap gave no answer in 30 s")
-			}
-			time.Sleep(time.Second)
+		time.Sleep(time.Second)
+	}
+	if err := os.WriteFile(filepath.Join("..", "..", "testdata", "uicheck", "out", "d31-live-layout.json"), raw, 0o644); err != nil {
+		return err
+	}
+	var live struct {
+		Err    string `json:"err"`
+		Status string `json:"status"`
+		Layout struct {
+			Frames []struct {
+				Label  string `json:"label"`
+				Kind   string `json:"kind"`
+				Status string `json:"status"`
+				Count  int    `json:"count"`
+			} `json:"frames"`
+			Boxes []struct {
+				Kind  string `json:"kind"`
+				Title string `json:"title"`
+			} `json:"boxes"`
+			Lines []struct {
+				Word  string `json:"word"`
+				Basis string `json:"basis"`
+			} `json:"lines"`
+			Idle []struct {
+				Label string `json:"label"`
+			} `json:"idle"`
+		} `json:"layout"`
+	}
+	if err := json.Unmarshal(raw, &live); err != nil {
+		return err
+	}
+	if live.Err != "" {
+		return fmt.Errorf("d31: real live map: %s", live.Err)
+	}
+	fmt.Printf("d31: %s map, status %s: %d boxes, %d lines, %d frames, %d idle sprints\n", source, live.Status, len(live.Layout.Boxes), len(live.Layout.Lines), len(live.Layout.Frames), len(live.Layout.Idle))
+	words := map[string]int{}
+	for _, l := range live.Layout.Lines {
+		words[l.Word+"/"+l.Basis]++
+	}
+	fmt.Printf("d31: line words (word/basis: count): %v\n", words)
+	kinds := map[string]int{}
+	for _, b := range live.Layout.Boxes {
+		kinds[b.Kind]++
+	}
+	fmt.Printf("d31: box kinds: %v\n", kinds)
+	for _, f := range live.Layout.Frames {
+		fmt.Printf("d31: frame %q kind %s status %q holds %d boxes\n", f.Label, f.Kind, f.Status, f.Count)
+	}
+	sprintFrames := 0
+	for _, f := range live.Layout.Frames {
+		if f.Kind == "sprint" {
+			sprintFrames++
 		}
-		if err := os.WriteFile(filepath.Join("..", "..", "testdata", "uicheck", "out", "d31-live-layout.json"), raw, 0o644); err != nil {
-			return err
-		}
-		var live struct {
-			Err    string `json:"err"`
-			Status string `json:"status"`
-			Layout struct {
-				Frames []struct {
-					Label  string `json:"label"`
-					Kind   string `json:"kind"`
-					Status string `json:"status"`
-					Count  int    `json:"count"`
-				} `json:"frames"`
-				Boxes []struct {
-					Kind  string `json:"kind"`
-					Title string `json:"title"`
-				} `json:"boxes"`
-				Lines []struct {
-					Word  string `json:"word"`
-					Basis string `json:"basis"`
-				} `json:"lines"`
-				Idle []struct {
-					Label string `json:"label"`
-				} `json:"idle"`
-			} `json:"layout"`
-		}
-		if err := json.Unmarshal(raw, &live); err != nil {
-			return err
-		}
-		if live.Err != "" {
-			return fmt.Errorf("d31: real live map: %s", live.Err)
-		}
-		fmt.Printf("d31: %s map, status %s: %d boxes, %d lines, %d frames, %d idle sprints\n", source, live.Status, len(live.Layout.Boxes), len(live.Layout.Lines), len(live.Layout.Frames), len(live.Layout.Idle))
-		words := map[string]int{}
-		for _, l := range live.Layout.Lines {
-			words[l.Word+"/"+l.Basis]++
-		}
-		fmt.Printf("d31: line words (word/basis: count): %v\n", words)
-		kinds := map[string]int{}
-		for _, b := range live.Layout.Boxes {
-			kinds[b.Kind]++
-		}
-		fmt.Printf("d31: box kinds: %v\n", kinds)
-		for _, f := range live.Layout.Frames {
-			fmt.Printf("d31: frame %q kind %s status %q holds %d boxes\n", f.Label, f.Kind, f.Status, f.Count)
-		}
-		sprintFrames := 0
-		for _, f := range live.Layout.Frames {
-			if f.Kind == "sprint" {
-				sprintFrames++
-			}
-		}
-		fmt.Printf("d31: %d sprint frames in the live map (a sprint frame needs a works-for link)\n", sprintFrames)
-		if _, err := screenshot(hwnd, "d31-live-map-all"); err != nil {
-			return err
-		}
-		var out struct {
-			Err    string   `json:"err"`
-			Frames []string `json:"frames"`
-			Boxes  []string `json:"boxes"`
-			Frame  []string `json:"frame"`
-			Words  []string `json:"words"`
-			Heads  []string `json:"heads"`
-			Src    string   `json:"src"`
-			Count  string   `json:"count"`
-			Note   string   `json:"note"`
-		}
-		if err := evalInto(d31FilterJS+`(`+fmt.Sprintf("%q", label)+`)`, &out); err != nil {
-			return err
-		}
-		if out.Err != "" {
-			fmt.Printf("d31: no README picture: %s, frames %v\n", out.Err, out.Frames)
-			return nil
-		}
-		time.Sleep(500 * time.Millisecond)
-		if _, err := screenshot(hwnd, "d31-live-map-readme"); err != nil {
-			return err
-		}
-		fmt.Println("d31: strings in the README picture, check them for private data:")
-		fmt.Println("  columns:", strings.Join(out.Heads, " | "))
-		fmt.Println("  frame:", strings.Join(out.Frame, " | "))
-		for _, b := range out.Boxes {
-			fmt.Println("  box:", b)
-		}
-		fmt.Println("  line words:", strings.Join(out.Words, ", "))
-		fmt.Println("  header:", out.Src, "/", out.Count)
-		fmt.Println("  strip note:", out.Note)
-		if err := d30Eval(`window.__bdevMap.close()`); err != nil {
-			return err
-		}
-		fmt.Println("d31: ok")
+	}
+	fmt.Printf("d31: %d sprint frames in the live map (a sprint frame needs a works-for link)\n", sprintFrames)
+	if _, err := screenshot(hwnd, "d31-live-map-all"); err != nil {
+		return err
+	}
+	var out struct {
+		Err    string   `json:"err"`
+		Frames []string `json:"frames"`
+		Boxes  []string `json:"boxes"`
+		Frame  []string `json:"frame"`
+		Words  []string `json:"words"`
+		Heads  []string `json:"heads"`
+		Src    string   `json:"src"`
+		Count  string   `json:"count"`
+		Note   string   `json:"note"`
+	}
+	if err := evalInto(d31FilterJS+`(`+fmt.Sprintf("%q", label)+`)`, &out); err != nil {
+		return err
+	}
+	if out.Err != "" {
+		fmt.Printf("d31: no README picture: %s, frames %v\n", out.Err, out.Frames)
 		return nil
 	}
+	time.Sleep(500 * time.Millisecond)
+	if _, err := screenshot(hwnd, "d31-live-map-readme"); err != nil {
+		return err
+	}
+	fmt.Println("d31: strings in the README picture, check them for private data:")
+	fmt.Println("  columns:", strings.Join(out.Heads, " | "))
+	fmt.Println("  frame:", strings.Join(out.Frame, " | "))
+	for _, b := range out.Boxes {
+		fmt.Println("  box:", b)
+	}
+	fmt.Println("  line words:", strings.Join(out.Words, ", "))
+	fmt.Println("  header:", out.Src, "/", out.Count)
+	fmt.Println("  strip note:", out.Note)
+	if err := d30Eval(`window.__bdevMap.close()`); err != nil {
+		return err
+	}
+	fmt.Println("d31: ok")
+	return nil
 }

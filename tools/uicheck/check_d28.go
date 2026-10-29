@@ -157,110 +157,108 @@ func d28Problems(tips []d28Tip) []string {
 	return p
 }
 
-func init() {
-	checks["d28"] = func(hwnd uintptr, args []string) error {
-		if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
+func caseD28(hwnd uintptr, args []string) error {
+	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	if _, err := evalRaw(d28FakeJS); err != nil {
+		return fmt.Errorf("d28: fake paint: %w", err)
+	}
+	bringToFront(hwnd)
+	if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
+		fmt.Println("uicheck: d28: could not click .logo to establish focus:", err)
+	}
+	var errs []string
+	// checkHover finds the long-project agent, wiggles the pointer over it
+	// and judges the cards read on the way.
+	checkHover := func(where string) error {
+		var spot *d28Spot
+		if err := evalInto(d28ScanJS, &spot); err != nil {
+			return fmt.Errorf("%s: scan: %w", where, err)
+		}
+		if spot == nil {
+			errs = append(errs, where+": no agent with the long project found under the pointer")
+			return nil
+		}
+		var tips []d28Tip
+		for _, o := range d28Wiggle {
+			if o[0] > spot.W/2-2 || -o[0] > spot.W/2-2 || o[1] > spot.H/2-2 || -o[1] > spot.H/2-2 {
+				continue // would leave the agent's own hit area, not the card's fault
+			}
+			var t d28Tip
+			if err := evalInto(fmt.Sprintf("%s(%.0f, %.0f)", d28HoverJS, spot.X+o[0], spot.Y+o[1]), &t); err != nil {
+				return fmt.Errorf("%s: hover: %w", where, err)
+			}
+			tips = append(tips, t)
+		}
+		fmt.Printf("uicheck: d28 %s: agent at (%.0f,%.0f) hit area %.0fx%.0f, %d moves, widths:", where, spot.X, spot.Y, spot.W, spot.H, len(tips))
+		for _, t := range tips {
+			fmt.Printf(" %.1f", t.W)
+		}
+		fmt.Println()
+		if len(tips) < 4 {
+			errs = append(errs, fmt.Sprintf("%s: only %d usable pointer moves, the agent's hit area %.0fx%.0f is too small to wiggle over", where, len(tips), spot.W, spot.H))
+			return nil
+		}
+		for _, m := range d28Problems(tips) {
+			errs = append(errs, fmt.Sprintf("%s: %s", where, m))
+		}
+		// Back on the centre for the shot, so the card shown is the settled one.
+		if _, err := evalRaw(fmt.Sprintf("%s(%.0f, %.0f)", d28HoverJS, spot.X, spot.Y)); err != nil {
 			return err
 		}
-		time.Sleep(300 * time.Millisecond)
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		if _, err := evalRaw(d28FakeJS); err != nil {
-			return fmt.Errorf("d28: fake paint: %w", err)
+		return d23Shot(hwnd, "d28-"+strings.ReplaceAll(where, " ", "-"))
+	}
+	views := []struct {
+		name string
+		vk   uint16
+		ok   func(d23State) bool
+	}{
+		{"P", vkP, func(s d23State) bool { return s.Overlay && s.Lit > 500 }},
+		{"O", vkO, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
+		{"I", vkI, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
+	}
+	for _, v := range views {
+		if err := pressKey(v.vk); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: press: %v", v.name, err))
+			continue
 		}
+		s, good, err := d23Wait(v.ok)
+		if err != nil || !good {
+			errs = append(errs, fmt.Sprintf("%s did not open: %+v %v", v.name, s, err))
+			continue
+		}
+		// The fake agents walk in from the airlock; the hit area moves until they sit.
+		time.Sleep(12 * time.Second)
 		bringToFront(hwnd)
-		if err := clickSelectorAt(hwnd, ".logo", 0.5, 0.5); err != nil {
-			fmt.Println("uicheck: d28: could not click .logo to establish focus:", err)
-		}
-		var errs []string
-		// checkHover finds the long-project agent, wiggles the pointer over it
-		// and judges the cards read on the way.
-		checkHover := func(where string) error {
-			var spot *d28Spot
-			if err := evalInto(d28ScanJS, &spot); err != nil {
-				return fmt.Errorf("%s: scan: %w", where, err)
-			}
-			if spot == nil {
-				errs = append(errs, where+": no agent with the long project found under the pointer")
-				return nil
-			}
-			var tips []d28Tip
-			for _, o := range d28Wiggle {
-				if o[0] > spot.W/2-2 || -o[0] > spot.W/2-2 || o[1] > spot.H/2-2 || -o[1] > spot.H/2-2 {
-					continue // would leave the agent's own hit area, not the card's fault
-				}
-				var t d28Tip
-				if err := evalInto(fmt.Sprintf("%s(%.0f, %.0f)", d28HoverJS, spot.X+o[0], spot.Y+o[1]), &t); err != nil {
-					return fmt.Errorf("%s: hover: %w", where, err)
-				}
-				tips = append(tips, t)
-			}
-			fmt.Printf("uicheck: d28 %s: agent at (%.0f,%.0f) hit area %.0fx%.0f, %d moves, widths:", where, spot.X, spot.Y, spot.W, spot.H, len(tips))
-			for _, t := range tips {
-				fmt.Printf(" %.1f", t.W)
-			}
-			fmt.Println()
-			if len(tips) < 4 {
-				errs = append(errs, fmt.Sprintf("%s: only %d usable pointer moves, the agent's hit area %.0fx%.0f is too small to wiggle over", where, len(tips), spot.W, spot.H))
-				return nil
-			}
-			for _, m := range d28Problems(tips) {
-				errs = append(errs, fmt.Sprintf("%s: %s", where, m))
-			}
-			// Back on the centre for the shot, so the card shown is the settled one.
-			if _, err := evalRaw(fmt.Sprintf("%s(%.0f, %.0f)", d28HoverJS, spot.X, spot.Y)); err != nil {
-				return err
-			}
-			return d23Shot(hwnd, "d28-"+strings.ReplaceAll(where, " ", "-"))
-		}
-		views := []struct {
-			name string
-			vk   uint16
-			ok   func(d23State) bool
-		}{
-			{"P", vkP, func(s d23State) bool { return s.Overlay && s.Lit > 500 }},
-			{"O", vkO, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
-			{"I", vkI, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
-		}
-		for _, v := range views {
-			if err := pressKey(v.vk); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: press: %v", v.name, err))
-				continue
-			}
-			s, good, err := d23Wait(v.ok)
-			if err != nil || !good {
-				errs = append(errs, fmt.Sprintf("%s did not open: %+v %v", v.name, s, err))
-				continue
-			}
-			// The fake agents walk in from the airlock; the hit area moves until they sit.
-			time.Sleep(12 * time.Second)
-			bringToFront(hwnd)
-			for i, th := range []string{"site", "space"} {
-				if i > 0 {
-					if err := pressKey(vkT); err != nil {
-						return err
-					}
-					time.Sleep(600 * time.Millisecond)
-				}
-				if err := checkHover(v.name + " " + th); err != nil {
+		for i, th := range []string{"site", "space"} {
+			if i > 0 {
+				if err := pressKey(vkT); err != nil {
 					return err
 				}
+				time.Sleep(600 * time.Millisecond)
 			}
-			if err := pressKey(vkT); err != nil { // back to site for the next view
+			if err := checkHover(v.name + " " + th); err != nil {
 				return err
 			}
-			time.Sleep(400 * time.Millisecond)
-			if err := pressKey(v.vk); err != nil { // the same key closes the view
-				return err
-			}
-			if _, good, err := d23Wait(func(s d23State) bool { return !s.Overlay && !s.Panel }); err != nil || !good {
-				errs = append(errs, fmt.Sprintf("%s did not close on its own key", v.name))
-				_ = pressKey(vkEscape)
-			}
 		}
-		if len(errs) > 0 {
-			return fmt.Errorf("d28: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+		if err := pressKey(vkT); err != nil { // back to site for the next view
+			return err
 		}
-		fmt.Println("uicheck: d28: the Station hover card keeps one width, at most 320 px, wraps long values and stays inside the window in P, O and I on both Station themes")
-		return nil
+		time.Sleep(400 * time.Millisecond)
+		if err := pressKey(v.vk); err != nil { // the same key closes the view
+			return err
+		}
+		if _, good, err := d23Wait(func(s d23State) bool { return !s.Overlay && !s.Panel }); err != nil || !good {
+			errs = append(errs, fmt.Sprintf("%s did not close on its own key", v.name))
+			_ = pressKey(vkEscape)
+		}
 	}
+	if len(errs) > 0 {
+		return fmt.Errorf("d28: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d28: the Station hover card keeps one width, at most 320 px, wraps long values and stays inside the window in P, O and I on both Station themes")
+	return nil
 }

@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -57,114 +55,112 @@ type d38Page struct {
 	Calls  []map[string]any `json:"calls"`
 }
 
-func init() {
-	checks["d38"] = func(hwnd uintptr, args []string) error {
-		fail := func(format string, a ...any) error { return fmt.Errorf("d38: "+format, a...) }
-		load := func(name string) (any, error) {
-			raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", name))
-			if err != nil {
-				return nil, fmt.Errorf("read %s (uicheck runs from the tools folder): %w", name, err)
-			}
-			var L map[string]any
-			if err := json.Unmarshal(raw, &L); err != nil {
-				return nil, err
-			}
-			return L, nil
-		}
-		example, err := load("agentmap_layout_example.json")
+func caseD38(hwnd uintptr, args []string) error {
+	fail := func(format string, a ...any) error { return fmt.Errorf("d38: "+format, a...) }
+	load := func(name string) (any, error) {
+		raw, err := readFixture(name)
 		if err != nil {
-			return err
+			return nil, fmt.Errorf("read %s (uicheck runs from the tools folder): %w", name, err)
 		}
-		folded, err := load("agentmap_layout_folded.json")
-		if err != nil {
-			return err
+		var L map[string]any
+		if err := json.Unmarshal(raw, &L); err != nil {
+			return nil, err
 		}
-		// Derive the layout with the subagent fold box and the dotted line from the example.
-		ex := example.(map[string]any)
-		boxes := ex["boxes"].([]any)
-		var sub map[string]any
-		for _, b := range boxes {
-			if b.(map[string]any)["id"] == "session:anthropic:example-sub" {
-				sub = b.(map[string]any)
-			}
+		return L, nil
+	}
+	example, err := load("agentmap_layout_example.json")
+	if err != nil {
+		return err
+	}
+	folded, err := load("agentmap_layout_folded.json")
+	if err != nil {
+		return err
+	}
+	// Derive the layout with the subagent fold box and the dotted line from the example.
+	ex := example.(map[string]any)
+	boxes := ex["boxes"].([]any)
+	var sub map[string]any
+	for _, b := range boxes {
+		if b.(map[string]any)["id"] == "session:anthropic:example-sub" {
+			sub = b.(map[string]any)
 		}
-		if sub == nil {
-			return fail("the example layout has no subagent box")
-		}
-		ex["boxes"] = append(boxes, map[string]any{"id": d38FoldID, "kind": "folded", "title": "11 subagents",
-			"line": "click to open", "column": 2, "row": 4, "waits_on_you": false, "facts": []any{}, "tag": "group"})
-		ex["lines"] = append(ex["lines"].([]any), map[string]any{"from": sub["id"], "to": "session:anthropic:example-parent",
-			"word": "reports to", "basis": "vendor", "you": false, "style": "dotted"})
-		wrap := func(L any) string {
-			b, _ := json.Marshal(map[string]any{"layout": L, "hours": 24})
-			return string(b)
-		}
-		read := func() (d38Page, error) {
-			var p d38Page
-			time.Sleep(400 * time.Millisecond)
-			err := evalInto(d38ReadJS, &p)
-			return p, err
-		}
-		if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-			return err
-		}
-		if _, err := evalRaw(`window.__d38calls = [];
+	}
+	if sub == nil {
+		return fail("the example layout has no subagent box")
+	}
+	ex["boxes"] = append(boxes, map[string]any{"id": d38FoldID, "kind": "folded", "title": "11 subagents",
+		"line": "click to open", "column": 2, "row": 4, "waits_on_you": false, "facts": []any{}, "tag": "group"})
+	ex["lines"] = append(ex["lines"].([]any), map[string]any{"from": sub["id"], "to": "session:anthropic:example-parent",
+		"word": "reports to", "basis": "vendor", "you": false, "style": "dotted"})
+	wrap := func(L any) string {
+		b, _ := json.Marshal(map[string]any{"layout": L, "hours": 24})
+		return string(b)
+	}
+	read := func() (d38Page, error) {
+		var p d38Page
+		time.Sleep(400 * time.Millisecond)
+		err := evalInto(d38ReadJS, &p)
+		return p, err
+	}
+	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
+		return err
+	}
+	if _, err := evalRaw(`window.__d38calls = [];
 			window.bdevAgentMap = function(r){ window.__d38calls.push(JSON.parse(JSON.stringify(r))); return Promise.resolve(` + wrap(example) + `); };
 			window.__bdevMap.open('live'); true`); err != nil {
-			return err
-		}
-
-		// Zero subagents: five headers and the note in the empty columns.
-		if _, err := evalRaw(`window.__bdevMap.setPayload(` + wrap(folded) + `, 'live'); true`); err != nil {
-			return err
-		}
-		p, err := read()
-		if err != nil {
-			return err
-		}
-		if want := "Tool|Session|Subagents|Programs and servers|You"; strings.Join(p.Heads, "|") != want {
-			return fail("column headers %v, want %s", p.Heads, want)
-		}
-		if len(p.Notes) == 0 || p.Notes[0] != "none in this window" {
-			return fail("empty column notes %v, want none in this window", p.Notes)
-		}
-
-		// Borders, line styles, fold click and the count.
-		if _, err := evalRaw(`window.__bdevMap.setPayload(` + wrap(example) + `, 'live'); true`); err != nil {
-			return err
-		}
-		if p, err = read(); err != nil {
-			return err
-		}
-		if p.Bd2 == "" || p.Border != p.Bd2 {
-			return fail("session box border %q, want the --bd2 colour %q", p.Border, p.Bd2)
-		}
-		if p.Dotted == "" || p.Dotted == "none" {
-			return fail("the dotted line has stroke-dasharray %q", p.Dotted)
-		}
-		if p.Solid != "none" {
-			return fail("a solid line has stroke-dasharray %q, want none", p.Solid)
-		}
-		if !strings.Contains(p.Count, "1 waiting on you") || !strings.HasPrefix(p.You, "1 waiting on you") {
-			return fail("header count %q and You box %q do not agree on 1 waiting on you", p.Count, p.You)
-		}
-		if _, err := screenshot(hwnd, "d38-map"); err != nil {
-			return err
-		}
-		if _, err := evalRaw(`document.querySelector('.mapbox.folded').click(); true`); err != nil {
-			return err
-		}
-		if p, err = read(); err != nil {
-			return err
-		}
-		if len(p.Calls) == 0 {
-			return fail("the fold click did not ask Go for the map")
-		}
-		last := p.Calls[len(p.Calls)-1]
-		open, _ := last["open"].([]any)
-		if len(open) != 1 || open[0] != "subs:session:anthropic:example-parent" {
-			return fail("fold click asked for open %v, want [subs:session:anthropic:example-parent]", last["open"])
-		}
-		return nil
+		return err
 	}
+
+	// Zero subagents: five headers and the note in the empty columns.
+	if _, err := evalRaw(`window.__bdevMap.setPayload(` + wrap(folded) + `, 'live'); true`); err != nil {
+		return err
+	}
+	p, err := read()
+	if err != nil {
+		return err
+	}
+	if want := "Tool|Session|Subagents|Programs and servers|You"; strings.Join(p.Heads, "|") != want {
+		return fail("column headers %v, want %s", p.Heads, want)
+	}
+	if len(p.Notes) == 0 || p.Notes[0] != "none in this window" {
+		return fail("empty column notes %v, want none in this window", p.Notes)
+	}
+
+	// Borders, line styles, fold click and the count.
+	if _, err := evalRaw(`window.__bdevMap.setPayload(` + wrap(example) + `, 'live'); true`); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if p.Bd2 == "" || p.Border != p.Bd2 {
+		return fail("session box border %q, want the --bd2 colour %q", p.Border, p.Bd2)
+	}
+	if p.Dotted == "" || p.Dotted == "none" {
+		return fail("the dotted line has stroke-dasharray %q", p.Dotted)
+	}
+	if p.Solid != "none" {
+		return fail("a solid line has stroke-dasharray %q, want none", p.Solid)
+	}
+	if !strings.Contains(p.Count, "1 waiting on you") || !strings.HasPrefix(p.You, "1 waiting on you") {
+		return fail("header count %q and You box %q do not agree on 1 waiting on you", p.Count, p.You)
+	}
+	if _, err := screenshot(hwnd, "d38-map"); err != nil {
+		return err
+	}
+	if _, err := evalRaw(`document.querySelector('.mapbox.folded').click(); true`); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if len(p.Calls) == 0 {
+		return fail("the fold click did not ask Go for the map")
+	}
+	last := p.Calls[len(p.Calls)-1]
+	open, _ := last["open"].([]any)
+	if len(open) != 1 || open[0] != "subs:session:anthropic:example-parent" {
+		return fail("fold click asked for open %v, want [subs:session:anthropic:example-parent]", last["open"])
+	}
+	return nil
 }

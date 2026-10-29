@@ -34,32 +34,31 @@ import (
 // correctly read Cowork). Once the vendor arrives on a later tick, the
 // session's chart segment, legend dot and card must all recolour to a real
 // Cowork shade, not stay locked on the first tick's grey guess.
-func init() {
-	checks["d15"] = func(hwnd uintptr, args []string) error {
-		if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-			return err
-		}
-		time.Sleep(300 * time.Millisecond)
+func caseD15(hwnd uintptr, args []string) error {
+	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
 
-		vendorStripJS := `{ rows: [
+	vendorStripJS := `{ rows: [
       {agent:'cowork', agent_label:'Cowork', today:0, week:0, month:0},
       {agent:'claude-code', agent_label:'Claude Code', today:0, week:0, month:0},
       {agent:'copilot-cli', agent_label:'Copilot CLI', today:0, week:0, month:0}
     ] }`
 
-		// lateSid is unique per run (found by review, 2026-09-28): d15
-		// attaches to whatever burnmon-dev.exe window uicheck already
-		// launched, so page.html's own sessionColorMap - the very cache this
-		// scenario is about - survives from one d15 run to the next inside
-		// that same window. A fixed 'fake-late-1' would already be cached
-		// with its real Cowork shade by a second run, so tick 1 would return
-		// that shade instead of a fresh grey guess and the regression guard
-		// below would misfire, not because the fix regressed but because the
-		// scenario's own precondition (vendor genuinely not yet known) no
-		// longer held.
-		lateSid := fmt.Sprintf("fake-late-%d", time.Now().UnixNano())
+	// lateSid is unique per run (found by review, 2026-09-28): d15
+	// attaches to whatever burnmon-dev.exe window uicheck already
+	// launched, so page.html's own sessionColorMap - the very cache this
+	// scenario is about - survives from one d15 run to the next inside
+	// that same window. A fixed 'fake-late-1' would already be cached
+	// with its real Cowork shade by a second run, so tick 1 would return
+	// that shade instead of a fresh grey guess and the regression guard
+	// below would misfire, not because the fix regressed but because the
+	// scenario's own precondition (vendor genuinely not yet known) no
+	// longer held.
+	lateSid := fmt.Sprintf("fake-late-%d", time.Now().UnixNano())
 
-		script := `(function(){
+	script := `(function(){
   var nowMs = Date.now();
   function iso(ms){ return new Date(ms).toISOString(); }
   var sessions = [
@@ -95,27 +94,27 @@ func init() {
   return { earlyLateChart: seg ? getComputedStyle(seg).backgroundColor : null };
 })()`
 
-		// Deferred unconditionally, not after the eval/screenshot calls
-		// below: a JS exception partway through script (after
-		// __bdevEnterFakeMode already ran) would otherwise return early and
-		// leave the real page's own tick timer stopped forever. The guard
-		// inside is a no-op if fake mode was never actually entered.
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	// Deferred unconditionally, not after the eval/screenshot calls
+	// below: a JS exception partway through script (after
+	// __bdevEnterFakeMode already ran) would otherwise return early and
+	// leave the real page's own tick timer stopped forever. The guard
+	// inside is a no-op if fake mode was never actually entered.
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 
-		var early struct {
-			EarlyLateChart string `json:"earlyLateChart"`
-		}
-		if err := evalInto(script, &early); err != nil {
-			return fmt.Errorf("d15: eval fake-session paint (tick 1): %w", err)
-		}
-		if early.EarlyLateChart == "" {
-			return fmt.Errorf("d15: %s rendered no chart segment on tick 1 (before its vendor is known)", lateSid)
-		}
+	var early struct {
+		EarlyLateChart string `json:"earlyLateChart"`
+	}
+	if err := evalInto(script, &early); err != nil {
+		return fmt.Errorf("d15: eval fake-session paint (tick 1): %w", err)
+	}
+	if early.EarlyLateChart == "" {
+		return fmt.Errorf("d15: %s rendered no chart segment on tick 1 (before its vendor is known)", lateSid)
+	}
 
-		// Tick 2: lateSid's vendor has now arrived (present in sessions, same
-		// as any other running session) - still in the chart bucket, so this
-		// proves the recolour, not just a fresh, never-cached paint.
-		script2 := `(function(){
+	// Tick 2: lateSid's vendor has now arrived (present in sessions, same
+	// as any other running session) - still in the chart bucket, so this
+	// proves the recolour, not just a fresh, never-cached paint.
+	script2 := `(function(){
   var nowMs = Date.now();
   function iso(ms){ return new Date(ms).toISOString(); }
   var sessions = [
@@ -162,154 +161,153 @@ func init() {
   return out;
 })()`
 
-		var out struct {
-			Chart      map[string]string `json:"chart"`
-			Card       map[string]string `json:"card"`
-			VendorBase map[string]string `json:"vendorBase"`
-			Legend     []string          `json:"legend"`
-			LegendDot  map[string]string `json:"legendDot"`
-		}
-		if err := evalInto(script2, &out); err != nil {
-			return fmt.Errorf("d15: eval fake-session paint (tick 2): %w", err)
-		}
-		// __bdevPaintFake updates the DOM synchronously, but WebView2's own
-		// compositor can lag a frame or two behind before BitBlt's screen
-		// capture actually sees it (found this session: without this wait,
-		// the screenshot still showed the previous real-data frame even
-		// though evalInto's own DOM reads above already reflected the fake
-		// one) - give it a moment to actually paint before capturing.
-		time.Sleep(300 * time.Millisecond)
-		if _, err := screenshot(hwnd, "d15-vendor-colours"); err != nil {
-			return err
-		}
-
-		vendorOf := map[string]string{
-			"fake-cw-1": "cowork", "fake-cw-2": "cowork",
-			"fake-cc-1": "claude-code", "fake-cc-2": "claude-code",
-			"fake-cli-1": "copilot-cli", lateSid: "cowork",
-		}
-		var errs []string
-
-		// 0. lateSid's regression guard: tick 2's colour must actually differ
-		// from tick 1's grey-while-unknown guess - proves the vendor arriving
-		// triggered a real recolour, not that the old value simply happened
-		// to already look right.
-		if out.Chart[lateSid] != "" && out.Chart[lateSid] == early.EarlyLateChart {
-			errs = append(errs, fmt.Sprintf("%s: chart colour unchanged after its vendor arrived (%s), want a recolour to its Cowork shade", lateSid, early.EarlyLateChart))
-		}
-		if out.LegendDot[lateSid] == "" {
-			errs = append(errs, fmt.Sprintf("%s: missing legend dot colour on tick 2", lateSid))
-		} else if out.Chart[lateSid] != out.LegendDot[lateSid] {
-			errs = append(errs, fmt.Sprintf("%s: chart colour %s != legend dot colour %s", lateSid, out.Chart[lateSid], out.LegendDot[lateSid]))
-		}
-
-		// 1. chart colour == card colour == legend dot colour, for every
-		// open session (fake-late-1 included, now that its vendor is known).
-		for sid := range vendorOf {
-			if out.Chart[sid] == "" || out.Card[sid] == "" || out.LegendDot[sid] == "" {
-				errs = append(errs, fmt.Sprintf("%s: missing chart (%q), card (%q) or legend dot (%q) colour", sid, out.Chart[sid], out.Card[sid], out.LegendDot[sid]))
-				continue
-			}
-			if out.Chart[sid] != out.Card[sid] {
-				errs = append(errs, fmt.Sprintf("%s: chart colour %s != card colour %s", sid, out.Chart[sid], out.Card[sid]))
-			}
-			if out.Chart[sid] != out.LegendDot[sid] {
-				errs = append(errs, fmt.Sprintf("%s: chart colour %s != legend dot colour %s", sid, out.Chart[sid], out.LegendDot[sid]))
-			}
-		}
-
-		// 2. every open session's hue AND saturation sit within tolerance of
-		// its own vendor's live vendor-strip dot, and its hue stays clear of
-		// the other vendors present in this run. Saturation is checked
-		// alongside hue (not hue alone) because HARNESS_HUE.other (the old
-		// grey-cache bug's colour) happens to have a hue only ~1.6deg from
-		// Cowork's own - a hue-only check would have missed a regression
-		// back to that bug for a Cowork session specifically; grey's
-		// saturation (~0.16) sits far below any real vendor base (>=0.65),
-		// so the pair together is what actually rules the bug out.
-		vendorHue := map[string]float64{}
-		vendorSat := map[string]float64{}
-		for agent, rgb := range out.VendorBase {
-			h, s, _, err := parseRGBHSL(rgb)
-			if err != nil {
-				errs = append(errs, fmt.Sprintf("vendor strip %s: %v", agent, err))
-				continue
-			}
-			vendorHue[agent] = h
-			vendorSat[agent] = s
-		}
-		const hueTolerance = 6.0   // "within a few degrees" of its own vendor
-		const hueSeparation = 20.0 // clear of any other vendor present
-		const satTolerance = 0.20  // well inside a real vendor hue's own saturation, well outside HARNESS_HUE.other's (~0.16 vs >=0.65)
-		sessionHue := map[string]float64{}
-		for sid, agent := range vendorOf {
-			rgb := out.Chart[sid]
-			if rgb == "" {
-				continue
-			}
-			h, s, _, err := parseRGBHSL(rgb)
-			if err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", sid, err))
-				continue
-			}
-			sessionHue[sid] = h
-			own, ok := vendorHue[agent]
-			if !ok {
-				continue
-			}
-			if d := hueDelta(h, own); d > hueTolerance {
-				errs = append(errs, fmt.Sprintf("%s (%s): hue %.1f is %.1f deg from its own vendor's hue %.1f, want <=%.1f", sid, agent, h, d, own, hueTolerance))
-			}
-			if ownSat, ok := vendorSat[agent]; ok {
-				if d := math.Abs(s - ownSat); d > satTolerance {
-					errs = append(errs, fmt.Sprintf("%s (%s): saturation %.2f is %.2f from its own vendor's saturation %.2f, want <=%.2f (a session stuck on HARNESS_HUE.other's grey would fail here even when its hue looks close)", sid, agent, s, d, ownSat, satTolerance))
-				}
-			}
-			for otherAgent, otherHue := range vendorHue {
-				if otherAgent == agent {
-					continue
-				}
-				if d := hueDelta(h, otherHue); d < hueSeparation {
-					errs = append(errs, fmt.Sprintf("%s (%s): hue %.1f is only %.1f deg from %s's hue %.1f, want >=%.1f", sid, agent, h, d, otherAgent, otherHue, hueSeparation))
-				}
-			}
-		}
-
-		// 3. the two shades within each vendor differ by a real lightness
-		// step (report it), same hue.
-		pairs := [][2]string{{"fake-cw-1", "fake-cw-2"}, {"fake-cc-1", "fake-cc-2"}}
-		for _, pair := range pairs {
-			h1, _, l1, err1 := parseRGBHSL(out.Chart[pair[0]])
-			h2, _, l2, err2 := parseRGBHSL(out.Chart[pair[1]])
-			if err1 != nil || err2 != nil {
-				errs = append(errs, fmt.Sprintf("%s/%s: could not parse for shade check", pair[0], pair[1]))
-				continue
-			}
-			step := math.Abs(l1 - l2)
-			fmt.Printf("uicheck: d15: %s/%s lightness step %.1f pp (L %.2f vs %.2f), hue delta %.1f deg\n", pair[0], pair[1], step*100, l1, l2, hueDelta(h1, h2))
-			if step < 0.10 {
-				errs = append(errs, fmt.Sprintf("%s/%s: lightness step only %.1f pp, want a clearly visible step (>=10pp)", pair[0], pair[1], step*100))
-			}
-		}
-
-		// 4. item 4: the two same-project Cowork legend entries must not
-		// render identical text.
-		seen := map[string]int{}
-		for _, l := range out.Legend {
-			seen[l]++
-		}
-		for l, n := range seen {
-			if n > 1 {
-				errs = append(errs, fmt.Sprintf("legend: %d entries render identical text %q, want a session id appended on collision", n, l))
-			}
-		}
-
-		if len(errs) > 0 {
-			return fmt.Errorf("d15: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
-		}
-		fmt.Println("uicheck: d15: vendor colour families check clean (chart==card==legend dot, hue+saturation held per vendor, shades separated, legend collision resolved, late-vendor recolour proven)")
-		return nil
+	var out struct {
+		Chart      map[string]string `json:"chart"`
+		Card       map[string]string `json:"card"`
+		VendorBase map[string]string `json:"vendorBase"`
+		Legend     []string          `json:"legend"`
+		LegendDot  map[string]string `json:"legendDot"`
 	}
+	if err := evalInto(script2, &out); err != nil {
+		return fmt.Errorf("d15: eval fake-session paint (tick 2): %w", err)
+	}
+	// __bdevPaintFake updates the DOM synchronously, but WebView2's own
+	// compositor can lag a frame or two behind before BitBlt's screen
+	// capture actually sees it (found this session: without this wait,
+	// the screenshot still showed the previous real-data frame even
+	// though evalInto's own DOM reads above already reflected the fake
+	// one) - give it a moment to actually paint before capturing.
+	time.Sleep(300 * time.Millisecond)
+	if _, err := screenshot(hwnd, "d15-vendor-colours"); err != nil {
+		return err
+	}
+
+	vendorOf := map[string]string{
+		"fake-cw-1": "cowork", "fake-cw-2": "cowork",
+		"fake-cc-1": "claude-code", "fake-cc-2": "claude-code",
+		"fake-cli-1": "copilot-cli", lateSid: "cowork",
+	}
+	var errs []string
+
+	// 0. lateSid's regression guard: tick 2's colour must actually differ
+	// from tick 1's grey-while-unknown guess - proves the vendor arriving
+	// triggered a real recolour, not that the old value simply happened
+	// to already look right.
+	if out.Chart[lateSid] != "" && out.Chart[lateSid] == early.EarlyLateChart {
+		errs = append(errs, fmt.Sprintf("%s: chart colour unchanged after its vendor arrived (%s), want a recolour to its Cowork shade", lateSid, early.EarlyLateChart))
+	}
+	if out.LegendDot[lateSid] == "" {
+		errs = append(errs, fmt.Sprintf("%s: missing legend dot colour on tick 2", lateSid))
+	} else if out.Chart[lateSid] != out.LegendDot[lateSid] {
+		errs = append(errs, fmt.Sprintf("%s: chart colour %s != legend dot colour %s", lateSid, out.Chart[lateSid], out.LegendDot[lateSid]))
+	}
+
+	// 1. chart colour == card colour == legend dot colour, for every
+	// open session (fake-late-1 included, now that its vendor is known).
+	for sid := range vendorOf {
+		if out.Chart[sid] == "" || out.Card[sid] == "" || out.LegendDot[sid] == "" {
+			errs = append(errs, fmt.Sprintf("%s: missing chart (%q), card (%q) or legend dot (%q) colour", sid, out.Chart[sid], out.Card[sid], out.LegendDot[sid]))
+			continue
+		}
+		if out.Chart[sid] != out.Card[sid] {
+			errs = append(errs, fmt.Sprintf("%s: chart colour %s != card colour %s", sid, out.Chart[sid], out.Card[sid]))
+		}
+		if out.Chart[sid] != out.LegendDot[sid] {
+			errs = append(errs, fmt.Sprintf("%s: chart colour %s != legend dot colour %s", sid, out.Chart[sid], out.LegendDot[sid]))
+		}
+	}
+
+	// 2. every open session's hue AND saturation sit within tolerance of
+	// its own vendor's live vendor-strip dot, and its hue stays clear of
+	// the other vendors present in this run. Saturation is checked
+	// alongside hue (not hue alone) because HARNESS_HUE.other (the old
+	// grey-cache bug's colour) happens to have a hue only ~1.6deg from
+	// Cowork's own - a hue-only check would have missed a regression
+	// back to that bug for a Cowork session specifically; grey's
+	// saturation (~0.16) sits far below any real vendor base (>=0.65),
+	// so the pair together is what actually rules the bug out.
+	vendorHue := map[string]float64{}
+	vendorSat := map[string]float64{}
+	for agent, rgb := range out.VendorBase {
+		h, s, _, err := parseRGBHSL(rgb)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("vendor strip %s: %v", agent, err))
+			continue
+		}
+		vendorHue[agent] = h
+		vendorSat[agent] = s
+	}
+	const hueTolerance = 6.0   // "within a few degrees" of its own vendor
+	const hueSeparation = 20.0 // clear of any other vendor present
+	const satTolerance = 0.20  // well inside a real vendor hue's own saturation, well outside HARNESS_HUE.other's (~0.16 vs >=0.65)
+	sessionHue := map[string]float64{}
+	for sid, agent := range vendorOf {
+		rgb := out.Chart[sid]
+		if rgb == "" {
+			continue
+		}
+		h, s, _, err := parseRGBHSL(rgb)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", sid, err))
+			continue
+		}
+		sessionHue[sid] = h
+		own, ok := vendorHue[agent]
+		if !ok {
+			continue
+		}
+		if d := hueDelta(h, own); d > hueTolerance {
+			errs = append(errs, fmt.Sprintf("%s (%s): hue %.1f is %.1f deg from its own vendor's hue %.1f, want <=%.1f", sid, agent, h, d, own, hueTolerance))
+		}
+		if ownSat, ok := vendorSat[agent]; ok {
+			if d := math.Abs(s - ownSat); d > satTolerance {
+				errs = append(errs, fmt.Sprintf("%s (%s): saturation %.2f is %.2f from its own vendor's saturation %.2f, want <=%.2f (a session stuck on HARNESS_HUE.other's grey would fail here even when its hue looks close)", sid, agent, s, d, ownSat, satTolerance))
+			}
+		}
+		for otherAgent, otherHue := range vendorHue {
+			if otherAgent == agent {
+				continue
+			}
+			if d := hueDelta(h, otherHue); d < hueSeparation {
+				errs = append(errs, fmt.Sprintf("%s (%s): hue %.1f is only %.1f deg from %s's hue %.1f, want >=%.1f", sid, agent, h, d, otherAgent, otherHue, hueSeparation))
+			}
+		}
+	}
+
+	// 3. the two shades within each vendor differ by a real lightness
+	// step (report it), same hue.
+	pairs := [][2]string{{"fake-cw-1", "fake-cw-2"}, {"fake-cc-1", "fake-cc-2"}}
+	for _, pair := range pairs {
+		h1, _, l1, err1 := parseRGBHSL(out.Chart[pair[0]])
+		h2, _, l2, err2 := parseRGBHSL(out.Chart[pair[1]])
+		if err1 != nil || err2 != nil {
+			errs = append(errs, fmt.Sprintf("%s/%s: could not parse for shade check", pair[0], pair[1]))
+			continue
+		}
+		step := math.Abs(l1 - l2)
+		fmt.Printf("uicheck: d15: %s/%s lightness step %.1f pp (L %.2f vs %.2f), hue delta %.1f deg\n", pair[0], pair[1], step*100, l1, l2, hueDelta(h1, h2))
+		if step < 0.10 {
+			errs = append(errs, fmt.Sprintf("%s/%s: lightness step only %.1f pp, want a clearly visible step (>=10pp)", pair[0], pair[1], step*100))
+		}
+	}
+
+	// 4. item 4: the two same-project Cowork legend entries must not
+	// render identical text.
+	seen := map[string]int{}
+	for _, l := range out.Legend {
+		seen[l]++
+	}
+	for l, n := range seen {
+		if n > 1 {
+			errs = append(errs, fmt.Sprintf("legend: %d entries render identical text %q, want a session id appended on collision", n, l))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("d15: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d15: vendor colour families check clean (chart==card==legend dot, hue+saturation held per vendor, shades separated, legend collision resolved, late-vendor recolour proven)")
+	return nil
 }
 
 // parseRGBHSL parses a CSS "rgb(r, g, b)" / "rgba(r, g, b, a)" string (what

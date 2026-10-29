@@ -18,36 +18,35 @@ import (
 // 1152x2048 size cannot be reached from here. Fake mode only, with made-up
 // task titles: a uicheck run never shows real To Do rows (todo_gate.go).
 // One screenshot per case.
-func init() {
-	checks["d19"] = func(hwnd uintptr, args []string) error {
-		cases := []struct {
-			w, h       int32
-			todo       bool
-			expectDrop bool
-		}{{1600, 1000, true, false}, {1920, 1080, true, false}, {2560, 1300, true, false}, {1920, 1080, false, false}, {1280, 860, true, true}}
-		var errs []string
-		skipped := 0
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		// Own starting state, so the order of checks does not matter: d29 leaves
-		// the page in Plain with a stale reading. Standard, every part on,
-		// Overall scrollbar off, a fresh reading.
-		if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
-			return fmt.Errorf("d19: set the starting state: %w", err)
+func caseD19(hwnd uintptr, args []string) error {
+	cases := []struct {
+		w, h       int32
+		todo       bool
+		expectDrop bool
+	}{{1600, 1000, true, false}, {1920, 1080, true, false}, {2560, 1300, true, false}, {1920, 1080, false, false}, {1280, 860, true, true}}
+	var errs []string
+	skipped := 0
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	// Own starting state, so the order of checks does not matter: d29 leaves
+	// the page in Plain with a stale reading. Standard, every part on,
+	// Overall scrollbar off, a fresh reading.
+	if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
+		return fmt.Errorf("d19: set the starting state: %w", err)
+	}
+	for _, c := range cases {
+		if err := ensureWindowSizeWH(hwnd, c.w, c.h); err != nil {
+			return err
 		}
-		for _, c := range cases {
-			if err := ensureWindowSizeWH(hwnd, c.w, c.h); err != nil {
-				return err
-			}
-			// A window the screen could not hold was never this size, so its
-			// numbers say nothing about the layout at it (a laptop-only
-			// 1600x1000 screen failed this check for that reason).
-			if windowCapped {
-				fmt.Printf("uicheck: d19 %dx%d todo=%v: SKIPPED, this screen is too small for that window\n", c.w, c.h, c.todo)
-				skipped++
-				continue
-			}
-			time.Sleep(500 * time.Millisecond)
-			script := fmt.Sprintf(`(function(todoOn){
+		// A window the screen could not hold was never this size, so its
+		// numbers say nothing about the layout at it (a laptop-only
+		// 1600x1000 screen failed this check for that reason).
+		if windowCapped {
+			fmt.Printf("uicheck: d19 %dx%d todo=%v: SKIPPED, this screen is too small for that window\n", c.w, c.h, c.todo)
+			skipped++
+			continue
+		}
+		time.Sleep(500 * time.Millisecond)
+		script := fmt.Sprintf(`(function(todoOn){
   var nowMs = Date.now(), windowMs = 30 * 60 * 1000, ws = nowMs - windowMs;
   var sys = [], groups = [], chart = [];
   for(var t = nowMs - windowMs; t <= nowMs; t += 1000){
@@ -87,59 +86,58 @@ func init() {
     zoneOver: zoneOver
   };
 })(%v)`, c.todo)
-			var out struct {
-				Layout struct {
-					Applied    bool    `json:"applied"`
-					PlainHistH float64 `json:"plainHistH"`
-					HistH      float64 `json:"histH"`
-				} `json:"layout"`
-				TodoDropped bool    `json:"todoDropped"`
-				TodoBottom  float64 `json:"todoBottom"`
-				InnerH      float64 `json:"innerH"`
-				BodyOver    bool    `json:"bodyOver"`
-				ZoneOver    bool    `json:"zoneOver"`
-			}
-			if err := evalInto(script, &out); err != nil {
-				return fmt.Errorf("d19 %dx%d: eval layout: %w", c.w, c.h, err)
-			}
-			time.Sleep(400 * time.Millisecond)
-			state := "off"
-			if c.todo {
-				state = "on"
-			}
-			if _, err := screenshot(hwnd, fmt.Sprintf("d19-todo-%s-%dx%d", state, c.w, c.h)); err != nil {
-				return err
-			}
-			l := out.Layout
-			ratio := 0.0
-			if l.PlainHistH > 0 {
-				ratio = l.HistH / l.PlainHistH
-			}
-			fmt.Printf("uicheck: d19 %dx%d todo=%s: applied=%v chart %.0fpx of plain %.0fpx (ratio %.3f), To Do bottom %.0f of %.0f, dropped=%v\n",
-				c.w, c.h, state, l.Applied, l.HistH, l.PlainHistH, ratio, out.TodoBottom, out.InnerH, out.TodoDropped)
-			if out.BodyOver || out.ZoneOver {
-				errs = append(errs, fmt.Sprintf("%dx%d todo=%s: page or a zone overflows", c.w, c.h, state))
-			}
-			if !c.todo {
-				continue
-			}
-			if out.TodoDropped {
-				errs = append(errs, fmt.Sprintf("%dx%d: To Do is hidden, B7 never hides a part", c.w, c.h))
-				continue
-			}
-			// .todopanel's own 4px bottom margin.
-			if math.Abs(out.InnerH-4-out.TodoBottom) > 2 {
-				errs = append(errs, fmt.Sprintf("%dx%d: To Do ends at %.0f, want the window bottom (%.0f)", c.w, c.h, out.TodoBottom, out.InnerH-4))
-			}
+		var out struct {
+			Layout struct {
+				Applied    bool    `json:"applied"`
+				PlainHistH float64 `json:"plainHistH"`
+				HistH      float64 `json:"histH"`
+			} `json:"layout"`
+			TodoDropped bool    `json:"todoDropped"`
+			TodoBottom  float64 `json:"todoBottom"`
+			InnerH      float64 `json:"innerH"`
+			BodyOver    bool    `json:"bodyOver"`
+			ZoneOver    bool    `json:"zoneOver"`
 		}
-		if len(errs) > 0 {
-			return fmt.Errorf("d19: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+		if err := evalInto(script, &out); err != nil {
+			return fmt.Errorf("d19 %dx%d: eval layout: %w", c.w, c.h, err)
 		}
-		if skipped > 0 {
-			fmt.Printf("uicheck: d19: PARTIAL, %d of %d cases skipped because the screen is too small; run on a screen that holds 2560x1300 CSS px for a full pass\n", skipped, len(cases))
-			return nil
+		time.Sleep(400 * time.Millisecond)
+		state := "off"
+		if c.todo {
+			state = "on"
 		}
-		fmt.Println("uicheck: d19: To Do layout clean (To Do never hidden, fills the bottom, no overflow)")
+		if _, err := screenshot(hwnd, fmt.Sprintf("d19-todo-%s-%dx%d", state, c.w, c.h)); err != nil {
+			return err
+		}
+		l := out.Layout
+		ratio := 0.0
+		if l.PlainHistH > 0 {
+			ratio = l.HistH / l.PlainHistH
+		}
+		fmt.Printf("uicheck: d19 %dx%d todo=%s: applied=%v chart %.0fpx of plain %.0fpx (ratio %.3f), To Do bottom %.0f of %.0f, dropped=%v\n",
+			c.w, c.h, state, l.Applied, l.HistH, l.PlainHistH, ratio, out.TodoBottom, out.InnerH, out.TodoDropped)
+		if out.BodyOver || out.ZoneOver {
+			errs = append(errs, fmt.Sprintf("%dx%d todo=%s: page or a zone overflows", c.w, c.h, state))
+		}
+		if !c.todo {
+			continue
+		}
+		if out.TodoDropped {
+			errs = append(errs, fmt.Sprintf("%dx%d: To Do is hidden, B7 never hides a part", c.w, c.h))
+			continue
+		}
+		// .todopanel's own 4px bottom margin.
+		if math.Abs(out.InnerH-4-out.TodoBottom) > 2 {
+			errs = append(errs, fmt.Sprintf("%dx%d: To Do ends at %.0f, want the window bottom (%.0f)", c.w, c.h, out.TodoBottom, out.InnerH-4))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("d19: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	if skipped > 0 {
+		fmt.Printf("uicheck: d19: PARTIAL, %d of %d cases skipped because the screen is too small; run on a screen that holds 2560x1300 CSS px for a full pass\n", skipped, len(cases))
 		return nil
 	}
+	fmt.Println("uicheck: d19: To Do layout clean (To Do never hidden, fills the bottom, no overflow)")
+	return nil
 }

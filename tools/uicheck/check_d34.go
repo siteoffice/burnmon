@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -358,7 +356,7 @@ func d34Probe() error {
 // With extended true it also grows the lists to 12 wait items, 8 outcome items
 // and 8 sessions (clones of the first entry, invented names only).
 func d34Snapshot(extended bool) ([]byte, error) {
-	snap, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+	snap, err := readFixture("snapshot_example.json")
 	if err != nil {
 		return nil, fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
 	}
@@ -402,113 +400,111 @@ func d34Snapshot(extended bool) ([]byte, error) {
 	}
 	return json.Marshal(snapMap)
 }
-func init() {
-	checks["d34"] = func(hwnd uintptr, args []string) error {
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		snap, err := d34Snapshot(false)
-		if err != nil {
-			return err
-		}
-		snapE, err := d34Snapshot(true)
-		if err != nil {
-			return err
-		}
-		allBut := func(off string) map[string]bool {
-			m := map[string]bool{}
-			for _, id := range d29Parts {
-				if id != off {
-					m[id] = true
-				}
-			}
-			return m
-		}
-		payload := func(plain bool, c string, scrollbar bool, snap []byte) string {
-			o := d29Opts{Plain: plain, Scrollbar: scrollbar, Status: "ok", Snap: snap}
-			switch c {
-			case "a", "d", "e":
-				o.PlainAll = true
-			case "b":
-				o.StandardOff = map[string]bool{"turn_ticker": true}
-				o.PlainOnly = allBut("turn_ticker")
-			case "c":
-				o.PlainOnly = map[string]bool{"burn_30min": true}
-			}
-			return d29Payload(o)
-		}
-		wantTodo := func(plain bool, c string) bool { return !(plain && c == "c") }
-		probed := false
-		sizes := [][2]int32{{1280, 800}, {1920, 1080}, {2560, 1440}}
-		var fails []string
-		ran, skipped := 0, 0
-		for _, sz := range sizes {
-			w, h := sz[0], sz[1]
-			tag := fmt.Sprintf("%dx%d", w, h)
-			if err := ensureWindowSizeWH(hwnd, w, h); err != nil {
-				return err
-			}
-			if windowCapped {
-				fmt.Printf("uicheck: d34: SKIPPED %s, this screen is too small\n", tag)
-				skipped++
-				continue
-			}
-			time.Sleep(500 * time.Millisecond)
-			for _, plain := range []bool{false, true} {
-				mode := map[bool]string{false: "standard", true: "plain"}[plain]
-				for _, c := range []string{"a", "b", "c", "d", "e"} {
-					if c == "c" && !plain {
-						continue
-					}
-					if (c == "d" || c == "e") && w != 1280 {
-						continue
-					}
-					for _, sb := range []bool{true, false} {
-						if (c == "d" || c == "e") && sb {
-							continue
-						}
-						sbName := map[bool]string{true: "on", false: "off"}[sb]
-						useSnap := snap
-						if c == "e" {
-							useSnap = snapE
-						}
-						p, err := d34Apply(payload(plain, c, sb, useSnap), useSnap)
-						if err != nil {
-							return err
-						}
-						ran++
-						name := fmt.Sprintf("d34-%s-%s-%s-%s", tag, mode, c, sbName)
-						if _, err := screenshot(hwnd, name); err != nil {
-							return err
-						}
-						if !probed {
-							probed = true
-							if err := d34Probe(); err != nil {
-								return err
-							}
-						}
-						bad := d34Verify(p, sb, wantTodo(plain, c), c == "e")
-						if len(bad) == 0 {
-							fmt.Printf("uicheck: d34: PASS %s %s scrollbar %s case %s (parts %d, largest empty %.0f px, fitScroll %v, two columns %v, To Do drawn %v, handles %d%s)\n", tag, mode, sbName, c, p.Parts, p.Empty, p.FitScroll, p.TwoCols, p.TodoDrawn, p.Handles, d34ListNote(p, c == "e"))
-						} else {
-							msg := fmt.Sprintf("%s %s scrollbar %s case %s: %s", tag, mode, sbName, c, strings.Join(bad, "; "))
-							fmt.Printf("uicheck: d34: FAIL %s\n", msg)
-							fails = append(fails, msg)
-						}
-					}
-				}
-			}
-		}
-		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-			return err
-		}
-		fmt.Printf("uicheck: d34: %d cases ran, %d sizes skipped, %d failed\n", ran, skipped, len(fails))
-		if len(fails) > 0 {
-			return fmt.Errorf("d34: %d case(s) failed, first: %s", len(fails), fails[0])
-		}
-		if ran == 0 {
-			return fmt.Errorf("d34: no size ran")
-		}
-		return nil
+func caseD34(hwnd uintptr, args []string) error {
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	snap, err := d34Snapshot(false)
+	if err != nil {
+		return err
 	}
+	snapE, err := d34Snapshot(true)
+	if err != nil {
+		return err
+	}
+	allBut := func(off string) map[string]bool {
+		m := map[string]bool{}
+		for _, id := range d29Parts {
+			if id != off {
+				m[id] = true
+			}
+		}
+		return m
+	}
+	payload := func(plain bool, c string, scrollbar bool, snap []byte) string {
+		o := d29Opts{Plain: plain, Scrollbar: scrollbar, Status: "ok", Snap: snap}
+		switch c {
+		case "a", "d", "e":
+			o.PlainAll = true
+		case "b":
+			o.StandardOff = map[string]bool{"turn_ticker": true}
+			o.PlainOnly = allBut("turn_ticker")
+		case "c":
+			o.PlainOnly = map[string]bool{"burn_30min": true}
+		}
+		return d29Payload(o)
+	}
+	wantTodo := func(plain bool, c string) bool { return !(plain && c == "c") }
+	probed := false
+	sizes := [][2]int32{{1280, 800}, {1920, 1080}, {2560, 1440}}
+	var fails []string
+	ran, skipped := 0, 0
+	for _, sz := range sizes {
+		w, h := sz[0], sz[1]
+		tag := fmt.Sprintf("%dx%d", w, h)
+		if err := ensureWindowSizeWH(hwnd, w, h); err != nil {
+			return err
+		}
+		if windowCapped {
+			fmt.Printf("uicheck: d34: SKIPPED %s, this screen is too small\n", tag)
+			skipped++
+			continue
+		}
+		time.Sleep(500 * time.Millisecond)
+		for _, plain := range []bool{false, true} {
+			mode := map[bool]string{false: "standard", true: "plain"}[plain]
+			for _, c := range []string{"a", "b", "c", "d", "e"} {
+				if c == "c" && !plain {
+					continue
+				}
+				if (c == "d" || c == "e") && w != 1280 {
+					continue
+				}
+				for _, sb := range []bool{true, false} {
+					if (c == "d" || c == "e") && sb {
+						continue
+					}
+					sbName := map[bool]string{true: "on", false: "off"}[sb]
+					useSnap := snap
+					if c == "e" {
+						useSnap = snapE
+					}
+					p, err := d34Apply(payload(plain, c, sb, useSnap), useSnap)
+					if err != nil {
+						return err
+					}
+					ran++
+					name := fmt.Sprintf("d34-%s-%s-%s-%s", tag, mode, c, sbName)
+					if _, err := screenshot(hwnd, name); err != nil {
+						return err
+					}
+					if !probed {
+						probed = true
+						if err := d34Probe(); err != nil {
+							return err
+						}
+					}
+					bad := d34Verify(p, sb, wantTodo(plain, c), c == "e")
+					if len(bad) == 0 {
+						fmt.Printf("uicheck: d34: PASS %s %s scrollbar %s case %s (parts %d, largest empty %.0f px, fitScroll %v, two columns %v, To Do drawn %v, handles %d%s)\n", tag, mode, sbName, c, p.Parts, p.Empty, p.FitScroll, p.TwoCols, p.TodoDrawn, p.Handles, d34ListNote(p, c == "e"))
+					} else {
+						msg := fmt.Sprintf("%s %s scrollbar %s case %s: %s", tag, mode, sbName, c, strings.Join(bad, "; "))
+						fmt.Printf("uicheck: d34: FAIL %s\n", msg)
+						fails = append(fails, msg)
+					}
+				}
+			}
+		}
+	}
+	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
+		return err
+	}
+	fmt.Printf("uicheck: d34: %d cases ran, %d sizes skipped, %d failed\n", ran, skipped, len(fails))
+	if len(fails) > 0 {
+		return fmt.Errorf("d34: %d case(s) failed, first: %s", len(fails), fails[0])
+	}
+	if ran == 0 {
+		return fmt.Errorf("d34: no size ran")
+	}
+	return nil
 }
 
 // d34ListNote formats the host lists of case e as ", lists <sec> h/floor/nat rows N".

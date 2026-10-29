@@ -18,17 +18,16 @@ import (
 // and WS2 alpha.3 item 1 respectively made them the two deliberate
 // exceptions to "no scrollbars", rows get a fixed height and the box
 // scrolls instead of cropping.
-func init() {
-	checks["d9"] = func(hwnd uintptr, args []string) error {
-		sizes := [][2]int32{{1024, 768}, {1280, 860}, {1152, 2048}, {1920, 1080}, {2560, 1440}}
-		for _, size := range sizes {
-			if err := ensureWindowSizeWH(hwnd, size[0], size[1]); err != nil {
-				return err
-			}
-			time.Sleep(500 * time.Millisecond)
+func caseD9(hwnd uintptr, args []string) error {
+	sizes := [][2]int32{{1024, 768}, {1280, 860}, {1152, 2048}, {1920, 1080}, {2560, 1440}}
+	for _, size := range sizes {
+		if err := ensureWindowSizeWH(hwnd, size[0], size[1]); err != nil {
+			return err
+		}
+		time.Sleep(500 * time.Millisecond)
 
-			var offenders []string
-			script := `(function(){
+		var offenders []string
+		script := `(function(){
   var bad = [];
   var all = document.querySelectorAll('*');
   for (var i = 0; i < all.length; i++) {
@@ -49,18 +48,17 @@ func init() {
   }
   return bad;
 })()`
-			if err := evalInto(script, &offenders); err != nil {
-				return fmt.Errorf("d9 %dx%d: eval scrollbar sweep: %w", size[0], size[1], err)
-			}
-			if len(offenders) > 0 {
-				max := len(offenders)
-				if max > 10 {
-					max = 10
-				}
-				return fmt.Errorf("d9 %dx%d: %d element(s) with a visible scrollbar: %v", size[0], size[1], len(offenders), offenders[:max])
-			}
-			fmt.Printf("uicheck: d9 %dx%d: no visible scrollbar anywhere\n", size[0], size[1])
+		if err := evalInto(script, &offenders); err != nil {
+			return fmt.Errorf("d9 %dx%d: eval scrollbar sweep: %w", size[0], size[1], err)
 		}
-		return nil
+		if len(offenders) > 0 {
+			max := len(offenders)
+			if max > 10 {
+				max = 10
+			}
+			return fmt.Errorf("d9 %dx%d: %d element(s) with a visible scrollbar: %v", size[0], size[1], len(offenders), offenders[:max])
+		}
+		fmt.Printf("uicheck: d9 %dx%d: no visible scrollbar anywhere\n", size[0], size[1])
 	}
+	return nil
 }

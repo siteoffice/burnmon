@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -125,157 +123,155 @@ const d40ReadJS = `(function(){
   };
 })()`
 
-func init() {
-	checks["d40"] = func(hwnd uintptr, args []string) error {
-		fail := func(format string, a ...any) error { return fmt.Errorf("d40: "+format, a...) }
-		raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "agentmap_layout_example.json"))
-		if err != nil {
-			return fmt.Errorf("read the example layout (uicheck runs from the tools folder): %w", err)
-		}
-		var L map[string]any
-		if err := json.Unmarshal(raw, &L); err != nil {
-			return err
-		}
-		// Own starting state: d34 leaves the page in Plain. Leave fake mode, then Standard with every part on.
-		if _, err := evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`); err != nil {
-			return fail("leave fake mode: %w", err)
-		}
-		if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
-			return fail("set the starting state: %w", err)
-		}
-		idle, want := d40Fixture()
-		L["idle"] = idle
-		b, _ := json.Marshal(map[string]any{"layout": L, "hours": 24})
-		payload := string(b)
-		read := func() (d40Page, error) {
-			var p d40Page
-			time.Sleep(400 * time.Millisecond)
-			err := evalInto(d40ReadJS, &p)
-			return p, err
-		}
-		ran := 0
-		var fails []string
-		for _, sz := range [][2]int32{{1280, 800}, {1920, 1080}} {
-			tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
-			if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
-				return err
-			}
-			if windowCapped {
-				fmt.Printf("uicheck: d40: SKIPPED %s, this screen is too small\n", tag)
-				continue
-			}
-			time.Sleep(400 * time.Millisecond)
-			if _, err := evalRaw(`(function(){ window.__bdevMap.close(); window.bdevAgentMap = function(){ return new Promise(function(){}); };
-				window.__bdevMap.open('live'); window.__bdevMap.setPayload(` + payload + `, 'live'); return true; })()`); err != nil {
-				return err
-			}
-			p, err := read()
-			if err != nil {
-				return err
-			}
-			if p.OldIdle != 0 || !strings.HasPrefix(p.BtnText, "14 ") {
-				return fail("%s: .mapidle elements %d, button text %q, want none and 14 ...", tag, p.OldIdle, p.BtnText)
-			}
-			if p.PanelOn {
-				return fail("%s: the panel is open before the button was clicked", tag)
-			}
-			if err := clickSelector(hwnd, "#mapIdleBtn"); err != nil {
-				return err
-			}
-			if p, err = read(); err != nil {
-				return err
-			}
-			if !p.PanelOn || !p.TableOn {
-				return fail("%s: the button did not open the idle table (panel on %v, table %v)", tag, p.PanelOn, p.TableOn)
-			}
-			if strings.Join(p.Heads, "|") != "Name|Project|Kind|Waited|Links" {
-				return fail("%s: table heads %v", tag, p.Heads)
-			}
-			if len(p.Rows) != 14 || strings.Join(p.Rows, ",") != strings.Join(want, ",") {
-				return fail("%s: %d rows %v, want 14 in the order %v", tag, len(p.Rows), p.Rows, want)
-			}
-			if len(p.Group) != 2 || p.Group[0] != "Done, needs close-out" || p.Group[1] != "Other sprints and flows" {
-				return fail("%s: group headings %v, want exactly two", tag, p.Group)
-			}
-			if p.Boxes == 0 {
-				return fail("%s: the map has no boxes", tag)
-			}
-			// These two do not stop the run, so each size reports its own result.
-			sizeOK := true
-			if len(p.Overlap) != 0 {
-				msg := fmt.Sprintf("%s: the panel %s overlaps boxes %v", tag, p.PanelRect, p.Overlap)
-				fmt.Println("uicheck: d40: FAIL " + msg)
-				fails = append(fails, msg)
-				sizeOK = false
-			}
-			if len(p.Outside) != 0 {
-				msg := fmt.Sprintf("%s: boxes not fully visible in the map area: %v", tag, p.Outside)
-				fmt.Println("uicheck: d40: FAIL " + msg)
-				fails = append(fails, msg)
-				sizeOK = false
-			}
-			rect, boxes := p.PanelRect, p.Boxes
-			if _, err := screenshot(hwnd, "d40-map-idle-"+tag); err != nil {
-				return err
-			}
-			// Esc closes the table first, then the map.
-			bringToFront(hwnd)
-			_ = clickSelector(hwnd, "#mapTitle")
-			if err := pressKey(vkEscape); err != nil {
-				return err
-			}
-			if p, err = read(); err != nil {
-				return err
-			}
-			if p.TableOn || p.PanelOn || !p.MapOpen {
-				return fail("%s: first Esc left table %v, panel %v, map open %v, want closed, closed, open", tag, p.TableOn, p.PanelOn, p.MapOpen)
-			}
-			if err := pressKey(vkEscape); err != nil {
-				return err
-			}
-			if p, err = read(); err != nil {
-				return err
-			}
-			if p.MapOpen {
-				return fail("%s: second Esc did not close the map", tag)
-			}
-			// A box click with the table open shows that box's evidence.
-			if _, err := evalRaw(`(function(){ window.__bdevMap.open('live'); window.__bdevMap.setPayload(` + payload + `, 'live'); window.__bdevMap.idle(true); return true; })()`); err != nil {
-				return err
-			}
-			if p, err = read(); err != nil {
-				return err
-			}
-			if !p.TableOn {
-				return fail("%s: the table did not reopen", tag)
-			}
-			if err := clickSelector(hwnd, "#mapStage .mapbox.session"); err != nil {
-				return err
-			}
-			if p, err = read(); err != nil {
-				return err
-			}
-			if p.TableOn || !p.PanelOn || p.PanelH3 == "" {
-				return fail("%s: box click left table %v, panel on %v, title %q", tag, p.TableOn, p.PanelOn, p.PanelH3)
-			}
-			if _, err := evalRaw(`(window.__bdevMap.close(), true)`); err != nil {
-				return err
-			}
-			ran++
-			if !sizeOK {
-				continue
-			}
-			fmt.Printf("uicheck: d40: PASS %s (14 idle rows in order, panel %s overlaps no box, %d boxes visible, Esc twice, box click)\n", tag, rect, boxes)
-		}
-		if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-			return err
-		}
-		if len(fails) > 0 {
-			return fail("%d check(s) failed, first: %s", len(fails), fails[0])
-		}
-		if ran == 0 {
-			return fail("no size ran")
-		}
-		return nil
+func caseD40(hwnd uintptr, args []string) error {
+	fail := func(format string, a ...any) error { return fmt.Errorf("d40: "+format, a...) }
+	raw, err := readFixture("agentmap_layout_example.json")
+	if err != nil {
+		return fmt.Errorf("read the example layout (uicheck runs from the tools folder): %w", err)
 	}
+	var L map[string]any
+	if err := json.Unmarshal(raw, &L); err != nil {
+		return err
+	}
+	// Own starting state: d34 leaves the page in Plain. Leave fake mode, then Standard with every part on.
+	if _, err := evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`); err != nil {
+		return fail("leave fake mode: %w", err)
+	}
+	if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
+		return fail("set the starting state: %w", err)
+	}
+	idle, want := d40Fixture()
+	L["idle"] = idle
+	b, _ := json.Marshal(map[string]any{"layout": L, "hours": 24})
+	payload := string(b)
+	read := func() (d40Page, error) {
+		var p d40Page
+		time.Sleep(400 * time.Millisecond)
+		err := evalInto(d40ReadJS, &p)
+		return p, err
+	}
+	ran := 0
+	var fails []string
+	for _, sz := range [][2]int32{{1280, 800}, {1920, 1080}} {
+		tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
+		if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
+			return err
+		}
+		if windowCapped {
+			fmt.Printf("uicheck: d40: SKIPPED %s, this screen is too small\n", tag)
+			continue
+		}
+		time.Sleep(400 * time.Millisecond)
+		if _, err := evalRaw(`(function(){ window.__bdevMap.close(); window.bdevAgentMap = function(){ return new Promise(function(){}); };
+				window.__bdevMap.open('live'); window.__bdevMap.setPayload(` + payload + `, 'live'); return true; })()`); err != nil {
+			return err
+		}
+		p, err := read()
+		if err != nil {
+			return err
+		}
+		if p.OldIdle != 0 || !strings.HasPrefix(p.BtnText, "14 ") {
+			return fail("%s: .mapidle elements %d, button text %q, want none and 14 ...", tag, p.OldIdle, p.BtnText)
+		}
+		if p.PanelOn {
+			return fail("%s: the panel is open before the button was clicked", tag)
+		}
+		if err := clickSelector(hwnd, "#mapIdleBtn"); err != nil {
+			return err
+		}
+		if p, err = read(); err != nil {
+			return err
+		}
+		if !p.PanelOn || !p.TableOn {
+			return fail("%s: the button did not open the idle table (panel on %v, table %v)", tag, p.PanelOn, p.TableOn)
+		}
+		if strings.Join(p.Heads, "|") != "Name|Project|Kind|Waited|Links" {
+			return fail("%s: table heads %v", tag, p.Heads)
+		}
+		if len(p.Rows) != 14 || strings.Join(p.Rows, ",") != strings.Join(want, ",") {
+			return fail("%s: %d rows %v, want 14 in the order %v", tag, len(p.Rows), p.Rows, want)
+		}
+		if len(p.Group) != 2 || p.Group[0] != "Done, needs close-out" || p.Group[1] != "Other sprints and flows" {
+			return fail("%s: group headings %v, want exactly two", tag, p.Group)
+		}
+		if p.Boxes == 0 {
+			return fail("%s: the map has no boxes", tag)
+		}
+		// These two do not stop the run, so each size reports its own result.
+		sizeOK := true
+		if len(p.Overlap) != 0 {
+			msg := fmt.Sprintf("%s: the panel %s overlaps boxes %v", tag, p.PanelRect, p.Overlap)
+			fmt.Println("uicheck: d40: FAIL " + msg)
+			fails = append(fails, msg)
+			sizeOK = false
+		}
+		if len(p.Outside) != 0 {
+			msg := fmt.Sprintf("%s: boxes not fully visible in the map area: %v", tag, p.Outside)
+			fmt.Println("uicheck: d40: FAIL " + msg)
+			fails = append(fails, msg)
+			sizeOK = false
+		}
+		rect, boxes := p.PanelRect, p.Boxes
+		if _, err := screenshot(hwnd, "d40-map-idle-"+tag); err != nil {
+			return err
+		}
+		// Esc closes the table first, then the map.
+		bringToFront(hwnd)
+		_ = clickSelector(hwnd, "#mapTitle")
+		if err := pressKey(vkEscape); err != nil {
+			return err
+		}
+		if p, err = read(); err != nil {
+			return err
+		}
+		if p.TableOn || p.PanelOn || !p.MapOpen {
+			return fail("%s: first Esc left table %v, panel %v, map open %v, want closed, closed, open", tag, p.TableOn, p.PanelOn, p.MapOpen)
+		}
+		if err := pressKey(vkEscape); err != nil {
+			return err
+		}
+		if p, err = read(); err != nil {
+			return err
+		}
+		if p.MapOpen {
+			return fail("%s: second Esc did not close the map", tag)
+		}
+		// A box click with the table open shows that box's evidence.
+		if _, err := evalRaw(`(function(){ window.__bdevMap.open('live'); window.__bdevMap.setPayload(` + payload + `, 'live'); window.__bdevMap.idle(true); return true; })()`); err != nil {
+			return err
+		}
+		if p, err = read(); err != nil {
+			return err
+		}
+		if !p.TableOn {
+			return fail("%s: the table did not reopen", tag)
+		}
+		if err := clickSelector(hwnd, "#mapStage .mapbox.session"); err != nil {
+			return err
+		}
+		if p, err = read(); err != nil {
+			return err
+		}
+		if p.TableOn || !p.PanelOn || p.PanelH3 == "" {
+			return fail("%s: box click left table %v, panel on %v, title %q", tag, p.TableOn, p.PanelOn, p.PanelH3)
+		}
+		if _, err := evalRaw(`(window.__bdevMap.close(), true)`); err != nil {
+			return err
+		}
+		ran++
+		if !sizeOK {
+			continue
+		}
+		fmt.Printf("uicheck: d40: PASS %s (14 idle rows in order, panel %s overlaps no box, %d boxes visible, Esc twice, box click)\n", tag, rect, boxes)
+	}
+	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
+		return err
+	}
+	if len(fails) > 0 {
+		return fail("%d check(s) failed, first: %s", len(fails), fails[0])
+	}
+	if ran == 0 {
+		return fail("no size ran")
+	}
+	return nil
 }

@@ -16,22 +16,21 @@ import (
 // proof image the spec asks for. 1920x1080, not the 1280x860 default: at
 // 1280x860 applyPanelFit drops the whole Activity/heatmap row, and a hidden
 // label measures 0 of 0 (an early version of this check passed that way).
-func init() {
-	checks["d20"] = func(hwnd uintptr, args []string) error {
-		if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-			return err
-		}
-		if windowCapped {
-			fmt.Println("uicheck: d20: SKIPPED, this screen is too small for a 1920x1080 window, so the heatmap row is fit-dropped and its labels measure 0px")
-			return nil
-		}
-		// Own starting state: the sections the dev store holds change between runs and
-		// checks (Plain mode drops the heatmap row, which then measures 0 of 0).
-		if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
-			return fmt.Errorf("d20: set the starting state: %w", err)
-		}
-		time.Sleep(300 * time.Millisecond)
-		script := `(function(){
+func caseD20(hwnd uintptr, args []string) error {
+	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
+		return err
+	}
+	if windowCapped {
+		fmt.Println("uicheck: d20: SKIPPED, this screen is too small for a 1920x1080 window, so the heatmap row is fit-dropped and its labels measure 0px")
+		return nil
+	}
+	// Own starting state: the sections the dev store holds change between runs and
+	// checks (Plain mode drops the heatmap row, which then measures 0 of 0).
+	if _, err := evalRaw(`window.__bdevSections.apply(` + d29Payload(d29Opts{Status: "ok"}) + `)`); err != nil {
+		return fmt.Errorf("d20: set the starting state: %w", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	script := `(function(){
   var nowMs = Date.now(), windowMs = 30 * 60 * 1000, ws = nowMs - windowMs;
   var HARN = ['claude', 'claude-desktop', 'codex', 'copilot-cli', 'copilot-vscode', 'hermes', 'wsl', 'burnmon-dev', 'burnmon-dev-webview2', 'node'];
   var groups = [], chart = [];
@@ -60,41 +59,40 @@ func init() {
   });
   return out;
 })()`
-		var rows []struct {
-			Text      string  `json:"text"`
-			ScrollW   int     `json:"scrollW"`
-			ClientW   int     `json:"clientW"`
-			Cells     int     `json:"cells"`
-			CellsLeft float64 `json:"cellsLeft"`
-		}
-		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
-		if err := evalInto(script, &rows); err != nil {
-			return fmt.Errorf("d20: eval harness labels: %w", err)
-		}
-		time.Sleep(300 * time.Millisecond)
-		if _, err := screenshot(hwnd, "d20-harness-labels"); err != nil {
-			return err
-		}
-		var errs []string
-		if len(rows) == 0 {
-			errs = append(errs, "harness heatmap rendered no rows")
-		}
-		for _, r := range rows {
-			fmt.Printf("uicheck: d20: %-24q label %dpx of %dpx, %d minute cells, cells start at +%.0fpx\n", r.Text, r.ScrollW, r.ClientW, r.Cells, r.CellsLeft)
-			if r.ClientW < 150 {
-				errs = append(errs, fmt.Sprintf("label %q is %dpx wide, want the 150px column (row hidden or not widened)", r.Text, r.ClientW))
-			}
-			if r.ScrollW > r.ClientW {
-				errs = append(errs, fmt.Sprintf("label %q clipped (%dpx content in %dpx)", r.Text, r.ScrollW, r.ClientW))
-			}
-			if r.Cells == 0 {
-				errs = append(errs, fmt.Sprintf("row %q has no minute cells", r.Text))
-			}
-		}
-		if len(errs) > 0 {
-			return fmt.Errorf("d20: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
-		}
-		fmt.Println("uicheck: d20: every harness heatmap label renders in full")
-		return nil
+	var rows []struct {
+		Text      string  `json:"text"`
+		ScrollW   int     `json:"scrollW"`
+		ClientW   int     `json:"clientW"`
+		Cells     int     `json:"cells"`
+		CellsLeft float64 `json:"cellsLeft"`
 	}
+	defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
+	if err := evalInto(script, &rows); err != nil {
+		return fmt.Errorf("d20: eval harness labels: %w", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, err := screenshot(hwnd, "d20-harness-labels"); err != nil {
+		return err
+	}
+	var errs []string
+	if len(rows) == 0 {
+		errs = append(errs, "harness heatmap rendered no rows")
+	}
+	for _, r := range rows {
+		fmt.Printf("uicheck: d20: %-24q label %dpx of %dpx, %d minute cells, cells start at +%.0fpx\n", r.Text, r.ScrollW, r.ClientW, r.Cells, r.CellsLeft)
+		if r.ClientW < 150 {
+			errs = append(errs, fmt.Sprintf("label %q is %dpx wide, want the 150px column (row hidden or not widened)", r.Text, r.ClientW))
+		}
+		if r.ScrollW > r.ClientW {
+			errs = append(errs, fmt.Sprintf("label %q clipped (%dpx content in %dpx)", r.Text, r.ScrollW, r.ClientW))
+		}
+		if r.Cells == 0 {
+			errs = append(errs, fmt.Sprintf("row %q has no minute cells", r.Text))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("d20: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+	}
+	fmt.Println("uicheck: d20: every harness heatmap label renders in full")
+	return nil
 }
