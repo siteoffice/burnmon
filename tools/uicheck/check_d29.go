@@ -126,6 +126,9 @@ type d29Page struct {
 	BodyOver     float64  `json:"bodyOver"`
 	AgentsSlot   bool     `json:"agentsSlot"`
 	StripClip    float64  `json:"stripClip"`
+	StripShrunk  bool     `json:"stripShrunk"`
+	StripRows    int      `json:"stripRows"`
+	StripWhole   int      `json:"stripWhole"`
 	GearOpen     bool     `json:"gearOpen"`
 	Ticks        []string `json:"ticks"`
 	Headings     []string `json:"headings"`
@@ -185,6 +188,9 @@ const d29ReadJS = `(function(){
     hostOver: host.scrollHeight - host.clientHeight, bodyOver: document.body.scrollHeight - document.body.clientHeight,
     agentsSlot: !!document.getElementById('secAgentsSlot'),
     stripClip: strip ? strip.scrollHeight - strip.clientHeight : 0,
+    stripShrunk: !!(window.__bdevFit && window.__bdevFit.items || []).filter(function(it){ return it.id === 'vendorStripPanel' && it.h < it.nat; }).length,
+    stripRows: strip ? strip.querySelectorAll('tbody tr').length : 0,
+    stripWhole: strip ? Array.prototype.filter.call(strip.querySelectorAll('tbody tr'), function(r){ return r.getBoundingClientRect().bottom <= strip.getBoundingClientRect().bottom + 1; }).length : 0,
     gearOpen: document.getElementById('secSettings').classList.contains('open'),
     ticks: ticks,
     headings: Array.prototype.map.call(document.querySelectorAll('#secSettingsCols h4'), function(h){ return h.textContent; }),
@@ -218,6 +224,29 @@ func d29Eval(js string) error {
 }
 
 func d29Fail(format string, args ...any) error { return fmt.Errorf("d29: "+format, args...) }
+
+// d29StripCheck: the vendor strip's last row must not be cut by its own
+// max-height cap (R8). Since B7 the fit pass may shrink it as a list toward its
+// floor, a table's header plus two rows, also with the scrollbar on (the
+// legacy block is one window tall); the rows below the cut then clip, as the
+// comment above #vendorStripPanel in page.html accepts. So a cut is only fine
+// when the fit pass shrank the strip, and even then two rows stay whole.
+func d29StripCheck(p d29Page) error {
+	if !p.StripShrunk {
+		if p.StripClip > 1 {
+			return d29Fail("standard: the vendor strip is clipped by %.0f px", p.StripClip)
+		}
+		return nil
+	}
+	want := 2
+	if p.StripRows < want {
+		want = p.StripRows
+	}
+	if p.StripWhole < want {
+		return d29Fail("standard: the fit pass shrank the vendor strip below its floor: %d of %d rows whole, want %d", p.StripWhole, p.StripRows, want)
+	}
+	return nil
+}
 
 func caseD29(hwnd uintptr, args []string) error {
 	snap, err := readFixture("snapshot_example.json")
@@ -261,8 +290,8 @@ func caseD29(hwnd uintptr, args []string) error {
 	if !p.AgentsSlot {
 		return d29Fail("agents map has no slot for R7")
 	}
-	if p.StripClip > 1 {
-		return d29Fail("standard: the vendor strip is clipped by %.0f px", p.StripClip)
+	if err := d29StripCheck(p); err != nil {
+		return err
 	}
 	if _, err := screenshot(hwnd, "d29-standard"); err != nil {
 		return err
