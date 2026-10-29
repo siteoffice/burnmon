@@ -16,7 +16,10 @@ import (
 // pointer is moved with synthetic mousemove events on the Station canvas (the
 // real cursor is left alone), first to find the agent, then a few px around
 // its centre. Each of P, O and I is checked on the site and space Station
-// themes. Screenshots: d28-<view>-<theme>.
+// themes. Before the O and I hovers the page is scrolled so the whole Station
+// is in view (scope 8 of the B7.2 spec): the app keeps the card inside the
+// part of the Station the window shows, and a Station cut off by the fold is
+// not what this case tests. Screenshots: d28-<view>-<theme>.
 const (
 	// d28MaxCardW matches the click card (d25MaxCardW is its looser bound):
 	// "about 320 px", measured as the card's own border box.
@@ -120,6 +123,65 @@ const d28HoverJS = `(function(x, y){
     scrollW: t.scrollWidth, clientW: t.clientWidth, clipped: clipped, iw: innerWidth, ih: innerHeight};
 })`
 
+// d28ScrollJS scrolls #pageScroll so the top of #stationPanel sits at its
+// top (spec 2026-10-28-burnmon-b7-2-uicheck-hygiene, scope 8, option b) and
+// answers the rects. With argument false it only reads, so the caller can
+// wait for the scroll to settle. The visible area is #pageScroll's box cut to
+// the window.
+const d28ScrollJS = `(function(move){
+  var ps = document.getElementById('pageScroll'), box = document.getElementById('stationPanel');
+  if(!ps || !box) return null;
+  if(move) ps.scrollTop += box.getBoundingClientRect().top - ps.getBoundingClientRect().top;
+  var b = box.getBoundingClientRect(), p = ps.getBoundingClientRect();
+  return {scrollTop: ps.scrollTop, top: b.top, bottom: b.bottom, visTop: Math.max(p.top, 0), visBottom: Math.min(p.bottom, innerHeight)};
+})`
+
+type d28Scroll struct {
+	ScrollTop float64 `json:"scrollTop"`
+	Top       float64 `json:"top"`
+	Bottom    float64 `json:"bottom"`
+	VisTop    float64 `json:"visTop"`
+	VisBottom float64 `json:"visBottom"`
+}
+
+// d28StationInView scrolls the Station fully into view, waits until two reads
+// 100 ms apart agree and answers "" when the whole Station is in the visible
+// area, else why not. The card is then judged against the Station, not
+// against however much of it the live page height above it left on screen.
+func d28StationInView() (string, error) {
+	var last *d28Scroll
+	if err := evalInto(d28ScrollJS+"(true)", &last); err != nil {
+		return "", err
+	}
+	if last == nil {
+		return "no #pageScroll or #stationPanel to scroll", nil
+	}
+	for i := 0; i < 20; i++ {
+		time.Sleep(100 * time.Millisecond)
+		var now *d28Scroll
+		if err := evalInto(d28ScrollJS+"(false)", &now); err != nil {
+			return "", err
+		}
+		if now == nil {
+			return "#stationPanel went away while scrolling", nil
+		}
+		settled := *now == *last
+		last = now
+		if settled {
+			break
+		}
+	}
+	r := *last
+	fmt.Printf("uicheck: d28: Station scrolled to scrollTop %.0f, Station %.0f..%.0f, visible %.0f..%.0f\n", r.ScrollTop, r.Top, r.Bottom, r.VisTop, r.VisBottom)
+	if h, vh := r.Bottom-r.Top, r.VisBottom-r.VisTop; h > vh+0.5 {
+		return fmt.Sprintf("the Station is %.0f px tall, taller than the %.0f px of #pageScroll in view, so it cannot be scrolled fully into view (not hovered)", h, vh), nil
+	}
+	if r.Top < r.VisTop-0.5 || r.Bottom > r.VisBottom+0.5 {
+		return fmt.Sprintf("the Station %.0f..%.0f is not fully in the visible %.0f..%.0f after scrolling (not hovered)", r.Top, r.Bottom, r.VisTop, r.VisBottom), nil
+	}
+	return "", nil
+}
+
 // d28Wiggle is the pointer path around the agent's centre, in CSS px.
 var d28Wiggle = [][2]float64{{0, 0}, {3, 0}, {6, 0}, {9, 0}, {12, 0}, {0, 3}, {-4, -4}, {-8, 2}, {2, 6}, {0, 0}}
 
@@ -172,7 +234,17 @@ func caseD28(hwnd uintptr, args []string) error {
 	var errs []string
 	// checkHover finds the long-project agent, wiggles the pointer over it
 	// and judges the cards read on the way.
-	checkHover := func(where string) error {
+	checkHover := func(where string, scroll bool) error {
+		if scroll {
+			why, err := d28StationInView()
+			if err != nil {
+				return fmt.Errorf("%s: scroll: %w", where, err)
+			}
+			if why != "" {
+				errs = append(errs, where+": "+why)
+				return nil
+			}
+		}
 		var spot *d28Spot
 		if err := evalInto(d28ScanJS, &spot); err != nil {
 			return fmt.Errorf("%s: scan: %w", where, err)
@@ -246,7 +318,8 @@ func caseD28(hwnd uintptr, args []string) error {
 				}
 				time.Sleep(600 * time.Millisecond)
 			}
-			if err := checkHover(v.name + " " + th); err != nil {
+			// O and I put the Station in the page; P is a full-window overlay.
+			if err := checkHover(v.name+" "+th, v.name != "P"); err != nil {
 				return err
 			}
 		}
