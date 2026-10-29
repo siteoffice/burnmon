@@ -13,6 +13,9 @@ func TestPageDrawsGoSnapshotLine(t *testing.T) {
 	for _, want := range []string{
 		"var secLine = { text:'Starting up: writing the first snapshot.', warn:false };",
 		"secLine = p.snapshot_line || null;",
+		// The first frame is drawn before any payload, so the static header
+		// already says what is happening.
+		`id="hdrSnapAge" title="Age of %USERPROFILE%\.burnmon\snapshot.json, written by BurnMon every 5 seconds">Starting up: writing the first snapshot.</div>`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page.html lacks %q", want)
