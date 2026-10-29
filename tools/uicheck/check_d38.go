@@ -105,14 +105,16 @@ func caseD38(hwnd uintptr, args []string) error {
 	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
 		return err
 	}
-	if _, err := evalRaw(`window.__d38calls = [];
+	// The dev eval server wraps a script as return (...), so a statement
+	// list goes in a function or it never parses and the call times out.
+	if _, err := evalRaw(`(function(){ window.__d38calls = [];
 			window.bdevAgentMap = function(r){ window.__d38calls.push(JSON.parse(JSON.stringify(r))); return Promise.resolve(` + wrap(example) + `); };
-			window.__bdevMap.open('live'); true`); err != nil {
+			window.__bdevMap.open('live'); return true; })()`); err != nil {
 		return err
 	}
 
 	// Zero subagents: five headers and the note in the empty columns.
-	if _, err := evalRaw(`window.__bdevMap.setPayload(` + wrap(folded) + `, 'live'); true`); err != nil {
+	if _, err := evalRaw(`(function(){ window.__bdevMap.setPayload(` + wrap(folded) + `, 'live'); return true; })()`); err != nil {
 		return err
 	}
 	p, err := read()
@@ -127,7 +129,7 @@ func caseD38(hwnd uintptr, args []string) error {
 	}
 
 	// Borders, line styles, fold click and the count.
-	if _, err := evalRaw(`window.__bdevMap.setPayload(` + wrap(example) + `, 'live'); true`); err != nil {
+	if _, err := evalRaw(`(function(){ window.__bdevMap.setPayload(` + wrap(example) + `, 'live'); return true; })()`); err != nil {
 		return err
 	}
 	if p, err = read(); err != nil {
@@ -148,7 +150,7 @@ func caseD38(hwnd uintptr, args []string) error {
 	if _, err := screenshot(hwnd, "d38-map"); err != nil {
 		return err
 	}
-	if _, err := evalRaw(`document.querySelector('.mapbox.folded').click(); true`); err != nil {
+	if _, err := evalRaw(`(function(){ document.querySelector('.mapbox.folded').click(); return true; })()`); err != nil {
 		return err
 	}
 	if p, err = read(); err != nil {
