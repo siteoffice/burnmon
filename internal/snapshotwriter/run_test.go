@@ -1,8 +1,11 @@
 package snapshotwriter_test
 
 import (
+	"bytes"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,4 +101,28 @@ func TestRunTakesOverWithinTwoTicks(t *testing.T) {
 		t.Fatalf("no snapshot within %v of the kill", 2*runTick+300*time.Millisecond)
 	}
 	t.Logf("take-over wrote the snapshot %d ms after the owner was killed", time.Since(killed).Milliseconds())
+}
+
+// The first lock attempt and write run before the first ticker wait: with a
+// one-hour tick the file still appears at once, and the first-write line is
+// logged once.
+func TestRunFirstWriteBeforeFirstTick(t *testing.T) {
+	w, path := runWriter(t)
+	w.Tick = time.Hour
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+	lockPath := filepath.Join(t.TempDir(), "snapshot.lock")
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() { w.Run(snapshotwriter.NewLock(lockPath), "test.exe", stop); close(done) }()
+	ok := waitFor(2*time.Second, func() bool { return exists(path) })
+	close(stop)
+	<-done
+	if !ok {
+		t.Fatal("snapshot file did not appear within 2s with a one-hour tick")
+	}
+	if n := strings.Count(buf.String(), "snapshot: first write "); n != 1 {
+		t.Errorf("first-write line logged %d times, want 1; log:\n%s", n, buf.String())
+	}
 }
