@@ -52,13 +52,18 @@ const d37ReadJS = `(function(){
   Array.prototype.forEach.call(document.querySelectorAll('[data-ctl-why]'), function(s){ gear[s.getAttribute('data-ctl-why')] = s.textContent; });
   var prev = document.querySelector('[data-sec=waits] .ctlprev');
   var go = document.querySelector('[data-sec=waits] .ctlgo');
-  var res = document.querySelector('[data-sec=waits] .ctlres');
+  var prevBy = {};
+  Array.prototype.forEach.call(document.querySelectorAll('[data-sec=waits] .ctlprev'), function(e){
+    var k = e.getAttribute('data-ctlid'); if(!(k in prevBy)) prevBy[k] = e.textContent; });
+  var results = {};
+  Array.prototype.forEach.call(document.querySelectorAll('[data-sec=waits] .ctlres'), function(e){
+    var k = e.getAttribute('data-ctlid'); if(!(k in results)) results[k] = e.textContent; });
   return { rows: rows, all: document.querySelectorAll('#secPanels .ctl').length,
     outcome: document.querySelectorAll('[data-sec=outcomes] .ctl').length, gear: gear,
     prevText: prev ? prev.textContent : '', cmd: prev ? prev.querySelector('.ctlcmd').textContent : '',
     cmdKids: prev ? prev.querySelector('.ctlcmd').children.length : 0,
     goCount: document.querySelectorAll('#secPanels .ctlgo').length, goDisabled: go ? go.disabled : false,
-    result: res ? res.textContent : '', imgs: document.querySelectorAll('#secPanels img').length,
+    prevBy: prevBy, results: results, imgs: document.querySelectorAll('#secPanels img').length,
     runs: window.__d37run.slice(), prevs: window.__d37prev.slice() };
 })()`
 
@@ -72,7 +77,8 @@ type d37Page struct {
 	CmdKids  int               `json:"cmdKids"`
 	GoCount  int               `json:"goCount"`
 	GoDis    bool              `json:"goDisabled"`
-	Result   string            `json:"result"`
+	PrevBy   map[string]string `json:"prevBy"`  // preview text per control|target
+	Results  map[string]string `json:"results"` // result text per control|target
 	Imgs     int               `json:"imgs"`
 	Runs     []string          `json:"runs"`
 	Prevs    []map[string]any  `json:"prevs"`
@@ -192,11 +198,13 @@ func caseD37(hwnd uintptr, args []string) error {
 	if len(p.Runs) != 1 || p.Runs[0] != "tok-ab12" {
 		return fail("double press sent runs %v, want exactly [tok-ab12]", p.Runs)
 	}
-	if p.Result != "stop: exit 0, stopped ab12" || p.GoCount != 0 {
-		return fail("result %q, confirm buttons %d", p.Result, p.GoCount)
+	if p.Results["stop|ab12"] != "stop: exit 0, stopped ab12" || p.GoCount != 0 {
+		return fail("result %q, confirm buttons %d", p.Results["stop|ab12"], p.GoCount)
 	}
 
-	// A preview left for 5 s expires and loses Confirm.
+	// A preview left for 5 s expires and loses Confirm. Results are read per
+	// control and target: the stop result above stays 10 s (page.html
+	// CTL_RESULT_MS) and renders before attach's in the same row.
 	if err := click(chip("attach", "ab12")); err != nil {
 		return err
 	}
@@ -204,8 +212,8 @@ func caseD37(hwnd uintptr, args []string) error {
 	if p, err = read(); err != nil {
 		return err
 	}
-	if p.GoCount != 0 || !strings.Contains(p.Result, "expired") {
-		return fail("after 5 s: %d confirm buttons, result %q", p.GoCount, p.Result)
+	if p.GoCount != 0 || !strings.Contains(p.Results["attach|ab12"], "expired") {
+		return fail("after 5 s: %d confirm buttons, results %q", p.GoCount, p.Results)
 	}
 
 	// Two previews survive a re-apply; each Confirm sends its own token.
@@ -222,7 +230,8 @@ func caseD37(hwnd uintptr, args []string) error {
 	if p.GoCount != 2 {
 		return fail("%d confirm buttons after a poll, want 2", p.GoCount)
 	}
-	if _, err := evalRaw(`window.__d37run.length = 0; document.querySelector('.ctlgo[data-ctlgo=approve]').click()`); err != nil {
+	// One expression: the eval server wraps the script as return (...).
+	if _, err := evalRaw(`(function(){ window.__d37run.length = 0; document.querySelector('.ctlgo[data-ctlgo=approve]').click(); return true; })()`); err != nil {
 		return err
 	}
 	time.Sleep(150 * time.Millisecond)
@@ -233,18 +242,20 @@ func caseD37(hwnd uintptr, args []string) error {
 		return fail("approve sent runs %v", p.Runs)
 	}
 
-	// A refusal is shown as text.
+	// A refusal is shown as text. Confirm is ignored within 400 ms of the last
+	// run (page.html ctlConfirm, CTL_GAP), so wait past the approve run first.
 	if _, err := evalRaw(`window.__d37fail = 'the session changed since the preview, press again'`); err != nil {
 		return err
 	}
+	time.Sleep(450 * time.Millisecond)
 	if err := click(`document.querySelector('.ctlgo[data-ctlgo=stop]').click()`); err != nil {
 		return err
 	}
 	if p, err = read(); err != nil {
 		return err
 	}
-	if !strings.Contains(p.Result, "refused: the session changed since the preview") {
-		return fail("refusal shown as %q", p.Result)
+	if !strings.Contains(p.Results["stop|ab12"], "refused: the session changed since the preview") {
+		return fail("refusal shown as %q", p.Results["stop|ab12"])
 	}
 	if _, err := evalRaw(`window.__d37fail = null`); err != nil {
 		return err
@@ -268,7 +279,8 @@ func caseD37(hwnd uintptr, args []string) error {
 		return fail("plain preview text %q", p.PrevText)
 	}
 
-	// Hostile label: literal text, no element.
+	// Hostile label: literal text, no element. Read by key: the Plain stop
+	// preview above is still open and renders first in the row.
 	if _, err := evalRaw(`window.__d37label = 'a<b "c" & d \\ <img src=x>'`); err != nil {
 		return err
 	}
@@ -281,8 +293,8 @@ func caseD37(hwnd uintptr, args []string) error {
 	if p, err = read(); err != nil {
 		return err
 	}
-	if !strings.Contains(p.PrevText, `a<b "c" & d \ <img src=x>`) || p.Imgs != 0 {
-		return fail("hostile label shown as %q with %d images", p.PrevText, p.Imgs)
+	if !strings.Contains(p.PrevBy["attach|ab12"], `a<b "c" & d \ <img src=x>`) || p.Imgs != 0 {
+		return fail("hostile label shown as %q with %d images", p.PrevBy["attach|ab12"], p.Imgs)
 	}
 	return nil
 }
