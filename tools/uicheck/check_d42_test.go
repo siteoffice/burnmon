@@ -369,3 +369,96 @@ func TestD42CheckReset(t *testing.T) {
 		d42WantFail(t, d42CheckResetCleared(nil, false, d42Map("burn_30min", 0.4)), "the page state still holds", nil)
 	})
 }
+
+// d42PartnerBase is step 8 before the drag: the activity_heatmap /
+// turn_ticker handle drawn, activity_heatmap 50 px above its floor of 120.
+func d42PartnerBase() d42Read {
+	r := d42Clone(d42Base())
+	r.H["activity_heatmap"] = 170
+	r.Handles = []d42Handle{{Above: "activity_heatmap", Below: "turn_ticker", Min: -80, Max: 30}}
+	r.Items = []d42Item{{ID: "activityHeatmapRow", Kind: "fixed", H: 170, Floor: 120, Nat: 120}}
+	return r
+}
+
+func TestD42PartnerShares(t *testing.T) {
+	s := d42PartnerShares(d42Base())
+	// burn column: 200 + 100 + 150 = 450 beside the partner.
+	want := d42Map("activity_heatmap", 0.5, "host_lists", 1.0, "burn_30min", 0.2222, "vendor_strip", 0.1111, "turn_ticker", 0.1667)
+	if len(s) != len(want) {
+		t.Fatalf("shares %v, want %v", s, want)
+	}
+	for k, v := range want {
+		if s[k] != v {
+			t.Fatalf("shares %v, want %v", s, want)
+		}
+	}
+}
+
+func TestD42CheckPartnerRoom(t *testing.T) {
+	hdl, dy, err := d42CheckPartnerRoom(d42PartnerBase())
+	if err != nil {
+		t.Fatalf("pass measure failed: %v", err)
+	}
+	if hdl.Above != "activity_heatmap" || hdl.Below != "turn_ticker" || dy != -40 {
+		t.Fatalf("handle %+v, dy %v, want activity_heatmap / turn_ticker and -40", hdl, dy)
+	}
+	small := d42PartnerBase()
+	small.H["activity_heatmap"] = 135.5
+	if _, dy, err := d42CheckPartnerRoom(small); err != nil || dy != -13 {
+		t.Fatalf("15.5 px of room: dy %v, err %v, want -13 and a pass", dy, err)
+	}
+	cases := []struct {
+		name, want string
+		mut        func(r *d42Read)
+	}{
+		{"P1_handle_missing", "handle is not drawn with the saved shares", func(r *d42Read) { r.Handles = nil }},
+		{"P1_handle_hidden", "handle is not drawn with the saved shares", func(r *d42Read) { r.Handles[0].Hidden = true }},
+		{"P2_no_item", "the fit pass has no item activityHeatmapRow", func(r *d42Read) { r.Items = nil }},
+		{"P3_no_room", "left activity_heatmap 7.0 px above its floor of 120 px", func(r *d42Read) { r.H["activity_heatmap"] = 127 }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := d42PartnerBase()
+			c.mut(&r)
+			_, _, err := d42CheckPartnerRoom(r)
+			d42WantFail(t, err, c.want, nil)
+		})
+	}
+}
+
+// d42PartnerDragPass is a -20 px drag on activity_heatmap / turn_ticker:
+// turn_ticker +20, activity_heatmap -20, the lists and the other column still.
+func d42PartnerDragPass() d42DragMeasure {
+	before := d42PartnerBase()
+	after := d42Clone(before)
+	after.H["turn_ticker"], after.H["activity_heatmap"] = 170, 150
+	return d42DragMeasure{Hdl: before.Handles[0], Dy: -20, Before: before, After: after}
+}
+
+func TestD42CheckPartnerDrag(t *testing.T) {
+	if err := d42CheckPartnerDrag(d42PartnerDragPass()); err != nil {
+		t.Fatalf("pass measure failed: %v", err)
+	}
+	if err := d42CheckDrag(d42PartnerDragPass()); err != nil {
+		t.Fatalf("pass measure fails step 3's checks: %v", err)
+	}
+	all := []string{"activity_heatmap gave", "the lists changed by"}
+	cases := []struct {
+		name, want string
+		mut        func(a *d42Read)
+	}{
+		{"E1_partner_gave_less", "activity_heatmap gave 12.0 px, want 20 (the whole drag)", func(a *d42Read) {
+			a.H["activity_heatmap"] = 158
+			a.Lists["waits"] = 99
+		}},
+		{"E2_lists_moved", "the lists changed by -2.0 px, want under 2", func(a *d42Read) { a.Lists["waits"] = 98 }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := d42PartnerDragPass()
+			m.After = d42Clone(m.After)
+			c.mut(&m.After)
+			d42WantFail(t, d42CheckPartnerDrag(m), c.want, all)
+		})
+	}
+}

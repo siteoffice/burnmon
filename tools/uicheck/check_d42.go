@@ -49,6 +49,11 @@ import (
 //      1920x1080 the heights equal the reloaded layout (R2) within 2 px (R4)
 //   7  real clicks on the gear and on Reset heights: the heights equal the default
 //      layout of the reloaded page (R2a) within 2 px (R5), the file has no heights_standard and the page state is null
+//   8  save shares that put activity_heatmap well above its floor (and
+//      host_lists 1) through bdevSetSections (the binding a drag saves with),
+//      apply them, drag the
+//      activity_heatmap / turn_ticker handle up: the partner shrinks by the
+//      drag within 2 px and the lists move under 2 px, then step 3's checks
 // The heights are written into the run's own view file (scripts\uicheck-dev.ps1
 // makes a temp settings folder); applyStart starts each case with none saved.
 // Screenshot d42-drag-<size> after step 3.
@@ -575,6 +580,122 @@ func d42CheckResetCleared(file map[string]float64, plain bool, state map[string]
 	return nil
 }
 
+// Step 8 (the partner leg): at the default layout the partner of the step 3
+// handle sits at its floor, so step 3 passes with every px taken from the host
+// lists. Step 8 saves shares that put activity_heatmap well above its floor and
+// drags the activity_heatmap / turn_ticker handle up (turn_ticker grows): the
+// partner must give the whole drag and the lists nothing.
+const (
+	d42PartnerAbove = "activity_heatmap"
+	d42PartnerBelow = "turn_ticker"
+	d42PartnerItem  = "activityHeatmapRow"
+)
+
+// d42PartnerShares is the heights_standard map step 8 saves: the partner takes
+// half of the burn column, the other keyed parts share the rest in proportion
+// to their heights in r, rounded to 4 places as the page rounds a drag. The
+// live sampler parts can leave every keyed part of the column at its floor with
+// the spare room in the host lists, so host_lists 1 lets the lists give that
+// room to the columns first; without it the shares have nothing to move.
+func d42PartnerShares(r d42Read) map[string]float64 {
+	other := 0.0
+	for _, k := range d42Keys {
+		if d42Column[k] == d42Column[d42PartnerAbove] && k != d42PartnerAbove && r.H[k] > 0 {
+			other += r.H[k]
+		}
+	}
+	out := map[string]float64{d42PartnerAbove: 0.5, "host_lists": 1}
+	for _, k := range d42Keys {
+		if d42Column[k] == d42Column[d42PartnerAbove] && k != d42PartnerAbove && r.H[k] > 0 && other > 0 {
+			out[k] = math.Round(0.5*r.H[k]/other*10000) / 10000
+		}
+	}
+	return out
+}
+
+// d42CheckSharesSaved is step 8: bdevSetSections answered "ok" (res) and the
+// view file holds every share that was sent.
+func d42CheckSharesSaved(res string, sent, file map[string]float64) error {
+	if res != "ok" {
+		return d42Fail("partner leg: bdevSetSections did not save the shares within 10 s (%q)", res)
+	}
+	for k, v := range sent {
+		if f, ok := file[k]; !ok || math.Abs(f-v) > 1e-9 {
+			return d42Fail("partner leg: the view file holds %v, sent %v", file, sent)
+		}
+	}
+	return nil
+}
+
+// d42CheckPartnerRoom is step 8 before the drag: the handle is drawn and the
+// partner has room above its floor. dy is negative (a drag up), at most 40 px
+// and 2 px short of the room, so the partner can give all of it.
+func d42CheckPartnerRoom(r d42Read) (d42Handle, float64, error) {
+	var hdl d42Handle
+	found := false
+	for _, h := range r.Handles {
+		if h.Above == d42PartnerAbove && h.Below == d42PartnerBelow && !h.Hidden {
+			hdl, found = h, true
+		}
+	}
+	if !found {
+		return hdl, 0, d42Fail("partner leg: the %s / %s handle is not drawn with the saved shares (%v)", d42PartnerAbove, d42PartnerBelow, r.Handles)
+	}
+	floor := -1.0
+	for _, it := range r.Items {
+		if it.ID == d42PartnerItem {
+			floor = it.Floor
+		}
+	}
+	if floor < 0 {
+		return hdl, 0, d42Fail("partner leg: the fit pass has no item %s", d42PartnerItem)
+	}
+	room := r.H[d42PartnerAbove] - floor
+	if room < 8 {
+		return hdl, 0, d42Fail("partner leg: the saved shares left %s %.1f px above its floor of %.0f px, want 8 or more (%s)", d42PartnerAbove, room, floor, d42Heights(r))
+	}
+	return hdl, -math.Min(40, math.Floor(room-2)), nil
+}
+
+// d42CheckPartnerDrag is step 8 after the drag: the partner shrank by the drag
+// within 2 px (the tolerance step 3 uses) and the lists moved under 2 px.
+func d42CheckPartnerDrag(m d42DragMeasure) error {
+	d := m.deltas()
+	g := math.Abs(m.Dy)
+	var bad []string
+	if math.Abs(-d.DPart-g) > 2 {
+		bad = append(bad, fmt.Sprintf("%s gave %.1f px, want %.0f (the whole drag)", d.Part, -d.DPart, g))
+	}
+	if math.Abs(d.DLists) >= 2 {
+		bad = append(bad, fmt.Sprintf("the lists changed by %.1f px, want under 2 (the partner had room)", d.DLists))
+	}
+	if len(bad) > 0 {
+		return d42Fail("partner drag: %s", strings.Join(bad, "; "))
+	}
+	return nil
+}
+
+// d42ViaBinding asks the real binding bdevSections for heights_standard.
+func d42ViaBinding() (map[string]float64, error) {
+	if _, err := evalRaw(`(window.__d42 = null, window.bdevSections().then(function(p){ window.__d42 = p; }), true)`); err != nil {
+		return nil, err
+	}
+	for i := 0; i < 15; i++ {
+		var got struct {
+			Done bool               `json:"done"`
+			H    map[string]float64 `json:"h"`
+		}
+		if err := evalInto(`(function(){ var p = window.__d42; return {done: !!p, h: p ? (p.heights_standard || null) : null}; })()`, &got); err != nil {
+			return nil, err
+		}
+		if got.Done {
+			return got.H, nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return nil, nil
+}
+
 func caseD42(hwnd uintptr, args []string) error {
 	snap, err := d42Snapshot()
 	if err != nil {
@@ -645,23 +766,9 @@ func caseD42(hwnd uintptr, args []string) error {
 	if err := d42CheckSaved(d42SavedMeasure{File: file, Plain: plain, Hdl: hdl, DLists: dd.DLists}); err != nil {
 		return err
 	}
-	if _, err := evalRaw(`(window.__d42 = null, window.bdevSections().then(function(p){ window.__d42 = p; }), true)`); err != nil {
+	viaGo, err := d42ViaBinding()
+	if err != nil {
 		return err
-	}
-	var viaGo map[string]float64
-	for i := 0; i < 15; i++ {
-		var got struct {
-			Done bool               `json:"done"`
-			H    map[string]float64 `json:"h"`
-		}
-		if err := evalInto(`(function(){ var p = window.__d42; return {done: !!p, h: p ? (p.heights_standard || null) : null}; })()`, &got); err != nil {
-			return err
-		}
-		if got.Done {
-			viaGo = got.H
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
 	}
 	if err := d42CheckBinding(viaGo, file); err != nil {
 		return err
@@ -806,6 +913,72 @@ func caseD42(hwnd uintptr, args []string) error {
 		return err
 	}
 	fmt.Printf("uicheck: d42: PASS reset (%s, file and page state clear)\n", d42Heights(r5))
+	// 8. the partner leg: shares saved through the binding the page saves a drag with
+	shares := d42PartnerShares(r5)
+	change, err := json.Marshal(map[string]any{"heights_mode": "standard", "heights": shares})
+	if err != nil {
+		return err
+	}
+	if _, err := evalRaw(`(window.__d42Set = '', window.bdevSetSections(` + string(change) + `).then(function(){ window.__d42Set = 'ok'; }, function(e){ window.__d42Set = 'error ' + e; }), true)`); err != nil {
+		return err
+	}
+	setRes := ""
+	for i := 0; i < 50 && setRes == ""; i++ {
+		time.Sleep(200 * time.Millisecond)
+		if setRes, err = evalString(`window.__d42Set || ''`); err != nil {
+			return err
+		}
+	}
+	file8, _, err := d42FileHeights(func(s map[string]float64, _ bool) bool { return s != nil })
+	if err != nil {
+		return err
+	}
+	if err := d42CheckSharesSaved(setRes, shares, file8); err != nil {
+		return err
+	}
+	via8, err := d42ViaBinding()
+	if err != nil {
+		return err
+	}
+	if err := d42CheckBinding(via8, file8); err != nil {
+		return err
+	}
+	withShares, err := d41Payload(base, map[string]any{"heights_standard": via8})
+	if err != nil {
+		return err
+	}
+	if _, err := d34Apply(withShares, snap); err != nil {
+		return err
+	}
+	r6, err := d42Read1()
+	if err != nil {
+		return err
+	}
+	hdl8, dy8, err := d42CheckPartnerRoom(r6)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("uicheck: d42: partner leg: saved %v; dragging %s / %s by %+.0f px; before: %s\n", via8, hdl8.Above, hdl8.Below, dy8, d42Heights(r6))
+	bringToFront(hwnd)
+	time.Sleep(200 * time.Millisecond)
+	sel8 := fmt.Sprintf(`.zonebody > .hdl[data-above="%s"][data-below="%s"]`, hdl8.Above, hdl8.Below)
+	if err := dragSelector(hwnd, sel8, dy8); err != nil {
+		return err
+	}
+	time.Sleep(800 * time.Millisecond)
+	r7, err := d42Read1()
+	if err != nil {
+		return err
+	}
+	drag8 := d42DragMeasure{Hdl: hdl8, Dy: dy8, Before: r6, After: r7}
+	if err := d42CheckPartnerDrag(drag8); err != nil {
+		return err
+	}
+	if err := d42CheckDrag(drag8); err != nil {
+		return err
+	}
+	d8 := drag8.deltas()
+	fmt.Printf("uicheck: d42: PASS partner drag (%s +%.1f, %s %.1f, lists %.1f, other column %+.1f px)\n", d8.Grow, d8.DGrow, d8.Part, d8.DPart, d8.DLists, d8.OtherCol)
 	return nil
 }
 
