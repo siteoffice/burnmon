@@ -356,7 +356,7 @@ responsive down to a single compact column.
   stay the same families, darkened only where they would be too faint on white.
 - **M** opens the Agents map and **M** again closes it. It opens on its LIVE tab when the
   snapshot is current and on Last 24 hours otherwise; Last 7 days is a third tab. A box
-  opens the session it stands for; the live map reads through `bdevAgentMap`.
+  opens the session it stands for; the live map reads through `bdevAgentMapStart`, which builds off the UI thread.
 - **One tick**: every panel repaints from one snapshot a second. The System chart and
   process-group history arrive as deltas (only samples the page does not hold yet), so
   the payload stays the same size however long the window runs. A late snapshot skips

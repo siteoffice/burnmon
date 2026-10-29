@@ -417,17 +417,28 @@ func main() {
 	// bdevAgentMap (R7): the full agent map as boxes and lines, live from the
 	// snapshot file or for the last N hours from the store. The small overview
 	// rides in bdevSections. Read-only, no port.
-	if err := w.Bind("bdevAgentMap", func(req agentMapRequest) (agentMapPayload, error) {
+	// go-webview2 runs a binding on the UI thread, and the history build
+	// takes seconds (more on a busy machine), so the window froze for all of
+	// it. bdevAgentMapStart returns at once and builds on a goroutine; the
+	// page's bdevAgentMap wraps it in a promise keyed by call (page.html).
+	if err := w.Bind("bdevAgentMapStart", func(key string, req agentMapRequest) {
 		a.mu.Lock()
 		root := a.cfg.ForemanRoot
 		a.mu.Unlock()
-		p, err := agentMapFor(agentMapEnv{DataDir: setDir, SnapPath: snapPath, St: st, ForemanRoot: root, Writer: a.snapStatus.View}, req, time.Now())
-		if err != nil {
-			log.Println("bdevAgentMap:", err)
-		}
-		return p, err
+		go func() {
+			p, err := agentMapFor(agentMapEnv{DataDir: setDir, SnapPath: snapPath, St: st, ForemanRoot: root, Writer: a.snapStatus.View}, req, time.Now())
+			if err != nil {
+				log.Println("bdevAgentMap:", err)
+			}
+			js, err := agentMapResolveJS(key, p, err)
+			if err != nil {
+				log.Println("bdevAgentMap: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
 	}); err != nil {
-		log.Println("could not bind bdevAgentMap:", err)
+		log.Println("could not bind bdevAgentMapStart:", err)
 	}
 
 	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon
@@ -944,6 +955,22 @@ func bdevAsyncResolveJS(resolverName string, data any) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("window.%s && window.%s(%s)", resolverName, resolverName, dataJSON), nil
+}
+
+// agentMapReply is one bdevAgentMapStart answer: the payload, or the error
+// text when the build failed (the page rejects the promise on it).
+type agentMapReply struct {
+	agentMapPayload
+	Error string `json:"error,omitempty"`
+}
+
+// agentMapResolveJS is the script that hands one map answer to the page.
+func agentMapResolveJS(key string, p agentMapPayload, buildErr error) (string, error) {
+	r := agentMapReply{agentMapPayload: p}
+	if buildErr != nil {
+		r.Error = buildErr.Error()
+	}
+	return bdevAsyncResolveJSWithKey("__bdevAgentMapResolve", key, r)
 }
 
 // bdevAsyncResolveJSWithKey mirrors cmd\burnmon\main.go's own asyncResolveJS:
