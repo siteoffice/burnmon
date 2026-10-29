@@ -462,3 +462,26 @@ func TestD42CheckPartnerDrag(t *testing.T) {
 		})
 	}
 }
+
+func TestD42CheckSharesSaved(t *testing.T) {
+	sent := d42Map("activity_heatmap", 0.5, "host_lists", 1.0, "turn_ticker", 0.2)
+	if err := d42CheckSharesSaved("ok", sent, d42Copy(sent)); err != nil {
+		t.Fatalf("pass measure failed: %v", err)
+	}
+	t.Run("W1_not_answered", func(t *testing.T) {
+		d42WantFail(t, d42CheckSharesSaved("", sent, d42Copy(sent)), "bdevSetSections did not save the shares within 10 s", nil)
+	})
+	t.Run("W1_binding_error", func(t *testing.T) {
+		d42WantFail(t, d42CheckSharesSaved("error boom", sent, d42Copy(sent)), `did not save the shares within 10 s ("error boom")`, nil)
+	})
+	t.Run("W2_file_missing_key", func(t *testing.T) {
+		f := d42Copy(sent)
+		delete(f, "host_lists")
+		d42WantFail(t, d42CheckSharesSaved("ok", sent, f), "partner leg: the view file holds", nil)
+	})
+	t.Run("W2_file_value_differs", func(t *testing.T) {
+		f := d42Copy(sent)
+		f["activity_heatmap"] = 0.4
+		d42WantFail(t, d42CheckSharesSaved("ok", sent, f), "partner leg: the view file holds", nil)
+	})
+}
