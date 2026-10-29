@@ -18,6 +18,13 @@ import (
 // and WS2 alpha.3 item 1 respectively made them the two deliberate
 // exceptions to "no scrollbars", rows get a fixed height and the box
 // scrolls instead of cropping.
+// The #secHost lists (.seclist) are the third exception on the vertical
+// axis: B7.1 item 1 gives them "their own thin scrollbar below" the
+// three-row floor (page.html secList comment, since 86a249d).
+// Only overflow auto or scroll can show a scrollbar on an element; overflow
+// visible spills into an ancestor, which the sweep checks on its own. html
+// and body are the exception: their visible overflow becomes the window's
+// scrollbar.
 func caseD9(hwnd uintptr, args []string) error {
 	sizes := [][2]int32{{1024, 768}, {1280, 860}, {1152, 2048}, {1920, 1080}, {2560, 1440}}
 	for _, size := range sizes {
@@ -39,8 +46,10 @@ func caseD9(hwnd uintptr, args []string) error {
     if (el.id === 'pageScroll') continue;
     var cs = getComputedStyle(el);
     if (cs.display === 'none') continue;
-    var vOver = el.scrollHeight > el.clientHeight + 1 && cs.overflowY !== 'hidden';
-    var hOver = el.scrollWidth > el.clientWidth + 1 && cs.overflowX !== 'hidden';
+    var root = el === document.documentElement || el === document.body;
+    var canBar = function(o){ return o === 'auto' || o === 'scroll' || (root && o !== 'hidden' && o !== 'clip'); };
+    var vOver = el.scrollHeight > el.clientHeight + 1 && canBar(cs.overflowY) && !el.classList.contains('seclist');
+    var hOver = el.scrollWidth > el.clientWidth + 1 && canBar(cs.overflowX);
     if (vOver || hOver) {
       var label = el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' && el.className ? '.' + el.className.split(' ').join('.') : '');
       bad.push(label + ' (scrollH=' + el.scrollHeight + ' clientH=' + el.clientHeight + ' scrollW=' + el.scrollWidth + ' clientW=' + el.clientWidth + ' overflowY=' + cs.overflowY + ' overflowX=' + cs.overflowX + ')');
