@@ -24,9 +24,6 @@ import (
 // panel (#advisorFindings) populated; that panel and its bdevAdvisorNow
 // binding were deleted by this same patch's section 8.
 func caseD0(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-		return err
-	}
 	time.Sleep(500 * time.Millisecond)
 
 	if exists, err := evalBool(`!!document.getElementById('advisorFindings')`); err != nil {
@@ -96,9 +93,6 @@ func caseD0(hwnd uintptr, args []string) error {
 // disk with a positive size (the binding's own dataDir\exports\ folder,
 // design doc's bdevExport).
 func caseD1(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-		return err
-	}
 
 	if _, err := evalRaw(`document.getElementById('exportBtn').click()`); err != nil {
 		return fmt.Errorf("click export button: %w", err)

@@ -200,9 +200,6 @@ func caseD30(hwnd uintptr, args []string) error {
 	if err := json.Unmarshal(snap, &wc); err != nil {
 		return err
 	}
-	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-		return err
-	}
 	time.Sleep(500 * time.Millisecond)
 
 	// The section payload is d29's, with the overview's data added as the Go side adds it.
@@ -640,9 +637,6 @@ func caseD31(hwnd uintptr, args []string) error {
 		}
 		source = "history"
 	}
-	if err := ensureWindowSizeWH(hwnd, 1280, 900); err != nil {
-		return err
-	}
 	time.Sleep(500 * time.Millisecond)
 	if err := d30Eval(`window.__bdevMap.open('live')`); err != nil {
 		return err
@@ -964,9 +958,6 @@ func caseD38(hwnd uintptr, args []string) error {
 		err := evalInto(d38ReadJS, &p)
 		return p, err
 	}
-	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-		return err
-	}
 	// The dev eval server wraps a script as return (...), so a statement
 	// list goes in a function or it never parses and the call times out.
 	if _, err := evalRaw(`(function(){ window.__d38calls = [];
@@ -1283,9 +1274,6 @@ func caseD40(hwnd uintptr, args []string) error {
 			continue
 		}
 		fmt.Printf("uicheck: d40: PASS %s (14 idle rows in order, panel %s overlaps no box, %d boxes visible, Esc twice, box click)\n", tag, rect, boxes)
-	}
-	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-		return err
 	}
 	if len(fails) > 0 {
 		return fail("%d check(s) failed, first: %s", len(fails), fails[0])

@@ -388,11 +388,8 @@ func d29StripCheck(p d29Page) error {
 }
 
 func caseD29(hwnd uintptr, args []string) error {
-	snap, err := readFixture("snapshot_example.json")
+	snap, err := readSnapshotExample()
 	if err != nil {
-		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
-	}
-	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
 		return err
 	}
 	time.Sleep(500 * time.Millisecond)
@@ -839,9 +836,9 @@ func d33Apply(payload string) (d33Page, error) {
 }
 
 func caseD33(hwnd uintptr, args []string) error {
-	snap, err := readFixture("snapshot_example.json")
+	snap, err := readSnapshotExample()
 	if err != nil {
-		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
+		return err
 	}
 	std := func(off ...string) string {
 		m := map[string]bool{}
@@ -1321,9 +1318,9 @@ func d34Probe() error {
 // With extended true it also grows the lists to 12 wait items, 8 outcome items
 // and 8 sessions (clones of the first entry, invented names only).
 func d34Snapshot(extended bool) ([]byte, error) {
-	snap, err := readFixture("snapshot_example.json")
+	snap, err := readSnapshotExample()
 	if err != nil {
-		return nil, fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
+		return nil, err
 	}
 	var snapMap map[string]any
 	if err := json.Unmarshal(snap, &snapMap); err != nil {
@@ -1457,9 +1454,6 @@ func caseD34(hwnd uintptr, args []string) error {
 				}
 			}
 		}
-	}
-	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-		return err
 	}
 	fmt.Printf("uicheck: d34: %d cases ran, %d sizes skipped, %d failed\n", ran, skipped, len(fails))
 	if len(fails) > 0 {

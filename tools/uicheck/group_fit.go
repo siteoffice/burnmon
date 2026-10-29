@@ -18,8 +18,9 @@ func caseD2(hwnd uintptr, args []string) error {
 	return checkViewportFits(hwnd, "d2", 1152, 2048)
 }
 
-// checkViewportFits sets the window to width x height (outer, physical
-// window pixels, what ensureWindowSizeWH/SetWindowPos take) and then reads
+// checkViewportFits takes the window at width x height, the size applyStart
+// gave it from devCaseStart (outer, physical window pixels, what
+// ensureWindowSizeWH/SetWindowPos take), and then reads
 // back the page's own CSS-pixel window.innerWidth/innerHeight, which is
 // smaller than width/height by the title bar, borders and any DPI scaling,
 // and can be smaller still if the OS clamps the window to fit the current
@@ -31,9 +32,6 @@ func caseD2(hwnd uintptr, args []string) error {
 // than silently reporting "fits" against whatever smaller size the OS
 // actually granted (found by review, 2026-09-24).
 func checkViewportFits(hwnd uintptr, name string, width, height int32) error {
-	if err := ensureWindowSizeWH(hwnd, width, height); err != nil {
-		return err
-	}
 	time.Sleep(500 * time.Millisecond) // let layout/reflow settle after the resize
 
 	var dims struct {
@@ -85,9 +83,6 @@ func checkViewportFits(hwnd uintptr, name string, width, height int32) error {
 // per house culture: flag it, don't silently assert it away, and don't
 // block the phase's own checks on an unrelated known issue either.
 func caseD3(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1024, 1152); err != nil {
-		return err
-	}
 	time.Sleep(500 * time.Millisecond)
 
 	var dims struct {

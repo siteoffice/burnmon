@@ -82,11 +82,34 @@ func (s startState) clone() startState {
 }
 
 // devCaseStart holds the cases that need something other than their group's
-// default; each edits its own copy. d24 sets its size here rather than
-// resizing itself, so the focus applyStart gives is at the size its key
-// presses run at.
+// default; each edits its own copy. The window size a case reads at is set
+// here, not in the case: applyStart sizes the window once, before the focus
+// click, so focus is given at the size the case's key presses run at, and
+// windowCapped already says whether the screen could hold it. A case that
+// measures over several sizes still resizes itself (the size is what it
+// tests). The cited line is the in-case resize this replaced.
 var devCaseStart = map[string]func(*startState){
-	"d24": func(s *startState) { s.Width, s.Height = 1600, 900 },
+	// fit: each case is one viewport (check_d3.go:20, check_d4.go:6, check_d5.go:7, check_d6.go:8, check_d8.go:8).
+	"d3": startSize(1024, 1152),
+	"d4": startSize(1280, 860),
+	"d5": startSize(1920, 1080),
+	"d6": startSize(2560, 1440),
+	"d8": startSize(1024, 768),
+	// charts: wide enough for the heatmap and the one-row System boxes (check_d14.go:16, check_d20.go:20, check_d22.go:22).
+	"d14": startSize(1920, 1080),
+	"d20": startSize(1920, 1080),
+	"d22": startSize(1920, 1080),
+	"d24": startSize(1600, 900),
+	// layout: d42's drag size, d42DragW x d42DragH.
+	"d42": startSize(d42DragW, d42DragH),
+	// map (check_d31.go:73, check_d38.go:105).
+	"d31": startSize(1280, 900),
+	"d38": startSize(1920, 1080),
+}
+
+// startSize is a devCaseStart entry that only sets the window size.
+func startSize(w, h int32) func(*startState) {
+	return func(s *startState) { s.Width, s.Height = w, h }
 }
 
 // caseStart is g's default with c's override applied.

@@ -157,9 +157,6 @@ func d23Wait(ok func(d23State) bool) (d23State, bool, error) {
 }
 
 func caseD23(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-		return err
-	}
 	time.Sleep(300 * time.Millisecond)
 	if _, err := evalRaw(d23FakeJS); err != nil {
 		return fmt.Errorf("d23: fake paint: %w", err)
@@ -429,9 +426,6 @@ func d25Problems(c d25Card, ax, ay float64) []string {
 }
 
 func caseD25(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-		return err
-	}
 	time.Sleep(300 * time.Millisecond)
 	if _, err := evalRaw(d23FakeJS); err != nil {
 		return fmt.Errorf("d25: fake paint: %w", err)
@@ -643,9 +637,6 @@ func caseD26(hwnd uintptr, args []string) error {
 	tag := os.Getenv("UICHECK_TAG")
 	if tag == "" {
 		tag = "run"
-	}
-	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-		return err
 	}
 	time.Sleep(300 * time.Millisecond)
 	if _, err := evalRaw(d23FakeJS); err != nil {
@@ -878,9 +869,6 @@ func caseD27(hwnd uintptr, args []string) error {
 	tag := os.Getenv("UICHECK_TAG")
 	if tag == "" {
 		tag = "run"
-	}
-	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-		return err
 	}
 	time.Sleep(300 * time.Millisecond)
 	if _, err := evalRaw(d23FakeJS); err != nil {
@@ -1246,9 +1234,6 @@ func d28Problems(tips []d28Tip) []string {
 }
 
 func caseD28(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1600, 900); err != nil {
-		return err
-	}
 	time.Sleep(300 * time.Millisecond)
 	if _, err := evalRaw(d28FakeJS); err != nil {
 		return fmt.Errorf("d28: fake paint: %w", err)
@@ -1580,9 +1565,6 @@ func caseD41(hwnd uintptr, args []string) error {
 				fails = append(fails, msg)
 			}
 		}
-	}
-	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-		return err
 	}
 	if len(fails) > 0 {
 		return fmt.Errorf("d41: %d case(s) failed, first: %s", len(fails), fails[0])

@@ -698,6 +698,10 @@ func d42ViaBinding() (map[string]float64, error) {
 	return nil, nil
 }
 
+// d42DragW and d42DragH are the size d42 drags at; devCaseStart starts d42
+// there, so applyStart's windowCapped is the one the check below reads.
+const d42DragW, d42DragH = 1920, 1080
+
 func caseD42(hwnd uintptr, args []string) error {
 	snap, err := d42Snapshot()
 	if err != nil {
@@ -706,11 +710,8 @@ func caseD42(hwnd uintptr, args []string) error {
 	// 1. clean start (applyStart: no saved heights, every part on), at the size Wilco uses
 	base := d29Opts{Status: "ok", Snap: snap, Scrollbar: false}
 	payload := d29Payload(base)
-	const dragW, dragH, otherW, otherH = 1920, 1080, 1800, 1050
+	const dragW, dragH, otherW, otherH = d42DragW, d42DragH, 1800, 1050
 	dragTag, otherTag := fmt.Sprintf("%dx%d", dragW, dragH), fmt.Sprintf("%dx%d", otherW, otherH)
-	if err := ensureWindowSizeWH(hwnd, dragW, dragH); err != nil {
-		return err
-	}
 	if windowCapped {
 		return d42Fail("this screen cannot hold %s, so the drag cannot be proven here (a skip would hide that)", dragTag)
 	}
@@ -1124,9 +1125,6 @@ func caseD43(hwnd uintptr, args []string) error {
 			fmt.Println("uicheck: d43: FAIL " + msg)
 			fails = append(fails, msg)
 		}
-	}
-	if err := ensureWindowSizeWH(hwnd, 1152, 2048); err != nil {
-		return err
 	}
 	if len(fails) > 0 {
 		return fmt.Errorf("d43: %d case(s) failed, first: %s", len(fails), fails[0])

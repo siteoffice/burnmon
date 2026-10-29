@@ -83,9 +83,9 @@ func d36ClickJS(id string) string {
 }
 
 func caseD36(hwnd uintptr, args []string) error {
-	raw, err := readFixture("snapshot_example.json")
+	raw, err := readSnapshotExample()
 	if err != nil {
-		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
+		return err
 	}
 	var ex struct {
 		Wait    []d36Item `json:"wait_items"`
@@ -101,9 +101,6 @@ func caseD36(hwnd uintptr, args []string) error {
 	fail := func(format string, a ...any) error { return fmt.Errorf("d36: "+format, a...) }
 	if ex.Counts == nil || ex.Counts.Blocked == 0 {
 		return fail("the example has no wait_counts with a Blocked count")
-	}
-	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-		return err
 	}
 	apply := func(plain bool, snap []byte, age string) (d36Page, error) {
 		var p d36Page
@@ -346,14 +343,11 @@ type d37Page struct {
 }
 
 func caseD37(hwnd uintptr, args []string) error {
-	raw, err := readFixture("snapshot_example.json")
+	raw, err := readSnapshotExample()
 	if err != nil {
-		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
-	}
-	fail := func(format string, a ...any) error { return fmt.Errorf("d37: "+format, a...) }
-	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
 		return err
 	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d37: "+format, a...) }
 	all := map[string]bool{"stop": true, "attach": true, "approve": true, "send_back": true}
 	none := map[string]bool{"stop": false, "attach": false, "approve": false, "send_back": false}
 	verdicts := map[string]map[string]string{
@@ -623,14 +617,11 @@ type d39Page struct {
 }
 
 func caseD39(hwnd uintptr, args []string) error {
-	raw, err := readFixture("snapshot_example.json")
+	raw, err := readSnapshotExample()
 	if err != nil {
-		return fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
-	}
-	fail := func(format string, a ...any) error { return fmt.Errorf("d39: "+format, a...) }
-	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
 		return err
 	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d39: "+format, a...) }
 	on := map[string]bool{"close_sprint": true}
 	payload := func(foreman bool, drop string) string {
 		var m map[string]any

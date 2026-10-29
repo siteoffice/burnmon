@@ -95,6 +95,37 @@ func TestCaseStartOverride(t *testing.T) {
 	}
 }
 
+// The cases that no longer size their own window read at the size they used
+// to set themselves (Task 3 iteration 2), so applyStart must give that size.
+func TestCaseStartSizes(t *testing.T) {
+	want := map[string][2]int32{
+		"d0": {1152, 2048}, "d1": {1152, 2048},
+		"d2": {1152, 2048}, "d3": {1024, 1152}, "d4": {1280, 860}, "d5": {1920, 1080}, "d6": {2560, 1440}, "d8": {1024, 768},
+		"d10": {1280, 860}, "d11": {1280, 860}, "d13": {1280, 860}, "d14": {1920, 1080}, "d15": {1280, 860},
+		"d16": {1280, 860}, "d17": {1280, 860}, "d18": {1280, 860}, "d20": {1920, 1080}, "d22": {1920, 1080},
+		"d23": {1600, 900}, "d24": {1600, 900}, "d25": {1600, 900}, "d26": {1600, 900}, "d27": {1600, 900}, "d28": {1600, 900},
+		"d29": {1152, 2048}, "d42": {1920, 1080},
+		"d30": {1152, 2048}, "d31": {1280, 900}, "d38": {1920, 1080},
+		"d36": {1920, 1080}, "d37": {1920, 1080}, "d39": {1920, 1080},
+	}
+	seen := 0
+	for _, g := range devGroups {
+		for _, c := range g.Cases {
+			w, ok := want[c.Name]
+			if !ok {
+				continue
+			}
+			seen++
+			if s := caseStart(g, c); s.Width != w[0] || s.Height != w[1] {
+				t.Errorf("%s/%s starts at %dx%d, want %dx%d", g.Name, c.Name, s.Width, s.Height, w[0], w[1])
+			}
+		}
+	}
+	if seen != len(want) {
+		t.Errorf("found %d of the %d cases", seen, len(want))
+	}
+}
+
 func TestCloneOwnsItsMaps(t *testing.T) {
 	a := appStart()
 	b := a.clone()

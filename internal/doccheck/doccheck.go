@@ -70,6 +70,7 @@ var (
 	bindRe     = regexp.MustCompile(`\.Bind\(\s*"(\w+)"`)
 	keydownRe  = regexp.MustCompile(`k === '([a-z0-9])'`)
 	uicheckFnm = regexp.MustCompile(`^check_([dw]\d+)\.go$`)
+	caseFuncRe = regexp.MustCompile(`(?m)^func caseD(\d+)\(`)
 	topFolders = []string{"cmd", "internal", "tools", "scripts", "testdata", "assets", "docs", "02_roadmap", "04_assets"}
 )
 
@@ -215,7 +216,7 @@ func Verify(docName, doc string, c Corpus, allow map[string]string) []Finding {
 			}
 		case "uicheck":
 			if !c.UICheck[cl.Text] {
-				why = "no tools\\uicheck\\check_" + cl.Text + ".go"
+				why = "no tools\\uicheck\\check_" + cl.Text + ".go and no case for it in a group_*.go file"
 			}
 		case "section":
 			if !c.PartIDs[cl.Text] && !c.GroupIDs[cl.Text] {
@@ -457,6 +458,17 @@ func LoadCorpus(root string) (Corpus, error) {
 	for _, e := range entries {
 		if m := uicheckFnm.FindStringSubmatch(e.Name()); m != nil {
 			c.UICheck[m[1]] = true
+		}
+		// B7.2 moved the d checks into group files (group_layout_1.go and so
+		// on), one func caseDNN per old check_dNN.go.
+		if strings.HasPrefix(e.Name(), "group_") && strings.HasSuffix(e.Name(), ".go") {
+			b, err := os.ReadFile(filepath.Join(root, "tools", "uicheck", e.Name()))
+			if err != nil {
+				return Corpus{}, err
+			}
+			for _, m := range caseFuncRe.FindAllStringSubmatch(string(b), -1) {
+				c.UICheck["d"+m[1]] = true
+			}
 		}
 	}
 	for _, id := range sections.IDs {

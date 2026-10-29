@@ -59,7 +59,8 @@ var devGroups = []devGroup{
 }
 
 // devAliases maps an old name that was merged into another case to the case
-// that now covers its assert. Empty: no case was merged in B7.2 Task 3.
+// that now covers its assert. Empty: no case was merged in B7.2 Task 3; the
+// per-group merge analysis is in the sprint's findings.md, Task 3 iteration 2.
 var devAliases = map[string]string{}
 
 // devNames holds every name that targets burnmon-dev.exe: group, group/case,
@@ -131,4 +132,14 @@ func runDevCase(hwnd uintptr, g devGroup, c devCase, args []string) error {
 // runs from tools\uicheck), the setup line most d cases shared word for word.
 func readFixture(name string) ([]byte, error) {
 	return os.ReadFile(filepath.Join("..", "..", "testdata", name))
+}
+
+// readSnapshotExample reads lane A's frozen example, the fixture the layout
+// and waits cases (d29, d33, d34, d36, d37, d39) load with the same error text.
+func readSnapshotExample() ([]byte, error) {
+	b, err := readFixture("snapshot_example.json")
+	if err != nil {
+		return nil, fmt.Errorf("read the frozen example (uicheck runs from the tools folder): %w", err)
+	}
+	return b, nil
 }

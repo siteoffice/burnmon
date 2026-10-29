@@ -18,9 +18,6 @@ import (
 // both that it stays gone and that #burnBars never grows an <svg>/<line>
 // some future change might reintroduce.
 func caseD10(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-		return err
-	}
 	if exists, err := evalBool(`!!document.getElementById('turnMarkers')`); err != nil {
 		return fmt.Errorf("check #turnMarkers absent: %w", err)
 	} else if exists {
@@ -50,9 +47,6 @@ func caseD10(hwnd uintptr, args []string) error {
 // way, so it is checking the real, already-running page's own behaviour,
 // not a simulation of it.
 func caseD11(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-		return err
-	}
 
 	// A clean slate: truncate whatever the log already holds so this
 	// check's own 30s window is not polluted by ticks from before it
@@ -291,9 +285,6 @@ func caseD12(hwnd uintptr, args []string) error {
 // each bar's track length depended on its own value text's width ("0%" vs
 // "100%"), so min and max differed; this proves they no longer do.
 func caseD13(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-		return err
-	}
 	time.Sleep(500 * time.Millisecond)
 
 	var widths []float64
@@ -335,9 +326,6 @@ func caseD13(hwnd uintptr, args []string) error {
 // a fixed 9px box; this proves the real bug (a label wider than its box) is
 // gone, not just hidden from d9's scrollbar sweep.
 func caseD14(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-		return err
-	}
 	time.Sleep(500 * time.Millisecond)
 
 	var labels []struct {
@@ -403,9 +391,6 @@ func caseD14(hwnd uintptr, args []string) error {
 // session's chart segment, legend dot and card must all recolour to a real
 // Cowork shade, not stay locked on the first tick's grey guess.
 func caseD15(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-		return err
-	}
 	time.Sleep(300 * time.Millisecond)
 
 	vendorStripJS := `{ rows: [
@@ -758,9 +743,6 @@ func hueDelta(a, b float64) float64 {
 // match on real data even though this fixture's own exact window_start
 // happened to hide it; renderHistoryChart now takes window_start directly).
 func caseD16(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-		return err
-	}
 	time.Sleep(300 * time.Millisecond)
 
 	script := `(function(){
@@ -956,9 +938,6 @@ func caseD16(hwnd uintptr, args []string) error {
 // (counting "M" moveto commands - one per subpath) rather than a debug hook,
 // since the sparkline has none.
 func caseD17(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-		return err
-	}
 	time.Sleep(300 * time.Millisecond)
 
 	script := `(function(){
@@ -1158,9 +1137,6 @@ func caseD17(hwnd uintptr, args []string) error {
 // chart's own gap segments (__bdevHistDebug), #harnessHeatmap and
 // #processGroups markup.
 func caseD18(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1280, 860); err != nil {
-		return err
-	}
 	time.Sleep(300 * time.Millisecond)
 
 	script := `(function(){
@@ -1293,9 +1269,6 @@ func caseD18(hwnd uintptr, args []string) error {
 // 1280x860 applyPanelFit drops the whole Activity/heatmap row, and a hidden
 // label measures 0 of 0 (an early version of this check passed that way).
 func caseD20(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-		return err
-	}
 	if windowCapped {
 		fmt.Println("uicheck: d20: SKIPPED, this screen is too small for a 1920x1080 window, so the heatmap row is fit-dropped and its labels measure 0px")
 		return nil
@@ -1445,9 +1418,6 @@ func caseD21(hwnd uintptr, args []string) error {
 // line. 1920x1080: a wide single row of boxes, above the 900px stacking
 // breakpoint.
 func caseD22(hwnd uintptr, args []string) error {
-	if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
-		return err
-	}
 	time.Sleep(300 * time.Millisecond)
 	errs := []string{}
 	for _, wifi := range []bool{true, false} {
