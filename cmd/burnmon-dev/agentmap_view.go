@@ -11,12 +11,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"burnmon/internal/agentmap"
 	"burnmon/internal/gitrefs"
 	"burnmon/internal/graph"
 	"burnmon/internal/snapshot"
+	"burnmon/internal/snapshotwriter"
 	"burnmon/internal/store"
 	"burnmon/internal/waits"
 )
@@ -44,6 +46,9 @@ type agentMapEnv struct {
 	// means a gitrefs checker.
 	BranchGone      func(repo, branch string) bool
 	MergedByMessage func(repo, branch string) (found, known bool)
+	// Writer is the snapshot writer's state for the live note; nil means
+	// unknown.
+	Writer func() snapshotwriter.StatusView
 }
 
 // agentMapRequest is what the page sends: live or history, how many hours of
@@ -87,6 +92,19 @@ func joinNotes(a, b string) string {
 	return a + " " + b
 }
 
+// asSentence capitalises a header line and ends it with a period, so a note
+// can carry more text after it.
+func asSentence(s string) string {
+	if s == "" {
+		return s
+	}
+	s = strings.ToUpper(s[:1]) + s[1:]
+	if !strings.HasSuffix(s, ".") {
+		s += "."
+	}
+	return s
+}
+
 // agentMapFor builds the map the page asked for. A snapshot that is not
 // current draws no boxes: its old numbers are never shown as current.
 func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapPayload, error) {
@@ -101,14 +119,12 @@ func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapP
 		r := snapshot.Load(env.SnapPath, now)
 		p.Status, p.AgeSeconds = r.Status, r.AgeSeconds
 		if r.Status != snapshot.StatusOK || r.Snapshot == nil {
-			switch r.Status {
-			case snapshot.StatusUnsupported:
-				p.Note = "The snapshot is a newer version than this window reads."
-			case snapshot.StatusStale, snapshot.StatusMissing:
-				p.Note = fmt.Sprintf("BurnMon is not running (%s). No current boxes are shown.", r.Status)
-			default:
-				p.Note = "The snapshot file cannot be read: " + r.Error
+			// The same sentence as the header line (snapshot_line.go).
+			var ws snapshotwriter.StatusView
+			if env.Writer != nil {
+				ws = env.Writer()
 			}
+			p.Note = asSentence(lineFor(ws, r).Text) + " No current boxes are shown."
 			p.Layout = agentmap.BuildLayout(agentmap.LayoutInput{Plain: in.Plain})
 			return p, nil
 		}

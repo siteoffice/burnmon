@@ -16,6 +16,7 @@ import (
 	"burnmon/internal/controls"
 	"burnmon/internal/sections"
 	"burnmon/internal/snapshot"
+	"burnmon/internal/snapshotwriter"
 )
 
 // sectionsPayload is bdevSections' return value. The embedded state carries
@@ -37,6 +38,10 @@ type sectionsPayload struct {
 	// Controls is the control switches, which controls are ready and why not,
 	// and the gate verdict table. It shadows State.Controls (the raw switches).
 	Controls controlsPayload `json:"controls"`
+	// Writer is this process's snapshot writer state (state "" when unknown);
+	// Line is the header sentence built from it and Reading (snapshot_line.go).
+	Writer snapshotwriter.StatusView `json:"writer"`
+	Line   snapshotLine              `json:"snapshot_line"`
 }
 
 // controlsPayload is what the page needs to draw the control chips and the
@@ -78,15 +83,16 @@ func saveSections(dataDir string, s sections.State) error {
 	return sections.Save(viewStatePath(dataDir), s)
 }
 
-// sectionsPayloadFor is sectionsPayloadWith without a controls service: no
-// control is ready.
+// sectionsPayloadFor is sectionsPayloadWith without a controls service (no
+// control is ready) and without writer state (unknown).
 func sectionsPayloadFor(dataDir, snapPath string, now time.Time) sectionsPayload {
-	return sectionsPayloadWith(dataDir, snapPath, now, nil)
+	return sectionsPayloadWith(dataDir, snapPath, now, nil, nil)
 }
 
 // sectionsPayloadWith builds the payload; avail reports the controls service's
-// availability (nil: nothing is ready).
-func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() controls.Availability) sectionsPayload {
+// availability (nil: nothing is ready) and writer the snapshot writer's state
+// (nil: unknown).
+func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() controls.Availability, writer func() snapshotwriter.StatusView) sectionsPayload {
 	st := loadSections(dataDir)
 	p := sectionsPayload{
 		State:        st,
@@ -96,6 +102,10 @@ func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() c
 		StationTheme: loadDevConfig(dataDir).StationTheme,
 		Reading:      snapshot.Load(snapPath, now),
 	}
+	if writer != nil {
+		p.Writer = writer()
+	}
+	p.Line = lineFor(p.Writer, p.Reading)
 	p.Controls = controlsPayload{On: st.Controls, Ready: map[string]bool{}, Verdicts: controls.Verdicts()}
 	var a controls.Availability
 	if avail != nil {

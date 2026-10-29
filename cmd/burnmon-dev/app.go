@@ -29,6 +29,7 @@ import (
 	"burnmon/internal/history"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
+	"burnmon/internal/snapshotwriter"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
 	"burnmon/internal/todo"
@@ -177,6 +178,12 @@ type app struct {
 
 	// perf is WS2 alpha.7's measurement log (perf.go).
 	perf snapshotPerf
+
+	// snapStatus is the snapshot writer's state for the page line
+	// (snapshot_line.go); set by startSnapshotWriter, nil before. started is
+	// the process start, for the writer's first-write log line.
+	snapStatus *snapshotwriter.Status
+	started    time.Time
 }
 
 // closedDayRows returns the per-day token/cost rows for every day strictly
