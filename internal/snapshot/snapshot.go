@@ -27,8 +27,8 @@ const SchemaVersion = 1
 // tokens would cost at API list price, not what anyone was billed.
 const CostLabel = "API price equivalent"
 
-// StaleAfterTicks is how many ticks old the file may be before a reader says
-// BurnMon is not running.
+// StaleAfterTicks is how many ticks old the file may be before a reader
+// treats it as stale: no process has written it lately.
 const StaleAfterTicks = 3
 
 // burnWindow is the span Burn looks back over.
@@ -256,7 +256,7 @@ func Build(in Input) Snapshot {
 }
 
 // IsStale reports whether the file is older than StaleAfterTicks ticks at
-// now, which is how a reader tells that BurnMon is not running.
+// now, which is how a reader tells that no process has written it lately.
 func (s Snapshot) IsStale(now time.Time) bool {
 	at, err := time.Parse(time.RFC3339, s.WrittenAt)
 	if err != nil {
@@ -345,8 +345,8 @@ type Reading struct {
 }
 
 // Load reads the snapshot file at path and judges it at now. A stale file
-// means BurnMon is not running, so its numbers are withheld rather than shown
-// as current. Load never returns an error: every fault is a Status.
+// means no process has written it lately, so its numbers are withheld rather
+// than shown as current. Load never returns an error: every fault is a Status.
 func Load(path string, now time.Time) Reading {
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {

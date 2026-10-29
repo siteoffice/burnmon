@@ -148,7 +148,7 @@ func buildExportBundle(st *store.Store, sys *sysmon.Store, cfg *pricing.Config, 
 // (design doc "Export (AI-ready bundle)"). Runs one full Collect pass first,
 // the same recipe burnmon-cli's own export command uses, so the store is as
 // current as a one-shot process can make it even when burnmon-dev.exe's own
-// GUI is not running.
+// GUI is closed.
 //
 // burnmon-dev.exe is built with -H windowsgui (build.ps1), the same as
 // burnmon.exe, so a plain `.\burnmon-dev.exe export ...` from a shell can
