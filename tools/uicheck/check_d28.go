@@ -216,11 +216,18 @@ func caseD28(hwnd uintptr, args []string) error {
 		ok   func(d23State) bool
 	}{
 		{"P", vkP, func(s d23State) bool { return s.Overlay && s.Lit > 500 }},
-		{"O", vkO, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
-		{"I", vkI, func(s d23State) bool { return s.Panel && s.Lit > 500 }},
+		{"O", vkO, func(s d23State) bool { return s.Panel && s.View == "top" && s.Lit > 500 }},
+		{"I", vkI, func(s d23State) bool { return s.Panel && s.View == "iso" && s.Lit > 500 }},
+	}
+	// Keys go to the foreground window, and a view runs for some 20 s: put the
+	// window in front before every key, so a key lost to another window cannot
+	// read as the app ignoring it.
+	press := func(vk uint16) error {
+		bringToFront(hwnd)
+		return pressKey(vk)
 	}
 	for _, v := range views {
-		if err := pressKey(v.vk); err != nil {
+		if err := press(v.vk); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: press: %v", v.name, err))
 			continue
 		}
@@ -234,7 +241,7 @@ func caseD28(hwnd uintptr, args []string) error {
 		bringToFront(hwnd)
 		for i, th := range []string{"site", "space"} {
 			if i > 0 {
-				if err := pressKey(vkT); err != nil {
+				if err := press(vkT); err != nil {
 					return err
 				}
 				time.Sleep(600 * time.Millisecond)
@@ -243,16 +250,18 @@ func caseD28(hwnd uintptr, args []string) error {
 				return err
 			}
 		}
-		if err := pressKey(vkT); err != nil { // back to site for the next view
+		if err := press(vkT); err != nil { // back to site for the next view
 			return err
 		}
 		time.Sleep(400 * time.Millisecond)
-		if err := pressKey(v.vk); err != nil { // the same key closes the view
+		if err := press(v.vk); err != nil { // the same key closes the view
 			return err
 		}
 		if _, good, err := d23Wait(func(s d23State) bool { return !s.Overlay && !s.Panel }); err != nil || !good {
-			errs = append(errs, fmt.Sprintf("%s did not close on its own key", v.name))
-			_ = pressKey(vkEscape)
+			fg, _, _ := procGetForegroundWindow.Call()
+			focus, _ := evalString(`String(document.hasFocus())`)
+			errs = append(errs, fmt.Sprintf("%s did not close on its own key (window in front %v, page focus %s)", v.name, fg == hwnd, focus))
+			_ = press(vkEscape)
 		}
 	}
 	if len(errs) > 0 {
