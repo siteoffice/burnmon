@@ -29,7 +29,7 @@ func TestFitPassNeverHides(t *testing.T) {
 func TestFitPassHasFloorsAndScroll(t *testing.T) {
 	for _, want := range []string{
 		"var FIT_CHART_MIN = 60, FIT_ROWS_MIN = 3, FIT_TABLE_MIN_ROWS = 2, FIT_CHART_GROW = 1.6;",
-		"window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [] };",
+		"window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [], items: [] };",
 		"body.fit-scroll #pageScroll",
 		"function fitAbsorb(items, amt)",
 		"classList.add('fit-scroll')",

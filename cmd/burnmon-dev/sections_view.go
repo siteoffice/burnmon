@@ -9,6 +9,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"burnmon/internal/agentmap"
@@ -62,6 +63,11 @@ type sectionsChange struct {
 	On        *bool  `json:"on,omitempty"`
 	// Control with On, alone, switches one control (sections.ControlIDs).
 	Control string `json:"control,omitempty"`
+	// HeightsMode with Heights, alone, replaces one mode's saved part heights
+	// (shares per sections.HeightKeys). ResetHeights true, alone, clears both.
+	HeightsMode  string             `json:"heights_mode,omitempty"`
+	Heights      map[string]float64 `json:"heights,omitempty"`
+	ResetHeights *bool              `json:"reset_heights,omitempty"`
 }
 
 func loadSections(dataDir string) sections.State {
@@ -115,7 +121,7 @@ func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() c
 // it does not understand is refused and the file is left as it was.
 func applySectionsChange(dataDir string, c sectionsChange) error {
 	cur := loadSections(dataDir)
-	hasPart := c.Mode != "" || c.Section != "" || c.On != nil || c.Control != ""
+	hasPart := c.Mode != "" || c.Section != "" || c.On != nil || c.Control != "" || c.HeightsMode != "" || c.Heights != nil || c.ResetHeights != nil
 	switch {
 	case c.Plain != nil && c.Scrollbar == nil && !hasPart:
 		return saveSections(dataDir, cur.WithPlain(*c.Plain))
@@ -138,6 +144,33 @@ func applySectionsChange(dataDir string, c sectionsChange) error {
 			}
 		}
 		return fmt.Errorf("control %q is not known", c.Control)
+	case c.ResetHeights != nil && c.Plain == nil && c.Scrollbar == nil && c.Mode == "" && c.Section == "" && c.On == nil && c.Control == "" && c.HeightsMode == "" && c.Heights == nil:
+		if !*c.ResetHeights {
+			return fmt.Errorf("reset_heights must be true")
+		}
+		return saveSections(dataDir, cur.ResetHeights())
+	case c.HeightsMode != "" && c.Plain == nil && c.Scrollbar == nil && c.Mode == "" && c.Section == "" && c.On == nil && c.Control == "" && c.ResetHeights == nil:
+		if c.HeightsMode != sections.ModeStandard && c.HeightsMode != sections.ModePlain {
+			return fmt.Errorf("heights mode %q is not standard or plain", c.HeightsMode)
+		}
+		if len(c.Heights) < 2 {
+			return fmt.Errorf("heights needs at least two parts")
+		}
+		for k, v := range c.Heights {
+			known := false
+			for _, id := range sections.HeightKeys {
+				if id == k {
+					known = true
+				}
+			}
+			if !known {
+				return fmt.Errorf("height key %q is not known", k)
+			}
+			if math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > 1 {
+				return fmt.Errorf("height for %q must be above 0 and at most 1", k)
+			}
+		}
+		return saveSections(dataDir, cur.WithHeights(c.HeightsMode, c.Heights))
 	}
-	return fmt.Errorf("sections change needs plain, scrollbar, control with on, or mode with section and on")
+	return fmt.Errorf("sections change needs plain, scrollbar, control with on, mode with section and on, heights with heights_mode, or reset_heights")
 }

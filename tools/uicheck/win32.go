@@ -486,6 +486,61 @@ func clickAt(x, y int32) error {
 	})
 }
 
+// dragPath returns steps+1 points from (x1,y1) to (x2,y2), the first and the
+// last exact, by linear interpolation with integer rounding. steps below 1 is 1.
+func dragPath(x1, y1, x2, y2 int32, steps int) [][2]int32 {
+	if steps < 1 {
+		steps = 1
+	}
+	pts := make([][2]int32, 0, steps+1)
+	for i := 0; i <= steps; i++ {
+		switch i {
+		case 0:
+			pts = append(pts, [2]int32{x1, y1})
+		case steps:
+			pts = append(pts, [2]int32{x2, y2})
+		default:
+			f := float64(i) / float64(steps)
+			pts = append(pts, [2]int32{
+				x1 + int32(math.Round(float64(x2-x1)*f)),
+				y1 + int32(math.Round(float64(y2-y1)*f)),
+			})
+		}
+	}
+	return pts
+}
+
+// dragAt presses the real left button at (x1,y1), moves the real cursor to
+// (x2,y2) in 12 steps with SetCursorPos, and releases. The button-up is sent
+// even when a move fails, so a failed drag never leaves the button held.
+func dragAt(x1, y1, x2, y2 int32) error {
+	pts := dragPath(x1, y1, x2, y2, 12)
+	ret, _, err := procSetCursorPos.Call(uintptr(pts[0][0]), uintptr(pts[0][1]))
+	if ret == 0 {
+		return fmt.Errorf("SetCursorPos: %w", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if err := sendInputs([]input{mouseInputRecord(mouseeventfLeftDown)}); err != nil {
+		return err
+	}
+	var moveErr error
+	for _, p := range pts[1:] {
+		time.Sleep(20 * time.Millisecond)
+		r, _, e := procSetCursorPos.Call(uintptr(p[0]), uintptr(p[1]))
+		if r == 0 {
+			moveErr = fmt.Errorf("SetCursorPos: %w", e)
+			break
+		}
+	}
+	// Hold on the last point so the page has handled every move before the release.
+	time.Sleep(150 * time.Millisecond)
+	upErr := sendInputs([]input{mouseInputRecord(mouseeventfLeftUp)})
+	if moveErr != nil {
+		return moveErr
+	}
+	return upErr
+}
+
 // VK_ESCAPE and VK_F11 (d7's fullscreen toggle, UI review patch section 10).
 const (
 	vkEscape = 0x1B

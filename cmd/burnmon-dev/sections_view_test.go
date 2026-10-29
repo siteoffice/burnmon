@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -530,5 +531,78 @@ func TestPageCostLineEscaped(t *testing.T) {
 	}
 	if strings.Contains(body, "innerHTML") {
 		t.Error("secItemRow assigns innerHTML")
+	}
+}
+func TestSetSectionsHeightsFromPage(t *testing.T) {
+	dir := t.TempDir()
+	snapPath := filepath.Join("..", "..", "testdata", "snapshot_example.json")
+	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
+	on, off := true, false
+	std := map[string]float64{"burn_30min": 0.4, "turn_ticker": 0.6}
+
+	if err := applySectionsChange(dir, sectionsChange{HeightsMode: "standard", Heights: std}); err != nil {
+		t.Fatal(err)
+	}
+	p := sectionsPayloadFor(dir, snapPath, now)
+	if len(p.HeightsStandard) != 2 || p.HeightsStandard["burn_30min"] != 0.4 || p.HeightsStandard["turn_ticker"] != 0.6 || p.HeightsPlain != nil {
+		t.Fatalf("payload heights %v / %v", p.HeightsStandard, p.HeightsPlain)
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"heights_standard"`) || strings.Contains(string(b), `"heights_plain"`) {
+		t.Errorf("payload json keys wrong: %s", b)
+	}
+
+	// A plain write leaves the standard map alone.
+	if err := applySectionsChange(dir, sectionsChange{HeightsMode: "plain", Heights: map[string]float64{"system_chart": 0.5, "process_groups": 0.5}}); err != nil {
+		t.Fatal(err)
+	}
+	got := loadSections(dir)
+	if len(got.HeightsStandard) != 2 || len(got.HeightsPlain) != 2 {
+		t.Fatalf("after plain write: %v / %v", got.HeightsStandard, got.HeightsPlain)
+	}
+
+	// Refusals leave the file byte-identical.
+	before, err := os.ReadFile(viewStatePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := []sectionsChange{
+		{HeightsMode: "standard", Heights: map[string]float64{"example-part": 0.5, "turn_ticker": 0.5}},
+		{HeightsMode: "x", Heights: std},
+		{HeightsMode: "standard", Heights: map[string]float64{"burn_30min": 2, "turn_ticker": 0.5}},
+		{HeightsMode: "plain", Heights: std, Plain: &on},
+		{HeightsMode: "plain", Heights: std, Scrollbar: &off},
+		{ResetHeights: &off},
+	}
+	for i, c := range bad {
+		if err := applySectionsChange(dir, c); err == nil {
+			t.Errorf("bad change %d accepted", i)
+		}
+		after, _ := os.ReadFile(viewStatePath(dir))
+		if string(after) != string(before) {
+			t.Errorf("bad change %d changed the file", i)
+		}
+	}
+
+	if err := applySectionsChange(dir, sectionsChange{ResetHeights: &on}); err != nil {
+		t.Fatal(err)
+	}
+	got = loadSections(dir)
+	if got.HeightsStandard != nil || got.HeightsPlain != nil {
+		t.Errorf("reset left %v / %v", got.HeightsStandard, got.HeightsPlain)
+	}
+}
+
+func TestSetSectionsHeightsAcceptsHostLists(t *testing.T) {
+	dir := t.TempDir()
+	h := map[string]float64{"burn_30min": 0.4, "turn_ticker": 0.6, "host_lists": 0.25}
+	if err := applySectionsChange(dir, sectionsChange{HeightsMode: "standard", Heights: h}); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadSections(dir).HeightsStandard; got["host_lists"] != 0.25 || len(got) != 3 {
+		t.Fatalf("saved %v", got)
 	}
 }

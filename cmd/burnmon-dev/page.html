@@ -131,7 +131,11 @@ main{flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; pad
   flex:0 0 auto; background:var(--panel2); border-bottom:1px solid var(--bd); color:var(--amber);
   font:700 12px/1 var(--mono); letter-spacing:.1em; padding:6px 10px; text-transform:uppercase;
 }
-.zonebody{flex:1; min-height:0; padding:4px; display:flex; flex-direction:column; gap:4px; overflow:hidden}
+.zonebody{flex:1; min-height:0; padding:4px; display:flex; flex-direction:column; gap:4px; overflow:hidden; position:relative}
+.hdl{position:absolute; left:4px; right:4px; height:4px; cursor:row-resize; background:transparent; z-index:3; touch-action:none}
+.hdl:hover, .hdl.drag{background:var(--amber)}
+.hdl.hdl-off{display:none}
+.hdl:focus-visible{outline:2px solid var(--amber2)}
 /* overflow:hidden is a blanket no-scroll patch section 3 backstop: any
    panel squeezed below its own content's natural size (a genuinely tiny
    window, after every droppable panel is already gone) clips silently
@@ -384,6 +388,7 @@ body.scroll-on #pageScroll, body.fit-scroll #pageScroll{overflow-y:auto; scrollb
 body.scroll-on #legacy{flex:0 0 auto}
 .sechost{flex:0 0 auto; overflow:hidden; margin:4px 4px 0; display:flex; flex-direction:column; gap:4px; min-height:0}
 .sechost.sec-fill{flex:1 1 auto; margin-bottom:4px}
+body.fit-scroll .sechost.sec-fill{flex:0 0 auto}
 .secnotice{padding:6px 8px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font-size:12px}
 .secnotice.warn{border-color:var(--amber)}
 .secpanels{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:4px}
@@ -399,8 +404,14 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .secrow b{color:var(--txt)}
 .sechint{color:var(--dim); font-size:11px}
 .secitem{white-space:nowrap; align-items:baseline}
-.seclist{flex:0 1 auto; min-height:0; max-height:8.3em; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+.seclist{flex:0 1 auto; min-height:0; max-height:8.3em; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
 .seclist > .secitem{flex:0 0 auto}
+.seclist::-webkit-scrollbar{width:8px}
+.seclist::-webkit-scrollbar-track{background:var(--panel2)}
+.seclist::-webkit-scrollbar-thumb{background:var(--sb)}
+.seclist::-webkit-scrollbar-thumb:hover{background:var(--sb-hover)}
+.seclist-tbl{max-height:none}
+.seclist > table{flex:0 0 auto; width:100%}
 .sectier{flex:0 0 auto; font:700 10px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
 .sectier.blocked{color:var(--amber)}
 .secgrey, .secgrey b{color:var(--dim)}
@@ -414,6 +425,7 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .ctlres.bad{color:var(--amber)}
 .seclist > .ctlprev, .seclist > .ctlres{flex:0 0 auto}
 .ctlwhy{font-size:11px; white-space:normal; max-width:320px}
+#secControls .ctlwhy{max-width:none; width:0; min-width:100%}
 .secpanel.sec-aged .secbody{opacity:.55}
 .secaged{color:var(--amber); font-size:11px}
 .secfile{color:var(--amber)}
@@ -519,6 +531,8 @@ body.plain #mapOverlay{font-size:13.5px}
 #secSettings .setgrid .setlbl{white-space:nowrap}
 #secSettings .setgrid input{justify-self:center}
 #secSettings .setstation{display:flex; gap:14px; align-items:center}
+#secSettings .setbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
+.setheights{display:flex; gap:10px; align-items:center}
 #secSettings h4{margin:0 0 2px; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase}
 #secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
 #secSettings input{margin:0; accent-color:var(--amber)}
@@ -685,6 +699,7 @@ body.plain #mapOverlay{font-size:13.5px}
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
   </div>
+  <div class="setrow setheights"><button id="secResetHeights" class="setbtn" type="button">Reset heights</button><span class="sechint">Drag the bar between two parts</span></div>
   <div id="histAdmin">
     <h4>History</h4>
     <div class="sechint" id="hist_keep"></div>
@@ -1897,6 +1912,37 @@ body.plain #mapOverlay{font-size:13.5px}
   }
   window.__bdevStationView = function(){ return station && typeof station.view === 'function' ? station.view() : null; }; // tools\uicheck (check_d23.go) only
   window.__bdevStationTheme = function(){ return station && typeof station.theme === 'function' ? station.theme() : null; }; // tools\uicheck (check_d23.go) only
+  // The vertical span of the visible parts: bottom of the last minus top of
+  // the first. Handles and the Station box are not parts.
+  function stationSpan(kids){
+    var top = Infinity, bot = -Infinity;
+    kids.forEach(function(el){
+      if(el.id === 'stationPanel' || (el.classList && el.classList.contains('hdl'))) return;
+      if(el.getClientRects().length === 0) return;
+      var r = el.getBoundingClientRect();
+      if(r.top < top) top = r.top;
+      if(r.bottom > bot) bot = r.bottom;
+    });
+    return bot > top ? bot - top : 0;
+  }
+  // applyPanelFit runs on the real parts: show them and hide the box, then
+  // stationSettle measures the span again and puts the box back.
+  function stationPeek(on){
+    if(!stationPanel) return;
+    if(on){
+      stationPanel.hidden.forEach(function(el){ el.style.display = ''; });
+      stationPanel.box.style.display = 'none';
+    } else stationSettle();
+  }
+  function stationSettle(){
+    var host = stationPanel.box.parentNode;
+    var kids = Array.prototype.filter.call(host.children, function(el){ return el !== stationPanel.box; });
+    var S = stationSpan(kids);
+    kids.forEach(function(el){ el.style.display = 'none'; });
+    stationPanel.hidden = kids;
+    stationPanel.box.style.display = '';
+    stationPanel.box.style.flex = S > 0 ? '0 0 ' + Math.round(S) + 'px' : '1';
+  }
   function mountStation(){
     if(station.isMounted()) return;
     if(stationMode === 'full'){
@@ -1904,17 +1950,19 @@ body.plain #mapOverlay{font-size:13.5px}
       ov.classList.add('on');
       station.mount(ov, 'full');
     } else {
-      // O takes the whole burn zone, label to turn ticker, everything above
-      // System (Wilco, 2026-10-01): the chart panel alone was too short for
-      // the deck to read.
-      var host = document.querySelector('.zone.burn');
-      var hidden = Array.prototype.slice.call(host.children);
-      hidden.forEach(function(el){ el.style.display = 'none'; });
+      // B7.1: O swaps the parts, not the zone. The visible parts of the burn
+      // zonebody (chart, vendor strip, activity row, turn ticker) are hidden
+      // and the box takes exactly the span they occupied, measured right
+      // before the swap, so nothing around it moves. The zone label stays.
+      var host = document.querySelector('.zone.burn .zonebody');
+      var kids = Array.prototype.slice.call(host.children);
+      var S = stationSpan(kids);
+      kids.forEach(function(el){ el.style.display = 'none'; });
       var box = document.createElement('div');
       box.id = 'stationPanel';
-      box.style.cssText = 'flex:1;min-height:0';
+      box.style.cssText = S > 0 ? 'flex:0 0 ' + Math.round(S) + 'px;min-height:0' : 'flex:1;min-height:0';
       host.appendChild(box);
-      stationPanel = {box: box, hidden: hidden};
+      stationPanel = {box: box, hidden: kids};
       station.mount(box, 'panel', stationMode === 'iso' ? 'iso' : 'top');
     }
     feedStation();
@@ -1927,8 +1975,8 @@ body.plain #mapOverlay{font-size:13.5px}
       stationPanel.box.parentNode.removeChild(stationPanel.box);
       stationPanel.hidden.forEach(function(el){ el.style.display = ''; });
       stationPanel = null;
-      // While the zone was hidden, applyPanelFit saw room to spare and the
-      // heatmaps drew at width 0: re-fit and redraw now, not on the next paint.
+      // The parts were hidden, so the heatmaps may have drawn at width 0:
+      // re-fit and redraw now, not on the next paint.
       applyPanelFit();
       renderHeatmap(lastHeatmapPayload);
       renderHarnessHeatmap(lastProcessGroupsHistory);
@@ -3192,14 +3240,21 @@ body.plain #mapOverlay{font-size:13.5px}
   //   content), then the charts without the cap, then the column's last panel,
   //   so no column leaves an empty block. In two columns both columns end on
   //   the same line; To Do and Processes sit below both.
+  //   The host lists (Waits on you, Outcomes, Sessions) give last, after every
+  //   legacy part, down to three rows each, scrollbar off only (B7.1).
+  //   A drag on a handle is an explicit choice and overrides that order: the part
+  //   that grows takes from its partner, then from the host lists (fitDragRange),
+  //   and the fraction of the lists' range taken is saved as host_lists next to the
+  //   shares; a handle with no room even then is hidden (iteration 2).
   //   Every part at its floor and still too tall: body.fit-scroll lets the page
   //   scroll. Nothing is hidden, so window.__bdevFit.hidden is always [].
   // Every pass starts from the CSS layout again: fitUndo gives the inline sizes back.
   var FIT_CHART_MIN = 60, FIT_ROWS_MIN = 3, FIT_TABLE_MIN_ROWS = 2, FIT_CHART_GROW = 1.6;
   // __bdevFit and __bdevTodoLayout are tools\uicheck's own reads (check_d34.go, check_d19.go).
-  window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [] };
+  window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [], items: [] };
   window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
   var fitTouched = [];
+  var fitLast = null, fitDrag = null;
   function fitHistH(){
     var h = document.querySelector('.histwrap');
     return h ? h.getBoundingClientRect().height : 0;
@@ -3260,6 +3315,7 @@ body.plain #mapOverlay{font-size:13.5px}
       var extra = el.querySelector('.secbody') ? 14 : 2;
       o.floor = Math.min(nat, hh + (th ? th.offsetHeight : 0) + FIT_TABLE_MIN_ROWS * fitRowH(el, 'tbody tr', 22) + extra);
     }
+    o.key = (col === 'burn' || col === 'sys') ? fitKeyOf(el) : '';
     o.h = o.nat;
     return o;
   }
@@ -3271,7 +3327,7 @@ body.plain #mapOverlay{font-size:13.5px}
       if(!fitShown(zone) || !fitShown(zone.parentNode)) return;
       var bodyEl = zone.querySelector('.zonebody'), items = [];
       Array.prototype.forEach.call(bodyEl.children, function(el){
-        if(!fitShown(el)) return;
+        if(!fitShown(el) || el.classList.contains('hdl')) return;
         var id = el.id, kind = 'fixed', rank = -1;
         if(el.classList.contains('burnchart')){ kind = 'chart'; rank = 1; }
         else if(el.classList.contains('histwrap')){ kind = 'chart'; rank = 0; }
@@ -3287,6 +3343,23 @@ body.plain #mapOverlay{font-size:13.5px}
     var td = document.getElementById('todoPanel');
     if(fitShown(td)) below.push(fitItem('below', td, 'todo', 3));
     return { cols: cols, below: below };
+  }
+  // Host lists (B7.1): each visible .seclist in #secHost, floor = three rows.
+  function fitListFloor(el, nat){
+    el.scrollTop = 0;
+    var rows = el.querySelector('table') ? el.querySelectorAll('tbody tr:not(.ctlrow)') : el.querySelectorAll('.secitem');
+    if(rows.length <= FIT_ROWS_MIN) return nat;
+    return Math.min(nat, Math.ceil(rows[FIT_ROWS_MIN - 1].getBoundingClientRect().bottom - el.getBoundingClientRect().top) + 1);
+  }
+  function fitCollectHost(){
+    var out = [];
+    Array.prototype.forEach.call(document.querySelectorAll('#secHost .seclist'), function(el, i){
+      if(!fitShown(el) || el.closest('.sec-off')) return;
+      var h = el.offsetHeight;
+      out.push({ el: el, col: 'host', kind:'seclist', rank: 7 + i, nat: h, cap: h, h: h, floor: fitListFloor(el, h),
+        id: (el.closest('[data-sec]') || el).getAttribute('data-sec') || '' });
+    });
+    return out;
   }
   function fitColNeed(c){
     var sum = 0;
@@ -3314,12 +3387,192 @@ body.plain #mapOverlay{font-size:13.5px}
     }
     if(amt > 0.5 && items.length) items[items.length - 1].h += amt;
   }
+  // Saved part heights (B7.1). A part key per resizable part; shares are per column.
+  function fitKeyOf(el){
+    if(el.classList.contains('burnchart')) return 'burn_30min';
+    if(el.classList.contains('histwrap')) return 'system_chart';
+    return { vendorStripPanel: 'vendor_strip', activityHeatmapRow: 'activity_heatmap', turnTickerPanel: 'turn_ticker', processGroupsPanel: 'process_groups' }[el.id] || '';
+  }
+  // Water-fill: heights follow the shares, never below a floor, never above a cap. Pure, no DOM.
+  function fitSplit(list, total){
+    var n = list.length, out = [], i;
+    for(i = 0; i < n; i++) out.push(null);
+    for(var round = 0; round < n + 2; round++){
+      var fixed = 0, sh = 0;
+      for(i = 0; i < n; i++){ if(out[i] === null) sh += list[i].share; else fixed += out[i]; }
+      if(sh <= 0) break;
+      var free = total - fixed, t = [], low = false, high = false;
+      for(i = 0; i < n; i++) if(out[i] === null){ t[i] = free * list[i].share / sh; if(t[i] < list[i].floor) low = true; }
+      if(low){
+        for(i = 0; i < n; i++) if(out[i] === null && t[i] < list[i].floor) out[i] = list[i].floor;
+        continue;
+      }
+      for(i = 0; i < n; i++) if(out[i] === null && t[i] > list[i].cap){ out[i] = list[i].cap; high = true; }
+      if(high) continue;
+      for(i = 0; i < n; i++) if(out[i] === null) out[i] = t[i];
+      break;
+    }
+    for(i = 0; i < n; i++) if(out[i] === null) out[i] = list[i].floor;
+    return out;
+  }
+  function fitApplyShares(cols, keys){
+    var sh = secState.plain ? secState.heightsPlain : secState.heightsStandard;
+    if(!sh) return;
+    keys.forEach(function(k){
+      var its = cols[k].items.filter(function(it){ return it.key; });
+      if(its.length < 2) return;
+      var S = 0, tot = 0, ok = true;
+      its.forEach(function(it){ S += it.h; if(!(sh[it.key] > 0)) ok = false; else tot += sh[it.key]; });
+      if(!ok) return;
+      var res = fitSplit(its.map(function(it){
+        return { share: sh[it.key] / tot, floor: it.floor, cap: it.kind === 'list' ? Math.max(it.nat, it.h) : Infinity };
+      }), S);
+      var fl = 0;
+      its.forEach(function(it, i){ it.h = res[i]; fl += Math.floor(res[i]); });
+      var first = its.filter(function(it){ return it.kind !== 'list'; })[0];
+      if(first) first.h += S - fl;
+    });
+  }
+  function fitFind(key){
+    if(!fitLast) return null;
+    var r = null;
+    fitLast.keys.forEach(function(k){ fitLast.cols[k].items.forEach(function(it){ if(it.key === key) r = it; }); });
+    return r;
+  }
+  // The range of one handle in px. The part that grows takes first from its partner (down to the
+  // partner's floor), then from the host lists (Waits, Outcomes, Sessions) down to their three-row
+  // floor: avail is what the lists can give. A drag is an explicit choice, so it may take from the
+  // lists although the automatic fit pass lets them give last (B7.1, iteration 2).
+  function fitDragRange(A, B, hA, hB, avail){
+    avail = avail || 0;
+    var capA = A.kind === 'list' ? Math.max(A.nat, hA) : Infinity, capB = B.kind === 'list' ? Math.max(B.nat, hB) : Infinity;
+    return { min: Math.max(A.floor - hA - avail, hB - capB), max: Math.min(capA - hA, hB - B.floor + avail) };
+  }
+  // Pure: the host list heights after taking y px from them, in proportion to the room each has above its floor.
+  function fitDrawLists(items, hs, y){
+    var rooms = items.map(function(it, i){ return Math.max(0, hs[i] - it.floor); }), sum = 0;
+    rooms.forEach(function(r){ sum += r; });
+    if(sum <= 0.5 || y <= 0) return hs.slice();
+    var g = Math.min(y, sum);
+    return hs.map(function(h, i){ return h - g * rooms[i] / sum; });
+  }
+  function fitColHasShares(c, sh){
+    var its = c.items.filter(function(it){ return it.key; });
+    return its.length >= 2 && its.every(function(it){ return sh[it.key] > 0; });
+  }
+  function fitHostAvail(){
+    if(!fitLast || !fitLast.canDraw) return 0;
+    var s = 0;
+    fitLast.host.forEach(function(it){ s += Math.max(0, fitLiveH(it) - it.floor); });
+    return s;
+  }
+  function fitClearHandles(){
+    Array.prototype.forEach.call(document.querySelectorAll('.zonebody > .hdl'), function(h){ h.parentNode.removeChild(h); });
+  }
+  // One 4 px bar over the row gap between two neighbouring resizable parts of a column.
+  function fitPlaceHandles(cols, keys, host, hostX, hostR, canDraw){
+    fitClearHandles();
+    fitLast = { cols: cols, keys: keys, host: host, X: hostX, R: hostR, canDraw: canDraw };
+    keys.forEach(function(k){
+      var c = cols[k], bodyEl = c.bodyEl, bodyRect = bodyEl.getBoundingClientRect(), groups = [];
+      Array.prototype.forEach.call(bodyEl.children, function(el){
+        if(!fitShown(el) || el.classList.contains('hdl')) return;
+        var key = fitKeyOf(el), prev = groups[groups.length - 1];
+        if((el.id === 'burnLegend' || el.id === 'sessionCards') && prev && prev.key === 'burn_30min'){ prev.last = el; return; }
+        groups.push({ key: key, first: el, last: el });
+      });
+      for(var i = 0; i + 1 < groups.length; i++){
+        var g1 = groups[i], g2 = groups[i + 1];
+        if(!g1.key || !g2.key) continue;
+        var r1 = g1.last.getBoundingClientRect(), r2 = g2.first.getBoundingClientRect();
+        var h = document.createElement('div');
+        h.className = 'hdl'; h.setAttribute('role', 'separator'); h.setAttribute('aria-orientation', 'horizontal');
+        h.setAttribute('data-above', g1.key); h.setAttribute('data-below', g2.key);
+        h.setAttribute('aria-label', 'Resize ' + g1.key + ' and ' + g2.key);
+        h.style.top = Math.round(r1.bottom - bodyRect.top + (r2.top - r1.bottom - 4) / 2) + 'px';
+        bodyEl.appendChild(h);
+        // No room even with the host lists at their floor: not drawn, not a dead bar.
+        var A = fitFind(g1.key), B = fitFind(g2.key);
+        if(A && B){
+          var rg = fitDragRange(A, B, fitLiveH(A), fitLiveH(B), fitHostAvail());
+          if(rg.max - rg.min < 1) h.classList.add('hdl-off');
+        }
+      }
+    });
+  }
+  function fitLiveH(it){ return it.el.getBoundingClientRect().height; }
+  document.addEventListener('pointerdown', function(e){
+    var h = e.target && e.target.closest ? e.target.closest('.hdl') : null;
+    if(!h || (e.button !== undefined && e.button !== 0)) return;
+    var A = fitFind(h.getAttribute('data-above')), B = fitFind(h.getAttribute('data-below'));
+    if(!A || !B) return;
+    var hA = fitLiveH(A), hB = fitLiveH(B);
+    var host = (fitLast && fitLast.canDraw) ? fitLast.host.map(function(it){ return { it: it, h0: fitLiveH(it) }; }) : [];
+    fitDrag = { h: h, A: A, B: B, hA: hA, hB: hB, y0: e.clientY, top0: parseFloat(h.style.top) || 0,
+      r: fitDragRange(A, B, hA, hB, fitHostAvail()), d: 0, y: 0, host: host, X0: fitLast ? fitLast.X : 0, R0: fitLast ? fitLast.R : 0 };
+    h.classList.add('drag');
+    try { h.setPointerCapture(e.pointerId); } catch(err) {}
+    e.preventDefault();
+  });
+  document.addEventListener('pointermove', function(e){
+    if(!fitDrag) return;
+    var d = Math.max(fitDrag.r.min, Math.min(fitDrag.r.max, e.clientY - fitDrag.y0));
+    fitDrag.d = d;
+    // The growing part takes from its partner down to the partner's floor, the rest from the host lists.
+    var up = d > 0, g = Math.abs(d), G = up ? fitDrag.A : fitDrag.B, S = up ? fitDrag.B : fitDrag.A;
+    var hG = up ? fitDrag.hA : fitDrag.hB, hS = up ? fitDrag.hB : fitDrag.hA;
+    var take = Math.max(0, Math.min(g, hS - S.floor));
+    fitDrag.y = g - take;
+    fitSetPx(G.el, hG + g);
+    fitSetPx(S.el, hS - take);
+    var nh = fitDrawLists(fitDrag.host.map(function(x){ return x.it; }), fitDrag.host.map(function(x){ return x.h0; }), fitDrag.y);
+    fitDrag.host.forEach(function(x, i){ fitSetPx(x.it.el, nh[i]); });
+    fitDrag.h.style.top = Math.round(fitDrag.top0 + d) + 'px';
+  });
+  function fitDragEnd(){
+    var dr = fitDrag; if(!dr) return;
+    fitDrag = null;
+    dr.h.classList.remove('drag');
+    if(!dr.d) return;
+    var col = null;
+    fitLast.keys.forEach(function(k){ if(fitLast.cols[k].items.indexOf(dr.A) >= 0) col = fitLast.cols[k]; });
+    if(!col) return;
+    var its = col.items.filter(function(it){ return it.key; }), sum = 0;
+    its.forEach(function(it){ sum += fitLiveH(it); });
+    var cur = secState.plain ? secState.heightsPlain : secState.heightsStandard, merged = {};
+    if(cur) Object.keys(cur).forEach(function(k){ merged[k] = cur[k]; });
+    its.forEach(function(it){ merged[it.key] = Math.round(fitLiveH(it) / sum * 10000) / 10000; });
+    // What the drag took from the host lists, as a fraction of their shrink range (nat down to floor).
+    var X = (dr.X0 || 0) + (dr.y || 0);
+    if(X >= 1 && dr.R0 > 0) merged.host_lists = Math.max(0.0001, Math.min(1, Math.round(X / dr.R0 * 10000) / 10000));
+    else delete merged.host_lists;
+    if(secState.plain) secState.heightsPlain = merged; else secState.heightsStandard = merged;
+    secSend({ heights_mode: secState.plain ? 'plain' : 'standard', heights: merged });
+    applyPanelFit();
+  }
+  document.addEventListener('pointerup', fitDragEnd);
+  document.addEventListener('pointercancel', fitDragEnd);
+  // uicheck only (check_d42.go): the feasible drag range in px of every handle.
+  window.__bdevFitHandles = function(){
+    var out = [];
+    if(!fitLast) return out;
+    var cl = function(v){ return Math.max(-9999, Math.min(9999, Math.round(v))); };
+    Array.prototype.forEach.call(document.querySelectorAll('.zonebody > .hdl'), function(h){
+      var a = h.getAttribute('data-above'), b = h.getAttribute('data-below'), A = fitFind(a), B = fitFind(b);
+      if(!A || !B) return;
+      var r = fitDragRange(A, B, fitLiveH(A), fitLiveH(B), fitHostAvail());
+      out.push({ above: a, below: b, min: cl(r.min), max: cl(r.max), hidden: h.classList.contains('hdl-off') });
+    });
+    return out;
+  };
   function applyPanelFit(){
+    var sp = stationPanel; if(sp) stationPeek(true);
     var body = document.body, hist = document.querySelector('.histwrap');
     var histBefore = fitHistH();
     var scroll = !!secState.scrollbar;
     var lg = document.getElementById('legacy'), mainEl = document.querySelector('main');
     fitUndo();
+    fitClearHandles();
     fitUncropGroups();
     // Natural heights come from the scrollbar-on layout, as before B7.
     body.classList.add('scroll-on');
@@ -3331,7 +3584,9 @@ body.plain #mapOverlay{font-size:13.5px}
     var all = [], two = false, mainShown = fitShown(mainEl) && keys.length > 0;
     keys.forEach(function(k){ all = all.concat(cols[k].items); });
     all = all.concat(below);
-    var fit = { scroll: scroll, fitScroll: false, hidden: [], columns: [] };
+    var hostItems = scroll ? [] : fitCollectHost();
+    all = all.concat(hostItems);
+    var fit = { scroll: scroll, fitScroll: false, hidden: [], columns: [], items: [] };
     if(lg && all.length){
       two = mainShown && getComputedStyle(mainEl).flexDirection === 'row';
       // The room: the legacy block's own height. Scrollbar on with main off has no fixed room.
@@ -3340,6 +3595,20 @@ body.plain #mapOverlay{font-size:13.5px}
       var belowExtra = 0;
       below.forEach(function(it){ belowExtra += fitMarginV(it.el); });
       var needOf = function(k){ return fitColNeed(cols[k]); };
+      var host = document.getElementById('secHost'), ps = document.getElementById('pageScroll');
+      var lgOn = fitShown(lg) && (keys.length > 0 || below.length > 0);
+      // Waits on you and Outcomes can sit side by side, so the gain is measured: the
+      // current heights go on the lists and the host's own height is read back.
+      var hostH0 = host ? host.offsetHeight : 0;
+      var hostGain = function(){
+        hostItems.forEach(function(it){ fitSetPx(it.el, it.h); });
+        return host ? hostH0 - host.offsetHeight : 0;
+      };
+      var fitDeficit = function(){
+        if(lgOn) return total() - B - hostGain();
+        hostItems.forEach(function(it){ fitSetPx(it.el, it.h); });
+        return host.scrollHeight + fitMarginV(host) - ps.clientHeight;
+      };
       var mainNeed = function(){
         if(!mainShown) return 0;
         var v = keys.map(needOf);
@@ -3354,14 +3623,14 @@ body.plain #mapOverlay{font-size:13.5px}
       // Give, in the order of give, never below a floor.
       var ranked = all.filter(function(it){ return it.rank >= 0; }).sort(function(a, b){ return a.rank - b.rank; });
       for(var guard = 0; guard < 400; guard++){
-        var deficit = total() - B;
+        var deficit = fitDeficit();
         if(deficit <= 0.5) break;
         var moved = false;
         for(var i = 0; i < ranked.length; i++){
           var it = ranked[i], room = it.h - it.floor;
           if(room <= 0.5) continue;
           var take = Math.min(room, deficit);
-          if(two && it.col !== 'below'){
+          if(two && it.col !== 'below' && it.col !== 'host'){
             var other = keys.filter(function(k){ return k !== it.col; })[0];
             if(other){
               var d = needOf(it.col) - needOf(other);
@@ -3374,7 +3643,8 @@ body.plain #mapOverlay{font-size:13.5px}
         }
         if(!moved) break;
       }
-      var over = total() - B;
+      // A deficit that started below zero never shrank a host item, so the free-height branch below needs no host term.
+      var over = fitDeficit();
       if(over > 0.5){
         fit.fitScroll = true;
       } else {
@@ -3424,9 +3694,31 @@ body.plain #mapOverlay{font-size:13.5px}
         }
         if(!keys.length && below.length) fitAbsorb(below, B - total());
       }
+      // A drag took height from the host lists (B7.1 iteration 2): shrink them by the saved fraction of
+      // their range, down to their floor, and give the same height to every column (two side by side
+      // end on one line; one column takes it alone). Stacked columns do not take part, the freed height
+      // could not be told apart between them. The automatic order above is untouched: this runs only
+      // when a column carries saved shares.
+      var hostX = 0, hostR = 0;
+      hostItems.forEach(function(it){ hostR += it.nat - it.floor; });
+      var canDraw = hostItems.length > 0 && lgOn && keys.length > 0 && (two || keys.length === 1);
+      var shm = secState.plain ? secState.heightsPlain : secState.heightsStandard;
+      if(canDraw && shm && shm.host_lists > 0 && hostR > 0 && keys.some(function(k){ return fitColHasShares(cols[k], shm); })){
+        var avail0 = 0;
+        hostItems.forEach(function(it){ avail0 += Math.max(0, it.h - it.floor); });
+        hostX = Math.min(shm.host_lists * hostR, avail0);
+        if(hostX >= 1){
+          var nh = fitDrawLists(hostItems, hostItems.map(function(it){ return it.h; }), hostX);
+          hostItems.forEach(function(it, i){ it.h = nh[i]; });
+          keys.forEach(function(k){ fitAbsorb(cols[k].items, hostX); });
+          B += hostX;
+        } else hostX = 0;
+      }
+      fitApplyShares(cols, keys);
       // Apply the sizes.
       all.forEach(function(it){
         if(it.kind === 'fixed' && Math.abs(it.h - it.nat) < 0.5) return;
+        if(it.kind === 'seclist' && it.h >= it.nat - 0.5) return;
         fitSetPx(it.el, it.h);
       });
       if(mainShown){
@@ -3438,20 +3730,24 @@ body.plain #mapOverlay{font-size:13.5px}
         lg.style.flex = '0 0 auto';
         if(scroll) lg.style.height = Math.ceil(total()) + 'px';
       }
+      fitPlaceHandles(cols, keys, hostItems, hostX, hostR, canDraw);
       keys.forEach(function(k){
         var g = cols[k].items.filter(function(it){ return it.kind === 'chart' || it.kind === 'ticker'; })[0];
         fit.columns.push({ name: k, free: Math.round(B - total()), grower: g ? (g.el.id || g.kind) : '' });
       });
+      fit.items = all.map(function(it){ return { id: it.id || it.el.id || it.kind, kind: it.kind, h: Math.round(it.h), floor: Math.round(it.floor), nat: Math.round(it.nat) }; });
       var hi = all.filter(function(it){ return it.el === hist; })[0];
       window.__bdevTodoLayout = { applied: true, plainHistH: hi ? hi.nat : 0, histH: hi ? hi.h : 0 };
     } else {
       window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
+      fitLast = null;
     }
     secHostSync();
     window.__bdevFit = fit;
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
     // The chart canvas was drawn at the height it had before this pass.
     if(hist && Math.abs(fitHistH() - histBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
+    if(sp) stationPeek(false);
   }
 
   // resize (and F11, which is itself a resize of the window's client area):
@@ -3496,7 +3792,7 @@ body.plain #mapOverlay{font-size:13.5px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space' };
+  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', heightsStandard:null, heightsPlain:null };
   var secReading = { status:'missing', age_seconds:0 };
   var secAgentMap = null; // the live agent map from the payload; null unless the snapshot is current
   var secLastJSON = '';
@@ -3888,8 +4184,8 @@ body.plain #mapOverlay{font-size:13.5px}
       ['Tool','Project','Doing now','Tokens','Price at list','Last active'] :
       ['Agent','Project','State','Tokens','API price equiv.','Idle'];
     if(withCtl) head = head.concat(['']);
-    return '<table><thead><tr>' + head.map(function(h, i){ return '<th' + (i < 3 ? ' style="text-align:left"' : '') + '>' + esc(h) + '</th>'; }).join('') +
-      '</tr></thead><tbody>' + rows + '</tbody></table>';
+    return '<div class="seclist seclist-tbl">' + '<table><thead><tr>' + head.map(function(h, i){ return '<th' + (i < 3 ? ' style="text-align:left"' : '') + '>' + esc(h) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows + '</tbody></table>' + '</div>';
   }
   function secBodyProcesses(snap){
     var p = snap.processes || [], bad = (snap.sources || []).filter(function(s){ return s.name === 'sysmon' && !s.ok; });
@@ -4035,7 +4331,8 @@ body.plain #mapOverlay{font-size:13.5px}
 
   function secApplyPayload(p){
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
-      plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space' };
+      plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space',
+      heightsStandard:p.heights_standard || null, heightsPlain:p.heights_plain || null };
     secReading = p.reading || { status:'missing', age_seconds:0 };
     var cp = p.controls || {};
     ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {}, foreman:!!cp.foreman };
@@ -4094,6 +4391,11 @@ body.plain #mapOverlay{font-size:13.5px}
           });
       }
     }
+  });
+  document.getElementById('secResetHeights').addEventListener('click', function(){
+    secState.heightsStandard = null; secState.heightsPlain = null;
+    secSend({ reset_heights: true });
+    applyPanelFit();
   });
   document.addEventListener('click', function(){ if(secSettingsEl.classList.contains('open')) secSettingsOpen(false); });
   // ---- B1 History block (delete, export) inside the gear dialog ----------
@@ -4360,8 +4662,7 @@ body.plain #mapOverlay{font-size:13.5px}
   function mapIdleTableHTML(L){
     var plain = secState.plain, groups = [
       [plain ? 'Done, needs close-out' : 'Done, needs close-out', function(i){ return !!i.close_out; }],
-      [plain ? 'Waiting for you' : 'Waits on you', function(i){ return !i.close_out && !!i.waits_on_you; }],
-      ['Other sprints and flows', function(i){ return !i.close_out && !i.waits_on_you; }]];
+      ['Other sprints and flows', function(i){ return !i.close_out; }]];
     var html = '<h3>' + esc(plain ? 'Foreman jobs with no agent' : 'Sprints and flows with no session') + '</h3><table class="mapidletbl"><thead><tr><th>Name</th><th>Project</th><th>Kind</th><th>Waited</th><th>Links</th></tr></thead><tbody>';
     var link = function(p, w){ return p ? '<a href="#" class="secfile" data-path="' + esc(p) + '">' + esc(w) + '</a>' : ''; };
     groups.forEach(function(g){
@@ -4511,7 +4812,8 @@ body.plain #mapOverlay{font-size:13.5px}
   // The page can be driven without Go (uicheck d29 feeds the frozen example).
   window.__bdevSections = { apply: function(p){ secFrozen = true; secApplyPayload(p); }, state: function(){
     return { plain:secState.plain, scrollbar:secState.scrollbar, parts:secState.parts, standard:secState.standard,
-      plainSet:secState.plainSet, groups:secState.groups, stationTheme:secState.stationTheme };
+      plainSet:secState.plainSet, groups:secState.groups, stationTheme:secState.stationTheme,
+      heightsStandard:secState.heightsStandard, heightsPlain:secState.heightsPlain };
   } };
   secPoll();
   setInterval(secPoll, 5000);

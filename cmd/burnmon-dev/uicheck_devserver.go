@@ -25,7 +25,11 @@ import (
 // tools\uicheck must be able to drive either one without them fighting
 // over the same listener. Dev-only: release builds and the README never
 // set BURNMON_DEV_UICHECK, so this never opens a port for a real user.
-func startUICheckServer(w webview2.WebView) {
+//
+// page builds the document the window starts with; a request {"reload":true}
+// loads it again (the window is made with SetHtml, a plain location.reload
+// would land on about:blank), so a check can prove what survives a real reload.
+func startUICheckServer(w webview2.WebView, page func() string) {
 	if os.Getenv("BURNMON_DEV_UICHECK") == "" {
 		return
 	}
@@ -50,7 +54,7 @@ func startUICheckServer(w webview2.WebView) {
 				log.Println("uicheck: accept:", err)
 				return
 			}
-			go srv.handle(conn, w)
+			go srv.handle(conn, w, page)
 		}
 	}()
 }
@@ -73,9 +77,10 @@ func (s *uicheckServer) deliver(id, resultJSON string) {
 
 type uicheckRequest struct {
 	Script string `json:"script"`
+	Reload bool   `json:"reload,omitempty"`
 }
 
-func (s *uicheckServer) handle(conn net.Conn, w webview2.WebView) {
+func (s *uicheckServer) handle(conn net.Conn, w webview2.WebView, page func() string) {
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
@@ -85,6 +90,12 @@ func (s *uicheckServer) handle(conn net.Conn, w webview2.WebView) {
 	var req uicheckRequest
 	if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
 		fmt.Fprintf(conn, "{\"ok\":false,\"error\":%q}\n", "bad request: "+err.Error())
+		return
+	}
+
+	if req.Reload {
+		w.Dispatch(func() { w.SetHtml(page()) })
+		fmt.Fprintln(conn, `{"ok":true,"value":null}`)
 		return
 	}
 

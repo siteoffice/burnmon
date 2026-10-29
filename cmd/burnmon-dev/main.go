@@ -807,7 +807,7 @@ func main() {
 		}
 	}()
 
-	startUICheckServer(w)
+	startUICheckServer(w, func() string { return assemblePage(devCfg.StationTheme, loadUITheme(dataDir)) })
 
 	w.SetHtml(assemblePage(devCfg.StationTheme, loadUITheme(dataDir)))
 	go startBackgroundIngest(a, st, w)
