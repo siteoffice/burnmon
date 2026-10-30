@@ -496,6 +496,12 @@ Each item has one of these kinds in the snapshot:
 | `session` | a session the graph shows as waiting on you, or an agent view session that is blocked or waits on a dialog, sandbox or worker request |
 | `finished` | a finished or stopped sprint (Outcomes) |
 
+A session item is titled with its project folder and the first 8 characters of its session
+id, for example `burnmon 1a2b3c4d`, so two sessions in one folder stay apart. A session
+without a project folder, such as a Cowork cloud session, shows its agent instead
+(`cowork-cloud 1a2b3c4d`), and one with neither shows `session 1a2b3c4d`. The full session id
+is never the title.
+
 Both parts show every item in a bounded scroll list with a count. A spec or result link
 opens through `bdevOpenItemFile`, which opens only a file named by the current snapshot
 and only `.md`, `.html` or `.txt` (an `.html` file opens in the default browser). The
