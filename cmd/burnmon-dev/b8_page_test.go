@@ -100,3 +100,32 @@ func TestPageDoneGroupStartsCollapsed(t *testing.T) {
 		}
 	}
 }
+
+// The render puts the Waits list back at its top, so a toggle scrolls the new
+// Done header back into view after secRender (which runs the fit pass that
+// also resets the list). A poll's render keeps preventScroll. A held key
+// toggles once (B8 Task 8 fix round 1).
+func TestPageDoneToggleKeepsHeaderInView(t *testing.T) {
+	body := idleFn(t, "secDoneToggle")
+	const scroll = "scrollIntoView({ block:'nearest' })"
+	r, s := strings.Index(body, "secRender();"), strings.Index(body, scroll)
+	if r < 0 || s < 0 || s < r {
+		t.Errorf("secDoneToggle does not call %s on the header after secRender", scroll)
+	}
+	render := idleFn(t, "secRender")
+	if strings.Contains(render, "scrollIntoView") || !strings.Contains(render, "focus({ preventScroll:true })") {
+		t.Error("secRender (the poll path) must keep focus with preventScroll and never scroll")
+	}
+	page := idlePage()
+	const handler = "if((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.sectier.done'))"
+	k := strings.Index(page, handler)
+	if k < 0 {
+		t.Fatalf("page.html lacks the Done header key handler %q", handler)
+	}
+	// A repeat still gets preventDefault, so a held Space never scrolls the page.
+	line := page[k:]
+	line = line[:strings.Index(line, "\n")]
+	if !strings.Contains(line, "e.preventDefault(); if(!e.repeat) secDoneToggle();") {
+		t.Errorf("the Done header key handler does not skip a held key (e.repeat) after preventDefault: %q", line)
+	}
+}

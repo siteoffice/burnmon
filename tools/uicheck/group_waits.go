@@ -773,8 +773,14 @@ func caseD39(hwnd uintptr, args []string) error {
 //   - the same payload applied again (what a poll does) leaves it open;
 //   - Enter on the focused header closes it, Space opens it again, and focus
 //     stays on the header although the render replaces it;
+//   - after the click and after each key the header lies inside its list's
+//     visible part (the render puts the list back at its top; at this size
+//     the list shows fewer lines than it holds);
 //   - the panel header, with its amber number (wait_counts.blocked), reads
 //     the same throughout.
+//
+// A key is sent only while BurnMon Dev is the foreground window
+// (keyIfForeground), so it never lands in another window.
 //
 // Screenshot: d44-collapsed.
 
@@ -784,15 +790,39 @@ const (
 	vkSpace  = 0x20
 )
 
+// keyIfForeground presses vk only when fg reports hwnd in front. bringToFront
+// reports no failure, and a key sent anyway lands in whatever window is in
+// front, where Enter could submit something.
+func keyIfForeground(hwnd uintptr, vk uint16, fg func() uintptr, press func(uint16) error) error {
+	if got := fg(); got != hwnd {
+		return fmt.Errorf("BurnMon Dev is not the foreground window (window %#x is), so no key was sent", got)
+	}
+	return press(vk)
+}
+
+// foregroundWindow is the window that gets keyboard input now.
+func foregroundWindow() uintptr {
+	h, _, _ := procGetForegroundWindow.Call()
+	return h
+}
+
+// d44ReadJS also says whether the Done header lies inside its list's visible
+// part (the list scrolls inside itself), with the numbers for the error text.
 const d44ReadJS = `(function(){
   var p = document.querySelector('[data-sec=waits]');
   if(!p) return { rows: [], tiers: [], head: '' };
-  var h = p.querySelector('.sectier.done');
+  var h = p.querySelector('.sectier.done'), l = h ? h.closest('.seclist') : null, view = '', inView = false;
+  if(l){
+    var hr = h.getBoundingClientRect(), top = l.getBoundingClientRect().top + l.clientTop, bottom = top + l.clientHeight;
+    inView = hr.top >= top - 1 && hr.bottom <= bottom + 1;
+    view = 'header ' + Math.round(hr.top) + '-' + Math.round(hr.bottom) + ', list ' + Math.round(top) + '-' + Math.round(bottom) + ', scrollTop ' + Math.round(l.scrollTop);
+  }
   return { rows: Array.prototype.map.call(p.querySelectorAll('.secitem'), function(r){ return r.getAttribute('data-id'); }),
     tiers: Array.prototype.map.call(p.querySelectorAll('.sectier'), function(e){ return e.textContent; }),
     head: p.querySelector('.panelhead').textContent,
     role: h ? h.getAttribute('role') || '' : '', tab: h ? h.getAttribute('tabindex') || '' : '',
-    expanded: h ? h.getAttribute('aria-expanded') || '' : '', focused: !!h && document.activeElement === h };
+    expanded: h ? h.getAttribute('aria-expanded') || '' : '', focused: !!h && document.activeElement === h,
+    inView: inView, view: view };
 })()`
 
 type d44Page struct {
@@ -803,6 +833,8 @@ type d44Page struct {
 	Tab      string   `json:"tab"`
 	Expanded string   `json:"expanded"`
 	Focused  bool     `json:"focused"`
+	InView   bool     `json:"inView"`
+	View     string   `json:"view"`
 }
 
 func caseD44(hwnd uintptr, args []string) error {
@@ -903,6 +935,9 @@ func caseD44(hwnd uintptr, args []string) error {
 	if err := check("after a click", p, "true", all); err != nil {
 		return err
 	}
+	if !p.InView {
+		return fail("after a click the Done header is outside its list's visible part (%s)", p.View)
+	}
 
 	if _, err := d29Apply(payload); err != nil {
 		return err
@@ -914,14 +949,15 @@ func caseD44(hwnd uintptr, args []string) error {
 		return err
 	}
 
-	// Keys go to the foreground window: put it in front before each one.
+	// Keys go to the foreground window: put it in front before each one and
+	// press only when it is.
 	key := func(name string, vk uint16, expanded string, rows []string) error {
 		if _, err := evalRaw(`(document.querySelector('[data-sec=waits] .sectier.done').focus(), 1)`); err != nil {
 			return err
 		}
 		bringToFront(hwnd)
-		if err := pressKey(vk); err != nil {
-			return fail("%s: press: %v", name, err)
+		if err := keyIfForeground(hwnd, vk, foregroundWindow, pressKey); err != nil {
+			return fail("%s: %v", name, err)
 		}
 		p, err := waitFor(expanded)
 		if err != nil {
@@ -932,6 +968,9 @@ func caseD44(hwnd uintptr, args []string) error {
 		}
 		if !p.Focused {
 			return fail("after %s the Done header does not have focus", name)
+		}
+		if !p.InView {
+			return fail("after %s the Done header is outside its list's visible part (%s)", name, p.View)
 		}
 		return nil
 	}

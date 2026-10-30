@@ -4304,6 +4304,15 @@ body.plain #mapOverlay{font-size:13.5px}
     secApplyParts();
     secFit();
   }
+  // The render puts the Waits list back at its top (and the fit pass inside it
+  // does too), so the header the user just used is scrolled back into view
+  // after it. A poll's render does not scroll.
+  function secDoneToggle(){
+    secDoneOpen = !secDoneOpen;
+    secRender();
+    var h = document.querySelector('#secPanels .sectier.done');
+    if(h) h.scrollIntoView({ block:'nearest' });
+  }
 
   // Every part is one switch per mode. A part that is off gets .sec-off, the
   // older zones follow their parts, and the whole older block goes when
@@ -4851,7 +4860,6 @@ body.plain #mapOverlay{font-size:13.5px}
     document.getElementById('turnPopupOverlay').classList.add('over-station');
     openTurnPopup(sid, turn);
   });
-  function secDoneToggle(){ secDoneOpen = !secDoneOpen; secRender(); }
   document.getElementById('secPanels').addEventListener('click', function(e){
     if(ctlClick(e)){ secRender(); return; }
     if(e.target.closest && e.target.closest('.sectier.done')){ secDoneToggle(); return; }
@@ -4866,9 +4874,10 @@ body.plain #mapOverlay{font-size:13.5px}
       }
     }
   });
-  // Enter and Space work the Done header as they work a button.
+  // Enter and Space work the Done header as they work a button; a held key
+  // toggles once, and its repeats still do not scroll the page.
   document.getElementById('secPanels').addEventListener('keydown', function(e){
-    if((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.sectier.done')){ e.preventDefault(); secDoneToggle(); }
+    if((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.sectier.done')){ e.preventDefault(); if(!e.repeat) secDoneToggle(); }
   });
   window.__bdevMap = { open: mapOpenView, close: mapCloseView, choose: mapChoose, isOpen: function(){ return mapOpen; },
     // uicheck only: draw a payload without calling Go. src is live or the hours.
