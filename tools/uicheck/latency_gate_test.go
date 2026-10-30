@@ -6,9 +6,124 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
+
+// swapVar sets *p to v for the length of the test.
+func swapVar[T any](t *testing.T, p *T, v T) {
+	t.Helper()
+	old := *p
+	*p = v
+	t.Cleanup(func() { *p = old })
+}
+
+// fakePage makes latencyReadFn answer like a page that shows the probe's row
+// exactly when its sprint.json says waiting-on-you, with no settle wait.
+func fakePage(t *testing.T, dir string) {
+	t.Helper()
+	swapVar(t, &latencySettle, 0)
+	swapVar(t, &latencyReadFn, func() (latencyRead, error) {
+		b, _ := os.ReadFile(filepath.Join(dir, "sprint.json"))
+		var s struct {
+			Status string `json:"status"`
+		}
+		_ = json.Unmarshal(b, &s)
+		return latencyRead{Sec: true, Stamp: true, Row: s.Status == "waiting-on-you"}, nil
+	})
+}
+
+// probeStatus is the status in the probe's sprint.json, "" when there is none.
+func probeStatus(t *testing.T, dir string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, "sprint.json"))
+	if err != nil {
+		return ""
+	}
+	var s struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
+	return s.Status
+}
+
+// claimTemp claims a probe folder under a temp Foreman root.
+func claimTemp(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sprints"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := claimProbeDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// Against a page that keeps up, the gate passes and the probe is gone.
+func TestLatencyGateFakePage(t *testing.T) {
+	dir := claimTemp(t)
+	fakePage(t, dir)
+	if err := latencyGateIn(dir, 2); err != nil {
+		t.Fatalf("latencyGateIn: %v", err)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("probe folder still there: %v", err)
+	}
+}
+
+// A row already on the page after the settle, before t0, comes from a late
+// snapshot: the round fails before it writes waiting-on-you, instead of
+// timing a row that was there all along.
+func TestRoundFailsWhenRowBeforeT0(t *testing.T) {
+	dir := claimTemp(t)
+	swapVar(t, &latencySettle, 0)
+	reads := 0
+	swapVar(t, &latencyReadFn, func() (latencyRead, error) {
+		reads++
+		return latencyRead{Sec: true, Stamp: true, Row: reads > 1}, nil
+	})
+	_, err := runLatencyRounds(&latencyProbe{dir: dir}, 1)
+	if err == nil || !strings.Contains(err.Error(), "before t0") {
+		t.Fatalf("err = %v, want the row-before-t0 failure", err)
+	}
+	if got := probeStatus(t, dir); got != "running" {
+		t.Fatalf("sprint.json status %q after the failed round, want running (no waiting-on-you write)", got)
+	}
+}
+
+// When the marker cannot be written, the folder just made is removed, so no
+// unmarked folder blocks later runs.
+func TestClaimRemovesFolderWhenMarkerFails(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sprints"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	swapVar(t, &probeMarkerWrite, func(string) error { return errors.New("disk full") })
+	if _, err := claimProbeDir(root); err == nil || !strings.Contains(err.Error(), "disk full") {
+		t.Fatalf("claimProbeDir err = %v, want the marker error", err)
+	}
+	if _, err := os.Stat(latencyProbeDir(root)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the unmarked probe folder stayed: %v", err)
+	}
+}
+
+// Closing the console window arrives as SIGTERM on Windows, Ctrl+C as
+// os.Interrupt: both run the cleanup.
+func TestLatencySignals(t *testing.T) {
+	has := map[os.Signal]bool{}
+	for _, s := range latencySignals {
+		has[s] = true
+	}
+	if !has[os.Interrupt] || !has[syscall.SIGTERM] {
+		t.Fatalf("latencySignals = %v, want os.Interrupt and SIGTERM", latencySignals)
+	}
+}
 
 // p95 is the nearest rank: the ceil(0.95 n)-th smallest value.
 func TestLatencyStats(t *testing.T) {

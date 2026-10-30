@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -37,11 +38,26 @@ const (
 	latencyLimitMs  = 2000
 	latencyWait     = 20 * time.Second
 	latencyPoll     = 50 * time.Millisecond
-	// latencySettle lets the "running" write's own burst and snapshot write
-	// end before t0, so each round starts from a quiet watcher, the way a
-	// sprint that ran for a while turns waiting-on-you.
-	latencySettle = time.Second
 )
+
+// latencySettle lets the "running" write's own burst and snapshot write end
+// before t0, so each round starts from a quiet watcher, the way a sprint that
+// ran for a while turns waiting-on-you. A var so tests can drop it.
+var latencySettle = time.Second
+
+// probeRemoveRetry is how long removeProbeDir keeps trying one entry. A Go
+// reader of sprint.json (BurnMon's own Foreman read) shares read and write but
+// not delete, so a delete fails for the few milliseconds it reads.
+var probeRemoveRetry = 2 * time.Second
+
+// latencySignals run the probe cleanup before the process ends: Ctrl+C, and
+// closing the console window, which Go reports as SIGTERM on Windows.
+var latencySignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
+
+// probeMarkerWrite writes the marker file; tests swap it to fail.
+var probeMarkerWrite = func(path string) error {
+	return os.WriteFile(path, []byte(latencyMarkerText), 0o644)
+}
 
 const latencyMarkerText = "Made by the BurnMon uicheck case latency/gate (tools\\uicheck\\latency_gate.go).\r\n" +
 	"It removes this folder when it ends. If a run was killed, delete the folder.\r\n"
@@ -115,22 +131,61 @@ func claimProbeDir(root string) (string, error) {
 	case !errors.Is(err, fs.ErrNotExist):
 		return "", err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(dir, latencyMarker), []byte(latencyMarkerText), 0o644); err != nil {
+	if err := os.Mkdir(dir, 0o755); err != nil {
 		return "", err
+	}
+	if err := probeMarkerWrite(filepath.Join(dir, latencyMarker)); err != nil {
+		// The folder was made just now and holds nothing of anyone else's:
+		// remove it, or every later run would refuse it as unmarked.
+		return "", errors.Join(err, os.RemoveAll(dir))
 	}
 	return dir, nil
 }
 
 // removeProbeDir removes the probe folder, and only when the marker says it
-// is the harness's own.
+// is the harness's own. Every other entry goes first and the marker last, so
+// a file that will not go (a reader holds it) leaves the folder marked, the
+// error says so, and a later run takes the folder over. os.RemoveAll on the
+// folder would carry on past that file and take the marker with it.
 func removeProbeDir(dir string) error {
 	if !hasProbeMarker(dir) {
 		return fmt.Errorf("%s has no %s; not removed", dir, latencyMarker)
 	}
-	return os.RemoveAll(dir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.Name() == latencyMarker {
+			continue
+		}
+		if err := removeRetry(os.RemoveAll, filepath.Join(dir, e.Name())); err != nil {
+			return fmt.Errorf("%s stays, with its marker: %w", dir, err)
+		}
+	}
+	if err := removeRetry(os.Remove, filepath.Join(dir, latencyMarker)); err != nil {
+		return err
+	}
+	return removeRetry(os.Remove, dir)
+}
+
+// removeRetry calls remove on path until it succeeds or probeRemoveRetry has
+// passed, and returns the last error.
+func removeRetry(remove func(string) error, path string) error {
+	deadline := time.Now().Add(probeRemoveRetry)
+	for {
+		err := remove(path)
+		if err == nil || errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // probeSprintJSON is the probe's sprint.json. Status waiting-on-you is all it
@@ -158,6 +213,37 @@ func writeProbeSprint(dir, status string, at time.Time) error {
 	return os.WriteFile(filepath.Join(dir, "sprint.json"), probeSprintJSON(status, at), 0o644)
 }
 
+// latencyProbe is the claimed probe folder. mu orders the sprint.json writes
+// and the removal, so a Ctrl+C cleanup never runs during a write (a file the
+// harness itself holds open will not delete), and once the removal has run
+// no write lands in the folder again.
+type latencyProbe struct {
+	dir     string
+	mu      sync.Mutex
+	removed bool
+	err     error
+}
+
+func (p *latencyProbe) write(status string, at time.Time) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.removed {
+		return errors.New("the probe was already removed")
+	}
+	return writeProbeSprint(p.dir, status, at)
+}
+
+// remove removes the probe once; a later call returns the first result.
+func (p *latencyProbe) remove() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.removed {
+		p.removed = true
+		p.err = removeProbeDir(p.dir)
+	}
+	return p.err
+}
+
 // latencyRead is one DOM read: the Waits part, the probe's row, whether the
 // page is hidden (that stops the 1 s stamp check) and whether this build has
 // the stamp binding at all.
@@ -177,25 +263,40 @@ func latencyRowJS() string {
 })()`
 }
 
+// latencyReadFn reads the page once; tests swap it for a fake page.
+var latencyReadFn = func() (latencyRead, error) {
+	var r latencyRead
+	err := evalInto(latencyRowJS(), &r)
+	return r, err
+}
+
+// pageCanShow says why the page cannot show the row in time, nil when it can,
+// so such a page fails at once instead of after the timeout.
+func pageCanShow(r latencyRead) error {
+	switch {
+	case !r.Stamp:
+		return errors.New("this burnmon-dev.exe has no bdevSnapshotStamp; rebuild with .\\build.ps1")
+	case r.Hidden:
+		return errors.New("the page is hidden (window minimized?), so its 1 s stamp check is off")
+	case !r.Sec:
+		return errors.New("the page has no Waits part")
+	}
+	return nil
+}
+
 // waitRow polls the DOM every latencyPoll until the probe's row is there
-// (want true) or gone, and returns when it saw that. A page that cannot show
-// the row in time fails at once instead of after the timeout.
+// (want true) or gone, and returns when it saw that.
 func waitRow(want bool, timeout time.Duration) (time.Time, error) {
-	js := latencyRowJS()
 	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(latencyPoll) {
-		var r latencyRead
-		if err := evalInto(js, &r); err != nil {
+		r, err := latencyReadFn()
+		if err != nil {
 			return time.Time{}, err
 		}
 		at := time.Now()
-		switch {
-		case !r.Stamp:
-			return time.Time{}, errors.New("this burnmon-dev.exe has no bdevSnapshotStamp; rebuild with .\\build.ps1")
-		case r.Hidden:
-			return time.Time{}, errors.New("the page is hidden (window minimized?), so its 1 s stamp check is off")
-		case !r.Sec:
-			return time.Time{}, errors.New("the page has no Waits part")
-		case r.Row == want:
+		if err := pageCanShow(r); err != nil {
+			return time.Time{}, err
+		}
+		if r.Row == want {
 			return at, nil
 		}
 	}
@@ -219,49 +320,81 @@ func caseLatencyGate(hwnd uintptr, args []string) error {
 	if err != nil {
 		return err
 	}
-	var once sync.Once
-	cleanup := func() {
-		once.Do(func() {
-			if err := removeProbeDir(dir); err != nil {
-				fmt.Printf("uicheck: latency/gate could not remove the probe: %v\n", err)
-			}
-		})
-	}
-	defer cleanup()
-	// Ctrl+C skips the defer and would leave a fake Blocked sprint in the
+	return latencyGateIn(dir, latencyRounds)
+}
+
+// latencyGateIn runs the rounds on the claimed probe folder dir and removes
+// the probe at the end, also when a signal stops the run. A probe that could
+// not be removed fails the gate, whatever the rounds gave: it is a fake
+// Blocked sprint left in the real Foreman tree.
+func latencyGateIn(dir string, rounds int) (err error) {
+	p := &latencyProbe{dir: dir}
+	defer func() {
+		if rerr := p.remove(); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("probe cleanup failed; delete %s by hand once nothing holds it: %w", dir, rerr))
+		}
+	}()
+	// A signal skips the defer and would leave a fake Blocked sprint in the
 	// real Foreman tree.
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+	signal.Notify(sig, latencySignals...)
 	defer signal.Stop(sig)
 	go func() {
-		<-sig
-		cleanup()
+		s := <-sig
+		if rerr := p.remove(); rerr != nil {
+			fmt.Printf("uicheck: latency/gate stopped by %v; probe cleanup failed, delete %s by hand: %v\n", s, dir, rerr)
+		}
 		os.Exit(1)
 	}()
 	fmt.Printf("uicheck: latency/gate probe %s\n", dir)
+	ms, err := runLatencyRounds(p, rounds)
+	if err != nil {
+		return err
+	}
+	return latencyVerdict(ms)
+}
 
+// runLatencyRounds times rounds rounds on p, in ms each.
+func runLatencyRounds(p *latencyProbe, rounds int) ([]int64, error) {
 	var ms []int64
-	for i := 1; i <= latencyRounds; i++ {
-		if err := writeProbeSprint(dir, "running", time.Now()); err != nil {
-			return fmt.Errorf("round %d: %w", i, err)
+	for i := 1; i <= rounds; i++ {
+		if err := p.write("running", time.Now()); err != nil {
+			return ms, fmt.Errorf("round %d: %w", i, err)
 		}
 		if _, err := waitRow(false, latencyWait); err != nil {
-			return fmt.Errorf("round %d: %w", i, err)
+			return ms, fmt.Errorf("round %d: %w", i, err)
 		}
 		time.Sleep(latencySettle)
+		// A row back on the page now is a late snapshot of the last round,
+		// not this round's write: timing it would make the round falsely fast.
+		r, err := latencyReadFn()
+		if err == nil {
+			err = pageCanShow(r)
+		}
+		if err == nil && r.Row {
+			err = errors.New("the row is on the page before t0 (a late snapshot); the round would be falsely fast")
+		}
+		if err != nil {
+			return ms, fmt.Errorf("round %d: %w", i, err)
+		}
 		// t0 is taken before the write, so the time counts the write too.
 		t0 := time.Now()
-		if err := writeProbeSprint(dir, "waiting-on-you", t0); err != nil {
-			return fmt.Errorf("round %d: %w", i, err)
+		if err := p.write("waiting-on-you", t0); err != nil {
+			return ms, fmt.Errorf("round %d: %w", i, err)
 		}
 		t1, err := waitRow(true, latencyWait)
 		if err != nil {
-			return fmt.Errorf("round %d: %w", i, err)
+			return ms, fmt.Errorf("round %d: %w", i, err)
 		}
 		d := t1.Sub(t0).Milliseconds()
 		ms = append(ms, d)
 		fmt.Printf("uicheck: latency/gate round %d: %d ms\n", i, d)
 	}
+	return ms, nil
+}
+
+// latencyVerdict prints p95 and max and fails on any round at the limit or over.
+func latencyVerdict(ms []int64) error {
 	p95, max := latencyStats(ms)
 	fmt.Printf("uicheck: latency/gate %d rounds: p95 %d ms, max %d ms (limit: under %d ms)\n", len(ms), p95, max, latencyLimitMs)
 	var slow []string
