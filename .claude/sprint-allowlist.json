@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "allow": [
+    "Bash(.\\scripts\\uicheck.ps1 dev)"
+  ]
+}
