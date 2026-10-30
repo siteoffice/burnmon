@@ -382,6 +382,14 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bdevSections:", err)
 	}
+	// bdevSnapshotStamp (B8): the page asks every second whether the snapshot
+	// file changed and only then calls bdevSections. It runs on the UI thread,
+	// so it is one os.Stat and nothing else.
+	if err := w.Bind("bdevSnapshotStamp", func() string {
+		return snapshotStamp(snapPath)
+	}); err != nil {
+		log.Println("could not bind bdevSnapshotStamp:", err)
+	}
 	if err := w.Bind("bdevSetSections", func(c sectionsChange) error {
 		err := applySectionsChange(setDir, c)
 		if err != nil {

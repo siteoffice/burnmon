@@ -504,7 +504,10 @@ folders are watched: a change to a file BurnMon reads there (`sprint.json`,
 `action-log.ndjson`, `report.md`, `flow.json`, `foreman.json`) is written to the snapshot
 within about a second, one write per burst of changes. The index and board files Foreman
 rewrites on every step never cause a write. The 7.5-second read of Foreman's state files
-stays as the fallback, also when a folder cannot be watched.
+stays as the fallback, also when a folder cannot be watched. BurnMon Dev checks the
+snapshot file's time and size every second and reads it again when they changed, so a new
+snapshot reaches these parts within about a second more; its full read every 5 seconds
+stays as the fallback.
 
 The agent view is off by default. With `agent_view` on, BurnMon runs `claude agents --json`
 every 30 seconds, each run bounded to 10 seconds, with a hidden window. It starts only a

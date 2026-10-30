@@ -606,3 +606,70 @@ func TestSetSectionsHeightsAcceptsHostLists(t *testing.T) {
 		t.Fatalf("saved %v", got)
 	}
 }
+
+// The page's 1 s tick compares this stamp to see a new snapshot (B8): empty
+// when the file is missing, the same while nobody writes, new after a write.
+func TestSnapshotStamp(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "snapshot.json")
+	if got := snapshotStamp(path); got != "" {
+		t.Fatalf("missing file stamp = %q, want empty", got)
+	}
+	if got := snapshotStamp(""); got != "" {
+		t.Errorf("empty path stamp = %q, want empty", got)
+	}
+
+	if err := os.WriteFile(path, []byte("one"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	first := snapshotStamp(path)
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := fmt.Sprintf("%d:%d", fi.ModTime().UnixNano(), fi.Size()); first != want {
+		t.Fatalf("stamp = %q, want %q", first, want)
+	}
+	if again := snapshotStamp(path); again != first {
+		t.Errorf("no write changed the stamp: %q then %q", first, again)
+	}
+
+	// A write of another size changes it even inside one clock tick.
+	if err := os.WriteFile(path, []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second := snapshotStamp(path)
+	if second == first {
+		t.Errorf("a write kept the stamp %q", first)
+	}
+
+	// A write of the same size changes it through the modification time. The
+	// time is set a second on, so the check holds inside one clock tick too.
+	if err := os.WriteFile(path, []byte("third!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err = os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	later := fi.ModTime().Add(time.Second)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if third := snapshotStamp(path); third == second {
+		t.Errorf("a same-size write with a new time kept the stamp %q", second)
+	}
+}
+
+// bdevSnapshotStamp runs on the UI thread every second, so it hands back the
+// stamp and does nothing else (B8). Without the binding the page would fall
+// back to the 5 s read without a word.
+func TestSnapshotStampBinding(t *testing.T) {
+	b, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := strings.ReplaceAll(string(b), "\r\n", "\n")
+	const bind = "if err := w.Bind(\"bdevSnapshotStamp\", func() string {\n\t\treturn snapshotStamp(snapPath)\n\t}); err != nil {"
+	if !strings.Contains(src, bind) {
+		t.Errorf("main.go lacks %q", bind)
+	}
+}

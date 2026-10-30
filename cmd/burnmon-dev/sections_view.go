@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"os"
 	"time"
 
 	"burnmon/internal/agentmap"
@@ -130,6 +131,18 @@ func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() c
 		p.AgentViewLine = agentViewLine(p.Reading.Snapshot.AgentView)
 	}
 	return p
+}
+
+// snapshotStamp is the snapshot file's modification time and size, "" when
+// the file is missing. The page's 1 s tick compares it to see a new snapshot
+// (B8). It is one os.Stat and nothing else: bdevSnapshotStamp runs it on the
+// UI thread.
+func snapshotStamp(path string) string {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d:%d", fi.ModTime().UnixNano(), fi.Size())
 }
 
 // applySectionsChange validates a change from the page and saves it. A change

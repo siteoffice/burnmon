@@ -3802,6 +3802,7 @@ body.plain #mapOverlay{font-size:13.5px}
   var secAgentMap = null; // the live agent map from the payload; null unless the snapshot is current
   var secAgentViewLine = ''; // Go's line on why the agent view is off or refused; empty when it runs
   var secLastJSON = '';
+  var secLastStamp = null; // the snapshot file's last stamp from Go; null until the first one
   var secLastSig = '';
   var secFrozen = false; // set by the test hook so the poll cannot overwrite what it injected
 
@@ -4364,6 +4365,17 @@ body.plain #mapOverlay{font-size:13.5px}
       secLastJSON = j;
     }).catch(function(e){ console.log('bdevSections:', e); });
   }
+  // A new snapshot reaches the page within a second (B8): each second this asks
+  // Go only for the file's stamp (one os.Stat) and runs the full read when it
+  // changed. The first stamp is only recorded; the 5 s secPoll stays as the fallback.
+  function secStampPoll(){
+    if(typeof window.bdevSnapshotStamp !== 'function' || document.hidden || secFrozen) return;
+    window.bdevSnapshotStamp().then(function(s){
+      var was = secLastStamp;
+      secLastStamp = s;
+      if(was !== null && s !== was) secPoll();
+    }).catch(function(e){ console.log('bdevSnapshotStamp:', e); });
+  }
   function secSend(change){
     if(typeof window.bdevSetSections !== 'function') return Promise.resolve();
     return window.bdevSetSections(change).then(function(){ secLastJSON = 'x'; return secPoll(); })
@@ -4854,6 +4866,7 @@ body.plain #mapOverlay{font-size:13.5px}
   } };
   secPoll();
   setInterval(secPoll, 5000);
+  setInterval(secStampPoll, 1000);
   setupExportButton();
 })();
 </script>

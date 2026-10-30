@@ -33,3 +33,46 @@ func TestPageDrawsAgentViewLine(t *testing.T) {
 		t.Errorf("the agent view line depends on Plain: %q", line)
 	}
 }
+
+// The page asks for the snapshot stamp every second and runs the full read
+// only when the stamp changed; the 5 s read stays as the fallback (B8).
+func TestPageStampPollReadsNewSnapshot(t *testing.T) {
+	page := idlePage()
+	for _, want := range []string{
+		"var secLastStamp = null;",
+		"setInterval(secStampPoll, 1000);",
+		"setInterval(secPoll, 5000);",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page.html lacks %q", want)
+		}
+	}
+	body := idleFn(t, "secStampPoll")
+	// Hidden or frozen (uicheck feeds the page through __bdevSections.apply):
+	// no call to Go at all.
+	const skip = "if(typeof window.bdevSnapshotStamp !== 'function' || document.hidden || secFrozen) return;"
+	ask := "window.bdevSnapshotStamp()"
+	i, j := strings.Index(body, skip), strings.Index(body, ask)
+	if i < 0 {
+		t.Errorf("secStampPoll lacks %q", skip)
+	}
+	if j < 0 {
+		t.Errorf("secStampPoll lacks %q", ask)
+	}
+	if i >= 0 && j >= 0 && j < i {
+		t.Error("secStampPoll asks Go before it checks hidden and frozen")
+	}
+	// The first stamp is only recorded; a changed one runs the full read.
+	for _, want := range []string{
+		"var was = secLastStamp;",
+		"secLastStamp = s;",
+		"if(was !== null && s !== was) secPoll();",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("secStampPoll lacks %q", want)
+		}
+	}
+	if n := strings.Count(body, "secPoll()"); n != 1 {
+		t.Errorf("secStampPoll calls secPoll %d times, want 1 (only on a changed stamp)", n)
+	}
+}
