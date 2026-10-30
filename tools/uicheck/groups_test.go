@@ -3,7 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -140,6 +143,55 @@ func TestRunDevGroup(t *testing.T) {
 	if strings.Join(ran, " ") != "a b" {
 		t.Fatalf("ran after the failure: %v", ran)
 	}
+}
+
+// latency/gate writes into the real Foreman tree, so only its full name runs
+// it. A full run, "dev" and "reverse" take the seven devGroups, which both
+// scripts list again as $devGroups: none holds latency. The bare "latency"
+// and "gate" do not resolve either, since uicheck.ps1 would send them to
+// burnmon.exe; "latency/gate" matches its ^[a-z]+/ route to burnmon-dev.exe.
+func TestLatencyNotInDefaultRun(t *testing.T) {
+	var names []string
+	for _, g := range devGroups {
+		names = append(names, g.Name)
+		if g.Name == "latency" {
+			t.Error("devGroups holds latency")
+		}
+	}
+	for _, script := range []string{"uicheck.ps1", "uicheck-dev.ps1"} {
+		got, err := scriptDevGroups(filepath.Join("..", "..", "scripts", script))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, names) {
+			t.Errorf("%s $devGroups = %v, want %v", script, got, names)
+		}
+	}
+	if checks["latency/gate"] == nil || !isDevCheck("latency/gate") {
+		t.Error("latency/gate is not a registered dev check")
+	}
+	for _, n := range []string{"latency", "gate"} {
+		if checks[n] != nil || isDevCheck(n) {
+			t.Errorf("%q resolves; only latency/gate may", n)
+		}
+	}
+}
+
+// scriptDevGroups reads a script's $devGroups = @("fit", ...) line.
+func scriptDevGroups(path string) ([]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	m := regexp.MustCompile(`\$devGroups = @\(([^)]*)\)`).FindSubmatch(b)
+	if m == nil {
+		return nil, fmt.Errorf("%s: no $devGroups line", path)
+	}
+	var out []string
+	for _, q := range regexp.MustCompile(`"([^"]+)"`).FindAllSubmatch(m[1], -1) {
+		out = append(out, string(q[1]))
+	}
+	return out, nil
 }
 
 func caseNames(g devGroup) []string {
