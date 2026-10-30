@@ -42,6 +42,9 @@ type sectionsPayload struct {
 	// Line is the header sentence built from it and Reading (snapshot_line.go).
 	Writer snapshotwriter.StatusView `json:"writer"`
 	Line   snapshotLine              `json:"snapshot_line"`
+	// AgentViewLine says why the agent view is off or refused (agentview_line.go);
+	// empty when it runs.
+	AgentViewLine string `json:"agent_view_line,omitempty"`
 }
 
 // controlsPayload is what the page needs to draw the control chips and the

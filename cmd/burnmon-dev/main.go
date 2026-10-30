@@ -205,6 +205,8 @@ func main() {
 	if cfgFile != "" {
 		log.Println("using config overrides from", cfgFile)
 	}
+	// The config does not change while the app runs, so the line is fixed too.
+	agentLine := agentViewLine(cfg, exec.LookPath, runtime.GOOS)
 
 	devCfg := loadDevConfig(setDir)
 	devCfg.MicrosoftTodoEnabled = todoEnabledForRun(devCfg.MicrosoftTodoEnabled, uicheckActive())
@@ -378,7 +380,9 @@ func main() {
 	}
 	ctlSvc := newControlService(cfg, setDir, snapPath, storePath)
 	if err := w.Bind("bdevSections", func() sectionsPayload {
-		return sectionsPayloadWith(setDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
+		p := sectionsPayloadWith(setDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
+		p.AgentViewLine = agentLine
+		return p
 	}); err != nil {
 		log.Println("could not bind bdevSections:", err)
 	}

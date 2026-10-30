@@ -3800,6 +3800,7 @@ body.plain #mapOverlay{font-size:13.5px}
   // payload carried no line and secHeadline composes one itself.
   var secLine = { text:'Starting up: writing the first snapshot.', warn:false };
   var secAgentMap = null; // the live agent map from the payload; null unless the snapshot is current
+  var secAgentViewLine = ''; // Go's line on why the agent view is off or refused; empty when it runs
   var secLastJSON = '';
   var secLastSig = '';
   var secFrozen = false; // set by the test hook so the poll cannot overwrite what it injected
@@ -4089,6 +4090,8 @@ body.plain #mapOverlay{font-size:13.5px}
   }
   function secBodyWaits(snap){
     var w = snap.wait_items || [], html = secAged(snap) ? secAgedLine() : '';
+    // Go's sentence, so it reads the same in Standard and Plain.
+    if(secAgentViewLine) html = '<div class="dim secagentview">' + esc(secAgentViewLine) + '</div>' + html;
     if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'Nothing waits on you.') + '</div>';
     var rows = '';
     SEC_TIERS.forEach(function(t){
@@ -4348,6 +4351,7 @@ body.plain #mapOverlay{font-size:13.5px}
     var cp = p.controls || {};
     ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {}, foreman:!!cp.foreman };
     secAgentMap = p.agent_map || null;
+    secAgentViewLine = p.agent_view_line || '';
     secRender();
     if(mapOpen && mapSource === 'live') mapFetch();
   }

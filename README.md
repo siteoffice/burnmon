@@ -506,7 +506,11 @@ The agent view is off by default. With `agent_view` on, BurnMon runs `claude age
 every 30 seconds, each run bounded to 10 seconds, with a hidden window. It starts only a
 `claude.exe` that can be started directly. When `claude` on `PATH` is the npm shim
 `claude.cmd`, BurnMon reads the shim as text, never runs it, and starts the `claude.exe` it
-names; a `.ps1` or `.bat` is refused. It has not been run
+names; a `.ps1` or `.bat` is refused. When the agent view is off or refused, Waits on you in
+BurnMon Dev opens with one line that says so and names the `burnmon.json` key that fixes it:
+`agent_view` when it is off, `claude_path` with the refusal reason when `claude` does not
+resolve. BurnMon Dev reads `burnmon.json` once at start, so a fix shows after a restart. It
+has not been run
 against the real `claude` (B3 report). Window level behaviour of these parts is not
 checked here: uicheck `d36` renders both parts from the example snapshot, and `d29`, `d33`
 and `d34` cover the layout, but none of them was run in B1 to B4 because the apps were open.
