@@ -504,7 +504,9 @@ seconds to reach the page (calculated, not measured).
 
 The agent view is off by default. With `agent_view` on, BurnMon runs `claude agents --json`
 every 30 seconds, each run bounded to 10 seconds, with a hidden window. It starts only a
-`claude.exe` that can be started directly: a `.cmd` shim is refused. It has not been run
+`claude.exe` that can be started directly. When `claude` on `PATH` is the npm shim
+`claude.cmd`, BurnMon reads the shim as text, never runs it, and starts the `claude.exe` it
+names; a `.ps1` or `.bat` is refused. It has not been run
 against the real `claude` (B3 report). Window level behaviour of these parts is not
 checked here: uicheck `d36` renders both parts from the example snapshot, and `d29`, `d33`
 and `d34` cover the layout, but none of them was run in B1 to B4 because the apps were open.
@@ -584,14 +586,19 @@ Three more keys go in `burnmon.json`. `burnmon.example.json` does not list them 
   override it.
 - `agent_view`: `true` turns on the agent view poller. Default off.
 - `claude_path`: an absolute path to `claude.exe`. It must be an existing file and a
-  `.exe` on Windows; a `.cmd` shim is refused. Empty means a `claude.exe` on `PATH`, which
-  the poller and the controls accept too.
+  `.exe` on Windows; a `.cmd` shim is refused here. Empty means a `claude.exe` on `PATH`, or
+  the `claude.exe` that the npm shim `claude.cmd` on `PATH` names, which the poller and the
+  controls accept too.
 
-`claude` on `PATH` is often an npm shim, `claude.cmd`, which BurnMon refuses. For an npm
-install, the shim runs a real `claude.exe` under the npm prefix, in
-`<npm prefix>\node_modules\@anthropic-ai\claude-code\bin\claude.exe`. Open the shim in a text
-editor to see the exact path, and put that path in `claude_path`. On the laptop where this was
-checked (read only) the shim names that file and the file exists.
+`claude` on `PATH` is often an npm shim, `claude.cmd`. For an npm install, the shim runs a
+real `claude.exe` under the npm prefix, in
+`<npm prefix>\node_modules\@anthropic-ai\claude-code\bin\claude.exe`. BurnMon reads the shim as
+text, never runs it, and takes the quoted `%dp0%` or `%~dp0` path that ends in `claude.exe`,
+when that file exists. A shim that names no `claude.exe` (an older one runs `node.exe` with a
+`.js` file) or names a missing one is refused, and so is a `.ps1` or `.bat` shim; the agent
+view source says why. Then `claude_path` is the manual fix: open the shim in a text editor to
+see the exact path, and put that path in `claude_path`. On the laptop where this was checked
+(read only) the shim names that file and BurnMon finds it.
 
 ## WSL
 
