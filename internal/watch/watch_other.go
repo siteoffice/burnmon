@@ -3,10 +3,10 @@
 package watch
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
@@ -20,6 +20,7 @@ import (
 // Create event reports.
 type fsnotifyBackend struct {
 	onChange OnChange
+	match    func(path string) bool // which file paths reach onChange
 
 	fsw       *fsnotify.Watcher
 	watchedMu sync.Mutex
@@ -28,12 +29,12 @@ type fsnotifyBackend struct {
 	wg sync.WaitGroup
 }
 
-func newNativeBackend(onChange OnChange) (nativeBackend, error) {
+func newNativeBackend(onChange OnChange, match func(string) bool) (nativeBackend, error) {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
-	b := &fsnotifyBackend{onChange: onChange, fsw: fsw, watched: map[string]bool{}}
+	b := &fsnotifyBackend{onChange: onChange, match: match, fsw: fsw, watched: map[string]bool{}}
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
@@ -42,8 +43,17 @@ func newNativeBackend(onChange OnChange) (nativeBackend, error) {
 	return b, nil
 }
 
+// AddRoot returns an error when root itself got no watch (missing, or not
+// a folder), so WatchFiles can tell a dead watch from a live one, as the
+// Windows backend already does. New ignores it.
 func (b *fsnotifyBackend) AddRoot(root string) error {
 	b.addTree(root, false)
+	b.watchedMu.Lock()
+	ok := b.watched[root]
+	b.watchedMu.Unlock()
+	if !ok {
+		return fmt.Errorf("watch: %s is not watched", root)
+	}
 	return nil
 }
 
@@ -53,8 +63,8 @@ func (b *fsnotifyBackend) AddRoot(root string) error {
 // to being caught by the 15-minute full rescan, same as before this package
 // existed.
 //
-// notifyExisting, when true, also calls onChange for every .jsonl file
-// already present under root (root's own watch is skipped if already
+// notifyExisting, when true, also calls onChange for every file b.match
+// accepts already present under root (root's own watch is skipped if already
 // registered, but each subdirectory found is walked and watched exactly as
 // during startup). This closes the race behind F7 (SESSION_LOG.md, v0.1.2,
 // confirmed by TestWatcher_NewNestedDayFolderRace): a rollout writer that
@@ -74,7 +84,7 @@ func (b *fsnotifyBackend) addTree(root string, notifyExisting bool) {
 			return nil
 		}
 		if !d.IsDir() {
-			if notifyExisting && strings.HasSuffix(strings.ToLower(p), ".jsonl") {
+			if notifyExisting && b.match(p) {
 				b.onChange(p)
 			}
 			return nil
@@ -140,14 +150,14 @@ func (b *fsnotifyBackend) handleEvent(ev fsnotify.Event) {
 			// A new project or session folder: watch it (and anything
 			// under it) too, so files written inside it are seen from here
 			// on. Pass notifyExisting=true (F7 fix): this directory is new
-			// since startup, so any .jsonl already inside it raced its own
-			// Create event past the watch not existing yet and must be
-			// picked up here instead.
+			// since startup, so any matching file already inside it raced
+			// its own Create event past the watch not existing yet and
+			// must be picked up here instead.
 			b.addTree(ev.Name, true)
 		}
 		return
 	}
-	if strings.HasSuffix(strings.ToLower(ev.Name), ".jsonl") {
+	if b.match(ev.Name) {
 		b.onChange(ev.Name)
 	}
 }
