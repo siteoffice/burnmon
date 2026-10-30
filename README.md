@@ -499,9 +499,12 @@ Each item has one of these kinds in the snapshot:
 Both parts show every item in a bounded scroll list with a count. A spec or result link
 opens through `bdevOpenItemFile`, which opens only a file named by the current snapshot
 and only `.md`, `.html` or `.txt` (an `.html` file opens in the default browser). The
-parts turn grey when the snapshot is older than two ticks. Foreman's state files are read
-every 7.5 seconds. The B3 report works out that a new gate can take up to about 15.7
-seconds to reach the page (calculated, not measured).
+parts turn grey when the snapshot is older than two ticks. Foreman's `sprints` and `flows`
+folders are watched: a change to a file BurnMon reads there (`sprint.json`,
+`action-log.ndjson`, `report.md`, `flow.json`, `foreman.json`) is written to the snapshot
+within about a second, one write per burst of changes. The index and board files Foreman
+rewrites on every step never cause a write. The 7.5-second read of Foreman's state files
+stays as the fallback, also when a folder cannot be watched.
 
 The agent view is off by default. With `agent_view` on, BurnMon runs `claude agents --json`
 every 30 seconds, each run bounded to 10 seconds, with a hidden window. It starts only a

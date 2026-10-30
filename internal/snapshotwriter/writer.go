@@ -217,13 +217,16 @@ type Writer struct {
 	// Started is when the process started, for the first-write log line
 	// (zero: when Run began).
 	Started time.Time
+
+	kick chan struct{} // made by Run; Kick sends on it
 }
 
 // Run is the writer loop. Every w.Tick, a process that does not hold lock
 // tries to take it; the one that holds it writes with Once and logs a write
 // error. A dead owner's lock is free at the next tick, so another process
-// takes over there. Run returns when stop closes (a nil stop never does),
-// releasing the lock.
+// takes over there. A Foreman change (watchForeman) or Kick runs the same
+// step at once, with a fresh Foreman read. Run returns when stop closes (a
+// nil stop never does), releasing the lock.
 func (w *Writer) Run(lock *Lock, exe string, stop <-chan struct{}) {
 	started := w.Started
 	if started.IsZero() {
@@ -233,6 +236,12 @@ func (w *Writer) Run(lock *Lock, exe string, stop <-chan struct{}) {
 	defer lock.Release()
 	ticker := time.NewTicker(w.Tick)
 	defer ticker.Stop()
+	// Both exes run this loop and burnmon.exe may hold the lock, so the
+	// Foreman watch lives here and not in BurnMon Dev alone.
+	w.kick = make(chan struct{}, 1)
+	if stopWatch := w.watchForeman(); stopWatch != nil {
+		defer stopWatch()
+	}
 	// The first attempt and write run before the first ticker wait, so a
 	// fresh window does not show the old file for a whole tick.
 	for {
@@ -262,6 +271,8 @@ func (w *Writer) Run(lock *Lock, exe string, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-ticker.C:
+		case <-w.kick:
+			w.Graph.forceForeman()
 		}
 	}
 }
