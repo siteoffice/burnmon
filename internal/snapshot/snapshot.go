@@ -131,6 +131,25 @@ type Snapshot struct {
 	// finished "claude agents --json" poll. BurnMon Dev uses them to decide
 	// which control buttons show; cwd and name are never written.
 	AgentSessions []AgentSession `json:"agent_sessions"`
+
+	// B8, added to version 1 as a new field only: the writer's own agent view
+	// state, so a reader can say why the agent view is empty. Absent when the
+	// writer has no graph sources, and in files written before B8.
+	AgentView *AgentViewStatus `json:"agent_view,omitempty"`
+}
+
+// AgentViewStatus states, as the writer records them.
+const (
+	AgentViewOff     = "off"     // agent_view is false in the writer's burnmon.json
+	AgentViewRefused = "refused" // agent_view is true but claude did not resolve
+	AgentViewOn      = "on"      // the poller runs
+)
+
+// AgentViewStatus is the writer's agent view state; Reason is the refusal
+// reason, set only when State is refused.
+type AgentViewStatus struct {
+	State  string `json:"state"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // AgentSession is one session from the last agent view poll.
@@ -164,6 +183,9 @@ type Input struct {
 
 	// R10: the last agent view poll, in the order claude gave it.
 	AgentSessions []AgentSession
+
+	// B8: the writer's agent view state; nil leaves agent_view out.
+	AgentView *AgentViewStatus
 }
 
 func cost(usd, fx float64) Cost {
@@ -196,6 +218,10 @@ func Build(in Input) Snapshot {
 		OutcomeItems:  append([]waits.Item{}, in.OutcomeItems...),
 		WaitCounts:    waits.CountOf(in.WaitItems),
 		AgentSessions: append([]AgentSession{}, in.AgentSessions...),
+	}
+	if in.AgentView != nil {
+		av := *in.AgentView
+		s.AgentView = &av
 	}
 
 	var walk func(ls *live.Session, parent string)

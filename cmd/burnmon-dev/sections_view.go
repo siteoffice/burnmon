@@ -42,8 +42,9 @@ type sectionsPayload struct {
 	// Line is the header sentence built from it and Reading (snapshot_line.go).
 	Writer snapshotwriter.StatusView `json:"writer"`
 	Line   snapshotLine              `json:"snapshot_line"`
-	// AgentViewLine says why the agent view is off or refused (agentview_line.go);
-	// empty when it runs.
+	// AgentViewLine says why the snapshot writer's agent view is off or
+	// refused (agentview_line.go); empty when it runs or the snapshot is not
+	// current.
 	AgentViewLine string `json:"agent_view_line,omitempty"`
 }
 
@@ -126,6 +127,7 @@ func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() c
 		// One count: the overview reads the snapshot's wait_counts, like the full map.
 		v.Counts.Waiting, v.Counts.YourTurn = p.Reading.Snapshot.WaitCounts.Blocked, p.Reading.Snapshot.WaitCounts.YourTurn
 		p.AgentMap = &v
+		p.AgentViewLine = agentViewLine(p.Reading.Snapshot.AgentView)
 	}
 	return p
 }

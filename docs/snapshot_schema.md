@@ -28,7 +28,7 @@ tick. Code: `internal\snapshotwriter\lock.go`.
 ## Compatibility rule
 
 Version 1 is frozen. Later rows (R6 added `nodes[]` and `edges[]`, R9 added `wait_items[]` and
-`outcome_items[]`, R10 added `agent_sessions[]`) add new top-level fields only. They never rename, remove or retype a version 1 field. Readers ignore fields they do
+`outcome_items[]`, R10 added `agent_sessions[]`, B8 added `agent_view`) add new top-level fields only. They never rename, remove or retype a version 1 field. Readers ignore fields they do
 not know. A change that breaks a reader bumps `schema_version`.
 
 ## Fields
@@ -51,6 +51,7 @@ of the graph edge they come from) and its `age_seconds`. `agent_sessions[]` item
 | `wait_items[]` | items that wait on the person (added in R9, still version 1). See "Waits and outcomes" |
 | `outcome_items[]` | items finished or failed in the last 24 hours (added in R9, still version 1). See "Waits and outcomes" |
 | `agent_sessions[]` | the last agent view poll (added in R10, still version 1). See "Agent sessions" |
+| `agent_view` | the writer's agent view state (added in B8, still version 1). See "Agent view state" |
 
 ### sessions[]
 
@@ -237,6 +238,20 @@ never written.
 
 BurnMon Dev uses the array only to decide which control buttons show. It re-reads agent view
 before any control runs, so a stale or edited snapshot cannot aim a control.
+
+## Agent view state: agent_view (added in B8, still version 1)
+
+One object added under the compatibility rule above: a new top-level field only, so
+`schema_version` stays 1. It says how the process that wrote the file set up its agent view
+at start, so a reader can tell why `agent_sessions[]` is empty:
+
+- `{"state": "off"}`: `agent_view` is false in that process's `burnmon.json`.
+- `{"state": "refused", "reason": "..."}`: `agent_view` is true but `claude` did not resolve;
+  `reason` is the same text as the `agent_view` source's `error`.
+- `{"state": "on"}`: the poller runs. Whether a poll worked is in the `agent_view` source.
+
+It is absent when the writer has no graph sources (no home folder), and in files written
+before B8. BurnMon Dev turns `off` and `refused` into one line in Waits on you.
 
 ## What is not in version 1
 

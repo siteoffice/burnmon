@@ -1,24 +1,25 @@
 //go:build windows
 
 // agentview_line.go is the one line Waits on you shows when the agent view is
-// off or refused, with the burnmon.json key that fixes it. The config is read
-// once at start, so main computes the line once.
+// off or refused, with the burnmon.json key that fixes it. It reads the state
+// the snapshot writer recorded, since that process (burnmon.exe or this
+// window, whichever holds the lock) is the one that polls agent view.
 package main
 
-import (
-	"burnmon/internal/pricing"
-	"burnmon/internal/snapshotwriter"
-)
+import "burnmon/internal/snapshot"
 
-// agentViewLine is empty when the agent view is on and claude resolves the
-// way the snapshot writer resolves it (ResolveClaudeConfigured); the refusal
-// reason goes in the parentheses.
-func agentViewLine(cfg pricing.Config, look func(string) (string, error), goos string) string {
-	if !cfg.AgentView {
-		return `Agent view off: set "agent_view": true in burnmon.json.`
+// agentViewLine is empty when the agent view is on or the snapshot records no
+// state (no graph sources, or a file written before B8); the refusal reason
+// goes in the parentheses.
+func agentViewLine(st *snapshot.AgentViewStatus) string {
+	if st == nil {
+		return ""
 	}
-	if _, err := snapshotwriter.ResolveClaudeConfigured(cfg.ClaudePath, look, goos); err != nil {
-		return `Agent view refused (` + err.Error() + `): set "claude_path" in burnmon.json to claude.exe.`
+	switch st.State {
+	case snapshot.AgentViewOff:
+		return `Agent view off: set "agent_view": true in burnmon.json.`
+	case snapshot.AgentViewRefused:
+		return `Agent view refused (` + st.Reason + `): set "claude_path" in burnmon.json to claude.exe.`
 	}
 	return ""
 }

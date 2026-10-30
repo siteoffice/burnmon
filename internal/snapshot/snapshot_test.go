@@ -440,3 +440,60 @@ func TestFixtureHasAgentSessions(t *testing.T) {
 		}
 	}
 }
+
+// B8: agent_view is additive. It survives a write and read when set, is left
+// out when not, and a snapshot written before it existed still reads.
+func TestAgentViewStatusRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "snapshot.json")
+	want := AgentViewStatus{State: AgentViewRefused, Reason: "claude is a .ps1 shim; agent_view needs claude.exe"}
+	if err := Write(path, Build(Input{Now: t0, TickSeconds: 5, AgentView: &want})); err != nil {
+		t.Fatal(err)
+	}
+	// The file's own keys, not the Go struct: agent_view.state and .reason.
+	raw := func() (map[string]string, bool) {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatal(err)
+		}
+		v, ok := m["agent_view"]
+		var av map[string]string
+		if ok {
+			if err := json.Unmarshal(v, &av); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return av, ok
+	}
+	if av, ok := raw(); !ok || len(av) != 2 || av["state"] != "refused" || av["reason"] != want.Reason {
+		t.Fatalf("agent_view written as %v (present %v)", av, ok)
+	}
+	got, err := Read(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AgentView == nil || *got.AgentView != want || got.SchemaVersion != 1 {
+		t.Fatalf("read back agent_view %+v, schema_version %d", got.AgentView, got.SchemaVersion)
+	}
+
+	if err := Write(path, Build(Input{Now: t0, TickSeconds: 5})); err != nil {
+		t.Fatal(err)
+	}
+	if av, ok := raw(); ok {
+		t.Fatalf("agent_view written without a status: %v", av)
+	}
+	if got, err = Read(path); err != nil || got.AgentView != nil {
+		t.Fatalf("read back without a status: %+v, %v", got.AgentView, err)
+	}
+
+	old, err := Read(filepath.Join("..", "..", "testdata", "snapshot_example.json"))
+	if err != nil || old.AgentView != nil {
+		t.Fatalf("older fixture: agent_view %+v, %v", old.AgentView, err)
+	}
+	if r := Load(filepath.Join("..", "..", "testdata", "snapshot_example.json"), time.Now()); r.Status == StatusUnreadable || r.Status == StatusUnsupported {
+		t.Fatalf("older fixture no longer loads: %+v", r)
+	}
+}

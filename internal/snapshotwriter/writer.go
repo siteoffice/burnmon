@@ -329,5 +329,6 @@ func (w *Writer) Once() error {
 		OutcomeItems: outcomeItems,
 
 		AgentSessions: gr.agentSessions(),
+		AgentView:     gr.agentViewStatus(),
 	}))
 }

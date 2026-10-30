@@ -329,7 +329,8 @@ Either exe writes the file. With both running, one writes: the one that holds th
 other takes over at its next tick (5 seconds). The lock is an operating system file lock,
 so a dead writer never blocks the other; the file holds an owner record (process id,
 exe, the time the lock was taken) for diagnosis only. The snapshot also carries `wait_items`,
-`outcome_items` and `agent_sessions`; fields and kinds are in `docs\snapshot_schema.md`.
+`outcome_items`, `agent_sessions` and `agent_view` (the writer's agent view state: `off`,
+`refused` with the reason, or `on`); fields and kinds are in `docs\snapshot_schema.md`.
 Gates, sprints and failed checks in `wait_items` and `outcome_items` come from Foreman
 and need `foreman_root`.
 
@@ -509,8 +510,9 @@ every 30 seconds, each run bounded to 10 seconds, with a hidden window. It start
 names; a `.ps1` or `.bat` is refused. When the agent view is off or refused, Waits on you in
 BurnMon Dev opens with one line that says so and names the `burnmon.json` key that fixes it:
 `agent_view` when it is off, `claude_path` with the refusal reason when `claude` does not
-resolve. BurnMon Dev reads `burnmon.json` once at start, so a fix shows after a restart. It
-has not been run
+resolve. The line follows the app that writes the snapshot (`burnmon.exe` or BurnMon Dev,
+whichever holds the snapshot lock), which reads `burnmon.json` once at start: a changed
+setting shows after restarting that app, `burnmon.exe` too when it runs. It has not been run
 against the real `claude` (B3 report). Window level behaviour of these parts is not
 checked here: uicheck `d36` renders both parts from the example snapshot, and `d29`, `d33`
 and `d34` cover the layout, but none of them was run in B1 to B4 because the apps were open.
