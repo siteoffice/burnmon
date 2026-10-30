@@ -1,5 +1,18 @@
 # BurnMon, status
 
+What is true at v0.4.0-beta.1 (2026-10-30, read live with `git rev-parse`, `git merge-base --is-ancestor` and
+`git ls-remote origin refs/heads/main`): the base is `main` and `origin/main` at `eff94bd`, and every sprint
+branch B1 to B7.3 is merged into it. The beta commit sets all three exes to `0.4.0-beta.1` (they reported `0.3.2`,
+`0.3.2` and `0.4.0-alpha.10`) and the Windows file properties in `winres\*.json` to `0.4.0.0` and `0.4.0-beta.1`
+(`app.json` and `cli.json` said `0.7.0`); `internal\doccheck\version_test.go` (`TestOneVersionClock`) now fails
+when those nine values drift. Measured by Wilco on the bumped tree before the commit: `go vet` exit 0,
+`go test ./... -count=1` exit 0, `.\build.ps1` exit 0, the built exes report `0.4.0-beta.1`, `uicheck` w0 and w2
+to w8 pass, `uicheck dev` passes (all seven groups). w1 was not run; it is red on `main` too. Known beta gaps,
+also in the README: no control has been run against a real session or flow, the agent view stays empty when
+`claude` on `PATH` is a `.cmd` shim (live snapshot 2026-10-30: `agent_sessions` 0), Foreman shows a new gate after
+up to about 15.7 s, and the reply control is not built. Those are the next sprint. Whether the tag is pushed: check
+`git ls-remote --tags origin`, not this paragraph. The paragraph below describes 2026-10-26 and is kept as history.
+
 What is true after B1 to B4 (2026-10-26, branch `sprint/burnmon-b5-docs-pass`, read live with
 `git rev-parse`, `git merge-base --is-ancestor` and `git ls-remote origin refs/heads/main`):
 `main` and `origin/main` are both `4c33094`. B1 (shared snapshot, `keep_history`, history delete

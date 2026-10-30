@@ -335,7 +335,7 @@ and need `foreman_root`.
 
 ## BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-alpha.10`) is a second, developer-facing window: what running
+`burnmon-dev.exe` (`v0.4.0-beta.1`) is a second, developer-facing window: what running
 AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
 grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
 performance problem and a token spike show up together. It reuses `burnmon.exe`'s own
@@ -667,8 +667,8 @@ Priority order lives in `02_roadmap\roadmap.md`; this is the short public versio
 - **Now**: the Station polish pass (layout, seated poses, labels) and finding the cause of
   its CPU climb. The project is otherwise parked until 2026-11-01, so expect little else
   before then.
-- **Next**: test and fix macOS and Linux with help from real users (see above); bring the
-  version numbers of `burnmon.exe` and `burnmon-cli.exe` (0.3.2) in line with `burnmon-dev`;
+- **Next**: make Waits on you and the agent view correct and fast against real sessions;
+  test and fix macOS and Linux with help from real users (see above);
   a plan-limits panel (how much of a seat or allowance is left), briefed but not started.
 - **Later, undecided**: a local OTLP receiver, signed Windows builds, a native window off
   Windows. A decision on whether and how to continue past 2026-12-19 is open.
@@ -709,9 +709,10 @@ The full list, with measurements, is in `STATUS.md`.
 
 Shipped: `v0.3.0` (price books, client map, export and merge, Copilot in VS Code, macOS and
 Linux browser-mode builds), 2026-09-24; `v0.3.1`, a cleanup pass, 2026-09-24; `v0.3.2`,
-shared ingest performance and local time everywhere, 2026-09-26. `burnmon-dev.exe` is at
-`v0.4.0-alpha.10` (tag), with further Station work on `main` since. `burnmon.exe` and
-`burnmon-cli.exe` still report `0.3.2`. See `STATUS.md` for what is true at the current
+shared ingest performance and local time everywhere, 2026-09-26. `v0.4.0-beta.1`, 2026-10-30: all three exes carry one version again; it adds
+the agent map, Waits on you, Outcomes, the first controls and the section layout to
+BurnMon Dev. Beta: the controls and the agent view are not yet proven against real
+sessions, and the agent view stays empty when `claude` on `PATH` is a `.cmd` shim. See `STATUS.md` for what is true at the current
 commit and `SESSION_LOG.md` for the session-by-session record. The BurnMon Dev text above
 (sections, Waits on you, Outcomes, controls) is written from the code of the branch this
 README sits on; `STATUS.md` says which of those parts are in `main`.
