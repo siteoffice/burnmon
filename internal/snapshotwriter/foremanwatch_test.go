@@ -31,33 +31,44 @@ func TestForemanFile(t *testing.T) {
 	}
 }
 
+// The window is 100 ms here, not the production 200 ms, so five triggers
+// fit in it with room to spare on a loaded machine (Ruling 9). A run whose
+// triggers still took a whole window is skipped: a late trigger opens a
+// second window there, so one fire cannot be shown on it.
 func TestCoalescerOneFire(t *testing.T) {
-	const d = 20 * time.Millisecond
+	const d = 100 * time.Millisecond
 	fires := make(chan time.Time, 10)
 	c := newCoalescer(d, func() { fires <- time.Now() })
 	defer c.Stop()
 	first := time.Now()
+	var last time.Time
 	for i := 0; i < 5; i++ {
+		if i > 0 {
+			time.Sleep(2 * time.Millisecond)
+		}
 		c.Trigger()
-		time.Sleep(2 * time.Millisecond)
+		last = time.Now()
+	}
+	if span := last.Sub(first); span >= d {
+		t.Skipf("the five triggers took %v, not under the %v window, so one fire cannot be tested on this run", span, d)
 	}
 	select {
 	case at := <-fires:
-		if lag := at.Sub(first); lag < d || lag > 10*d {
+		if lag := at.Sub(first); lag < d || lag > 3*d {
 			t.Fatalf("fired %v after the first trigger, want about %v", lag, d)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * d):
 		t.Fatal("five triggers gave no fire")
 	}
 	select {
 	case <-fires:
 		t.Fatal("five triggers in one window gave a second fire")
-	case <-time.After(5 * d):
+	case <-time.After(2 * d):
 	}
 	c.Trigger()
 	select {
 	case <-fires:
-	case <-time.After(time.Second):
+	case <-time.After(10 * d):
 		t.Fatal("a trigger after the fire armed no new one")
 	}
 }
@@ -78,13 +89,20 @@ func TestCoalescerStreamStillFires(t *testing.T) {
 	}
 }
 
+// Same guard as TestCoalescerOneFire: a stall between Trigger and Stop as
+// long as the window lets the fire through before Stop runs.
 func TestCoalescerStop(t *testing.T) {
+	const d = 100 * time.Millisecond
 	var fires atomic.Int32
-	c := newCoalescer(10*time.Millisecond, func() { fires.Add(1) })
+	c := newCoalescer(d, func() { fires.Add(1) })
+	start := time.Now()
 	c.Trigger()
 	c.Stop()
+	if span := time.Since(start); span >= d {
+		t.Skipf("Trigger to Stop took %v, not under the %v window, so a dropped fire cannot be tested on this run", span, d)
+	}
 	c.Trigger()
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(2 * d)
 	if n := fires.Load(); n != 0 {
 		t.Fatalf("fired %d times after Stop, want 0", n)
 	}
