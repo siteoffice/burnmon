@@ -4,11 +4,20 @@ import "testing"
 
 func TestShortID(t *testing.T) {
 	cases := []struct{ id, want string }{
+		// An id with a UUID in it: the UUID's first 8 hex digits.
 		{"session:anthropic:ec3c0d3c-c753-54e3-b994-c3a39e7505fc", "ec3c0d3c"},
 		{"ec3c0d3c-c753-54e3-b994-c3a39e7505fc", "ec3c0d3c"},
+		{"session:anthropic:EC3C0D3C-C753-54E3-B994-C3A39E7505FC", "EC3C0D3C"},
+		// Codex: the rollout file name, a timestamp then the UUID.
+		{"session:openai:rollout-2026-10-30T10-11-12-5973b6c0-1a2b-4c3d-8e9f-0123456789ab", "5973b6c0"},
+		// No UUID: the last 8 runes, where sessions of one day or one prefix differ.
+		{"session:hermes:20260922_213936_0572d4", "6_0572d4"},
+		{"session:anthropic:agent-a1b2c3d4e5f6a7b8", "e5f6a7b8"},
+		{"session:anthropic:c1d2e3f4a5b6", "e3f4a5b6"},
+		// Shorter than 8 runes: all of it.
 		{"agentview:ab12", "ab12"},
 		{"agentview:pid:3", "3"},
-		{"x:\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9", "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9"},
+		{"x:\u00e8\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9", "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9"},
 		{"", ""},
 	}
 	for _, c := range cases {

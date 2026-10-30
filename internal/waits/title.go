@@ -1,18 +1,29 @@
 package waits
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+var uuidRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
 
 // bareID is the part of an id after its last ":".
 func bareID(id string) string {
 	return id[strings.LastIndex(id, ":")+1:]
 }
 
-// ShortID is the bare id cut to 8 runes: enough to tell two sessions of one
-// folder apart.
+// ShortID tells two sessions of one folder apart in 8 characters. When the
+// bare id holds a UUID (Claude, Codex's rollout-<time>-<uuid>) it is the
+// UUID's first 8 hex digits; otherwise the bare id's last 8 runes, since ids
+// like Hermes' <date>_<time>_<hex> or agent-<hex> share their start.
 func ShortID(id string) string {
-	r := []rune(bareID(id))
+	b := bareID(id)
+	if u := uuidRe.FindString(b); u != "" {
+		return u[:8]
+	}
+	r := []rune(b)
 	if len(r) > 8 {
-		r = r[:8]
+		r = r[len(r)-8:]
 	}
 	return string(r)
 }

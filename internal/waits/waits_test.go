@@ -324,10 +324,10 @@ func TestSessionTitlesNeverShowARawID(t *testing.T) {
 	}
 	want := map[string]string{
 		"your_turn session:anthropic:" + uuid:               "cowork-cloud ec3c0d3c",
-		"can_close canclose:session:anthropic:c1d2e3f4a5b6": "claude-code c1d2e3f4",
-		"session session:anthropic:b1b2b3b4b5b6":            "burnmon b1b2b3b4",
-		"session agentview:9f8e7d6c5b4a":                    "session 9f8e7d6c",
-		"prompt session:anthropic:a0a1a2a3a4a5":             "proj a0a1a2a3",
+		"can_close canclose:session:anthropic:c1d2e3f4a5b6": "claude-code e3f4a5b6",
+		"session session:anthropic:b1b2b3b4b5b6":            "burnmon b3b4b5b6",
+		"session agentview:9f8e7d6c5b4a":                    "session 7d6c5b4a",
+		"prompt session:anthropic:a0a1a2a3a4a5":             "proj a2a3a4a5",
 		"gate gate:f1:G4":                                   "example-flow",
 		"sprint sprint:sp1":                                 "sprint-example",
 	}
