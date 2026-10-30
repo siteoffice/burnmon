@@ -1,10 +1,12 @@
 # Starts burnmon-dev.exe with its own dev-only eval channel open
 # (BURNMON_DEV_UICHECK=1, never set by release builds or the README), runs
-# one or more tools\uicheck "d*" checks against the real running window,
-# then stops the exe. Mirrors scripts\uicheck.ps1's own w-mode flow one
-# exe, one port (9334, not 9333) and one window title ("BurnMon Dev", not
-# "BurnMon") over; called by uicheck.ps1 itself when any target check
-# starts with "d", not normally invoked directly.
+# one or more tools\uicheck d checks (a group, group/case or old d name)
+# against the real running window, then stops the exe. Mirrors
+# scripts\uicheck.ps1's own w-mode flow one exe, one port (9334, not 9333)
+# and one window title ("BurnMon Dev", not "BurnMon") over; called by
+# uicheck.ps1 itself for any d check, not normally invoked directly. No
+# names runs the seven groups; "reverse" runs the targets backwards and
+# hands "reverse" to each group, which then runs its cases backwards.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
 
@@ -14,9 +16,15 @@ if (-not (Test-Path $exe)) {
     exit 1
 }
 
-$targetChecks = $args
+# Same order as devGroups in tools\uicheck\groups.go.
+$devGroups = @("fit", "charts", "station", "layout", "map", "waits", "shell")
+$reverse = $args -contains "reverse"
+$targetChecks = @($args | Where-Object { $_ -ne "reverse" })
 if ($targetChecks.Count -eq 0) {
-    $targetChecks = @("d0", "d1", "d2", "d3")
+    $targetChecks = @($devGroups)
+}
+if ($reverse) {
+    [array]::Reverse($targetChecks)
 }
 
 # Tracked by byte offset, not line count: setupLog (app.go) rotates the log
@@ -33,6 +41,27 @@ if ($targetChecks.Count -eq 0) {
 $logPath = "$env:LOCALAPPDATA\burnmon\burnmon-dev-app.log"
 $logBytesBefore = 0
 if (Test-Path $logPath) { $logBytesBefore = (Get-Item $logPath).Length }
+
+# A run keeps its own settings (view, window, dev config, wv2-dev, exports)
+# in a fresh temp folder via BURNMON_DEV_SETTINGS_DIR (cmd\burnmon-dev\app.go
+# settingsDir), so checks that resize, toggle or drag never touch Wilco's
+# real files. The env var reaches both the exe and every "go run" below.
+# The real files are hashed before and after as the guard that this holds.
+$realSettingsDir = "$env:LOCALAPPDATA\burnmon"
+$guardedFiles = @("burnmon-dev-view.json", "burnmon-dev-window.json", "burnmon-dev.json")
+function Get-SettingsHashes {
+    $h = [ordered]@{}
+    foreach ($f in $guardedFiles) {
+        $p = Join-Path $realSettingsDir $f
+        if (Test-Path $p) { $h[$f] = (Get-FileHash -Algorithm SHA256 -Path $p).Hash } else { $h[$f] = "missing" }
+    }
+    return $h
+}
+$hashesBefore = Get-SettingsHashes
+$tempSettingsDir = Join-Path $env:TEMP ("burnmon-uicheck\" + [guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Force -Path $tempSettingsDir | Out-Null
+$env:BURNMON_DEV_SETTINGS_DIR = $tempSettingsDir
+Write-Host "uicheck: settings folder $tempSettingsDir"
 
 $env:BURNMON_DEV_UICHECK = "1"
 $proc = Start-Process -FilePath $exe -PassThru
@@ -98,8 +127,10 @@ try {
     Push-Location tools\uicheck
     try {
         foreach ($check in $targetChecks) {
-            Write-Host "--- uicheck $check ---"
-            go run . $check
+            $goArgs = @($check)
+            if ($reverse -and ($devGroups -contains $check)) { $goArgs += "reverse" }
+            Write-Host "--- uicheck $($goArgs -join ' ') ---"
+            go run . @goArgs
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "uicheck $check FAILED"
                 exit $LASTEXITCODE
@@ -113,5 +144,33 @@ try {
     Remove-Item Env:\BURNMON_DEV_UICHECK -ErrorAction SilentlyContinue
     if (-not $proc.HasExited) {
         Stop-Process -Id $proc.Id -Force
+    }
+    [void]$proc.WaitForExit(10000)
+
+    $hashesAfter = Get-SettingsHashes
+    $changed = @()
+    foreach ($f in $guardedFiles) {
+        Write-Host "uicheck: real $f before $($hashesBefore[$f])"
+        Write-Host "uicheck: real $f after  $($hashesAfter[$f])"
+        if ($hashesBefore[$f] -ne $hashesAfter[$f]) { $changed += $f }
+    }
+    if (Test-Path $tempSettingsDir) {
+        Write-Host "uicheck: settings folder held: $((Get-ChildItem $tempSettingsDir | ForEach-Object Name) -join ', ')"
+    }
+
+    # WebView2 child processes can hold wv2-dev for a moment after the exe
+    # is gone, so retry the removal briefly instead of failing on the first try.
+    Remove-Item Env:\BURNMON_DEV_SETTINGS_DIR -ErrorAction SilentlyContinue
+    for ($i = 0; $i -lt 10 -and (Test-Path $tempSettingsDir); $i++) {
+        Remove-Item -Recurse -Force $tempSettingsDir -ErrorAction SilentlyContinue
+        if (Test-Path $tempSettingsDir) { Start-Sleep -Seconds 1 }
+    }
+    if (Test-Path $tempSettingsDir) {
+        Write-Host "uicheck: could not remove $tempSettingsDir; delete it by hand."
+    }
+
+    if ($changed.Count -gt 0) {
+        foreach ($f in $changed) { Write-Host "real BurnMon Dev settings changed: $f" }
+        exit 1
     }
 }

@@ -179,7 +179,7 @@ func monitorRectForWindow(hwnd uintptr) (rect32, bool) {
 	return mi.RcMonitor, true
 }
 
-// windowState is what gets persisted (burnmon-dev-window.json, dataDir):
+// windowState is what gets persisted (burnmon-dev-window.json, settingsDir):
 // section 10's "remember size, position, maximized state and monitor;
 // restore them if that monitor still exists".
 type windowState struct {
@@ -286,15 +286,21 @@ func startWindowStateSaver(hwnd uintptr, dataDir string, fs *fullscreenState) {
 				continue
 			}
 			last = cur
-			b, err := json.MarshalIndent(cur, "", "  ")
-			if err != nil {
-				continue
-			}
-			if err := os.WriteFile(windowStatePath(dataDir), b, 0o644); err != nil {
+			if err := saveWindowState(dataDir, cur); err != nil {
 				log.Println("window state: could not save:", err)
 			}
 		}
 	}()
+}
+
+// saveWindowState writes one placement; split out of the saver so a test can
+// prove where the file lands without a window.
+func saveWindowState(dataDir string, st windowState) error {
+	b, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(windowStatePath(dataDir), b, 0o644)
 }
 
 func currentWindowState(hwnd uintptr) (windowState, bool) {

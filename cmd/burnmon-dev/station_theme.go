@@ -22,7 +22,9 @@ func saveStationTheme(dataDir, theme string) error {
 	}
 	path := filepath.Join(dataDir, "burnmon-dev.json")
 	m := map[string]json.RawMessage{}
-	b, err := os.ReadFile(path)
+	// Read the same file loadDevConfig reads, so a first save into the uicheck
+	// settings folder keeps the real file's other keys.
+	b, err := os.ReadFile(devConfigReadPath(dataDir))
 	switch {
 	case err == nil:
 		if err := json.Unmarshal(b, &m); err != nil {

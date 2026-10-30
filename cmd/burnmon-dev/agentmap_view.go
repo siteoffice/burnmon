@@ -32,7 +32,7 @@ const (
 	mapHoursMax     = 720
 )
 
-// agentMapEnv is what the map reads from: the view file folder (for Plain
+// agentMapEnv is what the map reads from: the view file folder (settingsDir, for Plain
 // Mode), the snapshot file, the store and the Foreman folder.
 type agentMapEnv struct {
 	DataDir     string

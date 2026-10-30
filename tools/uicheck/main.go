@@ -16,12 +16,11 @@ import (
 )
 
 // isDevCheck reports whether name targets burnmon-dev.exe (its own window
-// title and dev eval port) rather than burnmon.exe: every check name this
-// package registers for burnmon-dev.exe starts with "d" (scripts\uicheck.ps1
-// and the design doc's own "uicheck d* cases" convention), matching the
-// existing "w" prefix's own (informal) meaning for burnmon.exe.
+// title and dev eval port) rather than burnmon.exe. Since the group checks
+// (groups.go) a prefix no longer tells: "waits" starts with "w", so this
+// asks the group registry instead.
 func isDevCheck(name string) bool {
-	return strings.HasPrefix(name, "d")
+	return devNames[name]
 }
 
 type checkFunc func(hwnd uintptr, args []string) error

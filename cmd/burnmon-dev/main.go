@@ -158,6 +158,12 @@ func main() {
 	}
 	setupLog(dataDir)
 	log.Printf("burnmon-dev %s starting", version)
+	// setDir holds this app's own settings files (settingsDir in app.go);
+	// dataDir keeps the shared stores, the config and the log.
+	setDir := settingsDir()
+	if setDir != dataDir {
+		log.Println("settings folder:", setDir)
+	}
 
 	if alreadyRunning() {
 		log.Println("another instance is already running; bringing it to the front")
@@ -200,7 +206,7 @@ func main() {
 		log.Println("using config overrides from", cfgFile)
 	}
 
-	devCfg := loadDevConfig(dataDir)
+	devCfg := loadDevConfig(setDir)
 	devCfg.MicrosoftTodoEnabled = todoEnabledForRun(devCfg.MicrosoftTodoEnabled, uicheckActive())
 
 	a := &app{
@@ -238,7 +244,7 @@ func main() {
 	// wait for this (startSlowRefreshers above is likewise backgrounded, for
 	// the same reason).
 
-	wv2Dir := filepath.Join(dataDir, "wv2-dev")
+	wv2Dir := filepath.Join(setDir, "wv2-dev")
 	_ = os.MkdirAll(wv2Dir, 0o755)
 
 	// Window, section 10: first launch is a normal 1280x860 window,
@@ -250,7 +256,7 @@ func main() {
 	// visible jump to the default rect is an accepted tradeoff of
 	// go-webview2's WebView interface having no "create hidden, then show"
 	// hook to avoid it.
-	savedState, hasSavedState := loadWindowState(dataDir)
+	savedState, hasSavedState := loadWindowState(setDir)
 	initialWidth, initialHeight := uint(1280), uint(860)
 	if hasSavedState {
 		initialWidth, initialHeight = uint(savedState.Width), uint(savedState.Height)
@@ -296,7 +302,7 @@ func main() {
 	// only reachable from the uicheck dev eval channel, not from a real F11
 	// keypress.
 	fs := &fullscreenState{}
-	startWindowStateSaver(hwnd, dataDir, fs)
+	startWindowStateSaver(hwnd, setDir, fs)
 	startupMark("window created")
 
 	installF11Hotkey(hwnd, fs)
@@ -343,7 +349,7 @@ func main() {
 	// burnmon-dev-view.json (viewstate.go) and applied at the next start by
 	// assemblePage. Anything but the two names is ignored.
 	if err := w.Bind("bdevSetUITheme", func(theme string) {
-		if err := saveUITheme(dataDir, theme); err != nil {
+		if err := saveUITheme(setDir, theme); err != nil {
 			log.Println("bdevSetUITheme:", err)
 		}
 	}); err != nil {
@@ -354,7 +360,7 @@ func main() {
 	// burnmon-dev.json (station_theme.go) and used at the next start. It does
 	// not touch devCfg or the Station that is open now.
 	if err := w.Bind("bdevSetStationTheme", func(theme string) error {
-		err := saveStationTheme(dataDir, theme)
+		err := saveStationTheme(setDir, theme)
 		if err != nil {
 			log.Println("bdevSetStationTheme:", err)
 		}
@@ -370,14 +376,14 @@ func main() {
 	if snapPathErr != nil {
 		log.Println("snapshot path:", snapPathErr)
 	}
-	ctlSvc := newControlService(cfg, dataDir, snapPath, storePath)
+	ctlSvc := newControlService(cfg, setDir, snapPath, storePath)
 	if err := w.Bind("bdevSections", func() sectionsPayload {
-		return sectionsPayloadWith(dataDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
+		return sectionsPayloadWith(setDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
 	}); err != nil {
 		log.Println("could not bind bdevSections:", err)
 	}
 	if err := w.Bind("bdevSetSections", func(c sectionsChange) error {
-		err := applySectionsChange(dataDir, c)
+		err := applySectionsChange(setDir, c)
 		if err != nil {
 			log.Println("bdevSetSections:", err)
 		}
@@ -411,17 +417,28 @@ func main() {
 	// bdevAgentMap (R7): the full agent map as boxes and lines, live from the
 	// snapshot file or for the last N hours from the store. The small overview
 	// rides in bdevSections. Read-only, no port.
-	if err := w.Bind("bdevAgentMap", func(req agentMapRequest) (agentMapPayload, error) {
+	// go-webview2 runs a binding on the UI thread, and the history build
+	// takes seconds (more on a busy machine), so the window froze for all of
+	// it. bdevAgentMapStart returns at once and builds on a goroutine; the
+	// page's bdevAgentMap wraps it in a promise keyed by call (page.html).
+	if err := w.Bind("bdevAgentMapStart", func(key string, req agentMapRequest) {
 		a.mu.Lock()
 		root := a.cfg.ForemanRoot
 		a.mu.Unlock()
-		p, err := agentMapFor(agentMapEnv{DataDir: dataDir, SnapPath: snapPath, St: st, ForemanRoot: root, Writer: a.snapStatus.View}, req, time.Now())
-		if err != nil {
-			log.Println("bdevAgentMap:", err)
-		}
-		return p, err
+		go func() {
+			p, err := agentMapFor(agentMapEnv{DataDir: setDir, SnapPath: snapPath, St: st, ForemanRoot: root, Writer: a.snapStatus.View}, req, time.Now())
+			if err != nil {
+				log.Println("bdevAgentMap:", err)
+			}
+			js, err := agentMapResolveJS(key, p, err)
+			if err != nil {
+				log.Println("bdevAgentMap: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
 	}); err != nil {
-		log.Println("could not bind bdevAgentMap:", err)
+		log.Println("could not bind bdevAgentMapStart:", err)
 	}
 
 	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon
@@ -654,7 +671,7 @@ func main() {
 
 	// bdevExport is the header EXPORT button (design doc "Export (AI-ready
 	// bundle)"): the last 24 hours, not redacted (the CLI's --redact flag
-	// covers the redacted case), written to dataDir\exports\. Shares
+	// covers the redacted case), written to setDir\exports\. Shares
 	// buildExportBundle (export_run.go) with the `export` CLI subcommand
 	// so the two paths can never disagree on what an export contains.
 	type exportResultPayload struct {
@@ -678,7 +695,7 @@ func main() {
 			if err != nil {
 				payload = exportResultPayload{OK: false, Error: err.Error()}
 			} else {
-				outDir := filepath.Join(dataDir, "exports")
+				outDir := filepath.Join(setDir, "exports")
 				res, werr := devexport.Write(outDir, b)
 				if werr != nil {
 					payload = exportResultPayload{OK: false, Error: werr.Error()}
@@ -807,9 +824,9 @@ func main() {
 		}
 	}()
 
-	startUICheckServer(w, func() string { return assemblePage(devCfg.StationTheme, loadUITheme(dataDir)) })
+	startUICheckServer(w, func() string { return assemblePage(devCfg.StationTheme, loadUITheme(setDir)) })
 
-	w.SetHtml(assemblePage(devCfg.StationTheme, loadUITheme(dataDir)))
+	w.SetHtml(assemblePage(devCfg.StationTheme, loadUITheme(setDir)))
 	go startBackgroundIngest(a, st, w)
 	w.Run()
 }
@@ -938,6 +955,22 @@ func bdevAsyncResolveJS(resolverName string, data any) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("window.%s && window.%s(%s)", resolverName, resolverName, dataJSON), nil
+}
+
+// agentMapReply is one bdevAgentMapStart answer: the payload, or the error
+// text when the build failed (the page rejects the promise on it).
+type agentMapReply struct {
+	agentMapPayload
+	Error string `json:"error,omitempty"`
+}
+
+// agentMapResolveJS is the script that hands one map answer to the page.
+func agentMapResolveJS(key string, p agentMapPayload, buildErr error) (string, error) {
+	r := agentMapReply{agentMapPayload: p}
+	if buildErr != nil {
+		r.Error = buildErr.Error()
+	}
+	return bdevAsyncResolveJSWithKey("__bdevAgentMapResolve", key, r)
 }
 
 // bdevAsyncResolveJSWithKey mirrors cmd\burnmon\main.go's own asyncResolveJS:

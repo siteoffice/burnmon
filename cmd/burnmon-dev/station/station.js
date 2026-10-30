@@ -1809,8 +1809,14 @@
       tip.style.display = 'block';
       tip.style.left = '0px'; // the width of an absolute box follows its left, so measure from a fixed one
       var tw = tip.offsetWidth, th = tip.offsetHeight;
-      tip.style.left = clamp(mx + 14, 4, W - tw - 4) + 'px';
-      tip.style.top = clamp(my + 14, 4, H - th - 4) + 'px';
+      // Keep the card on the part of the Station the window shows: in O and I
+      // the Station box can run below the fold while the page scrolls, and the
+      // card must stay inside the window (roadmap 2026-10-03 item F).
+      var r = canvas.getBoundingClientRect();
+      var vr = Math.min(W, window.innerWidth - r.left), vb = Math.min(H, window.innerHeight - r.top);
+      var vl = Math.max(0, -r.left), vt = Math.max(0, -r.top);
+      tip.style.left = clamp(mx + 14, vl + 4, vr - tw - 4) + 'px';
+      tip.style.top = clamp(my + 14, vt + 4, vb - th - 4) + 'px';
     }
 
     function hit(mx, my){

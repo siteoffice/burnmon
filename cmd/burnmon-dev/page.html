@@ -4714,6 +4714,28 @@ body.plain #mapOverlay{font-size:13.5px}
     el.innerHTML = h;
   }
 
+  // bdevAgentMapStart returns at once and builds the map on a goroutine
+  // (main.go), then hands the answer to __bdevAgentMapResolve by key. A
+  // binding that built on the UI thread froze the window for the whole build.
+  // bdevAgentMap keeps its promise shape, so mapFetch and the uicheck stubs
+  // (d38, d40) do not change.
+  var MAP_PENDING = {}, mapCallSeq = 0;
+  window.__bdevAgentMapResolve = function(key, r){
+    var p = MAP_PENDING[key];
+    if(!p) return;
+    delete MAP_PENDING[key];
+    if(r && r.error) p.reject(new Error(r.error)); else p.resolve(r);
+  };
+  if(typeof window.bdevAgentMapStart === 'function'){
+    window.bdevAgentMap = function(req){
+      return new Promise(function(resolve, reject){
+        var key = String(++mapCallSeq);
+        MAP_PENDING[key] = { resolve: resolve, reject: reject };
+        window.bdevAgentMapStart(key, req).catch(function(e){ delete MAP_PENDING[key]; reject(e); });
+      });
+    };
+  }
+
   function mapFetch(){
     var token = ++mapToken;
     if(typeof window.bdevAgentMap !== 'function'){
