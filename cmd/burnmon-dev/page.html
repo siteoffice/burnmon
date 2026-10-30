@@ -414,6 +414,11 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .seclist > table{flex:0 0 auto; width:100%}
 .sectier{flex:0 0 auto; font:700 10px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
 .sectier.blocked{color:var(--amber)}
+/* The Done header opens and closes its group; the mark shows which, and screen readers get aria-expanded instead. */
+.sectier.done{cursor:pointer}
+.sectier.done::before{content:'\25B8\00A0' / ''}
+.sectier.done[aria-expanded="true"]::before{content:'\25BE\00A0' / ''}
+.sectier.done:focus-visible{outline:2px solid var(--amber2); outline-offset:1px}
 .secgrey, .secgrey b{color:var(--dim)}
 .secitemtxt{min-width:0; overflow:hidden; text-overflow:ellipsis}
 .secitemmeta{flex:0 0 auto}
@@ -3805,6 +3810,9 @@ body.plain #mapOverlay{font-size:13.5px}
   var secLastStamp = null; // the snapshot file's last stamp from Go; null until the first one
   var secLastSig = '';
   var secFrozen = false; // set by the test hook so the poll cannot overwrite what it injected
+  // The Done group in Waits on you starts collapsed at every start and is not
+  // saved, so Blocked and Your turn show first; its header opens it.
+  var secDoneOpen = false;
 
   function secTitle(id){ return SEC_TITLE[id][secState.plain ? 1 : 0]; }
   function secBase(path){
@@ -4106,7 +4114,9 @@ body.plain #mapOverlay{font-size:13.5px}
       (t[0] === 'done' ? [true, false] : [null]).forEach(function(first){
         w.forEach(function(it){ if(secTier(it) === t[0] && (first === null || (it.kind === 'close_out') === first)){ part += secItemRow(it, false); n++; } });
       });
-      if(n) rows += '<div class="sectier ' + t[0] + '" data-tier="' + t[0] + '">' + esc(head + ' (' + n + ')') + '</div>' + part;
+      // The Done header is a button that keeps its count; its rows show only when open.
+      var fold = t[0] === 'done' ? ' role="button" tabindex="0" aria-expanded="' + secDoneOpen + '"' : '';
+      if(n) rows += '<div class="sectier ' + t[0] + '" data-tier="' + t[0] + '"' + fold + '>' + esc(head + ' (' + n + ')') + '</div>' + (fold && !secDoneOpen ? '' : part);
     });
     html += secList(rows);
     return html;
@@ -4285,7 +4295,11 @@ body.plain #mapOverlay{font-size:13.5px}
       var pbody = !secPartOn('processes') ? '' : (!snap ? secStub(secState.plain ? 'No current numbers yet.' : 'No current snapshot.') : SEC_BODY.processes(snap));
       ph.innerHTML = secPartOn('processes') ? secPanel('processes', pbody, true) : '';
     }
+    // The render replaces the Done header, so the keyboard goes back to the new one.
+    var ae = document.activeElement, doneFocus = !!(ae && ae.matches && ae.matches('.sectier.done'));
     document.getElementById('secPanels').innerHTML = (row1 ? '<div class="secrow1" id="secRow1">' + row1 + '</div>' : '') + rest;
+    var dh = doneFocus && document.querySelector('#secPanels .sectier.done');
+    if(dh) dh.focus({ preventScroll:true });
     ctlFill();
     secApplyParts();
     secFit();
@@ -4837,8 +4851,10 @@ body.plain #mapOverlay{font-size:13.5px}
     document.getElementById('turnPopupOverlay').classList.add('over-station');
     openTurnPopup(sid, turn);
   });
+  function secDoneToggle(){ secDoneOpen = !secDoneOpen; secRender(); }
   document.getElementById('secPanels').addEventListener('click', function(e){
     if(ctlClick(e)){ secRender(); return; }
+    if(e.target.closest && e.target.closest('.sectier.done')){ secDoneToggle(); return; }
     var b = e.target.closest ? e.target.closest('.mapopen') : null;
     if(b) mapOpenView(b.getAttribute('data-src'));
     var f = e.target.closest ? e.target.closest('.secfile') : null;
@@ -4849,6 +4865,10 @@ body.plain #mapOverlay{font-size:13.5px}
         if(r && r.catch) r.catch(function(err){ console.error('bdevOpenItemFile:', err); });
       }
     }
+  });
+  // Enter and Space work the Done header as they work a button.
+  document.getElementById('secPanels').addEventListener('keydown', function(e){
+    if((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.sectier.done')){ e.preventDefault(); secDoneToggle(); }
   });
   window.__bdevMap = { open: mapOpenView, close: mapCloseView, choose: mapChoose, isOpen: function(){ return mapOpen; },
     // uicheck only: draw a payload without calling Go. src is live or the hours.

@@ -76,3 +76,27 @@ func TestPageStampPollReadsNewSnapshot(t *testing.T) {
 		t.Errorf("secStampPoll calls secPoll %d times, want 1 (only on a changed stamp)", n)
 	}
 }
+
+// The Done group starts collapsed at every start and is never saved; a poll
+// (secApplyPayload) neither opens nor closes it (B8 spec item 3). uicheck
+// waits/d44 proves the DOM.
+func TestPageDoneGroupStartsCollapsed(t *testing.T) {
+	page := idlePage()
+	if !strings.Contains(page, "var secDoneOpen = false;") {
+		t.Error("page.html does not declare secDoneOpen false")
+	}
+	if strings.Contains(idleFn(t, "secApplyPayload"), "secDoneOpen") {
+		t.Error("secApplyPayload touches secDoneOpen, so a poll would reset the Done group")
+	}
+	for _, line := range strings.Split(page, "\n") {
+		if strings.Contains(line, "secDoneOpen") && (strings.Contains(line, "secSend") || strings.Contains(line, "bdevSet")) {
+			t.Errorf("secDoneOpen is sent to Go, so it would be saved: %q", strings.TrimSpace(line))
+		}
+	}
+	body := idleFn(t, "secBodyWaits")
+	for _, want := range []string{`role="button" tabindex="0" aria-expanded="`, "secDoneOpen"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("secBodyWaits lacks %q", want)
+		}
+	}
+}

@@ -7,12 +7,37 @@ import (
 	"time"
 )
 
+// waitsOpenDoneJS opens the Done group with a click on its header when it is
+// closed (it starts closed at every page load, d44) and returns its
+// aria-expanded after, or "" when the list has no Done group.
+const waitsOpenDoneJS = `(function(){
+  var h = document.querySelector('[data-sec=waits] .sectier.done');
+  if(!h) return '';
+  if(h.getAttribute('aria-expanded') === 'false') h.click();
+  h = document.querySelector('[data-sec=waits] .sectier.done');
+  return h ? h.getAttribute('aria-expanded') || '' : '';
+})()`
+
+// waitsOpenDone is for the cases that read every wait row: it opens the Done
+// group the way a user does and fails when it stays closed.
+func waitsOpenDone() error {
+	var got string
+	if err := evalInto(waitsOpenDoneJS, &got); err != nil {
+		return err
+	}
+	if got != "" && got != "true" {
+		return fmt.Errorf("the Done group did not open: aria-expanded %q", got)
+	}
+	return nil
+}
+
 // waits/d36: moved from check_d36.go.
 
 // d36: Waits on you and Outcomes list the items (agent control plan row R9).
 // Fed the UNMODIFIED frozen example (testdata\snapshot_example.json, the gate is not moved
 // to the front) it proves:
-//   - every wait item is a row in the DOM (the list scrolls inside the panel, none is
+//   - with the Done group opened (it starts collapsed, d44), every wait item is
+//     a row in the DOM (the list scrolls inside the panel, none is
 //     cut off), no +k more line; the header carries the Blocked count from
 //     wait_counts, not the row total (B6 scope item 8, one count everywhere):
 //     "Waits on you (7)" plus "1 your turn";
@@ -108,6 +133,9 @@ func caseD36(hwnd uintptr, args []string) error {
 		payload = strings.Replace(payload, `"age_seconds":7`, `"age_seconds":`+age, 1)
 		if _, err := d29Apply(payload); err != nil {
 			return p, err
+		}
+		if err := waitsOpenDone(); err != nil {
+			return p, fail("%v", err)
 		}
 		err := evalInto(d36ReadJS, &p)
 		return p, err
@@ -563,7 +591,8 @@ func caseD37(hwnd uintptr, args []string) error {
 //   - the tier headers come in the order Blocked, Your turn, Done needs
 //     close-out (one Done tier holding the close_out and the can_close row),
 //     and the panel header count is 7;
-//   - the Close chip is on the close_out row only, and one press previews
+//   - with the Done group opened (it starts collapsed, d44), the Close chip
+//     is on the close_out row only, and one press previews
 //     {control: close_sprint, target: closeout:example__sprint__9};
 //   - with controls.foreman false and the close_out row removed: no Close
 //     chip, the Done tier is headed Done, can be closed, every gear line
@@ -667,6 +696,9 @@ func caseD39(hwnd uintptr, args []string) error {
 	if _, err := d29Apply(payload(true, "")); err != nil {
 		return err
 	}
+	if err := waitsOpenDone(); err != nil {
+		return fail("%v", err)
+	}
 	p, err := read()
 	if err != nil {
 		return err
@@ -698,8 +730,12 @@ func caseD39(hwnd uintptr, args []string) error {
 	}
 
 	// No Foreman: no Close chip, no close-out tier, the gear line hidden, no error text.
+	// The Done group is open, so the chip check sees the can_close row.
 	if _, err := d29Apply(payload(false, "close_out")); err != nil {
 		return err
+	}
+	if err := waitsOpenDone(); err != nil {
+		return fail("%v", err)
 	}
 	if p, err = read(); err != nil {
 		return err
@@ -722,4 +758,185 @@ func caseD39(hwnd uintptr, args []string) error {
 		return fail("error text visible without foreman_root: %v", p.Errs)
 	}
 	return nil
+}
+
+// waits/d44: the Done group starts collapsed (B8 spec item 3).
+
+// d44: the Done group (close-out and branch-gone items) starts collapsed with
+// its count, so Blocked and Your turn are what shows first. Fed the frozen
+// example cut to 2 Blocked, 1 Your turn and 3 Done items (its close_out and
+// can_close rows plus a branch_gone row) it proves:
+//   - the Blocked and Your turn rows are in the DOM, the Done header reads
+//     "Done, needs close-out (3)" as a button (role, tabindex 0) with
+//     aria-expanded false, and no Done row is rendered;
+//   - a real click on the header shows the 3 Done rows, aria-expanded true;
+//   - the same payload applied again (what a poll does) leaves it open;
+//   - Enter on the focused header closes it, Space opens it again, and focus
+//     stays on the header although the render replaces it;
+//   - the panel header, with its amber number (wait_counts.blocked), reads
+//     the same throughout.
+//
+// Screenshot: d44-collapsed.
+
+// VK_RETURN and VK_SPACE, the keys a button answers to.
+const (
+	vkReturn = 0x0D
+	vkSpace  = 0x20
+)
+
+const d44ReadJS = `(function(){
+  var p = document.querySelector('[data-sec=waits]');
+  if(!p) return { rows: [], tiers: [], head: '' };
+  var h = p.querySelector('.sectier.done');
+  return { rows: Array.prototype.map.call(p.querySelectorAll('.secitem'), function(r){ return r.getAttribute('data-id'); }),
+    tiers: Array.prototype.map.call(p.querySelectorAll('.sectier'), function(e){ return e.textContent; }),
+    head: p.querySelector('.panelhead').textContent,
+    role: h ? h.getAttribute('role') || '' : '', tab: h ? h.getAttribute('tabindex') || '' : '',
+    expanded: h ? h.getAttribute('aria-expanded') || '' : '', focused: !!h && document.activeElement === h };
+})()`
+
+type d44Page struct {
+	Rows     []string `json:"rows"`
+	Tiers    []string `json:"tiers"`
+	Head     string   `json:"head"`
+	Role     string   `json:"role"`
+	Tab      string   `json:"tab"`
+	Expanded string   `json:"expanded"`
+	Focused  bool     `json:"focused"`
+}
+
+func caseD44(hwnd uintptr, args []string) error {
+	raw, err := readSnapshotExample()
+	if err != nil {
+		return err
+	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d44: "+format, a...) }
+	var snap map[string]any
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		return err
+	}
+	byID := map[string]any{}
+	for _, it := range snap["wait_items"].([]any) {
+		byID[it.(map[string]any)["id"].(string)] = it
+	}
+	first := []string{"gate:example__flow__1:G4", "sprint:example__sprint-example__1", "session:anthropic:example-idle"}
+	done := []string{"closeout:example__sprint__9", "canclose:session:anthropic:example-merged", "branchgone:example__sprint__8"}
+	all := append(append([]string{}, first...), done...)
+	var items []any
+	for _, id := range all[:5] {
+		it, ok := byID[id]
+		if !ok {
+			return fail("the example has no wait item %q", id)
+		}
+		items = append(items, it)
+	}
+	// The example has no branch_gone row; this one has the shape waits.go gives it.
+	items = append(items, map[string]any{"kind": "branch_gone", "id": done[2], "title": "example-gone", "project": "example",
+		"detail": "branch gone, check by hand", "since": "2026-10-23T07:00:00Z", "age_seconds": 9000, "source": "foreman",
+		"group": "done", "holds": 1})
+	snap["wait_items"] = items
+	snap["wait_counts"] = map[string]int{"blocked": 2, "your_turn": 1, "done": 3}
+	sb, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	payload := d29Payload(d29Opts{Plain: false, Scrollbar: true, Status: "ok", Snap: sb})
+	read := func() (d44Page, error) {
+		var p d44Page
+		err := evalInto(d44ReadJS, &p)
+		return p, err
+	}
+	// waitFor reads until the Done header has aria-expanded want, for up to 2 s.
+	waitFor := func(want string) (d44Page, error) {
+		for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+			p, err := read()
+			if err != nil || p.Expanded == want || time.Now().After(deadline) {
+				return p, err
+			}
+		}
+	}
+	var head string
+	check := func(label string, p d44Page, expanded string, rows []string) error {
+		if p.Expanded != expanded {
+			return fail("%s: aria-expanded %q, want %q", label, p.Expanded, expanded)
+		}
+		if strings.Join(p.Rows, "|") != strings.Join(rows, "|") {
+			return fail("%s: rows %v, want %v", label, p.Rows, rows)
+		}
+		if p.Head != head {
+			return fail("%s: panel header %q, was %q", label, p.Head, head)
+		}
+		return nil
+	}
+
+	if _, err := d29Apply(payload); err != nil {
+		return err
+	}
+	p, err := read()
+	if err != nil {
+		return err
+	}
+	head = p.Head
+	if !strings.Contains(head, "Waits on you (2)") || !strings.Contains(head, "1 your turn") {
+		return fail("panel header %q, want the amber number 2 and 1 your turn", head)
+	}
+	wantTiers := []string{"Blocked (2)", "Your turn (1)", "Done, needs close-out (3)"}
+	if strings.Join(p.Tiers, "|") != strings.Join(wantTiers, "|") {
+		return fail("tiers %v, want %v", p.Tiers, wantTiers)
+	}
+	if p.Role != "button" || p.Tab != "0" {
+		return fail("Done header role %q, tabindex %q, want button and 0", p.Role, p.Tab)
+	}
+	if err := check("at the start", p, "false", first); err != nil {
+		return err
+	}
+	if _, err := screenshot(hwnd, "d44-collapsed"); err != nil {
+		return err
+	}
+
+	if err := clickSelector(hwnd, "[data-sec=waits] .sectier.done"); err != nil {
+		return fail("click the Done header: %v", err)
+	}
+	if p, err = waitFor("true"); err != nil {
+		return err
+	}
+	if err := check("after a click", p, "true", all); err != nil {
+		return err
+	}
+
+	if _, err := d29Apply(payload); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if err := check("after the payload again", p, "true", all); err != nil {
+		return err
+	}
+
+	// Keys go to the foreground window: put it in front before each one.
+	key := func(name string, vk uint16, expanded string, rows []string) error {
+		if _, err := evalRaw(`(document.querySelector('[data-sec=waits] .sectier.done').focus(), 1)`); err != nil {
+			return err
+		}
+		bringToFront(hwnd)
+		if err := pressKey(vk); err != nil {
+			return fail("%s: press: %v", name, err)
+		}
+		p, err := waitFor(expanded)
+		if err != nil {
+			return err
+		}
+		if err := check("after "+name, p, expanded, rows); err != nil {
+			return err
+		}
+		if !p.Focused {
+			return fail("after %s the Done header does not have focus", name)
+		}
+		return nil
+	}
+	if err := key("Enter", vkReturn, "false", first); err != nil {
+		return err
+	}
+	return key("Space", vkSpace, "true", all)
 }

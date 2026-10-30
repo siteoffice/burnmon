@@ -506,7 +506,11 @@ without a project folder, such as a Cowork cloud session, shows its agent instea
 (`cowork-cloud 1a2b3c4d`), and one with neither shows `session 1a2b3c4d`. The full session id
 is never the title.
 
-Both parts show every item in a bounded scroll list with a count. A spec or result link
+Both parts show every item in a bounded scroll list with a count. In Waits on you the Done
+group (close-out, can-be-closed and branch-gone items) starts collapsed at every start: only
+its header with the count shows, so Blocked and Your turn come first. A click on the header,
+or Enter or Space on it, opens and closes it. The amber number in the part's header still
+counts the Blocked items only. A spec or result link
 opens through `bdevOpenItemFile`, which opens only a file named by the current snapshot
 and only `.md`, `.html` or `.txt` (an `.html` file opens in the default browser). The
 parts turn grey when the snapshot is older than two ticks. Foreman's `sprints` and `flows`
