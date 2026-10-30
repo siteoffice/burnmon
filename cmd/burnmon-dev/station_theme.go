@@ -1,9 +1,9 @@
 //go:build windows
 
-// station_theme.go saves the "Station starts as" setting. It is the only
-// code that writes burnmon-dev.json, and it writes only the station_theme
-// key: every other key keeps its raw JSON, so a setting this build does not
-// know survives. An unparsable file is refused and left as it is.
+// station_theme.go saves the "Station starts as" setting. saveDevConfigKey
+// here is the only code that writes burnmon-dev.json, and it writes one key
+// per call: every other key keeps its raw JSON, so a setting this build does
+// not know survives. An unparsable file is refused and left as it is.
 package main
 
 import (
@@ -19,6 +19,15 @@ var renameFile = os.Rename
 func saveStationTheme(dataDir, theme string) error {
 	if theme != "space" && theme != "site" {
 		return fmt.Errorf("station theme %q is not space or site", theme)
+	}
+	return saveDevConfigKey(dataDir, "station_theme", theme)
+}
+
+// saveDevConfigKey sets key to v in burnmon-dev.json and keeps every other key.
+func saveDevConfigKey(dataDir, key string, v any) error {
+	val, err := json.Marshal(v)
+	if err != nil {
+		return err
 	}
 	path := filepath.Join(dataDir, "burnmon-dev.json")
 	m := map[string]json.RawMessage{}
@@ -37,8 +46,7 @@ func saveStationTheme(dataDir, theme string) error {
 	default:
 		return err
 	}
-	v, _ := json.Marshal(theme)
-	m["station_theme"] = v
+	m[key] = val
 	out, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err

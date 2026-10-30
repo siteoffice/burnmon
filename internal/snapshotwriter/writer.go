@@ -33,6 +33,11 @@ const Tick = 5 * time.Second
 // latest.
 const foremanEvery = Tick + Tick/2
 
+// AgentViewFirstPoll is the agent_view source's error until the writer's
+// first poll has finished. Its items are missing until then, so a reader
+// that compares lists (the toast rules) skips such a snapshot.
+const AgentViewFirstPoll = "no poll has finished yet"
+
 // GraphReaders holds the relation graph's own sources (R6) between ticks.
 // Every reader is local disk or the Windows process and TCP tables: no port,
 // no network, no model call.
@@ -185,7 +190,7 @@ func (gr *GraphReaders) buildGraph(st *store.Store, sessions []graph.Session, ev
 		_, at, done, aerr := gr.agentViewState()
 		wi.Agents = agentEntries
 		if !done {
-			sources = append(sources, source(waits.SourceAgentView, stamp, errors.New("no poll has finished yet")))
+			sources = append(sources, source(waits.SourceAgentView, stamp, errors.New(AgentViewFirstPoll)))
 		} else {
 			sources = append(sources, source(waits.SourceAgentView, at.UTC().Format(time.RFC3339), aerr))
 		}

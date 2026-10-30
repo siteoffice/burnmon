@@ -380,6 +380,17 @@ responsive down to a single compact column.
   gives up 30% of its height and To Do fills the bottom of the window (a window too small
   for To Do still drops it first, as before); task text is live only, never written
   to an export, a log or a committed screenshot.
+- **Notification**: when an item enters Blocked or Your turn in Waits on you, BurnMon Dev
+  shows a Windows notification (a tray balloon, which Windows 10 and 11 show as a toast)
+  with the item's kind and title only: no prompt text, no command, no path. One per item
+  per 10 minutes, several at once become one ("3 things wait on you"), and Done never
+  notifies. What already waits at start stays quiet, and a snapshot that is missing, stale
+  or written before the agent view's first poll is skipped, so neither causes a burst. A
+  click on the notification brings the window to the front. On by default:
+  `"toast_enabled": false` in `burnmon-dev.json`, or the gear dialog's "Show a notification
+  when something waits on you", turns it off at once; turning it back on does not notify
+  what entered while it was off. It runs on its own hidden window and thread, never the
+  UI thread, and reads the snapshot file only.
 - **Export**: the header's "EXPORT" button, or
   `burnmon-dev.exe export --since --until --out DIR [--redact]` (`--since`/`--until` take
   a local day, YYYY-MM-DD, or a full RFC3339 timestamp), writes an AI-ready bundle to

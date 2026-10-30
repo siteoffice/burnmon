@@ -700,6 +700,7 @@ body.plain #mapOverlay{font-size:13.5px}
     <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
     <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint"> Close sprint</label><div class="dim ctlwhy" data-ctl-why="close_sprint"></div></div>
   </div>
+  <label class="setrow"><input type="checkbox" id="secToast"> Show a notification when something waits on you</label>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
@@ -3798,7 +3799,7 @@ body.plain #mapOverlay{font-size:13.5px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', heightsStandard:null, heightsPlain:null };
+  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, heightsStandard:null, heightsPlain:null };
   var secReading = { status:'missing', age_seconds:0 };
   // secLine is Go's sentence about the snapshot. The window opens before the
   // first payload, so it starts as the starting line; null means the last
@@ -4265,6 +4266,8 @@ body.plain #mapOverlay{font-size:13.5px}
     Array.prototype.forEach.call(document.querySelectorAll('input[name="secStationStart"]'), function(r){
       r.checked = r.value === secState.stationTheme;
     });
+    var tg = document.getElementById('secToast');
+    if(tg) tg.checked = !!secState.toast;
   }
   function secRender(){
     var host = document.getElementById('secHost');
@@ -4369,7 +4372,7 @@ body.plain #mapOverlay{font-size:13.5px}
   function secApplyPayload(p){
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space',
-      heightsStandard:p.heights_standard || null, heightsPlain:p.heights_plain || null };
+      toast:p.toast_enabled !== false, heightsStandard:p.heights_standard || null, heightsPlain:p.heights_plain || null };
     secReading = p.reading || { status:'missing', age_seconds:0 };
     secLine = p.snapshot_line || null;
     var cp = p.controls || {};
@@ -4428,6 +4431,18 @@ body.plain #mapOverlay{font-size:13.5px}
     if(t.hasAttribute('data-sw')) secSend({ mode: t.getAttribute('data-mode'), section: t.getAttribute('data-sw'), on: t.checked });
     else if(t.hasAttribute('data-ctl-sw')) secSend({ control: t.getAttribute('data-ctl-sw'), on: t.checked });
     else if(t.id === 'secScrollbar') secSend({ scrollbar: t.checked });
+    else if(t.id === 'secToast'){
+      if(typeof window.bdevSetToast === 'function'){
+        Promise.resolve(window.bdevSetToast(t.checked)).then(function(){ secLastJSON = 'x'; return secPoll(); })
+          .catch(function(e){
+            console.log('bdevSetToast:', e);
+            // Not saved: put the box back on the last value the payload gave and re-poll.
+            t.checked = !!secState.toast;
+            secLastJSON = 'x';
+            return secPoll();
+          });
+      }
+    }
     else if(t.name === 'secStationStart' && t.checked){
       // Saved for the next start only; the Station that is open keeps its theme.
       if(typeof window.bdevSetStationTheme === 'function'){

@@ -31,7 +31,9 @@ type sectionsPayload struct {
 	Groups []sections.Group `json:"groups"`
 	// StationTheme is the saved startup theme ("space" or "site") for the
 	// gear's "Station starts as" setting.
-	StationTheme string           `json:"station_theme"`
+	StationTheme string `json:"station_theme"`
+	// ToastEnabled is the saved toast_enabled for the gear's notification switch.
+	ToastEnabled bool             `json:"toast_enabled"`
 	Reading      snapshot.Reading `json:"reading"`
 	// AgentMap is the live map for the Agents map section, nil unless the
 	// snapshot is current. History is a separate call (agentmap_view.go).
@@ -99,12 +101,14 @@ func sectionsPayloadFor(dataDir, snapPath string, now time.Time) sectionsPayload
 // (nil: unknown).
 func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() controls.Availability, writer func() snapshotwriter.StatusView) sectionsPayload {
 	st := loadSections(dataDir)
+	dc := loadDevConfig(dataDir)
 	p := sectionsPayload{
 		State:        st,
 		Mode:         st.Mode(),
 		Parts:        st.Current(),
 		Groups:       sections.Groups,
-		StationTheme: loadDevConfig(dataDir).StationTheme,
+		StationTheme: dc.StationTheme,
+		ToastEnabled: dc.ToastEnabled,
 		Reading:      snapshot.Load(snapPath, now),
 	}
 	if writer != nil {
