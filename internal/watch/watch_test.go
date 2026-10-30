@@ -379,7 +379,9 @@ func isSprintJSON(path string) bool {
 
 // TestWatchFilesMatch: WatchFiles sees a matching file created in a new
 // nested folder, and a later write to it, and never reports a file its
-// match rejects.
+// match rejects. notes.txt is written just before each sprint.json write:
+// a root's events arrive in write order, so once that sprint.json event is
+// in, a leaked notes.txt event would be in too.
 func TestWatchFilesMatch(t *testing.T) {
 	dir := t.TempDir()
 	c := &changeCollector{}
@@ -404,8 +406,16 @@ func TestWatchFilesMatch(t *testing.T) {
 	c.waitFor(t, path, 2*time.Second)
 
 	c.mu.Lock()
+	for _, got := range c.paths {
+		if got == notes {
+			t.Errorf("onChange fired for %s on create, want it filtered out", notes)
+		}
+	}
 	c.paths = nil
 	c.mu.Unlock()
+	if err := os.WriteFile(notes, []byte("y\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(`{"status":"waiting-on-you"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
