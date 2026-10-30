@@ -498,8 +498,10 @@ Each item has one of these kinds in the snapshot:
 
 A session item is titled with its project folder and a short id of 8 characters, for example
 `burnmon 1a2b3c4d`, so two sessions in one folder stay apart. The short id is the first 8
-hex digits of the UUID in the session id (Claude Code, Codex), or else the last 8 characters
-of the session id (Hermes ids start with the date, so their tail differs). A session
+hex digits of the UUID in the session id (Claude Code), the last 8 when it is a version-7
+UUID (Codex: its start is a clock, the same for sessions started a minute apart), or else the
+last 8 characters of the session id (Hermes ids start with the date, so their tail differs).
+A session id shorter than 8 characters is shown whole. A session
 without a project folder, such as a Cowork cloud session, shows its agent instead
 (`cowork-cloud 1a2b3c4d`), and one with neither shows `session 1a2b3c4d`. The full session id
 is never the title.

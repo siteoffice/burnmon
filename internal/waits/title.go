@@ -13,12 +13,17 @@ func bareID(id string) string {
 }
 
 // ShortID tells two sessions of one folder apart in 8 characters. When the
-// bare id holds a UUID (Claude, Codex's rollout-<time>-<uuid>) it is the
-// UUID's first 8 hex digits; otherwise the bare id's last 8 runes, since ids
+// bare id holds a UUID it is the UUID's first 8 hex digits (Claude), but its
+// last 8 for a version-7 UUID (Codex's rollout-<time>-<uuid>), whose head is
+// a millisecond clock that sessions started a minute apart share. Without a
+// UUID it is the bare id's last 8 runes, all of it when shorter, since ids
 // like Hermes' <date>_<time>_<hex> or agent-<hex> share their start.
 func ShortID(id string) string {
 	b := bareID(id)
 	if u := uuidRe.FindString(b); u != "" {
+		if u[14] == '7' { // the version digit, first of the third group
+			return u[len(u)-8:]
+		}
 		return u[:8]
 	}
 	r := []rune(b)

@@ -8,8 +8,14 @@ func TestShortID(t *testing.T) {
 		{"session:anthropic:ec3c0d3c-c753-54e3-b994-c3a39e7505fc", "ec3c0d3c"},
 		{"ec3c0d3c-c753-54e3-b994-c3a39e7505fc", "ec3c0d3c"},
 		{"session:anthropic:EC3C0D3C-C753-54E3-B994-C3A39E7505FC", "EC3C0D3C"},
-		// Codex: the rollout file name, a timestamp then the UUID.
+		// A UUID that is not version 7 keeps its head, even inside a longer id.
 		{"session:openai:rollout-2026-10-30T10-11-12-5973b6c0-1a2b-4c3d-8e9f-0123456789ab", "5973b6c0"},
+		// Codex: the rollout file name, a timestamp then a version-7 UUID, whose
+		// head is a millisecond clock: its last 8 hex digits.
+		{"session:openai:rollout-2026-10-30T10-11-12-019a1b2c-3d4e-7f50-8a6b-7c8d9e0f1a2b", "9e0f1a2b"},
+		// Two Codex sessions started a second apart share the v7 head, not the tail.
+		{"session:openai:rollout-2026-10-30T16-58-25-01a0edac-1f2e-7a3b-8c4d-5e6f7a8b9c0d", "7a8b9c0d"},
+		{"session:openai:rollout-2026-10-30T16-58-26-01a0edac-2b3c-7d4e-9f5a-6b7c8d9e0f1a", "8d9e0f1a"},
 		// No UUID: the last 8 runes, where sessions of one day or one prefix differ.
 		{"session:hermes:20260922_213936_0572d4", "6_0572d4"},
 		{"session:anthropic:agent-a1b2c3d4e5f6a7b8", "e5f6a7b8"},
