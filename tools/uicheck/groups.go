@@ -52,7 +52,7 @@ var devGroups = []devGroup{
 	}, sizedStart(1152, 2048)}, // size as in check_d30.go:186
 	{"waits", []devCase{
 		{"d36", caseD36}, {"d37", caseD37}, {"d39", caseD39}, {"d44", caseD44},
-		{"d45", caseD45},
+		{"d45", caseD45}, {"d46", caseD46},
 	}, sizedStart(1920, 1080)}, // size as in check_d36.go:88
 	{"shell", []devCase{
 		{"d0", caseD0}, {"d1", caseD1}, {"d24", caseD24}, {"d32", caseD32},

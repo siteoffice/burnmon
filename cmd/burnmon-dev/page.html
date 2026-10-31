@@ -3926,13 +3926,16 @@ body.plain #mapOverlay{font-size:13.5px}
     return html;
   }
   // The command, the hint and the result text are never put in markup: ctlFill
-  // sets them with textContent after the render.
+  // sets them with textContent after the render. Confirm and the hint come
+  // first: a gate command wraps over many lines, and the preview box clips, so
+  // a Confirm after it would sit out of reach.
   function ctlLines(target){
     var html = '';
     CTL_ORDER.forEach(function(c){
       var key = ctlKey(c, target), p = ctlPending[key], r = ctlResult[key];
-      if(p) html += '<div class="ctlprev" data-ctlid="' + esc(key) + '"><code class="ctlcmd" data-ctlfill="cmd"></code> <span data-ctlfill="hint"></span> ' +
-        '<button type="button" class="ctl ctlgo" data-ctlgo="' + esc(c) + '" data-target="' + esc(target) + '"' + (Date.now() - p.at < CTL_GAP ? ' disabled' : '') + '>Confirm</button></div>';
+      if(p) html += '<div class="ctlprev" data-ctlid="' + esc(key) + '">' +
+        '<button type="button" class="ctl ctlgo" data-ctlgo="' + esc(c) + '" data-target="' + esc(target) + '"' + (Date.now() - p.at < CTL_GAP ? ' disabled' : '') + '>Confirm</button>' +
+        ' <span data-ctlfill="hint"></span> <code class="ctlcmd" data-ctlfill="cmd"></code></div>';
       if(r) html += '<div class="ctlres ' + (r.ok ? 'ok' : 'bad') + '" role="status" data-ctlid="' + esc(key) + '" data-ctlfill="res"></div>';
     });
     return html;
@@ -3974,8 +3977,20 @@ body.plain #mapOverlay{font-size:13.5px}
     });
     Object.keys(ctlResult).forEach(function(key){ if(now > ctlResult[key].until) delete ctlResult[key]; });
   }
-  function ctlPreview(c, t){
-    var key = ctlKey(c, t), r;
+  // The press is explicit, so the new preview line may scroll into view in its
+  // list: the render keeps a list where it was, and the line sits after the
+  // pressed row, often below the visible part. A poll or tick render never does.
+  function ctlReveal(key, rowId){
+    var rows = document.querySelectorAll('#secPanels .secitem'), i, n;
+    for(i = 0; i < rows.length; i++){
+      if(rows[i].getAttribute('data-id') !== rowId) continue;
+      for(n = rows[i].nextElementSibling; n && !n.classList.contains('secitem'); n = n.nextElementSibling){
+        if(n.classList.contains('ctlprev') && n.getAttribute('data-ctlid') === key){ n.scrollIntoView({ block:'nearest' }); return; }
+      }
+    }
+  }
+  function ctlPreview(c, t, rowId){
+    var key = ctlKey(c, t), r, shown = false;
     if(ctlAsking[key]) return;
     if(typeof window.bdevControlPreview !== 'function'){ console.log('bdevControlPreview: not bound'); return; }
     ctlAsking[key] = true;
@@ -3986,12 +4001,13 @@ body.plain #mapOverlay{font-size:13.5px}
       var now = Date.now();
       ctlPending[key] = { control:c, token:String(res.token), command:String(res.command), label:String(res.label), at:now,
         until:now + Math.min(CTL_TTL, res.expires_in_ms || CTL_TTL) };
+      shown = true;
       setTimeout(secRender, CTL_GAP + 20);
       setTimeout(secRender, CTL_TTL + 50);
     }, function(err){
       ctlShowResult(key, c, { refused:ctlErr(err) });
       setTimeout(secRender, CTL_RESULT_MS + 50);
-    }).then(function(){ delete ctlAsking[key]; secRender(); });
+    }).then(function(){ delete ctlAsking[key]; secRender(); if(shown) ctlReveal(key, rowId); });
   }
   // The only place the run binding is called; the argument is the stored token.
   function ctlRun(key, c, p){
@@ -4019,7 +4035,8 @@ body.plain #mapOverlay{font-size:13.5px}
     if(!el) return false;
     var go = el.hasAttribute('data-ctlgo'), c = el.getAttribute(go ? 'data-ctlgo' : 'data-ctl'), t = el.getAttribute('data-target');
     if(!Object.prototype.hasOwnProperty.call(CTL_WORD, c) || t == null) return true;
-    if(go) ctlConfirm(c, t); else ctlPreview(c, t);
+    var row = el.closest('.secitem');
+    if(go) ctlConfirm(c, t); else ctlPreview(c, t, row ? row.getAttribute('data-id') : '');
     return true;
   }
   // The gear block: switch states and the reason a control is not usable.

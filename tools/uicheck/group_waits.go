@@ -1143,3 +1143,200 @@ func caseD45(hwnd uintptr, args []string) error {
 	}
 	return nil
 }
+
+// waits/d46: Confirm is in reach after a control preview (B8 Task 12 fix).
+
+// d46: a person can press Confirm after a control preview. The first live
+// press of a control put Confirm after a gate command of about 600 characters,
+// inside a preview box and a list that both clip, so it could not be reached
+// in the 5 s a preview lives (d37 only clicks programmatically, so it never
+// saw this). The two control bindings are REPLACED by recorders, so no real
+// control is ever pressed. Fed the frozen example (seven Blocked rows, so the
+// Waits list is full and scrolls), controls on, one press on the approve chip
+// of its G2 gate row and a preview command of the real gate shape, it proves,
+// with no scrolling done by the case:
+//   - the list scrolls and the gate row is not its first row;
+//   - after CTL_GAP the point at the centre of that row's Confirm button
+//     belongs to the button, the button is enabled, and the preview line
+//     still holds the whole command, character for character;
+//   - the same payload applied again (what a poll does) leaves the list's
+//     scrollTop and Confirm where they were, and nothing ran.
+//
+// Screenshot: d46-confirm.
+
+// d46GateScript is internal\controls\gate.go GateScript (uicheck is its own
+// module and cannot import it), so the fake command has the real length.
+const d46GateScript = "import sys; sys.path.insert(0, sys.argv[1]); " +
+	"import flow_transition as ft, flow_state as fs; " +
+	"f = ft.load_flow(sys.argv[2]); g = f.get('gate'); g = g if isinstance(g, dict) else {}; " +
+	"sys.exit(3) if (g.get('id') != sys.argv[4] or g.get('token') != sys.argv[5] or g.get('status') != 'awaiting-owner') else None; " +
+	"sys.exit(4) if sys.argv[3] not in fs.valid_verdicts(sys.argv[4]) else None; " +
+	"ft.cmd_gate(sys.argv[2], sys.argv[3], note='', surface='burnmon'); sys.exit(0)"
+
+// d46Command is a gate preview command as the controls render it:
+// python.exe -I -c "<GateScript>" <lib dir> <flow dir> <verdict> <gate> <token>.
+func d46Command() string {
+	return `C:\Users\example\AppData\Local\Programs\Python\Python312\python.exe -I -c "` + d46GateScript + `" ` +
+		`C:\ZND\10_holding\flows\_lib C:\ZND\10_holding\flows\burnmon-b8-ctl-probe approve G2 ` +
+		`FLOW-BURNMON-b8-ctl-probe-approve-G2-20261031T110129Z-D38C`
+}
+
+const d46Gate = "gate:example__flow__2:G2"
+
+func d46Recorders(cmd string) string {
+	b, _ := json.Marshal(cmd)
+	return `(function(){
+  window.__d46prev = []; window.__d46run = [];
+  window.bdevControlPreview = function(r){
+    window.__d46prev.push(JSON.parse(JSON.stringify(r)));
+    return Promise.resolve({token:'tok-' + r.target, command:` + string(b) + `, label:'gate G2', expires_in_ms:5000});
+  };
+  window.bdevControlRun = function(t){
+    window.__d46run.push(t);
+    return Promise.resolve({exit_code:0, line:'ok'});
+  };
+  return true;
+})()`
+}
+
+const d46ReadJS = `(function(){
+  var id = '` + d46Gate + `';
+  var list = document.querySelector('[data-sec=waits] .seclist');
+  var rows = list ? Array.prototype.slice.call(list.querySelectorAll('.secitem')) : [];
+  var row = list ? list.querySelector('.secitem[data-id="' + id + '"]') : null;
+  var prev = list ? list.querySelector('.ctlprev[data-ctlid="approve|' + id + '"]') : null;
+  var go = prev ? prev.querySelector('.ctlgo') : null;
+  var out = { found: !!list, rows: rows.length, rowIndex: rows.indexOf(row), hasPrev: !!prev, hasGo: !!go,
+    runs: window.__d46run.slice(), prevs: window.__d46prev.slice() };
+  if(list){
+    var lr = list.getBoundingClientRect();
+    out.listTop = lr.top; out.listBottom = lr.bottom; out.scrollTop = list.scrollTop; out.max = list.scrollHeight - list.clientHeight;
+  }
+  if(prev) out.cmd = prev.querySelector('.ctlcmd').textContent;
+  if(go){
+    var r = go.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    out.goTop = r.top; out.goBottom = r.bottom; out.disabled = go.disabled;
+    out.hitGo = !!hit && (hit === go || go.contains(hit));
+    out.hit = hit ? hit.tagName + (hit.className ? '.' + hit.className : '') : 'null';
+  }
+  return out;
+})()`
+
+type d46Page struct {
+	Found      bool             `json:"found"`
+	Rows       int              `json:"rows"`
+	RowIndex   int              `json:"rowIndex"` // of the gate row in the list, -1 when absent
+	HasPrev    bool             `json:"hasPrev"`
+	HasGo      bool             `json:"hasGo"`
+	Runs       []string         `json:"runs"`
+	Prevs      []map[string]any `json:"prevs"`
+	ListTop    float64          `json:"listTop"`
+	ListBottom float64          `json:"listBottom"`
+	ScrollTop  float64          `json:"scrollTop"`
+	Max        float64          `json:"max"`
+	Cmd        string           `json:"cmd"`
+	GoTop      float64          `json:"goTop"`
+	GoBottom   float64          `json:"goBottom"`
+	Disabled   bool             `json:"disabled"`
+	HitGo      bool             `json:"hitGo"`
+	Hit        string           `json:"hit"` // what elementFromPoint returned at Confirm's centre
+}
+
+// geometry is the line a failure carries: what the point at Confirm's centre
+// belongs to, then where Confirm and its list are. The hit comes first, since a
+// shell may cut a long line.
+func (p d46Page) geometry() string {
+	return fmt.Sprintf("elementFromPoint %s, Confirm top %.0f bottom %.0f, list top %.0f bottom %.0f, scrollTop %.0f of %.0f",
+		p.Hit, p.GoTop, p.GoBottom, p.ListTop, p.ListBottom, p.ScrollTop, p.Max)
+}
+
+func caseD46(hwnd uintptr, args []string) error {
+	raw, err := readSnapshotExample()
+	if err != nil {
+		return err
+	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d46: "+format, a...) }
+	cmd := d46Command()
+	all := map[string]bool{"stop": true, "attach": true, "approve": true, "send_back": true}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(d29Payload(d29Opts{Plain: false, Scrollbar: true, Status: "ok", Snap: raw})), &m); err != nil {
+		return err
+	}
+	m["controls"] = map[string]any{"on": all, "ready": all, "why": map[string]string{},
+		"verdicts": map[string]map[string]string{
+			"approve":   {"G1": "approve", "G2": "approve", "G3": "proceed"},
+			"send_back": {"G1": "reject", "G2": "reject"},
+		}}
+	pb, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	payload := string(pb)
+	read := func() (d46Page, error) {
+		var p d46Page
+		err := evalInto(d46ReadJS, &p)
+		return p, err
+	}
+	if _, err := evalRaw(d46Recorders(cmd)); err != nil {
+		return err
+	}
+
+	// The list is full and scrolls, and the gate row is not its first row.
+	if _, err := d29Apply(payload); err != nil {
+		return err
+	}
+	p, err := read()
+	if err != nil {
+		return err
+	}
+	if !p.Found || p.Rows < 5 || p.RowIndex < 3 || p.Max <= 0 {
+		return fail("the case needs a full Waits list that scrolls, with the gate row 4th or later: found %v, %d rows, gate row at %d, scroll range %.0f", p.Found, p.Rows, p.RowIndex, p.Max)
+	}
+
+	// One press on approve; after CTL_GAP the case scrolls nothing.
+	if _, err := evalRaw(`document.querySelector('[data-sec=waits] .ctl[data-ctl="approve"][data-target="` + d46Gate + `"]').click()`); err != nil {
+		return err
+	}
+	time.Sleep(700 * time.Millisecond)
+	if p, err = read(); err != nil {
+		return err
+	}
+	if _, err := screenshot(hwnd, "d46-confirm"); err != nil {
+		return err
+	}
+	if len(p.Prevs) != 1 || len(p.Runs) != 0 {
+		return fail("one press sent previews %v and runs %v, want one preview and no run", p.Prevs, p.Runs)
+	}
+	if !p.HasPrev || !p.HasGo {
+		return fail("no preview line with a Confirm button after the press (preview %v, Confirm %v)", p.HasPrev, p.HasGo)
+	}
+	if p.Cmd != cmd {
+		return fail("the preview holds %d characters of the command, want all %d", len(p.Cmd), len(cmd))
+	}
+	if p.Disabled {
+		return fail("Confirm is still disabled 700 ms after the press")
+	}
+	if !p.HitGo {
+		return fail("Confirm is out of reach, nothing scrolled by the case: %s", p.geometry())
+	}
+	after := p
+	fmt.Printf("d46: Confirm in reach: %s\n", after.geometry())
+
+	// A poll's render keeps the list where the preview put it and Confirm in reach.
+	if _, err := d29Apply(payload); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if !p.HasGo || p.ScrollTop < after.ScrollTop-1 || p.ScrollTop > after.ScrollTop+1 {
+		return fail("after a poll: Confirm %v, scrollTop %.0f, was %.0f", p.HasGo, p.ScrollTop, after.ScrollTop)
+	}
+	if !p.HitGo {
+		return fail("after a poll Confirm cannot be reached: %s", p.geometry())
+	}
+	if len(p.Runs) != 0 {
+		return fail("a poll ran %v", p.Runs)
+	}
+	return nil
+}
