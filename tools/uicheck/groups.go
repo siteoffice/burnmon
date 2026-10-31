@@ -51,11 +51,20 @@ var devGroups = []devGroup{
 		{"d40", caseD40},
 	}, sizedStart(1152, 2048)}, // size as in check_d30.go:186
 	{"waits", []devCase{
-		{"d36", caseD36}, {"d37", caseD37}, {"d39", caseD39},
+		{"d36", caseD36}, {"d37", caseD37}, {"d39", caseD39}, {"d44", caseD44},
+		{"d45", caseD45}, {"d46", caseD46},
 	}, sizedStart(1920, 1080)}, // size as in check_d36.go:88
 	{"shell", []devCase{
 		{"d0", caseD0}, {"d1", caseD1}, {"d24", caseD24}, {"d32", caseD32},
 	}, sizedStart(1152, 2048)}, // size as in check_d0.go:17
+}
+
+// devNamedGroups hold cases that run only by their full group/case name,
+// never in a full run, "dev" or "reverse": latency/gate writes a probe sprint
+// into the real Foreman tree (latency_gate.go). The start is the waits
+// group's: Standard mode with every part on, Waits included.
+var devNamedGroups = []devGroup{
+	{"latency", []devCase{{"gate", caseLatencyGate}}, sizedStart(1920, 1080)},
 }
 
 // devAliases maps an old name that was merged into another case to the case
@@ -85,6 +94,16 @@ func init() {
 	for alias, target := range devAliases {
 		checks[alias] = checks[target]
 		devNames[alias] = true
+	}
+	// Full names only: uicheck.ps1 routes a bare group or case name that is
+	// not one of the seven to burnmon.exe.
+	for _, g := range devNamedGroups {
+		g := g
+		for _, c := range g.Cases {
+			c := c
+			checks[g.Name+"/"+c.Name] = func(hwnd uintptr, args []string) error { return runDevCase(hwnd, g, c, args) }
+			devNames[g.Name+"/"+c.Name] = true
+		}
 	}
 }
 

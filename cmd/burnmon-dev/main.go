@@ -39,6 +39,7 @@ import (
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
+	"burnmon/internal/toast"
 	"burnmon/internal/todo"
 	"burnmon/internal/vendorstrip"
 )
@@ -376,11 +377,40 @@ func main() {
 	if snapPathErr != nil {
 		log.Println("snapshot path:", snapPathErr)
 	}
+	// Toasts (B8): a Windows notification when something enters Waits on you.
+	// The notifier has its own window on its own thread and the watch its own
+	// goroutine, which reads toast_enabled from burnmon-dev.json on every new
+	// snapshot and stays quiet until the startup backfill is done. On this UI
+	// thread only bdevSetToast runs, and it writes the small json file like
+	// bdevSetStationTheme does.
+	if n, err := toast.Start("BurnMon Dev", func() { bringToFront(hwnd) }); err != nil {
+		log.Println("toasts off for this run:", err)
+	} else {
+		defer n.Close()
+		startToastWatch(snapPath, setDir, a.initialCollectDone, n.Show)
+	}
+	if err := w.Bind("bdevSetToast", func(on bool) error {
+		err := saveDevConfigKey(setDir, "toast_enabled", on)
+		if err != nil {
+			log.Println("bdevSetToast:", err)
+		}
+		return err
+	}); err != nil {
+		log.Println("could not bind bdevSetToast:", err)
+	}
 	ctlSvc := newControlService(cfg, setDir, snapPath, storePath)
 	if err := w.Bind("bdevSections", func() sectionsPayload {
 		return sectionsPayloadWith(setDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
 	}); err != nil {
 		log.Println("could not bind bdevSections:", err)
+	}
+	// bdevSnapshotStamp (B8): the page asks every second whether the snapshot
+	// file changed and only then calls bdevSections. It runs on the UI thread,
+	// so it is one os.Stat and nothing else.
+	if err := w.Bind("bdevSnapshotStamp", func() string {
+		return snapshotStamp(snapPath)
+	}); err != nil {
+		log.Println("could not bind bdevSnapshotStamp:", err)
 	}
 	if err := w.Bind("bdevSetSections", func(c sectionsChange) error {
 		err := applySectionsChange(setDir, c)

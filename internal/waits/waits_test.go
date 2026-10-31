@@ -151,7 +151,7 @@ func TestSessionWaitFromGraphEdge(t *testing.T) {
 		t.Fatalf("got %+v", w)
 	}
 	it := w[0]
-	if it.Kind != "session" || it.ID != "session:anthropic:s1" || it.Title != "proj" || it.AgeSeconds != 40 ||
+	if it.Kind != "session" || it.ID != "session:anthropic:s1" || it.Title != "proj s1" || it.AgeSeconds != 40 ||
 		it.Source != "claude_pids" || it.SpecPath != `C:\example\specs\s.md` || it.ResultPath != `C:\example\r.md` ||
 		it.Since != "2026-10-23T09:59:20Z" {
 		t.Fatalf("item = %+v", it)
@@ -178,7 +178,7 @@ func TestAgentEntryReplacesSessionItem(t *testing.T) {
 	}
 	blocked := []AgentEntry{{ID: "ab12", State: "blocked", Cwd: `C:\example\proj`, Since: now.Add(-9 * time.Second)}}
 	w, _ = Build(Input{Now: now, Agents: blocked})
-	if len(w) != 1 || w[0].Kind != "session" || w[0].ID != "agentview:ab12" || w[0].Detail != "blocked" || w[0].Title != "proj" {
+	if len(w) != 1 || w[0].Kind != "session" || w[0].ID != "agentview:ab12" || w[0].Detail != "blocked" || w[0].Title != "proj ab12" {
 		t.Fatalf("blocked = %+v", w)
 	}
 	in.Agents = []AgentEntry{{SessionID: "s1", Status: "busy", Cwd: `C:\example\proj`}}
@@ -290,6 +290,52 @@ func TestPassingAndDoneStatusAreFinishedWithin24Hours(t *testing.T) {
 	_, o = Build(Input{Now: now, Sprints: []graph.Sprint{sp}})
 	if len(o) != 0 {
 		t.Fatalf("capped past boundary: %+v", o)
+	}
+}
+
+// A session item never shows a raw id as its title: its folder and a short
+// id, else its agent, else "session". Gate and sprint titles keep their slug,
+// and the count does not move.
+func TestSessionTitlesNeverShowARawID(t *testing.T) {
+	const uuid = "ec3c0d3c-c753-54e3-b994-c3a39e7505fc"
+	g := graph.Graph{
+		Nodes: []graph.Node{
+			// The laptop case: a cowork-cloud session has no project folder.
+			{ID: "session:anthropic:" + uuid, Kind: graph.KindSession, Label: uuid, Source: "store",
+				Attrs: map[string]string{"agent": "cowork-cloud", "state": "waiting", "wait": "your_turn"}},
+			{ID: "session:anthropic:c1d2e3f4a5b6", Kind: graph.KindSession, Label: "c1d2e3f4a5b6", Source: "store",
+				Attrs: map[string]string{"agent": "claude-code", "wait": "your_turn", "can_close": "true"}},
+			{ID: "session:anthropic:b1b2b3b4b5b6", Kind: graph.KindSession, Label: "burnmon", Source: "store",
+				Attrs: map[string]string{"agent": "claude-code", "wait": "blocked"}},
+			{ID: personID, Kind: graph.KindPerson, Label: "You"},
+		},
+		Edges: []graph.Edge{{From: "session:anthropic:b1b2b3b4b5b6", To: personID, Kind: graph.KindWaitsOn, Source: "store"}},
+	}
+	in := Input{Now: now, Graph: g, Flows: []graph.Flow{openFlow()},
+		Sprints: []graph.Sprint{{ID: "sp1", Slug: "sprint-example", Status: "waiting-on-you", UpdatedAt: now}},
+		Agents: []AgentEntry{
+			{ID: "9f8e7d6c5b4a", State: "blocked"},
+			{SessionID: "a0a1a2a3a4a5", Status: "waiting", WaitingFor: "permission prompt", Cwd: `C:\example\proj`},
+		}}
+	w, _ := Build(in)
+	titles := map[string]string{}
+	for _, it := range w {
+		titles[it.Kind+" "+it.ID] = it.Title
+	}
+	want := map[string]string{
+		"your_turn session:anthropic:" + uuid:               "cowork-cloud ec3c0d3c",
+		"can_close canclose:session:anthropic:c1d2e3f4a5b6": "claude-code e3f4a5b6",
+		"session session:anthropic:b1b2b3b4b5b6":            "burnmon b3b4b5b6",
+		"session agentview:9f8e7d6c5b4a":                    "session 7d6c5b4a",
+		"prompt session:anthropic:a0a1a2a3a4a5":             "proj a2a3a4a5",
+		"gate gate:f1:G4":                                   "example-flow",
+		"sprint sprint:sp1":                                 "sprint-example",
+	}
+	if !reflect.DeepEqual(titles, want) {
+		t.Fatalf("titles = %v", titles)
+	}
+	if c := CountOf(w); c != (Counts{Blocked: 5, YourTurn: 1, Done: 1}) {
+		t.Fatalf("counts = %+v", c)
 	}
 }
 

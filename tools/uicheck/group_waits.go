@@ -7,12 +7,37 @@ import (
 	"time"
 )
 
+// waitsOpenDoneJS opens the Done group with a click on its header when it is
+// closed (it starts closed at every page load, d44) and returns its
+// aria-expanded after, or "" when the list has no Done group.
+const waitsOpenDoneJS = `(function(){
+  var h = document.querySelector('[data-sec=waits] .sectier.done');
+  if(!h) return '';
+  if(h.getAttribute('aria-expanded') === 'false') h.click();
+  h = document.querySelector('[data-sec=waits] .sectier.done');
+  return h ? h.getAttribute('aria-expanded') || '' : '';
+})()`
+
+// waitsOpenDone is for the cases that read every wait row: it opens the Done
+// group the way a user does and fails when it stays closed.
+func waitsOpenDone() error {
+	var got string
+	if err := evalInto(waitsOpenDoneJS, &got); err != nil {
+		return err
+	}
+	if got != "" && got != "true" {
+		return fmt.Errorf("the Done group did not open: aria-expanded %q", got)
+	}
+	return nil
+}
+
 // waits/d36: moved from check_d36.go.
 
 // d36: Waits on you and Outcomes list the items (agent control plan row R9).
 // Fed the UNMODIFIED frozen example (testdata\snapshot_example.json, the gate is not moved
 // to the front) it proves:
-//   - every wait item is a row in the DOM (the list scrolls inside the panel, none is
+//   - with the Done group opened (it starts collapsed, d44), every wait item is
+//     a row in the DOM (the list scrolls inside the panel, none is
 //     cut off), no +k more line; the header carries the Blocked count from
 //     wait_counts, not the row total (B6 scope item 8, one count everywhere):
 //     "Waits on you (7)" plus "1 your turn";
@@ -108,6 +133,9 @@ func caseD36(hwnd uintptr, args []string) error {
 		payload = strings.Replace(payload, `"age_seconds":7`, `"age_seconds":`+age, 1)
 		if _, err := d29Apply(payload); err != nil {
 			return p, err
+		}
+		if err := waitsOpenDone(); err != nil {
+			return p, fail("%v", err)
 		}
 		err := evalInto(d36ReadJS, &p)
 		return p, err
@@ -563,7 +591,8 @@ func caseD37(hwnd uintptr, args []string) error {
 //   - the tier headers come in the order Blocked, Your turn, Done needs
 //     close-out (one Done tier holding the close_out and the can_close row),
 //     and the panel header count is 7;
-//   - the Close chip is on the close_out row only, and one press previews
+//   - with the Done group opened (it starts collapsed, d44), the Close chip
+//     is on the close_out row only, and one press previews
 //     {control: close_sprint, target: closeout:example__sprint__9};
 //   - with controls.foreman false and the close_out row removed: no Close
 //     chip, the Done tier is headed Done, can be closed, every gear line
@@ -667,6 +696,9 @@ func caseD39(hwnd uintptr, args []string) error {
 	if _, err := d29Apply(payload(true, "")); err != nil {
 		return err
 	}
+	if err := waitsOpenDone(); err != nil {
+		return fail("%v", err)
+	}
 	p, err := read()
 	if err != nil {
 		return err
@@ -698,8 +730,12 @@ func caseD39(hwnd uintptr, args []string) error {
 	}
 
 	// No Foreman: no Close chip, no close-out tier, the gear line hidden, no error text.
+	// The Done group is open, so the chip check sees the can_close row.
 	if _, err := d29Apply(payload(false, "close_out")); err != nil {
 		return err
+	}
+	if err := waitsOpenDone(); err != nil {
+		return fail("%v", err)
 	}
 	if p, err = read(); err != nil {
 		return err
@@ -720,6 +756,587 @@ func caseD39(hwnd uintptr, args []string) error {
 	}
 	if len(p.Errs) != 0 {
 		return fail("error text visible without foreman_root: %v", p.Errs)
+	}
+	return nil
+}
+
+// waits/d44: the Done group starts collapsed (B8 spec item 3).
+
+// d44: the Done group (close-out and branch-gone items) starts collapsed with
+// its count, so Blocked and Your turn are what shows first. Fed the frozen
+// example cut to 2 Blocked, 1 Your turn and 3 Done items (its close_out and
+// can_close rows plus a branch_gone row) it proves:
+//   - the Blocked and Your turn rows are in the DOM, the Done header reads
+//     "Done, needs close-out (3)" as a button (role, tabindex 0) with
+//     aria-expanded false, and no Done row is rendered;
+//   - a real click on the header shows the 3 Done rows, aria-expanded true;
+//   - the same payload applied again (what a poll does) leaves it open;
+//   - Enter on the focused header closes it, Space opens it again, and focus
+//     stays on the header although the render replaces it;
+//   - after the click and after each key the header lies inside its list's
+//     visible part (the render keeps the list's scroll position, d45; at this
+//     size the list shows fewer lines than it holds);
+//   - the panel header, with its amber number (wait_counts.blocked), reads
+//     the same throughout.
+//
+// A key is sent only while BurnMon Dev is the foreground window
+// (keyIfForeground), so it never lands in another window.
+//
+// Screenshot: d44-collapsed.
+
+// VK_RETURN and VK_SPACE, the keys a button answers to.
+const (
+	vkReturn = 0x0D
+	vkSpace  = 0x20
+)
+
+// keyIfForeground presses vk only when fg reports hwnd in front. bringToFront
+// reports no failure, and a key sent anyway lands in whatever window is in
+// front, where Enter could submit something.
+func keyIfForeground(hwnd uintptr, vk uint16, fg func() uintptr, press func(uint16) error) error {
+	if got := fg(); got != hwnd {
+		return fmt.Errorf("BurnMon Dev is not the foreground window (window %#x is), so no key was sent", got)
+	}
+	return press(vk)
+}
+
+// foregroundWindow is the window that gets keyboard input now.
+func foregroundWindow() uintptr {
+	h, _, _ := procGetForegroundWindow.Call()
+	return h
+}
+
+// d44ReadJS also says whether the Done header lies inside its list's visible
+// part (the list scrolls inside itself), with the numbers for the error text.
+const d44ReadJS = `(function(){
+  var p = document.querySelector('[data-sec=waits]');
+  if(!p) return { rows: [], tiers: [], head: '' };
+  var h = p.querySelector('.sectier.done'), l = h ? h.closest('.seclist') : null, view = '', inView = false;
+  if(l){
+    var hr = h.getBoundingClientRect(), top = l.getBoundingClientRect().top + l.clientTop, bottom = top + l.clientHeight;
+    inView = hr.top >= top - 1 && hr.bottom <= bottom + 1;
+    view = 'header ' + Math.round(hr.top) + '-' + Math.round(hr.bottom) + ', list ' + Math.round(top) + '-' + Math.round(bottom) + ', scrollTop ' + Math.round(l.scrollTop);
+  }
+  return { rows: Array.prototype.map.call(p.querySelectorAll('.secitem'), function(r){ return r.getAttribute('data-id'); }),
+    tiers: Array.prototype.map.call(p.querySelectorAll('.sectier'), function(e){ return e.textContent; }),
+    head: p.querySelector('.panelhead').textContent,
+    role: h ? h.getAttribute('role') || '' : '', tab: h ? h.getAttribute('tabindex') || '' : '',
+    expanded: h ? h.getAttribute('aria-expanded') || '' : '', focused: !!h && document.activeElement === h,
+    inView: inView, view: view };
+})()`
+
+type d44Page struct {
+	Rows     []string `json:"rows"`
+	Tiers    []string `json:"tiers"`
+	Head     string   `json:"head"`
+	Role     string   `json:"role"`
+	Tab      string   `json:"tab"`
+	Expanded string   `json:"expanded"`
+	Focused  bool     `json:"focused"`
+	InView   bool     `json:"inView"`
+	View     string   `json:"view"`
+}
+
+func caseD44(hwnd uintptr, args []string) error {
+	raw, err := readSnapshotExample()
+	if err != nil {
+		return err
+	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d44: "+format, a...) }
+	var snap map[string]any
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		return err
+	}
+	byID := map[string]any{}
+	for _, it := range snap["wait_items"].([]any) {
+		byID[it.(map[string]any)["id"].(string)] = it
+	}
+	first := []string{"gate:example__flow__1:G4", "sprint:example__sprint-example__1", "session:anthropic:example-idle"}
+	done := []string{"closeout:example__sprint__9", "canclose:session:anthropic:example-merged", "branchgone:example__sprint__8"}
+	all := append(append([]string{}, first...), done...)
+	var items []any
+	for _, id := range all[:5] {
+		it, ok := byID[id]
+		if !ok {
+			return fail("the example has no wait item %q", id)
+		}
+		items = append(items, it)
+	}
+	// The example has no branch_gone row; this one has the shape waits.go gives it.
+	items = append(items, map[string]any{"kind": "branch_gone", "id": done[2], "title": "example-gone", "project": "example",
+		"detail": "branch gone, check by hand", "since": "2026-10-23T07:00:00Z", "age_seconds": 9000, "source": "foreman",
+		"group": "done", "holds": 1})
+	snap["wait_items"] = items
+	snap["wait_counts"] = map[string]int{"blocked": 2, "your_turn": 1, "done": 3}
+	sb, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	payload := d29Payload(d29Opts{Plain: false, Scrollbar: true, Status: "ok", Snap: sb})
+	read := func() (d44Page, error) {
+		var p d44Page
+		err := evalInto(d44ReadJS, &p)
+		return p, err
+	}
+	// waitFor reads until the Done header has aria-expanded want, for up to 2 s.
+	waitFor := func(want string) (d44Page, error) {
+		for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+			p, err := read()
+			if err != nil || p.Expanded == want || time.Now().After(deadline) {
+				return p, err
+			}
+		}
+	}
+	var head string
+	check := func(label string, p d44Page, expanded string, rows []string) error {
+		if p.Expanded != expanded {
+			return fail("%s: aria-expanded %q, want %q", label, p.Expanded, expanded)
+		}
+		if strings.Join(p.Rows, "|") != strings.Join(rows, "|") {
+			return fail("%s: rows %v, want %v", label, p.Rows, rows)
+		}
+		if p.Head != head {
+			return fail("%s: panel header %q, was %q", label, p.Head, head)
+		}
+		return nil
+	}
+
+	if _, err := d29Apply(payload); err != nil {
+		return err
+	}
+	p, err := read()
+	if err != nil {
+		return err
+	}
+	head = p.Head
+	if !strings.Contains(head, "Waits on you (2)") || !strings.Contains(head, "1 your turn") {
+		return fail("panel header %q, want the amber number 2 and 1 your turn", head)
+	}
+	wantTiers := []string{"Blocked (2)", "Your turn (1)", "Done, needs close-out (3)"}
+	if strings.Join(p.Tiers, "|") != strings.Join(wantTiers, "|") {
+		return fail("tiers %v, want %v", p.Tiers, wantTiers)
+	}
+	if p.Role != "button" || p.Tab != "0" {
+		return fail("Done header role %q, tabindex %q, want button and 0", p.Role, p.Tab)
+	}
+	if err := check("at the start", p, "false", first); err != nil {
+		return err
+	}
+	if _, err := screenshot(hwnd, "d44-collapsed"); err != nil {
+		return err
+	}
+
+	if err := clickSelector(hwnd, "[data-sec=waits] .sectier.done"); err != nil {
+		return fail("click the Done header: %v", err)
+	}
+	if p, err = waitFor("true"); err != nil {
+		return err
+	}
+	if err := check("after a click", p, "true", all); err != nil {
+		return err
+	}
+	if !p.InView {
+		return fail("after a click the Done header is outside its list's visible part (%s)", p.View)
+	}
+
+	if _, err := d29Apply(payload); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if err := check("after the payload again", p, "true", all); err != nil {
+		return err
+	}
+
+	// Keys go to the foreground window: put it in front before each one and
+	// press only when it is.
+	key := func(name string, vk uint16, expanded string, rows []string) error {
+		if _, err := evalRaw(`(document.querySelector('[data-sec=waits] .sectier.done').focus(), 1)`); err != nil {
+			return err
+		}
+		bringToFront(hwnd)
+		if err := keyIfForeground(hwnd, vk, foregroundWindow, pressKey); err != nil {
+			return fail("%s: %v", name, err)
+		}
+		p, err := waitFor(expanded)
+		if err != nil {
+			return err
+		}
+		if err := check("after "+name, p, expanded, rows); err != nil {
+			return err
+		}
+		if !p.Focused {
+			return fail("after %s the Done header does not have focus", name)
+		}
+		if !p.InView {
+			return fail("after %s the Done header is outside its list's visible part (%s)", name, p.View)
+		}
+		return nil
+	}
+	if err := key("Enter", vkReturn, "false", first); err != nil {
+		return err
+	}
+	return key("Space", vkSpace, "true", all)
+}
+
+// waits/d45: a list keeps its scroll position (B8 final review fix 1).
+
+// d45: a poll or a tick never moves a list the user scrolled. Fed the frozen
+// example with 19 more Done rows (21 in all, as on the laptop when this was
+// found), the Done group opened and the Waits list scrolled to the middle of
+// its range, it proves, with the Overall scrollbar on and then off:
+//   - the same payload applied again (what a poll does: a full render with
+//     new list nodes) leaves the list's scrollTop where it was;
+//   - after more than a second in which the fit pass ran again (the tick
+//     paint calls it; with the scrollbar off it measures the host lists from
+//     their top) the scrollTop is still where it was.
+//
+// The page is frozen (__bdevSections.apply), so no real read renders in
+// between.
+const d45ReadJS = `(function(){
+  var l = document.querySelector('[data-sec=waits] .seclist'), h = document.querySelector('[data-sec=waits] .sectier.done');
+  if(!l) return { found: false };
+  return { found: true, top: l.scrollTop, max: l.scrollHeight - l.clientHeight,
+    expanded: h ? h.getAttribute('aria-expanded') || '' : '', scrollOn: document.body.classList.contains('scroll-on') };
+})()`
+
+// d45ScrollJS scrolls the Waits list to the middle of its range and returns
+// the scrollTop the browser kept, or -1 without a list.
+const d45ScrollJS = `(function(){
+  var l = document.querySelector('[data-sec=waits] .seclist');
+  if(!l) return -1;
+  l.scrollTop = Math.round((l.scrollHeight - l.clientHeight) / 2);
+  return l.scrollTop;
+})()`
+
+type d45Page struct {
+	Found    bool    `json:"found"`
+	Top      float64 `json:"top"`
+	Max      float64 `json:"max"`
+	Expanded string  `json:"expanded"`
+	ScrollOn bool    `json:"scrollOn"`
+}
+
+// d45MinRange is the least scroll range in px the list must have for the
+// middle position to tell a kept list from one put back at its top.
+const d45MinRange = 40
+
+func caseD45(hwnd uintptr, args []string) error {
+	raw, err := readSnapshotExample()
+	if err != nil {
+		return err
+	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d45: "+format, a...) }
+	var snap map[string]any
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		return err
+	}
+	items, _ := snap["wait_items"].([]any)
+	if len(items) == 0 {
+		return fail("the example has no wait items")
+	}
+	const extra = 19
+	for i := 1; i <= extra; i++ {
+		// The shape waits.go gives a branch_gone row, as in d44.
+		items = append(items, map[string]any{"kind": "branch_gone", "id": fmt.Sprintf("branchgone:example__sprint__d45-%d", i),
+			"title": fmt.Sprintf("example-gone-%d", i), "project": "example", "detail": "branch gone, check by hand",
+			"since": "2026-10-23T07:00:00Z", "age_seconds": 9000 + i, "source": "foreman", "group": "done", "holds": 1})
+	}
+	snap["wait_items"] = items
+	if wc, ok := snap["wait_counts"].(map[string]any); ok {
+		done, _ := wc["done"].(float64)
+		wc["done"] = int(done) + extra
+	}
+	sb, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	read := func() (d45Page, error) {
+		var p d45Page
+		err := evalInto(d45ReadJS, &p)
+		return p, err
+	}
+	// kept fails when the list's scrollTop moved more than a pixel from want.
+	kept := func(label string, want float64) error {
+		p, err := read()
+		if err != nil {
+			return err
+		}
+		if !p.Found {
+			return fail("%s: the Waits list is gone", label)
+		}
+		if p.Top < want-1 || p.Top > want+1 {
+			return fail("%s: the Waits list scrollTop is %.0f, was %.0f (range %.0f)", label, p.Top, want, p.Max)
+		}
+		return nil
+	}
+	// afterFit waits more than a second, until the fit pass has run again:
+	// every applyPanelFit puts a new object in window.__bdevFit, so a mark on
+	// the old one is gone once it ran.
+	afterFit := func(label string) error {
+		if _, err := evalRaw(`(window.__bdevFit = window.__bdevFit || {}, window.__bdevFit.d45 = 1, 1)`); err != nil {
+			return err
+		}
+		start := time.Now()
+		for deadline := start.Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+			ran, err := evalBool(`!(window.__bdevFit && window.__bdevFit.d45)`)
+			if err != nil {
+				return err
+			}
+			if ran && time.Since(start) > 1200*time.Millisecond {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return fail("%s: the fit pass did not run again within 10 s", label)
+			}
+		}
+	}
+
+	for _, scrollbar := range []bool{true, false} {
+		mode := map[bool]string{true: "scrollbar on", false: "scrollbar off"}[scrollbar]
+		payload := d29Payload(d29Opts{Plain: false, Scrollbar: scrollbar, Status: "ok", Snap: sb})
+		if _, err := d29Apply(payload); err != nil {
+			return err
+		}
+		if err := waitsOpenDone(); err != nil {
+			return fail("%s: %v", mode, err)
+		}
+		p, err := read()
+		if err != nil {
+			return err
+		}
+		if !p.Found || p.Expanded != "true" {
+			return fail("%s: the Waits list with the Done group open is not there (%+v)", mode, p)
+		}
+		if p.ScrollOn != scrollbar {
+			return fail("%s: body.scroll-on is %v", mode, p.ScrollOn)
+		}
+		if p.Max < d45MinRange {
+			return fail("%s: the Waits list scrolls only %.0f px, the case needs %d", mode, p.Max, d45MinRange)
+		}
+		var want float64
+		if err := evalInto(d45ScrollJS, &want); err != nil {
+			return err
+		}
+		if want < d45MinRange/2 {
+			return fail("%s: the Waits list took scrollTop %.0f, want the middle of %.0f", mode, want, p.Max)
+		}
+		if err := afterFit(mode + ", a tick"); err != nil {
+			return err
+		}
+		if err := kept(mode+", after a tick", want); err != nil {
+			return err
+		}
+		if _, err := d29Apply(payload); err != nil {
+			return err
+		}
+		if err := kept(mode+", after the payload again", want); err != nil {
+			return err
+		}
+		if err := afterFit(mode + ", a tick after the payload"); err != nil {
+			return err
+		}
+		if err := kept(mode+", after the payload and a tick", want); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// waits/d46: Confirm is in reach after a control preview (B8 Task 12 fix).
+
+// d46: a person can press Confirm after a control preview. The first live
+// press of a control put Confirm after a gate command of about 600 characters,
+// inside a preview box and a list that both clip, so it could not be reached
+// in the 5 s a preview lives (d37 only clicks programmatically, so it never
+// saw this). The two control bindings are REPLACED by recorders, so no real
+// control is ever pressed. Fed the frozen example (seven Blocked rows, so the
+// Waits list is full and scrolls), controls on, one press on the approve chip
+// of its G2 gate row and a preview command of the real gate shape, it proves,
+// with no scrolling done by the case:
+//   - the list scrolls and the gate row is not its first row;
+//   - after CTL_GAP the point at the centre of that row's Confirm button
+//     belongs to the button, the button is enabled, and the preview line
+//     still holds the whole command, character for character;
+//   - the same payload applied again (what a poll does) leaves the list's
+//     scrollTop and Confirm where they were, and nothing ran.
+//
+// Screenshot: d46-confirm.
+
+// d46GateScript is internal\controls\gate.go GateScript (uicheck is its own
+// module and cannot import it), so the fake command has the real length.
+const d46GateScript = "import sys; sys.path.insert(0, sys.argv[1]); " +
+	"import flow_transition as ft, flow_state as fs; " +
+	"f = ft.load_flow(sys.argv[2]); g = f.get('gate'); g = g if isinstance(g, dict) else {}; " +
+	"sys.exit(3) if (g.get('id') != sys.argv[4] or g.get('token') != sys.argv[5] or g.get('status') != 'awaiting-owner') else None; " +
+	"sys.exit(4) if sys.argv[3] not in fs.valid_verdicts(sys.argv[4]) else None; " +
+	"ft.cmd_gate(sys.argv[2], sys.argv[3], note='', surface='burnmon'); sys.exit(0)"
+
+// d46Command is a gate preview command as the controls render it:
+// python.exe -I -c "<GateScript>" <lib dir> <flow dir> <verdict> <gate> <token>.
+func d46Command() string {
+	return `C:\Users\example\AppData\Local\Programs\Python\Python312\python.exe -I -c "` + d46GateScript + `" ` +
+		`C:\ZND\10_holding\flows\_lib C:\ZND\10_holding\flows\burnmon-b8-ctl-probe approve G2 ` +
+		`FLOW-BURNMON-b8-ctl-probe-approve-G2-20261031T110129Z-D38C`
+}
+
+const d46Gate = "gate:example__flow__2:G2"
+
+func d46Recorders(cmd string) string {
+	b, _ := json.Marshal(cmd)
+	return `(function(){
+  window.__d46prev = []; window.__d46run = [];
+  window.bdevControlPreview = function(r){
+    window.__d46prev.push(JSON.parse(JSON.stringify(r)));
+    return Promise.resolve({token:'tok-' + r.target, command:` + string(b) + `, label:'gate G2', expires_in_ms:5000});
+  };
+  window.bdevControlRun = function(t){
+    window.__d46run.push(t);
+    return Promise.resolve({exit_code:0, line:'ok'});
+  };
+  return true;
+})()`
+}
+
+const d46ReadJS = `(function(){
+  var id = '` + d46Gate + `';
+  var list = document.querySelector('[data-sec=waits] .seclist');
+  var rows = list ? Array.prototype.slice.call(list.querySelectorAll('.secitem')) : [];
+  var row = list ? list.querySelector('.secitem[data-id="' + id + '"]') : null;
+  var prev = list ? list.querySelector('.ctlprev[data-ctlid="approve|' + id + '"]') : null;
+  var go = prev ? prev.querySelector('.ctlgo') : null;
+  var out = { found: !!list, rows: rows.length, rowIndex: rows.indexOf(row), hasPrev: !!prev, hasGo: !!go,
+    runs: window.__d46run.slice(), prevs: window.__d46prev.slice() };
+  if(list){
+    var lr = list.getBoundingClientRect();
+    out.listTop = lr.top; out.listBottom = lr.bottom; out.scrollTop = list.scrollTop; out.max = list.scrollHeight - list.clientHeight;
+  }
+  if(prev) out.cmd = prev.querySelector('.ctlcmd').textContent;
+  if(go){
+    var r = go.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    out.goTop = r.top; out.goBottom = r.bottom; out.disabled = go.disabled;
+    out.hitGo = !!hit && (hit === go || go.contains(hit));
+    out.hit = hit ? hit.tagName + (hit.className ? '.' + hit.className : '') : 'null';
+  }
+  return out;
+})()`
+
+type d46Page struct {
+	Found      bool             `json:"found"`
+	Rows       int              `json:"rows"`
+	RowIndex   int              `json:"rowIndex"` // of the gate row in the list, -1 when absent
+	HasPrev    bool             `json:"hasPrev"`
+	HasGo      bool             `json:"hasGo"`
+	Runs       []string         `json:"runs"`
+	Prevs      []map[string]any `json:"prevs"`
+	ListTop    float64          `json:"listTop"`
+	ListBottom float64          `json:"listBottom"`
+	ScrollTop  float64          `json:"scrollTop"`
+	Max        float64          `json:"max"`
+	Cmd        string           `json:"cmd"`
+	GoTop      float64          `json:"goTop"`
+	GoBottom   float64          `json:"goBottom"`
+	Disabled   bool             `json:"disabled"`
+	HitGo      bool             `json:"hitGo"`
+	Hit        string           `json:"hit"` // what elementFromPoint returned at Confirm's centre
+}
+
+// geometry is the line a failure carries: what the point at Confirm's centre
+// belongs to, then where Confirm and its list are. The hit comes first, since a
+// shell may cut a long line.
+func (p d46Page) geometry() string {
+	return fmt.Sprintf("elementFromPoint %s, Confirm top %.0f bottom %.0f, list top %.0f bottom %.0f, scrollTop %.0f of %.0f",
+		p.Hit, p.GoTop, p.GoBottom, p.ListTop, p.ListBottom, p.ScrollTop, p.Max)
+}
+
+func caseD46(hwnd uintptr, args []string) error {
+	raw, err := readSnapshotExample()
+	if err != nil {
+		return err
+	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d46: "+format, a...) }
+	cmd := d46Command()
+	all := map[string]bool{"stop": true, "attach": true, "approve": true, "send_back": true}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(d29Payload(d29Opts{Plain: false, Scrollbar: true, Status: "ok", Snap: raw})), &m); err != nil {
+		return err
+	}
+	m["controls"] = map[string]any{"on": all, "ready": all, "why": map[string]string{},
+		"verdicts": map[string]map[string]string{
+			"approve":   {"G1": "approve", "G2": "approve", "G3": "proceed"},
+			"send_back": {"G1": "reject", "G2": "reject"},
+		}}
+	pb, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	payload := string(pb)
+	read := func() (d46Page, error) {
+		var p d46Page
+		err := evalInto(d46ReadJS, &p)
+		return p, err
+	}
+	if _, err := evalRaw(d46Recorders(cmd)); err != nil {
+		return err
+	}
+
+	// The list is full and scrolls, and the gate row is not its first row.
+	if _, err := d29Apply(payload); err != nil {
+		return err
+	}
+	p, err := read()
+	if err != nil {
+		return err
+	}
+	if !p.Found || p.Rows < 5 || p.RowIndex < 3 || p.Max <= 0 {
+		return fail("the case needs a full Waits list that scrolls, with the gate row 4th or later: found %v, %d rows, gate row at %d, scroll range %.0f", p.Found, p.Rows, p.RowIndex, p.Max)
+	}
+
+	// One press on approve; after CTL_GAP the case scrolls nothing.
+	if _, err := evalRaw(`document.querySelector('[data-sec=waits] .ctl[data-ctl="approve"][data-target="` + d46Gate + `"]').click()`); err != nil {
+		return err
+	}
+	time.Sleep(700 * time.Millisecond)
+	if p, err = read(); err != nil {
+		return err
+	}
+	if _, err := screenshot(hwnd, "d46-confirm"); err != nil {
+		return err
+	}
+	if len(p.Prevs) != 1 || len(p.Runs) != 0 {
+		return fail("one press sent previews %v and runs %v, want one preview and no run", p.Prevs, p.Runs)
+	}
+	if !p.HasPrev || !p.HasGo {
+		return fail("no preview line with a Confirm button after the press (preview %v, Confirm %v)", p.HasPrev, p.HasGo)
+	}
+	if p.Cmd != cmd {
+		return fail("the preview holds %d characters of the command, want all %d", len(p.Cmd), len(cmd))
+	}
+	if p.Disabled {
+		return fail("Confirm is still disabled 700 ms after the press")
+	}
+	if !p.HitGo {
+		return fail("Confirm is out of reach, nothing scrolled by the case: %s", p.geometry())
+	}
+	after := p
+	fmt.Printf("d46: Confirm in reach: %s\n", after.geometry())
+
+	// A poll's render keeps the list where the preview put it and Confirm in reach.
+	if _, err := d29Apply(payload); err != nil {
+		return err
+	}
+	if p, err = read(); err != nil {
+		return err
+	}
+	if !p.HasGo || p.ScrollTop < after.ScrollTop-1 || p.ScrollTop > after.ScrollTop+1 {
+		return fail("after a poll: Confirm %v, scrollTop %.0f, was %.0f", p.HasGo, p.ScrollTop, after.ScrollTop)
+	}
+	if !p.HitGo {
+		return fail("after a poll Confirm cannot be reached: %s", p.geometry())
+	}
+	if len(p.Runs) != 0 {
+		return fail("a poll ran %v", p.Runs)
 	}
 	return nil
 }

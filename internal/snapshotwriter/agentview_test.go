@@ -201,3 +201,36 @@ func TestAgentSessionsInSnapshot(t *testing.T) {
 		t.Fatalf("a failed poll should give an empty array: %+v", got2.AgentSessions)
 	}
 }
+
+// B8: the writer records its own agent view state, so a reader can say why
+// the agent view is empty: off, refused with the reason, or on. A writer
+// without graph sources records nothing.
+func TestOnceRecordsAgentViewStatus(t *testing.T) {
+	st := snapshotTestStore(t)
+	pid := `{"pid":4100,"sessionId":"s2","procStart":"777"}`
+	status := func(gr *snapshotwriter.GraphReaders) *snapshot.AgentViewStatus {
+		return onceRead(t, newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr)).AgentView
+	}
+
+	off, _ := fakeReaders(t, pid)
+	if got := status(off); got == nil || *got != (snapshot.AgentViewStatus{State: "off"}) {
+		t.Errorf("off: %+v", got)
+	}
+
+	refused, _ := fakeReaders(t, pid)
+	refused.EnableAgentViewFor(lookOf(`C:\n\claude.ps1`, nil), "windows")
+	want := snapshot.AgentViewStatus{State: "refused", Reason: "claude is a .ps1 shim; agent_view needs claude.exe"}
+	if got := status(refused); got == nil || *got != want {
+		t.Errorf("refused: %+v, want %+v", got, want)
+	}
+
+	on, _ := fakeReaders(t, pid)
+	on.AgentView = runnerOf(twoEntries, nil)
+	if got := status(on); got == nil || *got != (snapshot.AgentViewStatus{State: "on"}) {
+		t.Errorf("on: %+v", got)
+	}
+
+	if got := status(nil); got != nil {
+		t.Errorf("no graph sources: %+v, want no agent_view", got)
+	}
+}

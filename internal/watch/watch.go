@@ -10,8 +10,10 @@
 package watch
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,14 +24,21 @@ import (
 // spec's "WSL roots polled every 5 s".
 const pollInterval = 5 * time.Second
 
-// OnChange is called with a .jsonl file's path whenever it is created or
-// written to, native or WSL. Called from a background goroutine; the
-// receiver is responsible for its own synchronisation (dataset.Cache's
-// ingest methods already serialise on the store).
+// OnChange is called with a file's path whenever it is created or written
+// to: a .jsonl transcript for New (native or WSL), a matching file for
+// WatchFiles. Called from a background goroutine; the receiver is
+// responsible for its own synchronisation (dataset.Cache's ingest methods
+// already serialise on the store).
 type OnChange func(path string)
 
+// isJSONL is the transcript watcher's backend filter, the suffix check the
+// backends hard-coded before WatchFiles needed another one.
+func isJSONL(path string) bool {
+	return strings.HasSuffix(strings.ToLower(path), ".jsonl")
+}
+
 // nativeBackend is the OS-specific mechanism that watches every native
-// (non-WSL) adapter root for new or changed .jsonl files, recursively.
+// (non-WSL) root for new or changed files its match accepts, recursively.
 // Windows (watch_windows.go): one recursive ReadDirectoryChangesW handle
 // per root, added once and never touched again, since the recursion itself
 // covers every subdirectory created under it from then on, at any depth.
@@ -106,7 +115,7 @@ func New(nativeRoots, wslRoots []string, onChange OnChange) (*Watcher, error) {
 		}
 		w.Track(path)
 		onChange(path)
-	})
+	}, isJSONL)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +134,33 @@ func New(nativeRoots, wslRoots []string, onChange OnChange) (*Watcher, error) {
 		}
 	}
 	return w, nil
+}
+
+// WatchFiles watches roots recursively with the native backend alone, for
+// folders other than transcript roots (B8: Foreman's sprints and flows).
+// onChange gets each created, written or renamed-into-place path that match
+// accepts. No tail poll, no WSL poll, no transcript rule. A root that
+// cannot be watched is logged and skipped; the error comes back only when
+// not one root could be, so the caller can say the watch is off.
+func WatchFiles(roots []string, match func(path string) bool, onChange OnChange) (stop func(), err error) {
+	native, err := newNativeBackend(onChange, match)
+	if err != nil {
+		return nil, err
+	}
+	added := 0
+	for _, root := range roots {
+		if native.AddRoot(root) == nil {
+			added++
+		}
+	}
+	if added == 0 {
+		native.Close()
+		return nil, fmt.Errorf("watch: none of %d roots could be watched", len(roots))
+	}
+	// Once: a second Close on Windows would close handle values the OS
+	// may already have handed to someone else.
+	var once sync.Once
+	return func() { once.Do(native.Close) }, nil
 }
 
 // Start runs the WSL poll loop in the background, if any WSL roots were

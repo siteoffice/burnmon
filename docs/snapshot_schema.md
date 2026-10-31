@@ -28,7 +28,7 @@ tick. Code: `internal\snapshotwriter\lock.go`.
 ## Compatibility rule
 
 Version 1 is frozen. Later rows (R6 added `nodes[]` and `edges[]`, R9 added `wait_items[]` and
-`outcome_items[]`, R10 added `agent_sessions[]`) add new top-level fields only. They never rename, remove or retype a version 1 field. Readers ignore fields they do
+`outcome_items[]`, R10 added `agent_sessions[]`, B8 added `agent_view`) add new top-level fields only. They never rename, remove or retype a version 1 field. Readers ignore fields they do
 not know. A change that breaks a reader bumps `schema_version`.
 
 ## Fields
@@ -51,6 +51,7 @@ of the graph edge they come from) and its `age_seconds`. `agent_sessions[]` item
 | `wait_items[]` | items that wait on the person (added in R9, still version 1). See "Waits and outcomes" |
 | `outcome_items[]` | items finished or failed in the last 24 hours (added in R9, still version 1). See "Waits and outcomes" |
 | `agent_sessions[]` | the last agent view poll (added in R10, still version 1). See "Agent sessions" |
+| `agent_view` | the writer's agent view state (added in B8, still version 1). See "Agent view state" |
 
 ### sessions[]
 
@@ -163,9 +164,14 @@ reads `~\.claude\jobs\`. Its states:
 - ok, with `read_at` set to the end of the latest finished poll.
 - not ok, "no poll has finished yet", until the first poll ends.
 - not ok, with the error, when the poll fails or its output does not parse.
-- not ok, with the reason, when `claude` is not on PATH, is a `.cmd` or `.bat` shim, has no
-  `.exe` extension, or is not an executable file, or when `claude_path` is not absolute, is not
-  a `.exe` or is not a regular file. BurnMon never runs a shim.
+- not ok, with the reason, when `claude` is not on PATH, is a `.ps1`, `.bat` or other shim
+  ("claude is a .bat shim; agent_view needs claude.exe"), has no `.exe` extension, or is not
+  an executable file, or when `claude_path` is not absolute, is not a `.exe` or is not a
+  regular file. A `.cmd` shim (npm's `claude.cmd`) is read as text for the `claude.exe` it
+  names, which is then run; it is refused with one of three reasons: "the claude.cmd shim
+  cannot be read", "the claude.cmd shim names no claude.exe" (an older shim that runs
+  `node.exe` with a `.js` file) or "the claude.cmd shim names a claude.exe that does not
+  exist". BurnMon never runs a shim.
 
 The `foreman` source's `read_at` is the time of the last real read of the Foreman files, which
 can be older than `written_at` because those files are read at most every tick and a half.
@@ -237,6 +243,20 @@ never written.
 
 BurnMon Dev uses the array only to decide which control buttons show. It re-reads agent view
 before any control runs, so a stale or edited snapshot cannot aim a control.
+
+## Agent view state: agent_view (added in B8, still version 1)
+
+One object added under the compatibility rule above: a new top-level field only, so
+`schema_version` stays 1. It says how the process that wrote the file set up its agent view
+at start, so a reader can tell why `agent_sessions[]` is empty:
+
+- `{"state": "off"}`: `agent_view` is false in that process's `burnmon.json`.
+- `{"state": "refused", "reason": "..."}`: `agent_view` is true but `claude` did not resolve;
+  `reason` is the same text as the `agent_view` source's `error`.
+- `{"state": "on"}`: the poller runs. Whether a poll worked is in the `agent_view` source.
+
+It is absent when the writer has no graph sources (no home folder), and in files written
+before B8. BurnMon Dev turns `off` and `refused` into one line in Waits on you.
 
 ## What is not in version 1
 

@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"os"
 	"time"
 
 	"burnmon/internal/agentmap"
@@ -30,7 +31,9 @@ type sectionsPayload struct {
 	Groups []sections.Group `json:"groups"`
 	// StationTheme is the saved startup theme ("space" or "site") for the
 	// gear's "Station starts as" setting.
-	StationTheme string           `json:"station_theme"`
+	StationTheme string `json:"station_theme"`
+	// ToastEnabled is the saved toast_enabled for the gear's notification switch.
+	ToastEnabled bool             `json:"toast_enabled"`
 	Reading      snapshot.Reading `json:"reading"`
 	// AgentMap is the live map for the Agents map section, nil unless the
 	// snapshot is current. History is a separate call (agentmap_view.go).
@@ -42,6 +45,10 @@ type sectionsPayload struct {
 	// Line is the header sentence built from it and Reading (snapshot_line.go).
 	Writer snapshotwriter.StatusView `json:"writer"`
 	Line   snapshotLine              `json:"snapshot_line"`
+	// AgentViewLine says why the snapshot writer's agent view is off or
+	// refused (agentview_line.go); empty when it runs or the snapshot is not
+	// current.
+	AgentViewLine string `json:"agent_view_line,omitempty"`
 }
 
 // controlsPayload is what the page needs to draw the control chips and the
@@ -94,12 +101,14 @@ func sectionsPayloadFor(dataDir, snapPath string, now time.Time) sectionsPayload
 // (nil: unknown).
 func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() controls.Availability, writer func() snapshotwriter.StatusView) sectionsPayload {
 	st := loadSections(dataDir)
+	dc := loadDevConfig(dataDir)
 	p := sectionsPayload{
 		State:        st,
 		Mode:         st.Mode(),
 		Parts:        st.Current(),
 		Groups:       sections.Groups,
-		StationTheme: loadDevConfig(dataDir).StationTheme,
+		StationTheme: dc.StationTheme,
+		ToastEnabled: dc.ToastEnabled,
 		Reading:      snapshot.Load(snapPath, now),
 	}
 	if writer != nil {
@@ -123,8 +132,21 @@ func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() c
 		// One count: the overview reads the snapshot's wait_counts, like the full map.
 		v.Counts.Waiting, v.Counts.YourTurn = p.Reading.Snapshot.WaitCounts.Blocked, p.Reading.Snapshot.WaitCounts.YourTurn
 		p.AgentMap = &v
+		p.AgentViewLine = agentViewLine(p.Reading.Snapshot.AgentView)
 	}
 	return p
+}
+
+// snapshotStamp is the snapshot file's modification time and size, "" when
+// the file is missing. The page's 1 s tick compares it to see a new snapshot
+// (B8). It is one os.Stat and nothing else: bdevSnapshotStamp runs it on the
+// UI thread.
+func snapshotStamp(path string) string {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d:%d", fi.ModTime().UnixNano(), fi.Size())
 }
 
 // applySectionsChange validates a change from the page and saves it. A change

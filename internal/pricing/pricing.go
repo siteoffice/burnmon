@@ -254,8 +254,9 @@ type Config struct {
 	AgentView bool `json:"agent_view,omitempty"`
 
 	// ClaudePath is an absolute path to claude.exe. Empty (the default)
-	// means a .exe on PATH. Set it when `claude` on PATH is the npm shim
-	// (claude.cmd), which BurnMon refuses to start.
+	// means a .exe on PATH, or the claude.exe that the npm shim (claude.cmd)
+	// on PATH names; BurnMon reads the shim, never starts it. Set it when
+	// neither resolves.
 	ClaudePath string `json:"claude_path,omitempty"`
 }
 

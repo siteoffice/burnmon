@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"unsafe"
 
@@ -104,6 +103,7 @@ func (rr *recursiveRoot) issueReadLocked() error {
 type windowsRecursiveBackend struct {
 	port     windows.Handle
 	onChange OnChange
+	match    func(path string) bool // which paths decode reports
 
 	mu    sync.Mutex
 	roots []*recursiveRoot
@@ -127,12 +127,12 @@ type windowsRecursiveBackend struct {
 	draining sync.WaitGroup
 }
 
-func newNativeBackend(onChange OnChange) (nativeBackend, error) {
+func newNativeBackend(onChange OnChange, match func(string) bool) (nativeBackend, error) {
 	port, err := windows.CreateIoCompletionPort(windows.InvalidHandle, 0, 0, 0)
 	if err != nil {
 		return nil, os.NewSyscallError("CreateIoCompletionPort", err)
 	}
-	b := &windowsRecursiveBackend{port: port, onChange: onChange}
+	b := &windowsRecursiveBackend{port: port, onChange: onChange, match: match}
 	b.wg.Add(1)
 	go b.run()
 	return b, nil
@@ -191,7 +191,7 @@ func (b *windowsRecursiveBackend) WatchCount() int {
 
 // run is the single I/O thread for every root this backend owns: it blocks
 // on the shared completion port, decodes whichever root's buffer just
-// completed into a list of changed .jsonl paths, re-arms that root's read,
+// completed into a list of changed matching paths, re-arms that root's read,
 // then dispatches onChange for each path. Re-arming before dispatch (rather
 // than after, the first version of this file's own order) matters: onChange
 // is dataset.Cache.IngestFile, which can take tens to hundreds of
@@ -282,8 +282,8 @@ func (b *windowsRecursiveBackend) run() {
 }
 
 // decode walks one completed FILE_NOTIFY_INFORMATION buffer (n bytes) and
-// returns every .jsonl create, write, or rename-into-place path found
-// anywhere under rr.root, at any depth (the entire benefit of the recursive
+// returns every create, write, or rename-into-place path b.match accepts,
+// found anywhere under rr.root, at any depth (the entire benefit of the recursive
 // flag on ReadDirectoryChanges over the old per-directory design), without
 // calling onChange itself: run re-arms the read against rr.buf before
 // dispatching any of them, so nothing here may retain a reference into
@@ -326,7 +326,7 @@ func (b *windowsRecursiveBackend) decode(rr *recursiveRoot, n uint32) []string {
 		full := filepath.Join(rr.root, name)
 		switch raw.Action {
 		case windows.FILE_ACTION_ADDED, windows.FILE_ACTION_MODIFIED, windows.FILE_ACTION_RENAMED_NEW_NAME:
-			if strings.HasSuffix(strings.ToLower(full), ".jsonl") {
+			if b.match(full) {
 				out = append(out, full)
 			}
 		}

@@ -449,7 +449,10 @@ func Build(in Input) (wait, outcomes []Item) {
 		}
 		sessions[e.it.ID] = e
 	}
+	// mkSession makes every session kind (session, prompt, question, your_turn,
+	// can_close), so the title rule lives here: id is the session node id.
 	mkSession := func(it Item, since time.Time, id string) entry {
+		it.Title = SessionTitle(it.Title, nodes[id].Attrs["agent"], id)
 		it.Group = groupOf(it.Kind)
 		it.Holds = 1 + len(children[id])
 		return entry{it: it, ids: held([]string{id}), since: since}

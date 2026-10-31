@@ -371,3 +371,126 @@ func TestWatcher_SkipsNonTranscripts(t *testing.T) {
 		t.Errorf("Track accepted %s, want it skipped", skip[0])
 	}
 }
+
+// isSprintJSON stands in for Foreman's state-file rule (B8 Task 4).
+func isSprintJSON(path string) bool {
+	return filepath.Base(path) == "sprint.json"
+}
+
+// TestWatchFilesMatch: WatchFiles sees a matching file created in a new
+// nested folder, and a later write to it, and never reports a file its
+// match rejects. notes.txt is written just before each sprint.json write:
+// a root's events arrive in write order, so once that sprint.json event is
+// in, a leaked notes.txt event would be in too.
+func TestWatchFilesMatch(t *testing.T) {
+	dir := t.TempDir()
+	c := &changeCollector{}
+	stop, err := WatchFiles([]string{dir}, isSprintJSON, c.onChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+
+	sub := filepath.Join(dir, "a", "b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	notes := filepath.Join(sub, "notes.txt")
+	if err := os.WriteFile(notes, []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(sub, "sprint.json")
+	if err := os.WriteFile(path, []byte(`{"status":"running"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, path, 2*time.Second)
+
+	c.mu.Lock()
+	for _, got := range c.paths {
+		if got == notes {
+			t.Errorf("onChange fired for %s on create, want it filtered out", notes)
+		}
+	}
+	c.paths = nil
+	c.mu.Unlock()
+	if err := os.WriteFile(notes, []byte("y\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"status":"waiting-on-you"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, path, 2*time.Second)
+	time.Sleep(300 * time.Millisecond)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, got := range c.paths {
+		if got != path {
+			t.Errorf("onChange fired for %s, want only %s", got, path)
+		}
+	}
+}
+
+// TestWatchFilesNoRoot: a caller must learn when nothing is watched, so it
+// can say the watch is off; one missing root next to a good one is fine
+// (Foreman without a flows folder).
+func TestWatchFilesNoRoot(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+	stop, err := WatchFiles([]string{missing}, isSprintJSON, func(string) {})
+	if err == nil {
+		stop()
+		t.Fatal("WatchFiles on a missing root: want an error, got nil")
+	}
+
+	stop, err = WatchFiles([]string{missing, t.TempDir()}, isSprintJSON, func(string) {})
+	if err != nil {
+		t.Fatalf("WatchFiles with one good root: %v", err)
+	}
+	stop()
+}
+
+// TestWatchFilesStop: stop returns, and no onChange call comes after it.
+func TestWatchFilesStop(t *testing.T) {
+	dir := t.TempDir()
+	c := &changeCollector{}
+	stop, err := WatchFiles([]string{dir}, isSprintJSON, c.onChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := filepath.Join(dir, "p", "sprint.json")
+	if err := os.MkdirAll(filepath.Dir(first), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(first, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, first, 2*time.Second)
+
+	done := make(chan struct{})
+	go func() {
+		stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stop did not return within 2 s")
+	}
+	c.mu.Lock()
+	n := len(c.paths)
+	c.mu.Unlock()
+
+	second := filepath.Join(dir, "q", "sprint.json")
+	if err := os.MkdirAll(filepath.Dir(second), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(second, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.paths) != n {
+		t.Fatalf("onChange fired after stop: %v", c.paths[n:])
+	}
+}

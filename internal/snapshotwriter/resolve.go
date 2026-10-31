@@ -3,6 +3,7 @@ package snapshotwriter
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,11 +16,12 @@ import (
 func ResolveClaude() (string, error) { return ResolveClaudeFor(exec.LookPath, runtime.GOOS) }
 
 // ResolveClaudeFor resolves "claude" with look and accepts it only when it can
-// be started without a shell in between. On Windows that means a .exe: a .cmd,
-// .bat or .ps1 (the npm shim) runs through cmd.exe, so a timeout would kill
-// only cmd.exe and leave node and any supervisor running. Elsewhere any
-// executable regular file is fine. The error text is shown as the agent_view
-// source's reason.
+// be started without a shell in between. On Windows that means a .exe, or the
+// claude.exe that an npm .cmd shim names: the shim is read as text, never run
+// (see claudeFromShim). A .bat or .ps1 is refused: it runs through a shell, so
+// a timeout would kill only the shell and leave node and any supervisor
+// running. Elsewhere any executable regular file is fine. The error text is
+// shown as the agent_view source's reason.
 func ResolveClaudeFor(look func(string) (string, error), goos string) (string, error) {
 	p, err := look("claude")
 	if err != nil {
@@ -29,6 +31,9 @@ func ResolveClaudeFor(look func(string) (string, error), goos string) (string, e
 		ext := strings.ToLower(filepath.Ext(p))
 		if ext == ".exe" {
 			return p, nil
+		}
+		if ext == ".cmd" {
+			return claudeFromShim(p)
 		}
 		if ext == "" {
 			return "", errors.New("claude has no .exe extension; agent_view needs claude.exe")
@@ -43,6 +48,59 @@ func ResolveClaudeFor(look func(string) (string, error), goos string) (string, e
 		return "", errors.New("claude is not an executable file; agent_view needs one")
 	}
 	return p, nil
+}
+
+// maxShimBytes bounds the read of a claude.cmd shim; npm's is under 1 KB.
+const maxShimBytes = 64 << 10
+
+// claudeFromShim reads an npm claude.cmd shim as text, never runs it, and
+// returns the claude.exe it names. npm writes that target as a quoted path
+// starting with %dp0% or %~dp0, the shim's own folder. An older shim names
+// node.exe and a .js file instead; that is refused, since only claude.exe
+// starts without a shell in between.
+func claudeFromShim(shimPath string) (string, error) {
+	f, err := os.Open(shimPath)
+	if err != nil {
+		return "", errors.New("the claude.cmd shim cannot be read")
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, maxShimBytes))
+	if err != nil {
+		return "", errors.New("the claude.cmd shim cannot be read")
+	}
+	dir := filepath.Dir(shimPath)
+	for _, line := range strings.Split(string(b), "\n") {
+		// cmd quotes do not span lines; parts[1], parts[3], ... are the
+		// quoted strings, and a last part with no closing quote is not one.
+		parts := strings.Split(line, `"`)
+		for i := 1; i+1 < len(parts); i += 2 {
+			rest, ok := cutPrefixFold(parts[i], "%dp0%")
+			if !ok {
+				rest, ok = cutPrefixFold(parts[i], "%~dp0")
+			}
+			if !ok {
+				continue
+			}
+			// %~dp0 ends in a backslash; Join cleans the doubled one.
+			p := filepath.Join(dir, rest)
+			if !strings.EqualFold(filepath.Base(p), "claude.exe") {
+				continue
+			}
+			fi, err := os.Lstat(p)
+			if err != nil || !fi.Mode().IsRegular() {
+				return "", errors.New("the claude.cmd shim names a claude.exe that does not exist")
+			}
+			return p, nil
+		}
+	}
+	return "", errors.New("the claude.cmd shim names no claude.exe")
+}
+
+func cutPrefixFold(s, prefix string) (string, bool) {
+	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
+		return "", false
+	}
+	return s[len(prefix):], true
 }
 
 // EnableAgentView turns the agent_view poller on when claude resolves to a

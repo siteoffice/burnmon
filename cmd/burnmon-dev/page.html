@@ -414,6 +414,11 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .seclist > table{flex:0 0 auto; width:100%}
 .sectier{flex:0 0 auto; font:700 10px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
 .sectier.blocked{color:var(--amber)}
+/* The Done header opens and closes its group; the mark shows which, and screen readers get aria-expanded instead. */
+.sectier.done{cursor:pointer}
+.sectier.done::before{content:'\25B8\00A0' / ''}
+.sectier.done[aria-expanded="true"]::before{content:'\25BE\00A0' / ''}
+.sectier.done:focus-visible{outline:2px solid var(--amber2); outline-offset:1px}
 .secgrey, .secgrey b{color:var(--dim)}
 .secitemtxt{min-width:0; overflow:hidden; text-overflow:ellipsis}
 .secitemmeta{flex:0 0 auto}
@@ -695,6 +700,7 @@ body.plain #mapOverlay{font-size:13.5px}
     <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
     <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint"> Close sprint</label><div class="dim ctlwhy" data-ctl-why="close_sprint"></div></div>
   </div>
+  <label class="setrow"><input type="checkbox" id="secToast"> Show a notification when something waits on you</label>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
@@ -3567,6 +3573,10 @@ body.plain #mapOverlay{font-size:13.5px}
   };
   function applyPanelFit(){
     var sp = stationPanel; if(sp) stationPeek(true);
+    // The pass resizes the host lists and measures them from their top
+    // (fitListFloor); each goes back where the user scrolled it at the end.
+    // Taken before fitUndo, whose un-shrink of a list can already clamp it.
+    var tops = secListTops();
     var body = document.body, hist = document.querySelector('.histwrap');
     var histBefore = fitHistH();
     var scroll = !!secState.scrollbar;
@@ -3742,6 +3752,7 @@ body.plain #mapOverlay{font-size:13.5px}
       window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
       fitLast = null;
     }
+    secListRestore(tops);
     secHostSync();
     window.__bdevFit = fit;
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
@@ -3793,16 +3804,21 @@ body.plain #mapOverlay{font-size:13.5px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', heightsStandard:null, heightsPlain:null };
+  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, heightsStandard:null, heightsPlain:null };
   var secReading = { status:'missing', age_seconds:0 };
   // secLine is Go's sentence about the snapshot. The window opens before the
   // first payload, so it starts as the starting line; null means the last
   // payload carried no line and secHeadline composes one itself.
   var secLine = { text:'Starting up: writing the first snapshot.', warn:false };
   var secAgentMap = null; // the live agent map from the payload; null unless the snapshot is current
+  var secAgentViewLine = ''; // Go's line on why the agent view is off or refused; empty when it runs
   var secLastJSON = '';
+  var secLastStamp = null; // the snapshot file's last stamp from Go; null until the first one
   var secLastSig = '';
   var secFrozen = false; // set by the test hook so the poll cannot overwrite what it injected
+  // The Done group in Waits on you starts collapsed at every start and is not
+  // saved, so Blocked and Your turn show first; its header opens it.
+  var secDoneOpen = false;
 
   function secTitle(id){ return SEC_TITLE[id][secState.plain ? 1 : 0]; }
   function secBase(path){
@@ -3910,13 +3926,16 @@ body.plain #mapOverlay{font-size:13.5px}
     return html;
   }
   // The command, the hint and the result text are never put in markup: ctlFill
-  // sets them with textContent after the render.
+  // sets them with textContent after the render. Confirm and the hint come
+  // first: a gate command wraps over many lines, and the preview box clips, so
+  // a Confirm after it would sit out of reach.
   function ctlLines(target){
     var html = '';
     CTL_ORDER.forEach(function(c){
       var key = ctlKey(c, target), p = ctlPending[key], r = ctlResult[key];
-      if(p) html += '<div class="ctlprev" data-ctlid="' + esc(key) + '"><code class="ctlcmd" data-ctlfill="cmd"></code> <span data-ctlfill="hint"></span> ' +
-        '<button type="button" class="ctl ctlgo" data-ctlgo="' + esc(c) + '" data-target="' + esc(target) + '"' + (Date.now() - p.at < CTL_GAP ? ' disabled' : '') + '>Confirm</button></div>';
+      if(p) html += '<div class="ctlprev" data-ctlid="' + esc(key) + '">' +
+        '<button type="button" class="ctl ctlgo" data-ctlgo="' + esc(c) + '" data-target="' + esc(target) + '"' + (Date.now() - p.at < CTL_GAP ? ' disabled' : '') + '>Confirm</button>' +
+        ' <span data-ctlfill="hint"></span> <code class="ctlcmd" data-ctlfill="cmd"></code></div>';
       if(r) html += '<div class="ctlres ' + (r.ok ? 'ok' : 'bad') + '" role="status" data-ctlid="' + esc(key) + '" data-ctlfill="res"></div>';
     });
     return html;
@@ -3958,8 +3977,20 @@ body.plain #mapOverlay{font-size:13.5px}
     });
     Object.keys(ctlResult).forEach(function(key){ if(now > ctlResult[key].until) delete ctlResult[key]; });
   }
-  function ctlPreview(c, t){
-    var key = ctlKey(c, t), r;
+  // The press is explicit, so the new preview line may scroll into view in its
+  // list: the render keeps a list where it was, and the line sits after the
+  // pressed row, often below the visible part. A poll or tick render never does.
+  function ctlReveal(key, rowId){
+    var rows = document.querySelectorAll('#secPanels .secitem'), i, n;
+    for(i = 0; i < rows.length; i++){
+      if(rows[i].getAttribute('data-id') !== rowId) continue;
+      for(n = rows[i].nextElementSibling; n && !n.classList.contains('secitem'); n = n.nextElementSibling){
+        if(n.classList.contains('ctlprev') && n.getAttribute('data-ctlid') === key){ n.scrollIntoView({ block:'nearest' }); return; }
+      }
+    }
+  }
+  function ctlPreview(c, t, rowId){
+    var key = ctlKey(c, t), r, shown = false;
     if(ctlAsking[key]) return;
     if(typeof window.bdevControlPreview !== 'function'){ console.log('bdevControlPreview: not bound'); return; }
     ctlAsking[key] = true;
@@ -3970,12 +4001,13 @@ body.plain #mapOverlay{font-size:13.5px}
       var now = Date.now();
       ctlPending[key] = { control:c, token:String(res.token), command:String(res.command), label:String(res.label), at:now,
         until:now + Math.min(CTL_TTL, res.expires_in_ms || CTL_TTL) };
+      shown = true;
       setTimeout(secRender, CTL_GAP + 20);
       setTimeout(secRender, CTL_TTL + 50);
     }, function(err){
       ctlShowResult(key, c, { refused:ctlErr(err) });
       setTimeout(secRender, CTL_RESULT_MS + 50);
-    }).then(function(){ delete ctlAsking[key]; secRender(); });
+    }).then(function(){ delete ctlAsking[key]; secRender(); if(shown) ctlReveal(key, rowId); });
   }
   // The only place the run binding is called; the argument is the stored token.
   function ctlRun(key, c, p){
@@ -4003,7 +4035,8 @@ body.plain #mapOverlay{font-size:13.5px}
     if(!el) return false;
     var go = el.hasAttribute('data-ctlgo'), c = el.getAttribute(go ? 'data-ctlgo' : 'data-ctl'), t = el.getAttribute('data-target');
     if(!Object.prototype.hasOwnProperty.call(CTL_WORD, c) || t == null) return true;
-    if(go) ctlConfirm(c, t); else ctlPreview(c, t);
+    var row = el.closest('.secitem');
+    if(go) ctlConfirm(c, t); else ctlPreview(c, t, row ? row.getAttribute('data-id') : '');
     return true;
   }
   // The gear block: switch states and the reason a control is not usable.
@@ -4089,6 +4122,8 @@ body.plain #mapOverlay{font-size:13.5px}
   }
   function secBodyWaits(snap){
     var w = snap.wait_items || [], html = secAged(snap) ? secAgedLine() : '';
+    // Go's sentence, so it reads the same in Standard and Plain.
+    if(secAgentViewLine) html = '<div class="dim secagentview">' + esc(secAgentViewLine) + '</div>' + html;
     if(!w.length) html += '<div>' + esc(secState.plain ? 'Nothing is waiting for you.' : 'Nothing waits on you.') + '</div>';
     var rows = '';
     SEC_TIERS.forEach(function(t){
@@ -4102,7 +4137,9 @@ body.plain #mapOverlay{font-size:13.5px}
       (t[0] === 'done' ? [true, false] : [null]).forEach(function(first){
         w.forEach(function(it){ if(secTier(it) === t[0] && (first === null || (it.kind === 'close_out') === first)){ part += secItemRow(it, false); n++; } });
       });
-      if(n) rows += '<div class="sectier ' + t[0] + '" data-tier="' + t[0] + '">' + esc(head + ' (' + n + ')') + '</div>' + part;
+      // The Done header is a button that keeps its count; its rows show only when open.
+      var fold = t[0] === 'done' ? ' role="button" tabindex="0" aria-expanded="' + secDoneOpen + '"' : '';
+      if(n) rows += '<div class="sectier ' + t[0] + '" data-tier="' + t[0] + '"' + fold + '>' + esc(head + ' (' + n + ')') + '</div>' + (fold && !secDoneOpen ? '' : part);
     });
     html += secList(rows);
     return html;
@@ -4251,6 +4288,26 @@ body.plain #mapOverlay{font-size:13.5px}
     Array.prototype.forEach.call(document.querySelectorAll('input[name="secStationStart"]'), function(r){
       r.checked = r.value === secState.stationTheme;
     });
+    var tg = document.getElementById('secToast');
+    if(tg) tg.checked = !!secState.toast;
+  }
+  // A poll or a tick must never move a list the user scrolled. The scroll
+  // position of each list in #secPanels, by its part (one list per part), so a
+  // render's new list finds where the old one was.
+  function secListTops(){
+    var out = {};
+    Array.prototype.forEach.call(document.querySelectorAll('#secPanels .seclist'), function(el){
+      var s = el.closest('[data-sec]');
+      if(s) out[s.getAttribute('data-sec')] = el.scrollTop;
+    });
+    return out;
+  }
+  // The browser clamps a position to the list's new height.
+  function secListRestore(tops){
+    Array.prototype.forEach.call(document.querySelectorAll('#secPanels .seclist'), function(el){
+      var s = el.closest('[data-sec]'), top = s ? tops[s.getAttribute('data-sec')] : 0;
+      if(top && el.scrollTop !== top) el.scrollTop = top;
+    });
   }
   function secRender(){
     var host = document.getElementById('secHost');
@@ -4281,10 +4338,26 @@ body.plain #mapOverlay{font-size:13.5px}
       var pbody = !secPartOn('processes') ? '' : (!snap ? secStub(secState.plain ? 'No current numbers yet.' : 'No current snapshot.') : SEC_BODY.processes(snap));
       ph.innerHTML = secPartOn('processes') ? secPanel('processes', pbody, true) : '';
     }
+    // The render replaces the Done header, so the keyboard goes back to the new one.
+    var ae = document.activeElement, doneFocus = !!(ae && ae.matches && ae.matches('.sectier.done'));
+    // The write gives new lists at their top; each goes back after the fit pass.
+    var tops = secListTops();
     document.getElementById('secPanels').innerHTML = (row1 ? '<div class="secrow1" id="secRow1">' + row1 + '</div>' : '') + rest;
+    var dh = doneFocus && document.querySelector('#secPanels .sectier.done');
+    if(dh) dh.focus({ preventScroll:true });
     ctlFill();
     secApplyParts();
     secFit();
+    secListRestore(tops);
+  }
+  // The render keeps the Waits list where it was, so the header the user just
+  // used can sit outside the list's visible part; it is scrolled into view
+  // after the render. A poll's render does not scroll.
+  function secDoneToggle(){
+    secDoneOpen = !secDoneOpen;
+    secRender();
+    var h = document.querySelector('#secPanels .sectier.done');
+    if(h) h.scrollIntoView({ block:'nearest' });
   }
 
   // Every part is one switch per mode. A part that is off gets .sec-off, the
@@ -4342,23 +4415,37 @@ body.plain #mapOverlay{font-size:13.5px}
   function secApplyPayload(p){
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space',
-      heightsStandard:p.heights_standard || null, heightsPlain:p.heights_plain || null };
+      toast:p.toast_enabled !== false, heightsStandard:p.heights_standard || null, heightsPlain:p.heights_plain || null };
     secReading = p.reading || { status:'missing', age_seconds:0 };
     secLine = p.snapshot_line || null;
     var cp = p.controls || {};
     ctlState = { on:cp.on || {}, ready:cp.ready || {}, why:cp.why || {}, verdicts:cp.verdicts || {}, foreman:!!cp.foreman };
     secAgentMap = p.agent_map || null;
+    secAgentViewLine = p.agent_view_line || '';
     secRender();
     if(mapOpen && mapSource === 'live') mapFetch();
   }
   function secPoll(){
     if(typeof window.bdevSections !== 'function' || document.hidden || secFrozen) return Promise.resolve();
     return window.bdevSections().then(function(p){
+      // uicheck may have frozen the page while this read was out.
+      if(secFrozen) return;
       var j = JSON.stringify(p);
       if(j === secLastJSON) return;
       secApplyPayload(p);
       secLastJSON = j;
     }).catch(function(e){ console.log('bdevSections:', e); });
+  }
+  // A new snapshot reaches the page within a second (B8): each second this asks
+  // Go only for the file's stamp (one os.Stat) and runs the full read when it
+  // changed. The first stamp is only recorded; the 5 s secPoll stays as the fallback.
+  function secStampPoll(){
+    if(typeof window.bdevSnapshotStamp !== 'function' || document.hidden || secFrozen) return;
+    window.bdevSnapshotStamp().then(function(s){
+      var was = secLastStamp;
+      secLastStamp = s;
+      if(was !== null && s !== was) secPoll();
+    }).catch(function(e){ console.log('bdevSnapshotStamp:', e); });
   }
   function secSend(change){
     if(typeof window.bdevSetSections !== 'function') return Promise.resolve();
@@ -4389,6 +4476,18 @@ body.plain #mapOverlay{font-size:13.5px}
     if(t.hasAttribute('data-sw')) secSend({ mode: t.getAttribute('data-mode'), section: t.getAttribute('data-sw'), on: t.checked });
     else if(t.hasAttribute('data-ctl-sw')) secSend({ control: t.getAttribute('data-ctl-sw'), on: t.checked });
     else if(t.id === 'secScrollbar') secSend({ scrollbar: t.checked });
+    else if(t.id === 'secToast'){
+      if(typeof window.bdevSetToast === 'function'){
+        Promise.resolve(window.bdevSetToast(t.checked)).then(function(){ secLastJSON = 'x'; return secPoll(); })
+          .catch(function(e){
+            console.log('bdevSetToast:', e);
+            // Not saved: put the box back on the last value the payload gave and re-poll.
+            t.checked = !!secState.toast;
+            secLastJSON = 'x';
+            return secPoll();
+          });
+      }
+    }
     else if(t.name === 'secStationStart' && t.checked){
       // Saved for the next start only; the Station that is open keeps its theme.
       if(typeof window.bdevSetStationTheme === 'function'){
@@ -4823,6 +4922,7 @@ body.plain #mapOverlay{font-size:13.5px}
   });
   document.getElementById('secPanels').addEventListener('click', function(e){
     if(ctlClick(e)){ secRender(); return; }
+    if(e.target.closest && e.target.closest('.sectier.done')){ secDoneToggle(); return; }
     var b = e.target.closest ? e.target.closest('.mapopen') : null;
     if(b) mapOpenView(b.getAttribute('data-src'));
     var f = e.target.closest ? e.target.closest('.secfile') : null;
@@ -4833,6 +4933,11 @@ body.plain #mapOverlay{font-size:13.5px}
         if(r && r.catch) r.catch(function(err){ console.error('bdevOpenItemFile:', err); });
       }
     }
+  });
+  // Enter and Space work the Done header as they work a button; a held key
+  // toggles once, and its repeats still do not scroll the page.
+  document.getElementById('secPanels').addEventListener('keydown', function(e){
+    if((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.sectier.done')){ e.preventDefault(); if(!e.repeat) secDoneToggle(); }
   });
   window.__bdevMap = { open: mapOpenView, close: mapCloseView, choose: mapChoose, isOpen: function(){ return mapOpen; },
     // uicheck only: draw a payload without calling Go. src is live or the hours.
@@ -4850,6 +4955,7 @@ body.plain #mapOverlay{font-size:13.5px}
   } };
   secPoll();
   setInterval(secPoll, 5000);
+  setInterval(secStampPoll, 1000);
   setupExportButton();
 })();
 </script>

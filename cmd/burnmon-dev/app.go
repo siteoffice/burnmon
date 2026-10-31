@@ -459,6 +459,9 @@ type devConfig struct {
 	// or "site". Anything else falls back to "space". It reaches the page
 	// as a spliced script string, so only these two values may pass.
 	StationTheme string `json:"station_theme"`
+	// ToastEnabled shows a Windows notification when something enters Waits
+	// on you (toast_watch.go). On unless the file says false.
+	ToastEnabled bool `json:"toast_enabled"`
 }
 
 // devConfigReadPath is burnmon-dev.json in dir, except when dir is the
@@ -473,12 +476,12 @@ func devConfigReadPath(dir string) string {
 }
 
 func loadDevConfig(dataDir string) devConfig {
-	cfg := devConfig{RetentionDays: 7, RefreshMs: 1000, StationTheme: "space"}
+	cfg := devConfig{RetentionDays: 7, RefreshMs: 1000, StationTheme: "space", ToastEnabled: true}
 	b, err := os.ReadFile(devConfigReadPath(dataDir))
 	if err != nil {
 		return cfg
 	}
-	var loaded devConfig
+	loaded := devConfig{ToastEnabled: true} // an absent key keeps toasts on
 	if err := json.Unmarshal(b, &loaded); err != nil {
 		log.Println("burnmon-dev.json: parse error, using defaults:", err)
 		return cfg
@@ -487,6 +490,7 @@ func loadDevConfig(dataDir string) devConfig {
 		cfg.RetentionDays = loaded.RetentionDays
 	}
 	cfg.MicrosoftTodoEnabled = loaded.MicrosoftTodoEnabled
+	cfg.ToastEnabled = loaded.ToastEnabled
 	if loaded.RefreshMs > 0 {
 		cfg.RefreshMs = loaded.RefreshMs
 	}

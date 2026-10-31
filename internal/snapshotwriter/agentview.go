@@ -153,6 +153,21 @@ func (gr *GraphReaders) agentSessions() []snapshot.AgentSession {
 	return out
 }
 
+// agentViewStatus is this writer's agent view state for the snapshot: on when
+// a poller runs, refused with the reason EnableAgentView kept, else off. Nil
+// without graph sources, so the field is left out.
+func (gr *GraphReaders) agentViewStatus() *snapshot.AgentViewStatus {
+	switch {
+	case gr == nil:
+		return nil
+	case gr.AgentView != nil:
+		return &snapshot.AgentViewStatus{State: snapshot.AgentViewOn}
+	case gr.agentViewRefused != nil:
+		return &snapshot.AgentViewStatus{State: snapshot.AgentViewRefused, Reason: gr.agentViewRefused.Error()}
+	}
+	return &snapshot.AgentViewStatus{State: snapshot.AgentViewOff}
+}
+
 // lastFolder is the last element of a Windows or slash path, "" for none.
 func lastFolder(p string) string {
 	p = strings.TrimRight(p, `\/`)

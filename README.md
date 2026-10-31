@@ -329,7 +329,8 @@ Either exe writes the file. With both running, one writes: the one that holds th
 other takes over at its next tick (5 seconds). The lock is an operating system file lock,
 so a dead writer never blocks the other; the file holds an owner record (process id,
 exe, the time the lock was taken) for diagnosis only. The snapshot also carries `wait_items`,
-`outcome_items` and `agent_sessions`; fields and kinds are in `docs\snapshot_schema.md`.
+`outcome_items`, `agent_sessions` and `agent_view` (the writer's agent view state: `off`,
+`refused` with the reason, or `on`); fields and kinds are in `docs\snapshot_schema.md`.
 Gates, sprints and failed checks in `wait_items` and `outcome_items` come from Foreman
 and need `foreman_root`.
 
@@ -379,6 +380,21 @@ responsive down to a single compact column.
   gives up 30% of its height and To Do fills the bottom of the window (a window too small
   for To Do still drops it first, as before); task text is live only, never written
   to an export, a log or a committed screenshot.
+- **Notification**: when an item enters Blocked or Your turn in Waits on you, BurnMon Dev
+  shows a Windows notification (a tray balloon, which Windows 10 and 11 show as a toast)
+  with the item's kind and title only: no prompt text, no command, no path. One per item
+  per 10 minutes, several at once become one ("3 things wait on you"), and Done never
+  notifies. What already waits at start stays quiet, including what the startup backfill
+  brings in (sessions that changed while BurnMon Dev was closed): it notifies only from the
+  second snapshot written after that backfill. A snapshot that is missing, stale or written
+  before the agent view's first poll is skipped, so none of these causes a burst. A click on
+  the notification brings the window to the front. On by default: `"toast_enabled": false`
+  in `burnmon-dev.json`, or the gear dialog's "Show a notification when something waits on
+  you", turns it off at once (the file is read on every new snapshot); turning it back on
+  does not notify what entered while it was off. It runs on its own hidden window and
+  thread, never the UI thread, and reads only the snapshot file and `burnmon-dev.json`.
+  Its tray icon takes one of two IDs in turn, so Windows' list of other system tray icons
+  (Settings, Taskbar) gains at most two entries for it, not one per notification.
 - **Export**: the header's "EXPORT" button, or
   `burnmon-dev.exe export --since --until --out DIR [--redact]` (`--since`/`--until` take
   a local day, YYYY-MM-DD, or a full RFC3339 timestamp), writes an AI-ready bundle to
@@ -495,17 +511,46 @@ Each item has one of these kinds in the snapshot:
 | `session` | a session the graph shows as waiting on you, or an agent view session that is blocked or waits on a dialog, sandbox or worker request |
 | `finished` | a finished or stopped sprint (Outcomes) |
 
-Both parts show every item in a bounded scroll list with a count. A spec or result link
+A session item is titled with its project folder and a short id of 8 characters, for example
+`burnmon 1a2b3c4d`, so two sessions in one folder stay apart. The short id is the first 8
+hex digits of the UUID in the session id (Claude Code), the last 8 when it is a version-7
+UUID (Codex: its start is a clock, the same for sessions started a minute apart), or else the
+last 8 characters of the session id (Hermes ids start with the date, so their tail differs).
+A session id shorter than 8 characters is shown whole. A session
+without a project folder, such as a Cowork cloud session, shows its agent instead
+(`cowork-cloud 1a2b3c4d`), and one with neither shows `session 1a2b3c4d`. The full session id
+is never the title.
+
+Both parts show every item in a bounded scroll list with a count; a refresh leaves each list
+where it was scrolled. In Waits on you the Done
+group (close-out, can-be-closed and branch-gone items) starts collapsed at every start: only
+its header with the count shows, so Blocked and Your turn come first. A click on the header,
+or Enter or Space on it, opens and closes it. The amber number in the part's header still
+counts the Blocked items only. A spec or result link
 opens through `bdevOpenItemFile`, which opens only a file named by the current snapshot
 and only `.md`, `.html` or `.txt` (an `.html` file opens in the default browser). The
-parts turn grey when the snapshot is older than two ticks. Foreman's state files are read
-every 7.5 seconds. The B3 report works out that a new gate can take up to about 15.7
-seconds to reach the page (calculated, not measured).
+parts turn grey when the snapshot is older than two ticks. Foreman's `sprints` and `flows`
+folders are watched: a change to a file BurnMon reads there (`sprint.json`,
+`action-log.ndjson`, `report.md`, `flow.json`, `foreman.json`) is written to the snapshot
+within about a second, one write per burst of changes. The index and board files Foreman
+rewrites on every step never cause a write. The 7.5-second read of Foreman's state files
+stays as the fallback, also when a folder cannot be watched. BurnMon Dev checks the
+snapshot file's time and size every second and reads it again when they changed, so a new
+snapshot reaches these parts within about a second more; its full read every 5 seconds
+stays as the fallback.
 
 The agent view is off by default. With `agent_view` on, BurnMon runs `claude agents --json`
 every 30 seconds, each run bounded to 10 seconds, with a hidden window. It starts only a
-`claude.exe` that can be started directly: a `.cmd` shim is refused. It has not been run
-against the real `claude` (B3 report). Window level behaviour of these parts is not
+`claude.exe` that can be started directly. When `claude` on `PATH` is the npm shim
+`claude.cmd`, BurnMon reads the shim as text, never runs it, and starts the `claude.exe` it
+names; a `.ps1` or `.bat` is refused. When the agent view is off or refused, Waits on you in
+BurnMon Dev opens with one line that says so and names the `burnmon.json` key that fixes it:
+`agent_view` when it is off, `claude_path` with the refusal reason when `claude` does not
+resolve. The line follows the app that writes the snapshot (`burnmon.exe` or BurnMon Dev,
+whichever holds the snapshot lock), which reads `burnmon.json` once at start: a changed
+setting shows after restarting that app, `burnmon.exe` too when it runs. B8 ran it against the
+real `claude` on the owner's laptop: with `agent_view` on, the snapshot listed a background
+agent started for the test. Window level behaviour of these parts is not
 checked here: uicheck `d36` renders both parts from the example snapshot, and `d29`, `d33`
 and `d34` cover the layout, but none of them was run in B1 to B4 because the apps were open.
 
@@ -584,14 +629,19 @@ Three more keys go in `burnmon.json`. `burnmon.example.json` does not list them 
   override it.
 - `agent_view`: `true` turns on the agent view poller. Default off.
 - `claude_path`: an absolute path to `claude.exe`. It must be an existing file and a
-  `.exe` on Windows; a `.cmd` shim is refused. Empty means a `claude.exe` on `PATH`, which
-  the poller and the controls accept too.
+  `.exe` on Windows; a `.cmd` shim is refused here. Empty means a `claude.exe` on `PATH`, or
+  the `claude.exe` that the npm shim `claude.cmd` on `PATH` names, which the poller and the
+  controls accept too.
 
-`claude` on `PATH` is often an npm shim, `claude.cmd`, which BurnMon refuses. For an npm
-install, the shim runs a real `claude.exe` under the npm prefix, in
-`<npm prefix>\node_modules\@anthropic-ai\claude-code\bin\claude.exe`. Open the shim in a text
-editor to see the exact path, and put that path in `claude_path`. On the laptop where this was
-checked (read only) the shim names that file and the file exists.
+`claude` on `PATH` is often an npm shim, `claude.cmd`. For an npm install, the shim runs a
+real `claude.exe` under the npm prefix, in
+`<npm prefix>\node_modules\@anthropic-ai\claude-code\bin\claude.exe`. BurnMon reads the shim as
+text, never runs it, and takes the quoted `%dp0%` or `%~dp0` path that ends in `claude.exe`,
+when that file exists. A shim that names no `claude.exe` (an older one runs `node.exe` with a
+`.js` file) or names a missing one is refused, and so is a `.ps1` or `.bat` shim; the agent
+view source says why. Then `claude_path` is the manual fix: open the shim in a text editor to
+see the exact path, and put that path in `claude_path`. On the laptop where this was checked
+(read only) the shim names that file and BurnMon finds it.
 
 ## WSL
 
@@ -711,8 +761,11 @@ Shipped: `v0.3.0` (price books, client map, export and merge, Copilot in VS Code
 Linux browser-mode builds), 2026-09-24; `v0.3.1`, a cleanup pass, 2026-09-24; `v0.3.2`,
 shared ingest performance and local time everywhere, 2026-09-26. `v0.4.0-beta.1`, 2026-10-30: all three exes carry one version again; it adds
 the agent map, Waits on you, Outcomes, the first controls and the section layout to
-BurnMon Dev. Beta: the controls and the agent view are not yet proven against real
-sessions, and the agent view stays empty when `claude` on `PATH` is a `.cmd` shim. See `STATUS.md` for what is true at the current
+BurnMon Dev. In beta.1 the controls and the agent view were not yet proven against real
+sessions; B8 ran each control once, on a test agent and on throwaway Foreman flows, and saw
+the agent view list a real background agent. In beta.1 the agent view stayed empty when `claude` on `PATH` was a `.cmd` shim;
+since B8 BurnMon reads an npm `claude.cmd` shim for the `claude.exe` it names (see "Foreman
+and Claude Code settings"). See `STATUS.md` for what is true at the current
 commit and `SESSION_LOG.md` for the session-by-session record. The BurnMon Dev text above
 (sections, Waits on you, Outcomes, controls) is written from the code of the branch this
 README sits on; `STATUS.md` says which of those parts are in `main`.

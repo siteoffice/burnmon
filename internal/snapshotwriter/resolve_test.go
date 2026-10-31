@@ -29,10 +29,119 @@ func TestResolveClaudeWindowsOnlyExe(t *testing.T) {
 	}
 }
 
-func TestResolveClaudeCmdShimReason(t *testing.T) {
-	_, err := snapshotwriter.ResolveClaudeFor(lookOf(`C:\n\claude.cmd`, nil), "windows")
-	if err == nil || err.Error() != "claude is a .cmd shim; agent_view needs claude.exe" {
+func TestResolveClaudeCmdShimUnreadable(t *testing.T) {
+	_, err := snapshotwriter.ResolveClaudeFor(lookOf(filepath.Join(t.TempDir(), "claude.cmd"), nil), "windows")
+	if err == nil || err.Error() != "the claude.cmd shim cannot be read" {
 		t.Fatalf("reason: %v", err)
+	}
+}
+
+// npmShim is the claude.cmd that npm writes, CRLF and all.
+var npmShim = strings.ReplaceAll(`@ECHO off
+GOTO start
+:find_dp0
+SET dp0=%~dp0
+EXIT /b
+:start
+SETLOCAL
+CALL :find_dp0
+"%dp0%\node_modules\@anthropic-ai\claude-code\bin\claude.exe"   %*
+`, "\n", "\r\n")
+
+// writeShim writes text as claude.cmd in a folder with a space in its name,
+// like an npm prefix under C:\Program Files\nodejs.
+func writeShim(t *testing.T, text string) string {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		t.Skip("shim paths use backslashes")
+	}
+	dir := filepath.Join(t.TempDir(), "npm prefix")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shim := filepath.Join(dir, "claude.cmd")
+	if err := os.WriteFile(shim, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return shim
+}
+
+func touch(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func shimExe(shim string) string {
+	return filepath.Join(filepath.Dir(shim), "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe")
+}
+
+func TestResolveShimRealShape(t *testing.T) {
+	shim := writeShim(t, npmShim)
+	exe := shimExe(shim)
+	touch(t, exe)
+	got, err := snapshotwriter.ResolveClaudeFor(lookOf(shim, nil), "windows")
+	if err != nil || got != exe {
+		t.Fatalf("got %q %v, want %q", got, err, exe)
+	}
+	got, err = snapshotwriter.ResolveClaudeConfigured("", lookOf(shim, nil), "windows")
+	if err != nil || got != exe {
+		t.Fatalf("configured empty: got %q %v, want %q", got, err, exe)
+	}
+}
+
+func TestResolveShimTildeSpelling(t *testing.T) {
+	shim := writeShim(t, "@ECHO off\r\n\"%~dp0\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe\"   %*\r\n")
+	exe := shimExe(shim)
+	touch(t, exe)
+	got, err := snapshotwriter.ResolveClaudeFor(lookOf(shim, nil), "windows")
+	if err != nil || got != exe {
+		t.Fatalf("got %q %v, want %q", got, err, exe)
+	}
+}
+
+func TestResolveShimMissingFile(t *testing.T) {
+	shim := writeShim(t, npmShim)
+	_, err := snapshotwriter.ResolveClaudeFor(lookOf(shim, nil), "windows")
+	if err == nil || !strings.Contains(err.Error(), "names a claude.exe that does not exist") {
+		t.Fatalf("missing exe: %v", err)
+	}
+}
+
+func TestResolveShimNonExe(t *testing.T) {
+	shim := writeShim(t, strings.Replace(npmShim, `bin\claude.exe`, `cli.js`, 1))
+	touch(t, filepath.Join(filepath.Dir(shim), "node_modules", "@anthropic-ai", "claude-code", "cli.js"))
+	_, err := snapshotwriter.ResolveClaudeFor(lookOf(shim, nil), "windows")
+	if err == nil || !strings.Contains(err.Error(), "names no claude.exe") {
+		t.Fatalf("cli.js shim: %v", err)
+	}
+}
+
+// The older cmd-shim starts node.exe with a .js file; node.exe is never taken.
+func TestResolveShimNodeExeNotTaken(t *testing.T) {
+	shim := writeShim(t, strings.ReplaceAll(`@IF EXIST "%~dp0\node.exe" (
+  "%~dp0\node.exe"  "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
+) ELSE (
+  @SETLOCAL
+  @SET PATHEXT=%PATHEXT:;.JS;=;%
+  node  "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
+)
+`, "\n", "\r\n"))
+	touch(t, filepath.Join(filepath.Dir(shim), "node.exe"))
+	got, err := snapshotwriter.ResolveClaudeFor(lookOf(shim, nil), "windows")
+	if err == nil {
+		t.Fatalf("old shim accepted as %q", got)
+	}
+}
+
+func TestResolvePs1StillRefused(t *testing.T) {
+	_, err := snapshotwriter.ResolveClaudeFor(lookOf(`C:\n\claude.ps1`, nil), "windows")
+	if err == nil || err.Error() != "claude is a .ps1 shim; agent_view needs claude.exe" {
+		t.Fatalf("ps1: %v", err)
 	}
 }
 
@@ -68,14 +177,14 @@ func TestResolveClaudeNonWindowsNeedsExecutableFile(t *testing.T) {
 func TestEnableAgentViewRefusedShowsReason(t *testing.T) {
 	st := snapshotTestStore(t)
 	gr, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
-	gr.EnableAgentViewFor(lookOf(`C:\n\claude.cmd`, nil), "windows")
+	gr.EnableAgentViewFor(lookOf(`C:\n\claude.ps1`, nil), "windows")
 	if gr.AgentView != nil {
-		t.Fatal("runner set for a .cmd shim")
+		t.Fatal("runner set for a .ps1 shim")
 	}
 	w := newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr)
 	got := onceRead(t, w)
 	s := sourceNamed(got, waits.SourceAgentView)
-	if s == nil || s.OK || s.Error != "claude is a .cmd shim; agent_view needs claude.exe" {
+	if s == nil || s.OK || s.Error != "claude is a .ps1 shim; agent_view needs claude.exe" {
 		t.Fatalf("agent_view source: %+v", s)
 	}
 }
@@ -142,8 +251,8 @@ func TestResolveClaudeConfigured(t *testing.T) {
 	if err != nil || got != `C:\x\claude.exe` {
 		t.Fatalf("fallback: %q %v", got, err)
 	}
-	_, err = snapshotwriter.ResolveClaudeConfigured("", lookOf(`C:\x\claude.cmd`, nil), "windows")
-	if err == nil || err.Error() != "claude is a .cmd shim; agent_view needs claude.exe" {
+	_, err = snapshotwriter.ResolveClaudeConfigured("", lookOf(`C:\x\claude.ps1`, nil), "windows")
+	if err == nil || err.Error() != "claude is a .ps1 shim; agent_view needs claude.exe" {
 		t.Fatalf("fallback shim: %v", err)
 	}
 }
@@ -161,13 +270,13 @@ func TestEnableAgentViewWithConfiguredPath(t *testing.T) {
 
 	st := snapshotTestStore(t)
 	gr2, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
-	gr2.EnableAgentViewWith("", lookOf(`C:\n\claude.cmd`, nil))
+	gr2.EnableAgentViewWith("", lookOf(`C:\n\claude.ps1`, nil))
 	if gr2.AgentView != nil {
-		t.Fatal("runner set for a .cmd shim")
+		t.Fatal("runner set for a .ps1 shim")
 	}
 	w := newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr2)
 	s := sourceNamed(onceRead(t, w), waits.SourceAgentView)
-	if s == nil || s.OK || s.Error != "claude is a .cmd shim; agent_view needs claude.exe" {
+	if s == nil || s.OK || s.Error != "claude is a .ps1 shim; agent_view needs claude.exe" {
 		t.Fatalf("agent_view source: %+v", s)
 	}
 }

@@ -175,7 +175,7 @@ func TestYourTurnItems(t *testing.T) {
 		t.Fatalf("graph = %+v", w)
 	}
 	w, _ = Build(Input{Now: now, Agents: []AgentEntry{{SessionID: "i", Status: "idle", Cwd: `C:\example\proj`}}})
-	if len(w) != 1 || w[0].ID != "session:anthropic:i" || w[0].Group != GroupYourTurn || w[0].Title != "proj" || w[0].Source != "agent_view" {
+	if len(w) != 1 || w[0].ID != "session:anthropic:i" || w[0].Group != GroupYourTurn || w[0].Title != "proj i" || w[0].Source != "agent_view" {
 		t.Fatalf("agent idle = %+v", w)
 	}
 	w, _ = Build(Input{Now: now, Graph: g, Agents: []AgentEntry{{SessionID: "w", Status: "idle"}}})
@@ -230,6 +230,10 @@ func TestCountOf(t *testing.T) {
 	w, _ := Build(rankingInput())
 	if c := CountOf(w); c != (Counts{Blocked: 3, YourTurn: 2, Done: 2}) {
 		t.Fatalf("counts = %+v", c)
+	}
+	// The fixture labels its sessions with the bare id: the titles change, the count above does not.
+	if w[1].Title != "session b900" || w[5].Title != "session cc" {
+		t.Fatalf("titles = %q, %q", w[1].Title, w[5].Title)
 	}
 	if c := CountOf(nil); c != (Counts{}) {
 		t.Fatalf("empty = %+v", c)
