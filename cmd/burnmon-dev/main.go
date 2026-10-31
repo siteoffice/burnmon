@@ -24,7 +24,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -380,24 +379,22 @@ func main() {
 	}
 	// Toasts (B8): a Windows notification when something enters Waits on you.
 	// The notifier has its own window on its own thread and the watch its own
-	// goroutine; on this UI thread only bdevSetToast runs, and it writes the
-	// small json file like bdevSetStationTheme does.
-	var toastOn atomic.Bool
-	toastOn.Store(devCfg.ToastEnabled)
+	// goroutine, which reads toast_enabled from burnmon-dev.json on every new
+	// snapshot and stays quiet until the startup backfill is done. On this UI
+	// thread only bdevSetToast runs, and it writes the small json file like
+	// bdevSetStationTheme does.
 	if n, err := toast.Start("BurnMon Dev", func() { bringToFront(hwnd) }); err != nil {
 		log.Println("toasts off for this run:", err)
 	} else {
 		defer n.Close()
-		startToastWatch(snapPath, &toastOn, n.Show)
+		startToastWatch(snapPath, setDir, a.initialCollectDone, n.Show)
 	}
 	if err := w.Bind("bdevSetToast", func(on bool) error {
 		err := saveDevConfigKey(setDir, "toast_enabled", on)
 		if err != nil {
 			log.Println("bdevSetToast:", err)
-			return err
 		}
-		toastOn.Store(on)
-		return nil
+		return err
 	}); err != nil {
 		log.Println("could not bind bdevSetToast:", err)
 	}
