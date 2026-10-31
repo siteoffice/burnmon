@@ -230,6 +230,9 @@ var allowlist = map[string]string{
 	`sprints\<project>\<slug>\sprint.json`: "Foreman state file under foreman_root, outside the repo",
 	`flows\<project>\<flow>\flow.json`:     "Foreman state file under foreman_root, outside the repo",
 	`flows\_lib\flow_transition.py`:        "Foreman script under foreman_root, outside the repo",
+
+	// STATUS.md points at the sprint report that holds the B8 evidence.
+	`C:\ZND\10_holding\sprints\burnmon\burnmon-b8-agent-half\report.md`: "B8 sprint report in the owner's Foreman tree, outside the repo",
 }
 
 func repoDocs(t *testing.T, root string) map[string]string {
