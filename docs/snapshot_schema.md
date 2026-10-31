@@ -164,9 +164,14 @@ reads `~\.claude\jobs\`. Its states:
 - ok, with `read_at` set to the end of the latest finished poll.
 - not ok, "no poll has finished yet", until the first poll ends.
 - not ok, with the error, when the poll fails or its output does not parse.
-- not ok, with the reason, when `claude` is not on PATH, is a `.cmd` or `.bat` shim, has no
-  `.exe` extension, or is not an executable file, or when `claude_path` is not absolute, is not
-  a `.exe` or is not a regular file. BurnMon never runs a shim.
+- not ok, with the reason, when `claude` is not on PATH, is a `.ps1`, `.bat` or other shim
+  ("claude is a .bat shim; agent_view needs claude.exe"), has no `.exe` extension, or is not
+  an executable file, or when `claude_path` is not absolute, is not a `.exe` or is not a
+  regular file. A `.cmd` shim (npm's `claude.cmd`) is read as text for the `claude.exe` it
+  names, which is then run; it is refused with one of three reasons: "the claude.cmd shim
+  cannot be read", "the claude.cmd shim names no claude.exe" (an older shim that runs
+  `node.exe` with a `.js` file) or "the claude.cmd shim names a claude.exe that does not
+  exist". BurnMon never runs a shim.
 
 The `foreman` source's `read_at` is the time of the last real read of the Foreman files, which
 can be older than `written_at` because those files are read at most every tick and a half.
