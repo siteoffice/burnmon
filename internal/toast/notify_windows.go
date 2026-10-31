@@ -277,12 +277,13 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	return r
 }
 
-// show puts one toast up. Each toast gets a new icon under a new ID, and the
-// icon of an earlier toast goes first, so a late event of that toast (its
-// hide comes after the new one is up) cannot remove the new one.
+// show puts one toast up. Each toast gets a new icon under the other of two
+// IDs (nextIconID), and the icon of an earlier toast goes first, so a late
+// event of that toast (its hide comes after the new one is up) cannot remove
+// the new one.
 func (n *Notifier) show(text string) error {
 	n.remove()
-	n.lastID = n.lastID%0xFFFF + 1 // the ID comes back in 16 bits of lParam; 0 means none
+	n.lastID = nextIconID(n.lastID)
 	d := n.data(n.lastID)
 	d.UFlags = nifMessage | nifIcon | nifTip
 	d.UCallbackMessage = wmTray
@@ -308,6 +309,17 @@ func (n *Notifier) show(text string) error {
 		return errors.New("Shell_NotifyIconW NIM_MODIFY returned FALSE")
 	}
 	return nil
+}
+
+// nextIconID alternates between 1 and 2 (0 means none). Windows keeps one
+// NotifyIconSettings entry per exe and icon ID, listed in the taskbar
+// settings and never pruned, so a new ID per toast would add one each time.
+// Two are enough: the replaced toast's late events carry the other ID.
+func nextIconID(last uint32) uint32 {
+	if last == 1 {
+		return 2
+	}
+	return 1
 }
 
 // remove deletes the icon on show, if any.

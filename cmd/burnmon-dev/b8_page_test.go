@@ -101,10 +101,10 @@ func TestPageDoneGroupStartsCollapsed(t *testing.T) {
 	}
 }
 
-// The render puts the Waits list back at its top, so a toggle scrolls the new
-// Done header back into view after secRender (which runs the fit pass that
-// also resets the list). A poll's render keeps preventScroll. A held key
-// toggles once (B8 Task 8 fix round 1).
+// The render keeps the Waits list's scroll position, so a toggle scrolls the
+// new Done header into view after secRender when it sits outside the list's
+// visible part. A poll's render keeps preventScroll. A held key toggles once
+// (B8 Task 8 fix round 1).
 func TestPageDoneToggleKeepsHeaderInView(t *testing.T) {
 	body := idleFn(t, "secDoneToggle")
 	const scroll = "scrollIntoView({ block:'nearest' })"
@@ -127,5 +127,55 @@ func TestPageDoneToggleKeepsHeaderInView(t *testing.T) {
 	line = line[:strings.Index(line, "\n")]
 	if !strings.Contains(line, "e.preventDefault(); if(!e.repeat) secDoneToggle();") {
 		t.Errorf("the Done header key handler does not skip a held key (e.repeat) after preventDefault: %q", line)
+	}
+}
+
+// A poll or a tick never moves a list the user scrolled (B8 final review fix
+// 1): secRender writes new lists, so it takes each list's scrollTop before the
+// write and puts it back after the fit pass; the fit pass measures the host
+// lists from their top (fitListFloor), so it does the same around its work.
+// uicheck waits/d45 proves the DOM.
+func TestPageListsKeepScroll(t *testing.T) {
+	order := func(fn string, steps ...string) {
+		t.Helper()
+		body, at := idleFn(t, fn), 0
+		for _, s := range steps {
+			i := strings.Index(body[at:], s)
+			if i < 0 {
+				t.Errorf("%s lacks %q after the step before it", fn, s)
+				return
+			}
+			at += i + len(s)
+		}
+	}
+	order("secRender", "var tops = secListTops();", "document.getElementById('secPanels').innerHTML =", "secFit();", "secListRestore(tops);")
+	// Taken before fitUndo (its un-shrink of a list can already clamp the
+	// position) and put back after both branches, once every height is set.
+	order("applyPanelFit", "var tops = secListTops();", "fitUndo();", "fitCollectHost()", "fitPlaceHandles(cols, keys, hostItems", "fitLast = null;", "secListRestore(tops);", "window.__bdevFit = fit;")
+	// Keyed by the part, so a render's new list finds the old one's position.
+	body := idleFn(t, "secListTops")
+	for _, want := range []string{"#secPanels .seclist", "closest('[data-sec]')", "scrollTop"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("secListTops lacks %q", want)
+		}
+	}
+	if !strings.Contains(idleFn(t, "secListRestore"), "scrollTop =") {
+		t.Error("secListRestore does not set scrollTop")
+	}
+}
+
+// A sections read that was out when uicheck froze the page
+// (__bdevSections.apply) must not overwrite the payload uicheck applied: the
+// answer checks secFrozen again before it renders.
+func TestPagePollSkipsAnswerWhenFrozen(t *testing.T) {
+	body := idleFn(t, "secPoll")
+	then := strings.Index(body, ".then(function(p){")
+	if then < 0 {
+		t.Fatal("secPoll has no answer handler .then(function(p){")
+	}
+	rest := body[then:]
+	skip, apply := strings.Index(rest, "if(secFrozen) return;"), strings.Index(rest, "secApplyPayload(p);")
+	if skip < 0 || apply < 0 || skip > apply {
+		t.Error("secPoll's answer does not return on secFrozen before secApplyPayload(p)")
 	}
 }

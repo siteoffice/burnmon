@@ -393,6 +393,8 @@ responsive down to a single compact column.
   you", turns it off at once (the file is read on every new snapshot); turning it back on
   does not notify what entered while it was off. It runs on its own hidden window and
   thread, never the UI thread, and reads only the snapshot file and `burnmon-dev.json`.
+  Its tray icon takes one of two IDs in turn, so Windows' list of other system tray icons
+  (Settings, Taskbar) gains at most two entries for it, not one per notification.
 - **Export**: the header's "EXPORT" button, or
   `burnmon-dev.exe export --since --until --out DIR [--redact]` (`--since`/`--until` take
   a local day, YYYY-MM-DD, or a full RFC3339 timestamp), writes an AI-ready bundle to
@@ -519,7 +521,8 @@ without a project folder, such as a Cowork cloud session, shows its agent instea
 (`cowork-cloud 1a2b3c4d`), and one with neither shows `session 1a2b3c4d`. The full session id
 is never the title.
 
-Both parts show every item in a bounded scroll list with a count. In Waits on you the Done
+Both parts show every item in a bounded scroll list with a count; a refresh leaves each list
+where it was scrolled. In Waits on you the Done
 group (close-out, can-be-closed and branch-gone items) starts collapsed at every start: only
 its header with the count shows, so Blocked and Your turn come first. A click on the header,
 or Enter or Space on it, opens and closes it. The amber number in the part's header still
@@ -758,7 +761,9 @@ Linux browser-mode builds), 2026-09-24; `v0.3.1`, a cleanup pass, 2026-09-24; `v
 shared ingest performance and local time everywhere, 2026-09-26. `v0.4.0-beta.1`, 2026-10-30: all three exes carry one version again; it adds
 the agent map, Waits on you, Outcomes, the first controls and the section layout to
 BurnMon Dev. Beta: the controls and the agent view are not yet proven against real
-sessions, and the agent view stays empty when `claude` on `PATH` is a `.cmd` shim. See `STATUS.md` for what is true at the current
+sessions. In beta.1 the agent view stayed empty when `claude` on `PATH` was a `.cmd` shim;
+since B8 BurnMon reads an npm `claude.cmd` shim for the `claude.exe` it names (see "Foreman
+and Claude Code settings"). See `STATUS.md` for what is true at the current
 commit and `SESSION_LOG.md` for the session-by-session record. The BurnMon Dev text above
 (sections, Waits on you, Outcomes, controls) is written from the code of the branch this
 README sits on; `STATUS.md` says which of those parts are in `main`.

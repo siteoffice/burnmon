@@ -3573,6 +3573,10 @@ body.plain #mapOverlay{font-size:13.5px}
   };
   function applyPanelFit(){
     var sp = stationPanel; if(sp) stationPeek(true);
+    // The pass resizes the host lists and measures them from their top
+    // (fitListFloor); each goes back where the user scrolled it at the end.
+    // Taken before fitUndo, whose un-shrink of a list can already clamp it.
+    var tops = secListTops();
     var body = document.body, hist = document.querySelector('.histwrap');
     var histBefore = fitHistH();
     var scroll = !!secState.scrollbar;
@@ -3748,6 +3752,7 @@ body.plain #mapOverlay{font-size:13.5px}
       window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
       fitLast = null;
     }
+    secListRestore(tops);
     secHostSync();
     window.__bdevFit = fit;
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
@@ -4269,6 +4274,24 @@ body.plain #mapOverlay{font-size:13.5px}
     var tg = document.getElementById('secToast');
     if(tg) tg.checked = !!secState.toast;
   }
+  // A poll or a tick must never move a list the user scrolled. The scroll
+  // position of each list in #secPanels, by its part (one list per part), so a
+  // render's new list finds where the old one was.
+  function secListTops(){
+    var out = {};
+    Array.prototype.forEach.call(document.querySelectorAll('#secPanels .seclist'), function(el){
+      var s = el.closest('[data-sec]');
+      if(s) out[s.getAttribute('data-sec')] = el.scrollTop;
+    });
+    return out;
+  }
+  // The browser clamps a position to the list's new height.
+  function secListRestore(tops){
+    Array.prototype.forEach.call(document.querySelectorAll('#secPanels .seclist'), function(el){
+      var s = el.closest('[data-sec]'), top = s ? tops[s.getAttribute('data-sec')] : 0;
+      if(top && el.scrollTop !== top) el.scrollTop = top;
+    });
+  }
   function secRender(){
     var host = document.getElementById('secHost');
     if(!host) return;
@@ -4300,16 +4323,19 @@ body.plain #mapOverlay{font-size:13.5px}
     }
     // The render replaces the Done header, so the keyboard goes back to the new one.
     var ae = document.activeElement, doneFocus = !!(ae && ae.matches && ae.matches('.sectier.done'));
+    // The write gives new lists at their top; each goes back after the fit pass.
+    var tops = secListTops();
     document.getElementById('secPanels').innerHTML = (row1 ? '<div class="secrow1" id="secRow1">' + row1 + '</div>' : '') + rest;
     var dh = doneFocus && document.querySelector('#secPanels .sectier.done');
     if(dh) dh.focus({ preventScroll:true });
     ctlFill();
     secApplyParts();
     secFit();
+    secListRestore(tops);
   }
-  // The render puts the Waits list back at its top (and the fit pass inside it
-  // does too), so the header the user just used is scrolled back into view
-  // after it. A poll's render does not scroll.
+  // The render keeps the Waits list where it was, so the header the user just
+  // used can sit outside the list's visible part; it is scrolled into view
+  // after the render. A poll's render does not scroll.
   function secDoneToggle(){
     secDoneOpen = !secDoneOpen;
     secRender();
@@ -4385,6 +4411,8 @@ body.plain #mapOverlay{font-size:13.5px}
   function secPoll(){
     if(typeof window.bdevSections !== 'function' || document.hidden || secFrozen) return Promise.resolve();
     return window.bdevSections().then(function(p){
+      // uicheck may have frozen the page while this read was out.
+      if(secFrozen) return;
       var j = JSON.stringify(p);
       if(j === secLastJSON) return;
       secApplyPayload(p);

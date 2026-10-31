@@ -774,8 +774,8 @@ func caseD39(hwnd uintptr, args []string) error {
 //   - Enter on the focused header closes it, Space opens it again, and focus
 //     stays on the header although the render replaces it;
 //   - after the click and after each key the header lies inside its list's
-//     visible part (the render puts the list back at its top; at this size
-//     the list shows fewer lines than it holds);
+//     visible part (the render keeps the list's scroll position, d45; at this
+//     size the list shows fewer lines than it holds);
 //   - the panel header, with its amber number (wait_counts.blocked), reads
 //     the same throughout.
 //
@@ -978,4 +978,168 @@ func caseD44(hwnd uintptr, args []string) error {
 		return err
 	}
 	return key("Space", vkSpace, "true", all)
+}
+
+// waits/d45: a list keeps its scroll position (B8 final review fix 1).
+
+// d45: a poll or a tick never moves a list the user scrolled. Fed the frozen
+// example with 19 more Done rows (21 in all, as on the laptop when this was
+// found), the Done group opened and the Waits list scrolled to the middle of
+// its range, it proves, with the Overall scrollbar on and then off:
+//   - the same payload applied again (what a poll does: a full render with
+//     new list nodes) leaves the list's scrollTop where it was;
+//   - after more than a second in which the fit pass ran again (the tick
+//     paint calls it; with the scrollbar off it measures the host lists from
+//     their top) the scrollTop is still where it was.
+//
+// The page is frozen (__bdevSections.apply), so no real read renders in
+// between.
+const d45ReadJS = `(function(){
+  var l = document.querySelector('[data-sec=waits] .seclist'), h = document.querySelector('[data-sec=waits] .sectier.done');
+  if(!l) return { found: false };
+  return { found: true, top: l.scrollTop, max: l.scrollHeight - l.clientHeight,
+    expanded: h ? h.getAttribute('aria-expanded') || '' : '', scrollOn: document.body.classList.contains('scroll-on') };
+})()`
+
+// d45ScrollJS scrolls the Waits list to the middle of its range and returns
+// the scrollTop the browser kept, or -1 without a list.
+const d45ScrollJS = `(function(){
+  var l = document.querySelector('[data-sec=waits] .seclist');
+  if(!l) return -1;
+  l.scrollTop = Math.round((l.scrollHeight - l.clientHeight) / 2);
+  return l.scrollTop;
+})()`
+
+type d45Page struct {
+	Found    bool    `json:"found"`
+	Top      float64 `json:"top"`
+	Max      float64 `json:"max"`
+	Expanded string  `json:"expanded"`
+	ScrollOn bool    `json:"scrollOn"`
+}
+
+// d45MinRange is the least scroll range in px the list must have for the
+// middle position to tell a kept list from one put back at its top.
+const d45MinRange = 40
+
+func caseD45(hwnd uintptr, args []string) error {
+	raw, err := readSnapshotExample()
+	if err != nil {
+		return err
+	}
+	fail := func(format string, a ...any) error { return fmt.Errorf("d45: "+format, a...) }
+	var snap map[string]any
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		return err
+	}
+	items, _ := snap["wait_items"].([]any)
+	if len(items) == 0 {
+		return fail("the example has no wait items")
+	}
+	const extra = 19
+	for i := 1; i <= extra; i++ {
+		// The shape waits.go gives a branch_gone row, as in d44.
+		items = append(items, map[string]any{"kind": "branch_gone", "id": fmt.Sprintf("branchgone:example__sprint__d45-%d", i),
+			"title": fmt.Sprintf("example-gone-%d", i), "project": "example", "detail": "branch gone, check by hand",
+			"since": "2026-10-23T07:00:00Z", "age_seconds": 9000 + i, "source": "foreman", "group": "done", "holds": 1})
+	}
+	snap["wait_items"] = items
+	if wc, ok := snap["wait_counts"].(map[string]any); ok {
+		done, _ := wc["done"].(float64)
+		wc["done"] = int(done) + extra
+	}
+	sb, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	read := func() (d45Page, error) {
+		var p d45Page
+		err := evalInto(d45ReadJS, &p)
+		return p, err
+	}
+	// kept fails when the list's scrollTop moved more than a pixel from want.
+	kept := func(label string, want float64) error {
+		p, err := read()
+		if err != nil {
+			return err
+		}
+		if !p.Found {
+			return fail("%s: the Waits list is gone", label)
+		}
+		if p.Top < want-1 || p.Top > want+1 {
+			return fail("%s: the Waits list scrollTop is %.0f, was %.0f (range %.0f)", label, p.Top, want, p.Max)
+		}
+		return nil
+	}
+	// afterFit waits more than a second, until the fit pass has run again:
+	// every applyPanelFit puts a new object in window.__bdevFit, so a mark on
+	// the old one is gone once it ran.
+	afterFit := func(label string) error {
+		if _, err := evalRaw(`(window.__bdevFit = window.__bdevFit || {}, window.__bdevFit.d45 = 1, 1)`); err != nil {
+			return err
+		}
+		start := time.Now()
+		for deadline := start.Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+			ran, err := evalBool(`!(window.__bdevFit && window.__bdevFit.d45)`)
+			if err != nil {
+				return err
+			}
+			if ran && time.Since(start) > 1200*time.Millisecond {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return fail("%s: the fit pass did not run again within 10 s", label)
+			}
+		}
+	}
+
+	for _, scrollbar := range []bool{true, false} {
+		mode := map[bool]string{true: "scrollbar on", false: "scrollbar off"}[scrollbar]
+		payload := d29Payload(d29Opts{Plain: false, Scrollbar: scrollbar, Status: "ok", Snap: sb})
+		if _, err := d29Apply(payload); err != nil {
+			return err
+		}
+		if err := waitsOpenDone(); err != nil {
+			return fail("%s: %v", mode, err)
+		}
+		p, err := read()
+		if err != nil {
+			return err
+		}
+		if !p.Found || p.Expanded != "true" {
+			return fail("%s: the Waits list with the Done group open is not there (%+v)", mode, p)
+		}
+		if p.ScrollOn != scrollbar {
+			return fail("%s: body.scroll-on is %v", mode, p.ScrollOn)
+		}
+		if p.Max < d45MinRange {
+			return fail("%s: the Waits list scrolls only %.0f px, the case needs %d", mode, p.Max, d45MinRange)
+		}
+		var want float64
+		if err := evalInto(d45ScrollJS, &want); err != nil {
+			return err
+		}
+		if want < d45MinRange/2 {
+			return fail("%s: the Waits list took scrollTop %.0f, want the middle of %.0f", mode, want, p.Max)
+		}
+		if err := afterFit(mode + ", a tick"); err != nil {
+			return err
+		}
+		if err := kept(mode+", after a tick", want); err != nil {
+			return err
+		}
+		if _, err := d29Apply(payload); err != nil {
+			return err
+		}
+		if err := kept(mode+", after the payload again", want); err != nil {
+			return err
+		}
+		if err := afterFit(mode + ", a tick after the payload"); err != nil {
+			return err
+		}
+		if err := kept(mode+", after the payload and a tick", want); err != nil {
+			return err
+		}
+	}
+	return nil
 }

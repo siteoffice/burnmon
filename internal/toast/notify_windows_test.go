@@ -146,6 +146,34 @@ func TestTrayEvent(t *testing.T) {
 	}
 }
 
+// TestIconIDAlternates: Windows keeps one NotifyIconSettings entry per (exe,
+// icon ID) and never prunes it, so the IDs stay bounded: 1, 2, 1, 2. A late
+// event of the replaced toast carries the other ID and removes nothing.
+func TestIconIDAlternates(t *testing.T) {
+	var got []uint32
+	last := uint32(0)
+	for i := 0; i < 4; i++ {
+		last = nextIconID(last)
+		got = append(got, last)
+	}
+	want := []uint32{1, 2, 1, 2}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("icon IDs %v, want %v", got, want)
+		}
+	}
+	lp := func(ev, id uint32) uintptr { return uintptr(id)<<16 | uintptr(ev) }
+	// Toast on show has ID 2; the replaced one had ID 1.
+	for _, ev := range []uint32{ninBalloonUserClick, ninBalloonTimeout, ninBalloonHide} {
+		if _, remove := trayEvent(lp(ev, 1), 2); remove {
+			t.Errorf("event %#x of the replaced toast (ID 1) removes the toast on show (ID 2)", ev)
+		}
+		if _, remove := trayEvent(lp(ev, 2), 2); !remove {
+			t.Errorf("event %#x of the toast on show (ID 2) does not remove it", ev)
+		}
+	}
+}
+
 // TestStartCloseLeavesNoGoroutine: Close returns quickly and the window's
 // goroutine is gone after it, twice in a row (the window class is
 // registered once per process). Nothing is shown: the icon only appears on
