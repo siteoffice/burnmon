@@ -104,7 +104,39 @@ Priority order lives here and only here.
        Park exception (Wilco, 2026-10-12). Code done 2026-10-12, uncommitted: `scan.IsTranscriptPath`,
        `Store.PurgeAuditSessions`, run on every Collect.
        Proof: same file as row d.
-11. Decision 2026-12-19.
+11. B1 to B7.3 (2026-10-25 to 2026-10-30), Foreman sprints, specs in
+    `C:\ZND\10_holding\05_docs\superpowers\specs\`. **DONE:** all merged into `main` and pushed
+    (shared snapshot and keep_history, section groups, Waits on you and Outcomes, first controls,
+    docs pass, map and waits, layout fill, list floors, uicheck hygiene, snapshot status line).
+12. v0.4.0-beta.1 (2026-10-30). **DONE:** tag `v0.4.0-beta.1` on `775e0b5`, pushed; all three exes
+    report `0.4.0-beta.1`; `TestOneVersionClock` keeps them in step. Leftover: prune the merged
+    sprint worktrees and branches (Wilco's git step, with the B8 close-out).
+13. B8, the agent half: agent view behind the npm shim, a new gate on the page in under 2 s, Waits
+    on you titles and a collapsed Done group, every control once for real (Attended), a toast for
+    Blocked and Your turn. Spec: `2026-10-30_b8_agent_half_spec.md` (Foreman copy
+    `2026-10-30-burnmon-b8-agent-half.md`, `spec_lint.py` exit 0). Next to run.
+14. B9, native macOS window (Wilco 2026-10-30: "I need the native macOS one", right after B8): BurnMon
+    and BurnMon Dev in their own window on macOS instead of the browser plus the 127.0.0.1 server of
+    PR #4. WebView2 is Windows-only (`cmd\burnmon\main_other.go`) and every build is `CGO_ENABLED=0`,
+    so it needs a cgo webview library built on a Mac or a macOS CI runner. Library: webview_go
+    (Wilco 2026-10-30; research `..\04_assets\2026-10-30_b9_macos_webview_research.md`). Test plan (decided by Wilco, recorded here 2026-10-30):
+    rent a Mac online for 24 hours and test everything there; renting is Wilco's step (it spends
+    money). Everything that can be ready before the rental is ready before it: code, tests, a macOS
+    compile check in CI, and one scripted test run, so the 24 hours go to testing. Both burnmon and
+    BurnMon Dev get the window (Wilco 2026-10-30). Spec: `2026-10-30_b9_native_macos_window_spec.md`.
+15. B10, cost per outcome (decided by Wilco 2026-10-30, ahead of plan limits, after the macOS
+    window): tokens and cost per merged sprint and per closed gate, from the sprint links and
+    outcomes BurnMon already has; plus the burn-spike toast, built on B8's toast. Evidence for H2
+    and H3. No spec yet.
+16. Plan-limits research, before any build: which vendors write seat or allowance state to local
+    disk in a documented form. A brief in a plain chat, no code. It decides whether a plan-limits
+    panel can exist under the no-undocumented-endpoints rule. No brief yet.
+17. Native Linux window, after the macOS one, same approach. Linux is untested on real hardware today.
+18. Station polish (layout, seated poses, labels), after the native windows.
+19. Performance debt, after B10: History re-reads the whole store on every filter change (about 3 s
+    at 55,000 events), the Station CPU climb (cause not found), minimized RAM 297 MB against
+    250 MB, uicheck w1 red.
+20. Decision 2026-12-19.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.
 Architecture (decided): `..\04_assets\2026-09-22_token_monitor_architecture.md`.
