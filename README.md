@@ -548,8 +548,9 @@ BurnMon Dev opens with one line that says so and names the `burnmon.json` key th
 `agent_view` when it is off, `claude_path` with the refusal reason when `claude` does not
 resolve. The line follows the app that writes the snapshot (`burnmon.exe` or BurnMon Dev,
 whichever holds the snapshot lock), which reads `burnmon.json` once at start: a changed
-setting shows after restarting that app, `burnmon.exe` too when it runs. It has not been run
-against the real `claude` (B3 report). Window level behaviour of these parts is not
+setting shows after restarting that app, `burnmon.exe` too when it runs. B8 ran it against the
+real `claude` on the owner's laptop: with `agent_view` on, the snapshot listed a background
+agent started for the test. Window level behaviour of these parts is not
 checked here: uicheck `d36` renders both parts from the example snapshot, and `d29`, `d33`
 and `d34` cover the layout, but none of them was run in B1 to B4 because the apps were open.
 
@@ -760,8 +761,9 @@ Shipped: `v0.3.0` (price books, client map, export and merge, Copilot in VS Code
 Linux browser-mode builds), 2026-09-24; `v0.3.1`, a cleanup pass, 2026-09-24; `v0.3.2`,
 shared ingest performance and local time everywhere, 2026-09-26. `v0.4.0-beta.1`, 2026-10-30: all three exes carry one version again; it adds
 the agent map, Waits on you, Outcomes, the first controls and the section layout to
-BurnMon Dev. Beta: the controls and the agent view are not yet proven against real
-sessions. In beta.1 the agent view stayed empty when `claude` on `PATH` was a `.cmd` shim;
+BurnMon Dev. In beta.1 the controls and the agent view were not yet proven against real
+sessions; B8 ran each control once, on a test agent and on throwaway Foreman flows, and saw
+the agent view list a real background agent. In beta.1 the agent view stayed empty when `claude` on `PATH` was a `.cmd` shim;
 since B8 BurnMon reads an npm `claude.cmd` shim for the `claude.exe` it names (see "Foreman
 and Claude Code settings"). See `STATUS.md` for what is true at the current
 commit and `SESSION_LOG.md` for the session-by-session record. The BurnMon Dev text above
