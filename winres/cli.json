@@ -10,7 +10,7 @@
     "info": { "0409": {
       "FileDescription": "burnmon-cli, Claude usage dashboard CLI",
       "ProductName": "burnmon-cli",
-      "ProductVersion": "0.4.0-beta.1",
+      "ProductVersion": "0.4.0-beta.2",
       "FileVersion": "0.4.0.0",
       "OriginalFilename": "burnmon-cli.exe",
       "InternalName": "burnmon-cli",

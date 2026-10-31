@@ -336,7 +336,7 @@ and need `foreman_root`.
 
 ## BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-beta.1`) is a second, developer-facing window: what running
+`burnmon-dev.exe` (`v0.4.0-beta.2`) is a second, developer-facing window: what running
 AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
 grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
 performance problem and a token spike show up together. It reuses `burnmon.exe`'s own
@@ -761,7 +761,9 @@ Shipped: `v0.3.0` (price books, client map, export and merge, Copilot in VS Code
 Linux browser-mode builds), 2026-09-24; `v0.3.1`, a cleanup pass, 2026-09-24; `v0.3.2`,
 shared ingest performance and local time everywhere, 2026-09-26. `v0.4.0-beta.1`, 2026-10-30: all three exes carry one version again; it adds
 the agent map, Waits on you, Outcomes, the first controls and the section layout to
-BurnMon Dev. In beta.1 the controls and the agent view were not yet proven against real
+BurnMon Dev. `v0.4.0-beta.2`, 2026-10-31: B8, the agent half: the agent view behind an npm
+shim, a new Foreman gate on the page in about a second, folder and short id titles, a
+collapsed Done group and a Windows toast for Blocked and Your turn. In beta.1 the controls and the agent view were not yet proven against real
 sessions; B8 ran each control once, on a test agent and on throwaway Foreman flows, and saw
 the agent view list a real background agent. In beta.1 the agent view stayed empty when `claude` on `PATH` was a `.cmd` shim;
 since B8 BurnMon reads an npm `claude.cmd` shim for the `claude.exe` it names (see "Foreman
