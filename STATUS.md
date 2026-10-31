@@ -1,5 +1,20 @@
 # BurnMon, status
 
+What is true after B8, the agent half (2026-10-31, written on `sprint/burnmon-b8-agent-half` before its
+merge; read `git log main` live for the merge): the agent view finds `claude.exe` behind an npm `claude.cmd`
+shim and the page says in one line why it is off or refused; a Foreman change writes the snapshot at once and
+the page checks for a new one every second; session titles show folder and short id; the Done group starts
+collapsed; BurnMon Dev shows a Windows toast when something enters Blocked or Your turn (`toast_enabled`).
+Measured on the laptop with the B8 build: a new gate on the page in 965 to 1038 ms over 10 harness rounds (p95
+and max 1038 ms); BurnMon Dev's Go process idle at 0.80 percent of the machine over 10 minutes (Go plus WebView2
+2.46 percent over 3 minutes, no baseline); the agent view listed a real background agent; approve, send back,
+attach and stop each ran once for real with exit 0 and audit lines; a toast showed within 2 s and its click
+brought the window to the front. Final run on `cf1815c`: `go vet` clean, `go test` 1051 pass, 0 fail, 5 skip,
+`.\build.ps1` ok, `uicheck dev` 7 of 7 groups. Not tagged (the next tag is decided after the report). Open
+lines, all Minor or out of scope: `02_roadmap\2026-10-31_b8_backlog.md`. Report:
+`C:\ZND\10_holding\sprints\burnmon\burnmon-b8-agent-half\report.md`. The paragraph below describes beta.1 and
+is kept as history; its known beta gaps are what B8 closed.
+
 What is true at v0.4.0-beta.1 (2026-10-30, read live with `git rev-parse`, `git merge-base --is-ancestor` and
 `git ls-remote origin refs/heads/main`): the base is `main` and `origin/main` at `eff94bd`, and every sprint
 branch B1 to B7.3 is merged into it. The beta commit sets all three exes to `0.4.0-beta.1` (they reported `0.3.2`,
