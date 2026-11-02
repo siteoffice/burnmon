@@ -318,6 +318,38 @@ Things worth checking:
 
 Please leave out prompts, project names and client names from anything you paste.
 
+## Before you rely on it
+
+This is a beta, built and used daily by one person. It runs on your own machine and changes nothing
+outside the folders you point it at. It comes with no warranty (see LICENSE).
+
+What it does not do, or not yet:
+
+- **Cloud Cowork sessions arrive late in BurnMon.** A Cowork session that runs in Anthropic's cloud
+  writes no transcript to your disk. The optional `burnmon-cloud` plugin copies its usage numbers to
+  `~/.burnmon/cloud` at the end of each turn and at most every 20 seconds while Claude works; the
+  Claude desktop app then copies that file to your computer. Measured on 2026-11-02: about 1 to 3
+  minutes from the cloud write to BurnMon. A long tool run writes no usage at all until the next model
+  request, so a busy cloud session can show as idle. The session only counts when `~/.burnmon` is
+  connected to it.
+- **Prices are API-price equivalents**, not your bill. On a subscription seat you pay the seat.
+- **macOS and Linux have no app window.** The dashboard opens in your browser, served by a local web
+  server (see "macOS and Linux"). Linux is untested on real hardware.
+
+## Feedback and issues
+
+We want to hear what broke and what you expected instead.
+
+1. **Bug**: open an issue with the "Bug" template. Include the version (the About tab), your OS, and
+   what you did just before. Never paste prompts, keys or customer data.
+2. **"It did not do what I expected"**: use that template. This is the most useful one for us.
+3. **Idea**: use the "Idea" template, one idea per issue.
+4. **After two weeks**: attach a Burn Report export if you are willing to share it (BurnMon Dev,
+   Export button, `--redact` on; see "BurnMon Dev").
+
+Response: we read every issue within two working days. Security problems: do not open a public
+issue; mail info@zerononsense.dev.
+
 ## What needs BurnMon
 
 The Fleet and the Setup Doctor read the snapshot file, `%USERPROFILE%\.burnmon\snapshot.json`,
