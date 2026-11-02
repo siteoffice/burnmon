@@ -115,8 +115,7 @@ What it does not cover:
   reads), and every small Haiku call, which cost under 1 percent of that session.
 - Work done while a turn runs reaches BurnMon about 10 seconds after it is written. That
   includes the work of a subagent (an agent Claude starts for research or parallel tasks),
-  which arrives when the subagent finishes. Plugin 1.1.3 delivers the end of a turn about 10
-  to 15 seconds after it ends (measured on one session, 2026-10-12). Older versions deliver it
+  which arrives when the subagent finishes. The plugin writes within about 20 seconds; the copy to your laptop took about 3 minutes in one measurement on 2026-11-02. Older versions deliver it
   with your next
   message, or about 4 minutes after the turn when the session goes idle. BurnMon shows each
   request at the minute it was actually spent, so the chart fills in afterwards.
