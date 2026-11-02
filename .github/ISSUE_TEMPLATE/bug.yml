@@ -1,0 +1,36 @@
+name: Bug
+description: Something does not work, or works differently than the docs say
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste prompts, keys or customer data. Security problems: do not open a public issue, mail info@zerononsense.dev.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From the About tab.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Your system
+      description: Windows, macOS or Linux, and which tools you use (Claude Code, Codex, Copilot CLI, Hermes).
+    validations:
+      required: true
+  - type: textarea
+    id: did
+    attributes:
+      label: What you did just before
+      description: The exact command or button, and what you expected to see.
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: Paste the output or describe what you saw.
+    validations:
+      required: true

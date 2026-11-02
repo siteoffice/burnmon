@@ -1,0 +1,30 @@
+name: It did not do what I expected
+description: Nothing is broken, but the result was not what you thought it would be
+labels: ["expectation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most useful template for us. Never paste prompts, keys or customer data.
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: got
+    attributes:
+      label: What you got instead
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What you were trying to do
+      description: The goal behind it, in your own words.
+  - type: input
+    id: version
+    attributes:
+      label: Version and system
+      description: For example "0.4.0-beta.2, macOS".

@@ -1,0 +1,20 @@
+name: Idea
+description: One idea per issue
+labels: ["idea"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you ran into
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+    validations:
+      required: true
+  - type: textarea
+    id: instead
+    attributes:
+      label: What you do today instead
