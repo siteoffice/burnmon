@@ -234,3 +234,24 @@ func TestOnceRecordsAgentViewStatus(t *testing.T) {
 		t.Errorf("no graph sources: %+v, want no agent_view", got)
 	}
 }
+
+// The writer's loaded config path rides on the off and refused statuses, so a
+// reader can name the file that fixes them; on needs none.
+func TestOnceAgentViewStatusCarriesConfigPath(t *testing.T) {
+	st := snapshotTestStore(t)
+	pid := `{"pid":4100,"sessionId":"s2","procStart":"777"}`
+	const cfgPath = `C:\cfg\burnmon.json`
+	status := func(gr *snapshotwriter.GraphReaders) *snapshot.AgentViewStatus {
+		gr.ConfigPath = cfgPath
+		return onceRead(t, newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr)).AgentView
+	}
+	off, _ := fakeReaders(t, pid)
+	if got := status(off); got == nil || got.State != "off" || got.ConfigPath != cfgPath {
+		t.Errorf("off: %+v", got)
+	}
+	refused, _ := fakeReaders(t, pid)
+	refused.EnableAgentViewFor(lookOf(`C:\n\claude.ps1`, nil), "windows")
+	if got := status(refused); got == nil || got.State != "refused" || got.ConfigPath != cfgPath {
+		t.Errorf("refused: %+v", got)
+	}
+}

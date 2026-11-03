@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,17 +22,81 @@ func TestAgentViewLine(t *testing.T) {
 		want string
 	}{
 		{"no status", nil, ""},
-		{"off", &snapshot.AgentViewStatus{State: "off"}, `Agent view off: set "agent_view": true in burnmon.json.`},
-		{"refused, .ps1 shim", &snapshot.AgentViewStatus{State: "refused", Reason: "claude is a .ps1 shim; agent_view needs claude.exe"},
-			`Agent view refused (claude is a .ps1 shim; agent_view needs claude.exe): set "claude_path" in burnmon.json to claude.exe.`},
-		{"refused, claude_path not a .exe", &snapshot.AgentViewStatus{State: "refused", Reason: "claude_path is not a .exe"},
-			`Agent view refused (claude_path is not a .exe): set "claude_path" in burnmon.json to claude.exe.`},
+		{"off", &snapshot.AgentViewStatus{State: "off", ConfigPath: `C:\x\burnmon.json`}, `Agent view off: set "agent_view": true in C:\x\burnmon.json.`},
+		{"refused, .ps1 shim", &snapshot.AgentViewStatus{State: "refused", Reason: "claude is a .ps1 shim; agent_view needs claude.exe", ConfigPath: `C:\x\burnmon.json`},
+			`Agent view refused (claude is a .ps1 shim; agent_view needs claude.exe): set "claude_path" in C:\x\burnmon.json to claude.exe.`},
+		{"refused, claude_path not a .exe", &snapshot.AgentViewStatus{State: "refused", Reason: "claude_path is not a .exe", ConfigPath: `C:\x\burnmon.json`},
+			`Agent view refused (claude_path is not a .exe): set "claude_path" in C:\x\burnmon.json to claude.exe.`},
 		{"on", &snapshot.AgentViewStatus{State: "on"}, ""},
 	}
 	for _, c := range cases {
 		if got := agentViewLine(c.st); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+// A snapshot written before config_path existed still names a path: the
+// default under LOCALAPPDATA.
+func TestAgentViewLineFallbackPath(t *testing.T) {
+	local := t.TempDir()
+	t.Setenv("LOCALAPPDATA", local)
+	want := filepath.Join(local, "burnmon", "burnmon.json")
+	off := agentViewLine(&snapshot.AgentViewStatus{State: "off"})
+	if off != `Agent view off: set "agent_view": true in `+want+`.` {
+		t.Errorf("off: %q", off)
+	}
+	ref := agentViewLine(&snapshot.AgentViewStatus{State: "refused", Reason: "r"})
+	if ref != `Agent view refused (r): set "claude_path" in `+want+` to claude.exe.` {
+		t.Errorf("refused: %q", ref)
+	}
+}
+
+// loadConfigAt gives the file it loaded, and that path reaches both lines
+// through the status the writer records.
+func TestLoadConfigAtPathReachesLines(t *testing.T) {
+	exeDir, dataDir := t.TempDir(), t.TempDir()
+	want := filepath.Join(exeDir, "burnmon.json")
+	if err := os.WriteFile(want, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, got := loadConfigAt(exeDir, dataDir)
+	if got != want {
+		t.Fatalf("loaded path %q, want %q", got, want)
+	}
+	for _, st := range []*snapshot.AgentViewStatus{
+		{State: "off", ConfigPath: got},
+		{State: "refused", Reason: "r", ConfigPath: got},
+	} {
+		if line := agentViewLine(st); !strings.Contains(line, want) {
+			t.Errorf("%s line %q lacks %q", st.State, line, want)
+		}
+	}
+}
+
+// With no file anywhere the loader says "" and the lines fall back to the
+// default location.
+func TestLoadConfigAtNoFile(t *testing.T) {
+	local := t.TempDir()
+	t.Setenv("LOCALAPPDATA", local)
+	_, got := loadConfigAt(t.TempDir(), t.TempDir())
+	if got != "" {
+		t.Fatalf("loaded path %q, want empty", got)
+	}
+	want := filepath.Join(local, "burnmon", "burnmon.json")
+	for _, st := range []*snapshot.AgentViewStatus{{State: "off"}, {State: "refused", Reason: "r"}} {
+		if line := agentViewLine(st); !strings.Contains(line, want) || strings.Contains(line, "in burnmon.json.") {
+			t.Errorf("%s line %q", st.State, line)
+		}
+	}
+}
+
+// The app's writer carries the file the app loaded into the graph readers.
+func TestNewSnapshotWriterRecordsConfigPath(t *testing.T) {
+	a := &app{loadedCfg: `C:\x\burnmon.json`}
+	w := a.newSnapshotWriter(nil, filepath.Join(t.TempDir(), "snapshot.json"))
+	if w.Graph == nil || w.Graph.ConfigPath != `C:\x\burnmon.json` {
+		t.Fatalf("graph config path: %+v", w.Graph)
 	}
 }
 
@@ -47,14 +112,17 @@ func TestSectionsPayloadAgentViewLineFollowsSnapshot(t *testing.T) {
 		return p
 	}
 	off := &snapshot.AgentViewStatus{State: "off"}
+	local := t.TempDir()
+	t.Setenv("LOCALAPPDATA", local)
+	fallback := filepath.Join(local, "burnmon", "burnmon.json")
 	cases := []struct {
 		name string
 		path string
 		want string
 	}{
-		{"current, off", write(now, off), `Agent view off: set "agent_view": true in burnmon.json.`},
+		{"current, off", write(now, off), `Agent view off: set "agent_view": true in ` + fallback + `.`},
 		{"current, refused", write(now, &snapshot.AgentViewStatus{State: "refused", Reason: "the claude.cmd shim names no claude.exe"}),
-			`Agent view refused (the claude.cmd shim names no claude.exe): set "claude_path" in burnmon.json to claude.exe.`},
+			`Agent view refused (the claude.cmd shim names no claude.exe): set "claude_path" in ` + fallback + ` to claude.exe.`},
 		{"current, on", write(now, &snapshot.AgentViewStatus{State: "on"}), ""},
 		{"current, written before the field", write(now, nil), ""},
 		{"stale, off", write(now.Add(-time.Minute), off), ""},

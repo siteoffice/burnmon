@@ -441,6 +441,34 @@ func TestFixtureHasAgentSessions(t *testing.T) {
 	}
 }
 
+// config_path is additive on agent_view: it survives a round trip and is left
+// out when empty.
+func TestAgentViewConfigPathRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "snapshot.json")
+	want := AgentViewStatus{State: AgentViewOff, ConfigPath: `C:\cfg\burnmon.json`}
+	if err := Write(path, Build(Input{Now: t0, TickSeconds: 5, AgentView: &want})); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"config_path": "C:\\cfg\\burnmon.json"`) && !strings.Contains(string(b), `"config_path":"C:\\cfg\\burnmon.json"`) {
+		t.Errorf("file has no config_path: %s", b)
+	}
+	var got Snapshot
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.AgentView == nil || *got.AgentView != want {
+		t.Errorf("round trip: %+v, want %+v", got.AgentView, want)
+	}
+	empty, _ := json.Marshal(AgentViewStatus{State: AgentViewOn})
+	if strings.Contains(string(empty), "config_path") {
+		t.Errorf("empty config_path written: %s", empty)
+	}
+}
+
 // B8: agent_view is additive. It survives a write and read when set, is left
 // out when not, and a snapshot written before it existed still reads.
 func TestAgentViewStatusRoundTrip(t *testing.T) {

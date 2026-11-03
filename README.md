@@ -14,6 +14,15 @@ renamed and extended from v0.2 onward. Repo:
 `02_roadmap\2026-09-22_burnmon_plan.md`; the spec building the current release:
 `02_roadmap\2026-09-23_v0.3_spec.md`.
 
+## Which app do I open?
+
+- **BurnMon** (`burnmon.exe`) is for history: tokens and cost per day, vendor, project and
+  client, with its live Now page for a glance.
+- **BurnMon Dev** (`burnmon-dev.exe`) is for the last 30 minutes and for acting now:
+  Waits on you and the agent map.
+
+Settings live in `burnmon.json`, next to the exe or else in `%LOCALAPPDATA%\burnmon\burnmon.json`; see Configuration.
+
 ## Screenshots
 
 The Now page, live burn across vendors:
@@ -113,12 +122,13 @@ What it does not cover:
 - The numbers are a lower bound. The transcript misses some side calls. Measured on one
   session at seven turn boundaries: 0 to 7 percent of the main model's tokens (mostly cache
   reads), and every small Haiku call, which cost under 1 percent of that session.
-- Work done while a turn runs reaches BurnMon about 10 seconds after it is written. That
-  includes the work of a subagent (an agent Claude starts for research or parallel tasks),
-  which arrives when the subagent finishes. The plugin writes within about 20 seconds; the copy to your laptop took about 3 minutes in one measurement on 2026-11-02. Older versions deliver it
-  with your next
-  message, or about 4 minutes after the turn when the session goes idle. BurnMon shows each
-  request at the minute it was actually spent, so the chart fills in afterwards.
+- Cloud data arrives late, and BurnMon Dev says how late. That includes the work of a
+  subagent (an agent Claude starts for research or parallel tasks), which arrives when the
+  subagent finishes. The plugin writes within about 20 seconds; the copy to your laptop took about 3 minutes in one measurement on 2026-11-02. BurnMon Dev shows `cloud data N min old`
+  next to every Cowork (Cloud) session, or `cloud data under a minute old`. Older versions
+  deliver it with your next message, or about 4 minutes after the turn when the session goes
+  idle. BurnMon shows each request at the minute it was actually spent, so the chart fills
+  in afterwards.
 - The usage file has no tool calls, so BurnMon Dev's Station cannot tell a cloud session that
   works from one that waits for you. It shows the session as Thinking until 3 minutes after
   its newest request, then as Waiting on you.
@@ -328,8 +338,7 @@ What it does not do, or not yet:
 - **Cloud Cowork sessions arrive late in BurnMon.** A Cowork session that runs in Anthropic's cloud
   writes no transcript to your disk. The optional `burnmon-cloud` plugin copies its usage numbers to
   `~/.burnmon/cloud` at the end of each turn and at most every 20 seconds while Claude works; the
-  Claude desktop app then copies that file to your computer. Measured on 2026-11-02: about 1 to 3
-  minutes from the cloud write to BurnMon. A long tool run writes no usage at all until the next model
+  Claude desktop app then copies that file to your computer. The plugin writes within about 20 seconds; the copy to your laptop took about 3 minutes in one measurement on 2026-11-02. A long tool run writes no usage at all until the next model
   request, so a busy cloud session can show as idle. The session only counts when `~/.burnmon` is
   connected to it.
 - **Prices are API-price equivalents**, not your bill. On a subscription seat you pay the seat.
@@ -620,11 +629,14 @@ and the audit lines of a live run are not quoted anywhere.
 ## Configuration
 
 Prices and the subscription calibration are compiled-in illustrative defaults (see
-`internal\pricing\pricing.go`), not a real invoice. Drop a `burnmon.json` next to the exe
-(app and CLI both check there first, then `%LOCALAPPDATA%\burnmon\burnmon.json` for a
-fixed, read-only-share install) with your own numbers; any subset of fields overrides the
-defaults. `burnmon.example.json` lists these keys, including `owners` (empty by default);
-three newer keys are not in it yet, see "Foreman and Claude Code settings".
+`internal\pricing\pricing.go`), not a real invoice. Drop a `burnmon.json` in one of two
+places, both valid: next to the exe, or at `%LOCALAPPDATA%\burnmon\burnmon.json`. The app
+and CLI both read it, and the file next to the exe wins when both exist. Put your own
+numbers in it; any subset of fields overrides the defaults. `burnmon.example.json` lists
+these keys, including `owners` (empty by default). Three keys are the ones a tester is
+likely to touch: `agent_view` (anyone who wants background agents and the agent map),
+`foreman_root` (Foreman users only) and `claude_path` (only when BurnMon cannot start
+`claude`); see "Foreman and Claude Code settings".
 
 If no `burnmon.json` is found, both binaries still read a `claudecost.json` in the same
 two locations: the pre-rename config name, kept working for anyone who has not renamed
@@ -643,7 +655,7 @@ that is still on disk.
 
 ### Foreman and Claude Code settings
 
-Three more keys go in `burnmon.json`. `burnmon.example.json` does not list them yet.
+Three more keys go in `burnmon.json`.
 
 ```json
 {

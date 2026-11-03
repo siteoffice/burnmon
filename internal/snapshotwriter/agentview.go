@@ -163,9 +163,9 @@ func (gr *GraphReaders) agentViewStatus() *snapshot.AgentViewStatus {
 	case gr.AgentView != nil:
 		return &snapshot.AgentViewStatus{State: snapshot.AgentViewOn}
 	case gr.agentViewRefused != nil:
-		return &snapshot.AgentViewStatus{State: snapshot.AgentViewRefused, Reason: gr.agentViewRefused.Error()}
+		return &snapshot.AgentViewStatus{State: snapshot.AgentViewRefused, Reason: gr.agentViewRefused.Error(), ConfigPath: gr.ConfigPath}
 	}
-	return &snapshot.AgentViewStatus{State: snapshot.AgentViewOff}
+	return &snapshot.AgentViewStatus{State: snapshot.AgentViewOff, ConfigPath: gr.ConfigPath}
 }
 
 // lastFolder is the last element of a Windows or slash path, "" for none.

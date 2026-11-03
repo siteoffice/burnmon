@@ -71,6 +71,9 @@ type Session struct {
 	LastActivity string `json:"last_activity"` // RFC3339 UTC
 	Source       string `json:"source"`
 	AgeSeconds   int64  `json:"age_seconds"` // seconds since last_activity
+	// CloudAge is the label of a Cowork (Cloud) session's data age, empty (and
+	// absent) for every other session. Additive: schema_version stays 1.
+	CloudAge string `json:"cloud_age,omitempty"`
 }
 
 // Burn is the recent token rate across every session, running or not.
@@ -146,10 +149,13 @@ const (
 )
 
 // AgentViewStatus is the writer's agent view state; Reason is the refusal
-// reason, set only when State is refused.
+// reason, set only when State is refused. ConfigPath is the config file the
+// writer loaded at start ("" when it loaded none), so a reader can name the
+// file that fixes an off or refused state.
 type AgentViewStatus struct {
-	State  string `json:"state"`
-	Reason string `json:"reason,omitempty"`
+	State      string `json:"state"`
+	Reason     string `json:"reason,omitempty"`
+	ConfigPath string `json:"config_path,omitempty"`
 }
 
 // AgentSession is one session from the last agent view poll.
@@ -232,7 +238,7 @@ func Build(in Input) Snapshot {
 			Vendor: ls.Vendor, Agent: ls.Agent, ID: ls.SessionID, ParentID: parent,
 			Project: ls.Project, Model: ls.Model, State: ls.Stage, StateSince: ls.StageSince,
 			Tokens: ls.Tokens, Cost: cost(ls.Cost, in.FXUSDEUR),
-			LastActivity: ls.LastTurn, Source: sourceStore, AgeSeconds: age,
+			LastActivity: ls.LastTurn, Source: sourceStore, AgeSeconds: age, CloudAge: ls.CloudAge,
 		})
 		if ls.Stage == "waiting" {
 			since, _ := time.Parse(time.RFC3339, ls.StageSince)

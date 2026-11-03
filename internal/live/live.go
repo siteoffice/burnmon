@@ -76,6 +76,9 @@ type Session struct {
 	// insight found no context-runway finding for this session. The marker,
 	// ticker and drawer for every other finding kind stay 43A's job.
 	Runway string `json:"runway"`
+	// CloudAge is OF28's age of a Cowork (Cloud) session's data, "cloud data
+	// N min old", measured from its newest request. Empty for every other agent.
+	CloudAge string `json:"cloud_age,omitempty"`
 
 	// Stage, StageSince and StageTool are the Station's room for this
 	// session (BurnMon Dev's secret screen, internal/stage), filled only by
@@ -312,6 +315,15 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time, bu
 			Cost:          cost,
 			BusinessCost:  headlineForEvents(turns, cfg),
 			CacheHitRatio: hitRatio,
+		}
+		if s.Agent == coworkCloudAgent {
+			newest := turns[0].At
+			for _, t := range turns {
+				if t.At.After(newest) {
+					newest = t.At
+				}
+			}
+			s.CloudAge = CloudAgeLabel(now.Sub(newest))
 		}
 		s.Findings = insight.Analyze(turns, cfg)
 		s.Runway = insight.RunwayText(s.Findings)
@@ -785,6 +797,15 @@ func isAskTool(name string) bool {
 // coworkCloudAgent is the agent of the Cowork (Cloud) drop rows
 // (internal/adapter/claude/cloud.go).
 const coworkCloudAgent = "cowork-cloud"
+
+// CloudAgeLabel renders the age of a cloud session's newest request: whole
+// minutes, or "under a minute" below 60 s (zero and negative included).
+func CloudAgeLabel(d time.Duration) string {
+	if d < time.Minute {
+		return "cloud data under a minute old"
+	}
+	return fmt.Sprintf("cloud data %d min old", int(d/time.Minute))
+}
 
 // noToolTrail reports whether an agent's trail never records tool calls, so
 // a newest turn without a tool says nothing about a hand-back: Copilot in VS

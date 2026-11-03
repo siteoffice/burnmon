@@ -119,6 +119,9 @@ type app struct {
 	interval    time.Duration
 	wslInterval time.Duration
 	cfgPath     string
+	// loadedCfg is the config file loaded at start ("" when none), as
+	// opposed to cfgPath, the save target; the snapshot records it.
+	loadedCfg string
 
 	cache      dataset.Cache
 	wslDistros []string

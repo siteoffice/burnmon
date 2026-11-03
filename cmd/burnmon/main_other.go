@@ -93,13 +93,14 @@ func main() {
 	defer st.Close()
 
 	a := &app{
-		cfg:      cfg,
-		seat:     *seat,
-		monthsN:  *monthsN,
-		sources:  []string(sources),
-		htmlPath: filepath.Join(dataDir, "dashboard.html"),
-		interval: *interval,
-		cfgPath:  cfgSavePath,
+		cfg:       cfg,
+		seat:      *seat,
+		monthsN:   *monthsN,
+		sources:   []string(sources),
+		htmlPath:  filepath.Join(dataDir, "dashboard.html"),
+		interval:  *interval,
+		cfgPath:   cfgSavePath,
+		loadedCfg: cfgFile,
 	}
 	a.cache.Store = st
 
