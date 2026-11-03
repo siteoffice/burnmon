@@ -128,7 +128,7 @@ func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() c
 		p.Controls.Why = a.Why
 	}
 	if p.Reading.Status == snapshot.StatusOK && p.Reading.Snapshot != nil {
-		v := agentmap.Build(p.Reading.Snapshot.Nodes, p.Reading.Snapshot.Edges)
+		v := agentmap.BuildFor(p.Reading.Snapshot.Nodes, p.Reading.Snapshot.Edges, avail != nil && !a.Foreman)
 		// One count: the overview reads the snapshot's wait_counts, like the full map.
 		v.Counts.Waiting, v.Counts.YourTurn = p.Reading.Snapshot.WaitCounts.Blocked, p.Reading.Snapshot.WaitCounts.YourTurn
 		p.AgentMap = &v

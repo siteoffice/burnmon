@@ -109,3 +109,31 @@ func TestWriterWithoutForemanRoot(t *testing.T) {
 		}
 	}
 }
+
+// OF23 characterization (passes on the base, pins today's behaviour): with an
+// empty foreman_root a session that waits on the person is still a wait item,
+// from the agent view, and nothing in the list comes from Foreman.
+func TestWriterEmptyRootKeepsSessionWait(t *testing.T) {
+	st := snapshotTestStore(t)
+	gr, wt := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777","status":"busy"}`)
+	twoLiveSessions(t, st, wt)
+	gr.ForemanRoot = ""
+	gr.AgentView = runnerOf(blockedAndIdle, nil)
+	gr.PollAgentViewNow(context.Background())
+	got := onceRead(t, newWriter(st, filepath.Join(t.TempDir(), "snapshot.json"), noProcesses, gr))
+	if sourceNamed(got, "foreman") != nil {
+		t.Fatalf("foreman source listed without a root: %+v", got.Sources)
+	}
+	found := false
+	for _, it := range got.WaitItems {
+		if it.Source == "foreman" {
+			t.Fatalf("wait item from foreman without a root: %+v", it)
+		}
+		if it.ID == "session:anthropic:s1" && it.Source == "agent_view" && it.Group == waits.GroupBlocked {
+			found = true
+		}
+	}
+	if !found || got.WaitCounts.Blocked != 1 {
+		t.Fatalf("the blocked session wait is missing: counts %+v, items %+v", got.WaitCounts, got.WaitItems)
+	}
+}

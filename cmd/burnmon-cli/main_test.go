@@ -242,13 +242,143 @@ func TestRunWaitsReadsForemanRoot(t *testing.T) {
 	}
 }
 
-func TestRunWaitsNeedsARoot(t *testing.T) {
+// TestRunWaitsWithRootGolden pins the text output of a run with a Foreman
+// root, at a fixed clock, so a change for the no-root path cannot alter it.
+func TestRunWaitsWithRootGolden(t *testing.T) {
+	old := waitsNow
+	waitsNow = func() time.Time { return time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC) }
+	t.Cleanup(func() { waitsNow = old })
+	var buf bytes.Buffer
+	if code := runWaitsTo(&buf, []string{"-foreman", waitsForemanRoot(t)}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	want, err := os.ReadFile(filepath.Join("testdata", "waits_foreman.golden"))
+	if err != nil {
+		t.Fatalf("no golden; output was:\n%s", buf.String())
+	}
+	if got := strings.ReplaceAll(buf.String(), "\r\n", "\n"); got != strings.ReplaceAll(string(want), "\r\n", "\n") {
+		t.Fatalf("output differs from golden:\n%s", got)
+	}
+}
+
+// noRootConfig writes an empty config, so no foreman_root is set.
+func noRootConfig(t *testing.T) string {
+	t.Helper()
 	cfg := filepath.Join(t.TempDir(), "burnmon.json")
 	if err := os.WriteFile(cfg, []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return cfg
+}
+
+// noRootSnapshot writes a snapshot file with one your_turn wait item.
+func noRootSnapshot(t *testing.T) string {
+	t.Helper()
+	body := `{"schema_version":1,"wait_items":[{"kind":"session","id":"s-1","title":"example-session","detail":"asks a question","since":"2026-10-23T09:00:00Z","age_seconds":3600,"source":"session","group":"your_turn","holds":1}]}`
+	p := filepath.Join(t.TempDir(), "snapshot.json")
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestRunWaitsNoRootListsSessions(t *testing.T) {
 	var buf bytes.Buffer
-	if code := runWaitsTo(&buf, []string{"-config", cfg}); code != 1 {
+	code := runWaitsTo(&buf, []string{"-config", noRootConfig(t), "-snapshot", noRootSnapshot(t)})
+	if code != 0 {
+		t.Fatalf("exit %d, want 0", code)
+	}
+	got := buf.String()
+	want := "Waits on you\nsession  example-session  asks a question  1h  spec=-  result=-\n"
+	if got != want {
+		t.Fatalf("output:\n%s\nwant:\n%s", got, want)
+	}
+	if strings.Contains(got, "open gates:") || strings.Contains(got, "Outcomes") {
+		t.Fatalf("Foreman wording without a root:\n%s", got)
+	}
+}
+
+// staleSnapshot writes a snapshot with a written_at and a tick, for the
+// stale-file warning tests.
+func staleSnapshot(t *testing.T, writtenAt string) string {
+	t.Helper()
+	body := `{"schema_version":1,"written_at":"` + writtenAt + `","tick_seconds":5,"wait_items":[]}`
+	p := filepath.Join(t.TempDir(), "snapshot.json")
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestRunWaitsNoRootStaleSnapshotWarns(t *testing.T) {
+	old, oldErr := waitsNow, waitsStderr
+	waitsNow = func() time.Time { return time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC) }
+	var errBuf bytes.Buffer
+	waitsStderr = &errBuf
+	t.Cleanup(func() { waitsNow, waitsStderr = old, oldErr })
+	var buf bytes.Buffer
+	code := runWaitsTo(&buf, []string{"-config", noRootConfig(t), "-snapshot", staleSnapshot(t, "2026-10-23T09:00:00Z")})
+	if code != 0 {
+		t.Fatalf("exit %d, want 0", code)
+	}
+	if !strings.Contains(errBuf.String(), "stale") {
+		t.Fatalf("no stale warning on stderr: %q", errBuf.String())
+	}
+	if buf.String() != "Waits on you\n" {
+		t.Fatalf("stdout changed: %q", buf.String())
+	}
+}
+
+func TestRunWaitsNoRootFreshSnapshotQuiet(t *testing.T) {
+	old, oldErr := waitsNow, waitsStderr
+	waitsNow = func() time.Time { return time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC) }
+	var errBuf bytes.Buffer
+	waitsStderr = &errBuf
+	t.Cleanup(func() { waitsNow, waitsStderr = old, oldErr })
+	var buf bytes.Buffer
+	if code := runWaitsTo(&buf, []string{"-config", noRootConfig(t), "-snapshot", staleSnapshot(t, "2026-10-23T09:59:55Z")}); code != 0 {
+		t.Fatalf("exit %d, want 0", code)
+	}
+	if errBuf.Len() != 0 {
+		t.Fatalf("warning on a fresh snapshot: %q", errBuf.String())
+	}
+}
+
+func TestRunWaitsNoRootNoSnapshot(t *testing.T) {
+	var buf bytes.Buffer
+	missing := filepath.Join(t.TempDir(), "snapshot.json")
+	code := runWaitsTo(&buf, []string{"-config", noRootConfig(t), "-snapshot", missing})
+	if code != 0 {
+		t.Fatalf("exit %d, want 0", code)
+	}
+	if buf.String() != "Waits on you\n" {
+		t.Fatalf("output:\n%s", buf.String())
+	}
+}
+
+func TestRunWaitsNoRootJSON(t *testing.T) {
+	var buf bytes.Buffer
+	code := runWaitsTo(&buf, []string{"-json", "-config", noRootConfig(t), "-snapshot", noRootSnapshot(t)})
+	if code != 0 {
+		t.Fatalf("exit %d, want 0", code)
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["outcome_items"]; ok || len(out) != 1 {
+		t.Fatalf("want wait_items only, got %s", buf.String())
+	}
+	var items []waits.Item
+	if err := json.Unmarshal(out["wait_items"], &items); err != nil || len(items) != 1 || items[0].ID != "s-1" {
+		t.Fatalf("items %+v, err %v", items, err)
+	}
+}
+
+func TestRunWaitsBadRootStillFails(t *testing.T) {
+	var buf bytes.Buffer
+	missing := filepath.Join(t.TempDir(), "no-such-foreman")
+	if code := runWaitsTo(&buf, []string{"-config", noRootConfig(t), "-foreman", missing}); code != 1 {
 		t.Fatalf("exit %d, want 1", code)
 	}
 }
