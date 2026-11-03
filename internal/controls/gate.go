@@ -1,30 +1,64 @@
 package controls
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
-// verdicts maps a control and a gate to the Foreman verdict. G3 send back
-// (adapt) needs a note and G4 (ship) is followed by a merge, so neither is
-// offered. A test checks every verdict against flow_state.VERDICTS_BY_GATE.
+// verdicts maps a control and a gate NAME to the Foreman verdict. Only the
+// spec gate is offered: the accept gate (ship) is followed by a merge, so it
+// stays with the owner. A test checks every verdict against
+// flow_state.VERDICTS_BY_GATE.
 var verdicts = map[string]map[string]string{
-	Approve:  {"G1": "approve", "G2": "approve", "G3": "proceed"},
-	SendBack: {"G1": "reject", "G2": "reject"},
+	Approve:  {"spec": "approve"},
+	SendBack: {"spec": "reject"},
+}
+
+// gateAliases and retiredGates are copied from GATE_ALIASES and RETIRED_GATES
+// in C:\ZND\10_holding\flows\_lib\flow_state.py. TestVerdictsMatchForemanLibrary
+// guards the copy.
+var gateAliases = map[string]string{"G1": "spec", "G2": "spec", "G4": "accept", "H3": "accept"}
+
+var retiredGates = []string{"G3", "H4"}
+
+// canonicalGate mirrors flow_state.canonical_gate: a name or an unknown id
+// returns itself, a code returns its gate name, and false means retired.
+func canonicalGate(id string) (string, bool) {
+	code := strings.ToUpper(strings.TrimSpace(id))
+	for _, r := range retiredGates {
+		if code == r {
+			return id, false
+		}
+	}
+	if name, ok := gateAliases[code]; ok {
+		return name, true
+	}
+	return id, true
 }
 
 // VerdictFor returns the Foreman verdict for a control on a gate.
 func VerdictFor(control, gateID string) (string, error) {
-	if v, ok := verdicts[control][gateID]; ok {
-		return v, nil
+	if name, ok := canonicalGate(gateID); ok {
+		if v, ok := verdicts[control][name]; ok {
+			return v, nil
+		}
 	}
 	return "", fmt.Errorf("no %s for gate %s", control, gateID)
 }
 
-// Verdicts returns a copy of the table for the page payload.
+// Verdicts returns a copy of the table for the page payload. It also lists
+// each alias code whose gate name is present, so a stored G2 still gets buttons.
 func Verdicts() map[string]map[string]string {
 	out := make(map[string]map[string]string, len(verdicts))
 	for c, byGate := range verdicts {
 		m := make(map[string]string, len(byGate))
 		for g, v := range byGate {
 			m[g] = v
+		}
+		for code, name := range gateAliases {
+			if v, ok := byGate[name]; ok {
+				m[code] = v
+			}
 		}
 		out[c] = m
 	}

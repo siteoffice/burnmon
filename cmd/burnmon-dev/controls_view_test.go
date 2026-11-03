@@ -108,7 +108,7 @@ func TestPayloadCarriesControls(t *testing.T) {
 			t.Errorf("control %s is on in a fresh payload", id)
 		}
 	}
-	if p.Controls.Verdicts["approve"]["G3"] != "proceed" {
+	if p.Controls.Verdicts["approve"]["spec"] != "approve" {
 		t.Errorf("verdicts %v", p.Controls.Verdicts)
 	}
 	if p.Controls.Ready["stop"] || !p.Controls.Ready["attach"] || p.Controls.Why["stop"] == "" {
@@ -142,7 +142,7 @@ func TestPayloadCarriesControls(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	if !m.Controls.On["stop"] || m.Controls.Verdicts["approve"]["G3"] != "proceed" || len(m.Controls.Ready) != len(controls.All) {
+	if !m.Controls.On["stop"] || m.Controls.Verdicts["approve"]["spec"] != "approve" || len(m.Controls.Ready) != len(controls.All) {
 		t.Errorf("json controls %+v", m.Controls)
 	}
 }
