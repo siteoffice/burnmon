@@ -5,16 +5,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 )
 
 func TestVerdictFor(t *testing.T) {
 	ok := []struct{ control, gate, verdict string }{
-		{Approve, "G1", "approve"}, {Approve, "G2", "approve"}, {Approve, "G3", "proceed"},
-		{SendBack, "G1", "reject"}, {SendBack, "G2", "reject"},
+		{Approve, "spec", "approve"}, {SendBack, "spec", "reject"},
+		{Approve, "G2", "approve"}, {Approve, "g1", "approve"}, {SendBack, "G1", "reject"},
 	}
 	for _, c := range ok {
 		v, err := VerdictFor(c.control, c.gate)
@@ -23,7 +25,8 @@ func TestVerdictFor(t *testing.T) {
 		}
 	}
 	bad := []struct{ control, gate string }{
-		{SendBack, "G3"}, {Approve, "G4"}, {SendBack, "G4"}, {Approve, "G9"}, {Stop, "G1"}, {Attach, "G2"},
+		{Approve, "accept"}, {Approve, "G4"}, {SendBack, "H3"}, {Approve, "G3"}, {Approve, "H4"},
+		{Approve, "G9"}, {Approve, ""}, {Stop, "spec"}, {Attach, "G2"},
 	}
 	for _, c := range bad {
 		v, err := VerdictFor(c.control, c.gate)
@@ -38,13 +41,21 @@ func TestVerdictFor(t *testing.T) {
 
 func TestVerdictsReturnsACopy(t *testing.T) {
 	v := Verdicts()
-	v[Approve]["G1"] = "changed"
+	if v[Approve]["spec"] != "approve" || v[Approve]["G2"] != "approve" {
+		t.Fatalf("payload lacks spec or G2: %v", v[Approve])
+	}
+	for _, k := range []string{"G3", "accept", "G4"} {
+		if _, has := v[Approve][k]; has {
+			t.Errorf("payload holds %s", k)
+		}
+	}
+	v[Approve]["spec"] = "changed"
 	delete(v, SendBack)
-	got, _ := VerdictFor(Approve, "G1")
+	got, _ := VerdictFor(Approve, "spec")
 	if got != "approve" {
 		t.Fatal("Verdicts() exposes the table")
 	}
-	if _, err := VerdictFor(SendBack, "G1"); err != nil {
+	if _, err := VerdictFor(SendBack, "spec"); err != nil {
 		t.Fatal("deleting from the copy changed the table")
 	}
 }
@@ -52,7 +63,7 @@ func TestVerdictsReturnsACopy(t *testing.T) {
 func TestVerdictsMatchForemanLibrary(t *testing.T) {
 	src, err := os.ReadFile(`C:\ZND\10_holding\flows\_lib\flow_state.py`)
 	if err != nil {
-		t.Skip("Foreman library not present: " + err.Error())
+		t.Skip("Foreman library not present (testers have no Foreman): " + err.Error())
 	}
 	text := string(src)
 	start := strings.Index(text, "VERDICTS_BY_GATE = {")
@@ -63,7 +74,7 @@ func TestVerdictsMatchForemanLibrary(t *testing.T) {
 	if end := strings.Index(block, "}"); end > 0 {
 		block = block[:end]
 	}
-	line := regexp.MustCompile(`"(G\d)":\s*\(([^)]*)\)`)
+	line := regexp.MustCompile(`"(\w+)":\s*\(([^)]*)\)`)
 	word := regexp.MustCompile(`"([a-z]+)"`)
 	allowed := map[string][]string{}
 	for _, m := range line.FindAllStringSubmatch(block, -1) {
@@ -74,7 +85,27 @@ func TestVerdictsMatchForemanLibrary(t *testing.T) {
 	if len(allowed) == 0 {
 		t.Fatal("no gate lines parsed")
 	}
-	for control, byGate := range Verdicts() {
+
+	foremanAliases := map[string]string{}
+	if m := regexp.MustCompile(`GATE_ALIASES = \{([^}]*)\}`).FindStringSubmatch(text); m != nil {
+		for _, p := range regexp.MustCompile(`"(\w+)":\s*"(\w+)"`).FindAllStringSubmatch(m[1], -1) {
+			foremanAliases[p[1]] = p[2]
+		}
+	}
+	if len(foremanAliases) == 0 {
+		t.Fatal("no GATE_ALIASES parsed")
+	}
+	var foremanRetired []string
+	if m := regexp.MustCompile(`RETIRED_GATES = \(([^)]*)\)`).FindStringSubmatch(text); m != nil {
+		for _, w := range regexp.MustCompile(`"(\w+)"`).FindAllStringSubmatch(m[1], -1) {
+			foremanRetired = append(foremanRetired, w[1])
+		}
+	}
+	if len(foremanRetired) == 0 {
+		t.Fatal("no RETIRED_GATES parsed")
+	}
+
+	for control, byGate := range verdicts {
 		for gate, verdict := range byGate {
 			found := false
 			for _, a := range allowed[gate] {
@@ -85,6 +116,21 @@ func TestVerdictsMatchForemanLibrary(t *testing.T) {
 			if !found {
 				t.Errorf("%s %s verdict %q is not in Foreman's %v", control, gate, verdict, allowed[gate])
 			}
+		}
+	}
+	if !reflect.DeepEqual(gateAliases, foremanAliases) {
+		t.Errorf("gateAliases = %v, Foreman GATE_ALIASES = %v", gateAliases, foremanAliases)
+	}
+	mine := append([]string(nil), retiredGates...)
+	theirs := append([]string(nil), foremanRetired...)
+	sort.Strings(mine)
+	sort.Strings(theirs)
+	if !reflect.DeepEqual(mine, theirs) {
+		t.Errorf("retiredGates = %v, Foreman RETIRED_GATES = %v", mine, theirs)
+	}
+	for _, id := range foremanRetired {
+		if v, err := VerdictFor(Approve, id); err == nil || v != "" {
+			t.Errorf("VerdictFor(Approve, %s) = %q, %v; want an error for a retired gate", id, v, err)
 		}
 	}
 }
