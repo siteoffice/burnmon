@@ -1,5 +1,11 @@
 package graph
 
+import "time"
+
+// FailedCheckWindow is how long a stopped sprint's failed check keeps the
+// sprint Blocked, counted from the check time (inclusive).
+const FailedCheckWindow = 24 * time.Hour
+
 // Blocker kinds.
 const (
 	BlockerGate   = "gate"
@@ -32,7 +38,7 @@ func stoppedWithFailedCheck(sp Sprint) bool {
 // each. closeout and gone are sprint node ids (sprint:<id>) that Build marked
 // closeout or branch_gone. Order: gates in flow order, then sprints in input
 // order, each sprint before its failed checks.
-func ForemanBlockers(sprints []Sprint, flows []Flow, closeout, gone map[string]bool) []Blocker {
+func ForemanBlockers(sprints []Sprint, flows []Flow, closeout, gone map[string]bool, now time.Time) []Blocker {
 	out := []Blocker{}
 	for _, f := range flows {
 		// A pending gate with no id has no node to carry the edge: not a
@@ -46,7 +52,7 @@ func ForemanBlockers(sprints []Sprint, flows []Flow, closeout, gone map[string]b
 		if s.Status == "waiting-on-you" && !closeout[sid] && !gone[sid] {
 			out = append(out, Blocker{Kind: BlockerSprint, NodeID: sid, SprintID: s.ID})
 		}
-		if !SprintStopped(s.Status) {
+		if !SprintStopped(s.Status) || s.Phase == "done" {
 			continue
 		}
 		for _, c := range []struct {
@@ -54,6 +60,13 @@ func ForemanBlockers(sprints []Sprint, flows []Flow, closeout, gone map[string]b
 			chk  *Check
 		}{{"test", s.Test}, {"verify", s.Verify}} {
 			if c.chk != nil && c.chk.Failed {
+				at := c.chk.At
+				if at.IsZero() {
+					at = s.UpdatedAt
+				}
+				if now.Sub(at) > FailedCheckWindow {
+					continue
+				}
 				out = append(out, Blocker{Kind: BlockerCheck, NodeID: "check:" + s.ID + ":" + c.name, SprintID: s.ID, Check: c.name})
 			}
 		}

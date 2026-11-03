@@ -14,6 +14,7 @@ import (
 
 	"burnmon/internal/export"
 	"burnmon/internal/export/exporttest"
+	"burnmon/internal/graph"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
@@ -266,5 +267,28 @@ func TestRunWaitsJSON(t *testing.T) {
 	}
 	if len(out.WaitItems) != 1 || out.OutcomeItems == nil {
 		t.Fatalf("got %+v", out)
+	}
+}
+
+// TestWaitsReportClosedSprintCounts: a capped sprint at phase done with a
+// failed test inside 24 h gives no wait item. Its one outcome row stays
+// inside 24 h, so the report still counts that failed check once.
+func TestWaitsReportClosedSprintCounts(t *testing.T) {
+	at := time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)
+	sp := graph.Sprint{ID: "s-closed", Slug: "closed", Status: "capped", Phase: "done", UpdatedAt: at.Add(-time.Hour),
+		Test: &graph.Check{Failed: true, Label: "test exit 1", At: at.Add(-time.Hour)}}
+	wait, outcomes := waits.Build(waits.Input{Now: at, Sprints: []graph.Sprint{sp}})
+	for _, it := range wait {
+		if it.Kind == waits.KindFailedCheck {
+			t.Errorf("wait item %s for a closed sprint", it.ID)
+		}
+	}
+	if len(outcomes) != 1 {
+		t.Errorf("outcomes = %d rows, want 1", len(outcomes))
+	}
+	got := waitsReport(wait, outcomes)
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if last := lines[len(lines)-1]; last != "open gates: 0, waiting sprints: 0, failed checks: 1, finished last 24 h: 0" {
+		t.Fatalf("counts line = %q in:\n%s", last, got)
 	}
 }

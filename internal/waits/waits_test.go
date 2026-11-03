@@ -355,3 +355,89 @@ func TestWaitingForMapping(t *testing.T) {
 		}
 	}
 }
+
+// closedSprintFixtures are the sprints of the closed-sprint rule: a stopped
+// sprint with phase done gives no failed_check wait, any other stopped sprint
+// gives one only while its check (else the sprint) is at most 24 h old.
+func closedSprintFixtures(status string) map[string]graph.Sprint {
+	id := "s-" + status
+	old := now.Add(-25 * time.Hour)
+	recent := now.Add(-time.Hour)
+	fail := func(at time.Time) *graph.Check {
+		return &graph.Check{Failed: true, Label: "x fail", At: at}
+	}
+	sps := map[string]graph.Sprint{
+		"a": {ID: id, Slug: status, Status: status, Phase: "done", UpdatedAt: recent, Test: fail(recent)},
+		"b": {ID: id, Slug: status, Status: status, Phase: "dev", UpdatedAt: recent, Verify: fail(recent)},
+		"c": {ID: id, Slug: status, Status: status, Phase: "dev", UpdatedAt: old, Verify: fail(old)},
+		"d": {ID: id, Slug: status, Status: "running", Phase: "dev", UpdatedAt: recent, Test: fail(recent)},
+		"e": {ID: id, Slug: status, Status: status, Phase: "dev", UpdatedAt: recent, Test: fail(recent), Verify: fail(old)},
+	}
+	return sps
+}
+
+func failedCheckWaits(w []Item) []string {
+	ids := []string{}
+	for _, it := range w {
+		if it.Kind == KindFailedCheck {
+			ids = append(ids, it.ID)
+		}
+	}
+	return ids
+}
+
+func TestStoppedSprintFailedChecksLeaveBlocked(t *testing.T) {
+	for _, status := range []string{"capped", "failed", "escalated"} {
+		sps := closedSprintFixtures(status)
+		build := func(name string) ([]Item, []Item) {
+			in := Input{Now: now, Sprints: []graph.Sprint{sps[name]}}
+			in.Graph = graph.Build(graph.Input{Now: now, Sprints: in.Sprints})
+			return Build(in)
+		}
+		w, o := build("a")
+		if ids := failedCheckWaits(w); len(ids) != 0 || len(o) != 1 {
+			t.Errorf("%s done phase: failed_check waits %v, outcomes %+v", status, ids, o)
+		}
+		w, _ = build("b")
+		if ids := failedCheckWaits(w); len(ids) != 1 || ids[0] != "check:s-"+status+":verify" {
+			t.Errorf("%s dev 1 h old: failed_check waits %v", status, ids)
+		}
+		w, o = build("c")
+		if ids := failedCheckWaits(w); len(ids) != 0 || len(o) != 0 {
+			t.Errorf("%s dev 25 h old: failed_check waits %v, outcomes %+v", status, ids, o)
+		}
+		w, _ = build("d")
+		if ids := failedCheckWaits(w); len(ids) != 0 {
+			t.Errorf("running sprint: failed_check waits %v", ids)
+		}
+	}
+}
+
+func TestBlockerEdgesMatchWaitItemsAfterRule(t *testing.T) {
+	wantChecks := map[string]int{"a": 0, "b": 1, "c": 0, "d": 0, "e": 1}
+	for _, status := range []string{"capped", "failed", "escalated"} {
+		sps := closedSprintFixtures(status)
+		for name, sp := range sps {
+			in := Input{Now: now, Sprints: []graph.Sprint{sp}}
+			in.Graph = graph.Build(graph.Input{Now: now, Sprints: in.Sprints})
+			kinds := map[string]string{}
+			for _, n := range in.Graph.Nodes {
+				kinds[n.ID] = n.Kind
+			}
+			edges := 0
+			for _, e := range in.Graph.Edges {
+				if e.Kind == graph.KindWaitsOn && e.To == personID && kinds[e.From] == graph.KindCheck {
+					edges++
+				}
+			}
+			w, _ := Build(in)
+			items := len(failedCheckWaits(w))
+			if items != edges {
+				t.Errorf("%s fixture %s: %d failed_check wait items, %d check waits_on edges", status, name, items, edges)
+			}
+			if want := wantChecks[name]; items != want {
+				t.Errorf("%s fixture %s: %d failed_check wait items, want %d", status, name, items, want)
+			}
+		}
+	}
+}

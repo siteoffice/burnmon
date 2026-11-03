@@ -23,7 +23,7 @@ func TestWaitsBuildUsesBlockers(t *testing.T) {
 		}
 	}
 	want := []string{}
-	for _, b := range graph.ForemanBlockers(sprints, flows, map[string]bool{}, map[string]bool{}) {
+	for _, b := range graph.ForemanBlockers(sprints, flows, map[string]bool{}, map[string]bool{}, now) {
 		want = append(want, b.NodeID)
 	}
 	sort.Strings(got)

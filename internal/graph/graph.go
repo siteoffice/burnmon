@@ -686,7 +686,7 @@ func Build(in Input) Graph {
 	}
 	// The one decision: every Foreman thing that waits on you gets a box and
 	// one waits_on edge to You.
-	for _, bl := range ForemanBlockers(in.Sprints, in.Flows, closeoutSet, goneSet) {
+	for _, bl := range ForemanBlockers(in.Sprints, in.Flows, closeoutSet, goneSet, in.Now) {
 		var at time.Time
 		switch bl.Kind {
 		case BlockerGate:
