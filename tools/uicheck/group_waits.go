@@ -713,7 +713,7 @@ func caseD39(hwnd uintptr, args []string) error {
 	if len(p.Chips) != 1 || p.Chips[0] != "closeout:example__sprint__9" {
 		return fail("Close chips on %v, want only closeout:example__sprint__9", p.Chips)
 	}
-	if p.GearShown == nil || !*p.GearShown || p.GearCount != 3 {
+	if p.GearShown == nil || !*p.GearShown || p.GearCount != 4 {
 		return fail("the Foreman gear lines (%d) are not all shown with foreman true", p.GearCount)
 	}
 	if _, err := screenshot(hwnd, "d39-waits"); err != nil {
@@ -751,7 +751,7 @@ func caseD39(hwnd uintptr, args []string) error {
 			return fail("close-out tier %q without foreman_root", t)
 		}
 	}
-	if p.GearHidden == nil || !*p.GearHidden || p.GearCount != 3 {
+	if p.GearHidden == nil || !*p.GearHidden || p.GearCount != 4 {
 		return fail("a Foreman gear line (%d) is shown without foreman_root", p.GearCount)
 	}
 	if len(p.Errs) != 0 {

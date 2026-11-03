@@ -34,6 +34,7 @@ import (
 	"burnmon/internal/mergereport"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
+	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 	"burnmon/internal/waits"
 )
@@ -281,11 +282,18 @@ func runGraph(args []string) int {
 // 24 hours. Read only: no store, no sessions, no agent view.
 func runWaits(args []string) int { return runWaitsTo(os.Stdout, args) }
 
+// waitsNow is the clock runWaitsTo reads; tests set a fixed one.
+var waitsNow = time.Now
+
+// waitsStderr is where the stale-snapshot warning goes; tests capture it.
+var waitsStderr io.Writer = os.Stderr
+
 func runWaitsTo(w io.Writer, args []string) int {
 	fs := flag.NewFlagSet("waits", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
 	foreman := fs.String("foreman", "", "Foreman folder (overrides foreman_root in the config)")
 	jsonOut := fs.Bool("json", false, "print the items as JSON")
+	snapPath := fs.String("snapshot", "", "snapshot file read when there is no Foreman folder (default: the running app's snapshot.json)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -299,15 +307,14 @@ func runWaitsTo(w io.Writer, args []string) int {
 		root = *foreman
 	}
 	if root == "" {
-		fmt.Fprintln(os.Stderr, "no Foreman folder: pass -foreman <dir> or set foreman_root in burnmon.json")
-		return 1
+		return runWaitsFromSnapshot(w, *snapPath, *jsonOut)
 	}
 	sprints, flows, err := graph.ReadForeman(root)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not read Foreman state:", err)
 		return 1
 	}
-	wait, outcomes := waits.Build(waits.Input{Now: time.Now(), Sprints: sprints, Flows: flows})
+	wait, outcomes := waits.Build(waits.Input{Now: waitsNow(), Sprints: sprints, Flows: flows})
 	if *jsonOut {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
@@ -324,22 +331,73 @@ func runWaitsTo(w io.Writer, args []string) int {
 	return 0
 }
 
+// runWaitsFromSnapshot is the no-Foreman-folder form: it lists the wait items
+// the running app wrote to its snapshot file, with no outcomes and no counts.
+// A missing file is a note and exit 0, any other read error exits 1.
+func runWaitsFromSnapshot(w io.Writer, path string, jsonOut bool) int {
+	if path == "" {
+		p, err := snapshot.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "internal error:", err)
+			return 1
+		}
+		path = p
+	}
+	var items []waits.Item
+	snap, err := snapshot.Read(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		fmt.Fprintln(os.Stderr, "no snapshot yet: open BurnMon to write one ("+path+")")
+	case err != nil:
+		fmt.Fprintln(os.Stderr, "could not read the snapshot:", err)
+		return 1
+	default:
+		items = snap.WaitItems
+		if snap.IsStale(waitsNow()) {
+			fmt.Fprintln(waitsStderr, "warning: the snapshot is stale (BurnMon may be closed), these waits may be out of date ("+path+")")
+		}
+	}
+	if jsonOut {
+		if items == nil {
+			items = []waits.Item{}
+		}
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(struct {
+			WaitItems []waits.Item `json:"wait_items"`
+		}{items}); err != nil {
+			return 1
+		}
+		return 0
+	}
+	var b strings.Builder
+	b.WriteString("Waits on you\n")
+	for _, it := range items {
+		writeWaitsLine(&b, it)
+	}
+	fmt.Fprint(w, b.String())
+	return 0
+}
+
+// writeWaitsLine writes the one-line text form of an item.
+func writeWaitsLine(b *strings.Builder, it waits.Item) {
+	spec, result := it.SpecPath, it.ResultPath
+	if spec == "" {
+		spec = "-"
+	}
+	if result == "" {
+		result = "-"
+	}
+	fmt.Fprintf(b, "%s  %s  %s  %s  spec=%s  result=%s\n", it.Kind, it.Title, it.Detail,
+		waitsAge(it.AgeSeconds), spec, result)
+}
+
 // waitsReport is the text form: one line per item under two headings, then
 // the counts line. A failed check is counted once per id even when it is in
 // both lists.
 func waitsReport(wait, outcomes []waits.Item) string {
 	var b strings.Builder
-	line := func(it waits.Item) {
-		spec, result := it.SpecPath, it.ResultPath
-		if spec == "" {
-			spec = "-"
-		}
-		if result == "" {
-			result = "-"
-		}
-		fmt.Fprintf(&b, "%s  %s  %s  %s  spec=%s  result=%s\n", it.Kind, it.Title, it.Detail,
-			waitsAge(it.AgeSeconds), spec, result)
-	}
+	line := func(it waits.Item) { writeWaitsLine(&b, it) }
 	b.WriteString("Waits on you\n")
 	for _, it := range wait {
 		line(it)

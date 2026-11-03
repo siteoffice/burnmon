@@ -185,7 +185,13 @@ func newModel(nodes []graph.Node, edges []graph.Edge) *model {
 }
 
 // Build turns a node list and an edge list into the view.
-func Build(nodes []graph.Node, edges []graph.Edge) View {
+func Build(nodes []graph.Node, edges []graph.Edge) View { return BuildFor(nodes, edges, false) }
+
+// BuildFor is Build for a person with no foreman_root when noForeman is true: the
+// group of sessions with no job is then called "Sessions", not "No Foreman work".
+// The flag comes from the setting, never from the nodes, so a root with no
+// sprints keeps the old label.
+func BuildFor(nodes []graph.Node, edges []graph.Edge, noForeman bool) View {
 	m := newModel(nodes, edges)
 	v := View{Groups: []Group{}, Idle: []Idle{}, Notes: []string{
 		"Not shown: messages between agents. No tool's local files record who sent what to whom.",
@@ -232,7 +238,11 @@ func Build(nodes []graph.Node, edges []graph.Edge) View {
 
 	byGroup := map[string]*Group{}
 	var order []string
-	none := Group{ID: "none", Kind: "none", Label: NoGroupLabel, Cards: []Card{}}
+	noneLabel := NoGroupLabel
+	if noForeman {
+		noneLabel = "Sessions"
+	}
+	none := Group{ID: "none", Kind: "none", Label: noneLabel, Cards: []Card{}}
 	for _, c := range cards {
 		target, basis := m.worksFor(c.ID)
 		if target == "" {

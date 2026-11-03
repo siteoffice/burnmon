@@ -247,10 +247,11 @@ can set since, until and a label. When `owners` rules exist, tick at least one o
   (sessions and subagents from the store, the live-only edges it recorded, and Foreman
   sprints when a Foreman folder is set). `-foreman <dir>` overrides `foreman_root`.
 - `burnmon-cli waits -json`: list what waits on you and the outcomes of the last 24 hours
-  from Foreman's state, read only. It needs `foreman_root` or `-foreman <dir>`, and
-  prints a message and exits 1 without one. Its Foreman items are the same as in the
-  Waits on you and Outcomes sections of BurnMon Dev; session and agent view items are not
-  in its output.
+  from Foreman's state, read only. With `foreman_root` or `-foreman <dir>` its Foreman
+  items are the same as in the Waits on you and Outcomes sections of BurnMon Dev; session
+  and agent view items are not in its output. Without a Foreman folder it lists the wait
+  items in the running app's snapshot (`-snapshot <file>` overrides the path), with no
+  outcomes, and prints a note and exits 0 when there is no snapshot yet.
 - `burnmon-cli backfill-parents`: set the parent session on Claude subagent rows stored
   before the adapter read it. A dry run that only counts rows; `-apply` writes. Copy the
   store file first.

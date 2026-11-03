@@ -47,6 +47,9 @@ type LayoutInput struct {
 	Open     map[string]bool // frame ids the person opened; never folded
 	Plain    bool
 	MaxBoxes int // 0 means DefaultMaxBoxes
+	// NoForeman is true when foreman_root is empty: the help text and the group label
+	// then leave Foreman out. It is set from the setting, never from the nodes.
+	NoForeman bool
 	// Counts is the one count of waiting things, from waits.CountOf. The You box
 	// and the counts in the layout read it; nil means zero.
 	Counts *waits.Counts
@@ -408,9 +411,24 @@ func (b *builder) groupInferred(g Group) bool {
 
 func frameID(g Group) string { return "frame:" + g.ID }
 
+// noLink is the sentence that says no Foreman job is linked: empty with no
+// foreman_root, where there is no Foreman to link to.
+func (b *builder) noLink() string {
+	switch {
+	case b.in.NoForeman:
+		return ""
+	case b.w.plain:
+		return " No Foreman job is linked."
+	}
+	return " No Foreman sprint or flow is linked."
+}
+
 func (b *builder) explain(g Group) string {
 	switch g.Kind {
 	case "none":
+		if b.in.NoForeman {
+			return "Sessions in this window."
+		}
 		if b.w.plain {
 			return "No Foreman job is linked to these."
 		}
@@ -418,14 +436,14 @@ func (b *builder) explain(g Group) string {
 	case "project":
 		if g.Label == "Other" {
 			if b.w.plain {
-				return "Helpers whose main session is not in this window. No Foreman job is linked."
+				return "Helpers whose main session is not in this window." + b.noLink()
 			}
-			return "Subagents whose parent is not in this window. No Foreman sprint or flow is linked."
+			return "Subagents whose parent is not in this window." + b.noLink()
 		}
 		if b.w.plain {
-			return fmt.Sprintf("Work in the folder \"%s\". No Foreman job is linked.", g.Label)
+			return fmt.Sprintf("Work in the folder \"%s\".", g.Label) + b.noLink()
 		}
-		return fmt.Sprintf("Sessions in the folder \"%s\". No Foreman sprint or flow is linked.", g.Label)
+		return fmt.Sprintf("Sessions in the folder \"%s\".", g.Label) + b.noLink()
 	}
 	what := b.w.frameKind[g.Kind]
 	var s string
@@ -680,7 +698,7 @@ func (b *builder) sourceOf(nodeID string) string {
 // largest first, while the map has more than MaxBoxes boxes; a group that
 // waits on you folds last, and a frame the person opened never folds.
 func BuildLayout(in LayoutInput) Layout {
-	v := Build(in.Nodes, in.Edges)
+	v := BuildFor(in.Nodes, in.Edges, in.NoForeman)
 	v.Groups = splitUnlinked(v.Groups)
 	b := &builder{m: newModel(in.Nodes, in.Edges), in: in, w: wordsFor(in.Plain), lineSeen: map[string]bool{}}
 	b.l = Layout{Columns: []string{}, Boxes: []Box{}, Lines: []Line{}, Frames: []Frame{}, Idle: v.Idle, Counts: v.Counts, Notes: v.Notes}

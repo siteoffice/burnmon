@@ -112,7 +112,7 @@ func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapP
 	for _, id := range req.Open {
 		open[id] = true
 	}
-	in := agentmap.LayoutInput{Open: open, Plain: loadSections(env.DataDir).Plain}
+	in := agentmap.LayoutInput{Open: open, Plain: loadSections(env.DataDir).Plain, NoForeman: env.ForemanRoot == ""}
 	p := agentMapPayload{Source: req.Source, Status: "ok"}
 	switch req.Source {
 	case "live":
@@ -125,7 +125,7 @@ func agentMapFor(env agentMapEnv, req agentMapRequest, now time.Time) (agentMapP
 				ws = env.Writer()
 			}
 			p.Note = asSentence(lineFor(ws, r).Text) + " No current boxes are shown."
-			p.Layout = agentmap.BuildLayout(agentmap.LayoutInput{Plain: in.Plain})
+			p.Layout = agentmap.BuildLayout(agentmap.LayoutInput{Plain: in.Plain, NoForeman: in.NoForeman})
 			return p, nil
 		}
 		in.Nodes, in.Edges = r.Snapshot.Nodes, r.Snapshot.Edges
