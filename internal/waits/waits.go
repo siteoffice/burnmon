@@ -31,7 +31,7 @@ const (
 
 	SourceAgentView = "agent_view"
 
-	OutcomeWindow = 24 * time.Hour
+	OutcomeWindow = graph.FailedCheckWindow
 	DetailMax     = 120
 
 	personID = "person:you"
@@ -274,7 +274,7 @@ func Build(in Input) (wait, outcomes []Item) {
 		}
 	}
 
-	blockers := graph.ForemanBlockers(in.Sprints, in.Flows, closeout, gone)
+	blockers := graph.ForemanBlockers(in.Sprints, in.Flows, closeout, gone, now)
 	for _, bl := range blockers {
 		if bl.Kind != graph.BlockerGate {
 			continue

@@ -41,7 +41,7 @@ func TestForemanBlockersRules(t *testing.T) {
 	sprints, flows := blockerFixture()
 	closeout := map[string]bool{"sprint:p__example-merged__1": true}
 	gone := map[string]bool{"sprint:p__example-gone__1": true}
-	got := blockerIDs(ForemanBlockers(sprints, flows, closeout, gone))
+	got := blockerIDs(ForemanBlockers(sprints, flows, closeout, gone, time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)))
 	want := []string{
 		"gate gate:example-open:G2",
 		"failed_check check:p__example-capped__1:test",
@@ -57,7 +57,7 @@ func TestForemanBlockersRules(t *testing.T) {
 func TestBuildDrawsOneEdgePerBlocker(t *testing.T) {
 	sprints, flows := blockerFixture()
 	g := Build(Input{Now: time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC), Sprints: sprints, Flows: flows})
-	bs := ForemanBlockers(sprints, flows, map[string]bool{}, map[string]bool{})
+	bs := ForemanBlockers(sprints, flows, map[string]bool{}, map[string]bool{}, time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC))
 	edges := 0
 	for _, e := range g.Edges {
 		if e.Kind == KindWaitsOn && e.To == personID {
@@ -120,7 +120,7 @@ func TestHistoryDropsStoredForemanEdges(t *testing.T) {
 // a Blocker: the count and the lines both leave it out, as the B6 map did.
 func TestPendingGateWithoutIDIsNotBlocker(t *testing.T) {
 	flows := []Flow{{ID: "example-bare", Slug: "example-bare", GatePending: true}}
-	if bs := ForemanBlockers(nil, flows, nil, nil); len(bs) != 0 {
+	if bs := ForemanBlockers(nil, flows, nil, nil, time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)); len(bs) != 0 {
 		t.Errorf("blockers = %v, want none", blockerIDs(bs))
 	}
 	g := Build(Input{Now: time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC), Flows: flows})
@@ -128,5 +128,65 @@ func TestPendingGateWithoutIDIsNotBlocker(t *testing.T) {
 		if e.Kind == KindWaitsOn {
 			t.Errorf("waits_on edge %+v for a gate with no id", e)
 		}
+	}
+}
+
+// A stopped sprint at phase done is closed: its failed check draws no check
+// node and no line into You.
+func TestBuildDrawsNoCheckForClosedSprint(t *testing.T) {
+	at := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	sp := Sprint{ID: "p__example-closed-capped__1", Slug: "example-closed-capped", Status: "capped", Phase: "done",
+		UpdatedAt: at.Add(-time.Hour), Test: &Check{Failed: true, Label: "test exit 1", At: at.Add(-time.Hour)}}
+	g := Build(Input{Now: at, Sprints: []Sprint{sp}})
+	for _, n := range g.Nodes {
+		if n.Kind == KindCheck {
+			t.Errorf("check node %s drawn for a closed sprint", n.ID)
+		}
+	}
+	for _, e := range g.Edges {
+		if e.Kind == KindWaitsOn && e.To == personID {
+			t.Errorf("waits_on edge %+v into You for a closed sprint", e)
+		}
+	}
+}
+
+// A stopped sprint gives a check Blocker only while it is open (phase not
+// done) and the failed check is at most FailedCheckWindow old.
+func TestForemanBlockersStoppedWindow(t *testing.T) {
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	failedAt := func(age time.Duration) *Check {
+		return &Check{Failed: true, Label: "exit 1", At: now.Add(-age)}
+	}
+	const id = "p__example-window__1"
+	cases := []struct {
+		name string
+		sp   Sprint
+		want []string
+	}{
+		{"capped phase done", Sprint{Status: "capped", Phase: "done", Test: failedAt(time.Hour)}, nil},
+		{"failed phase done", Sprint{Status: "failed", Phase: "done", Test: failedAt(time.Hour)}, nil},
+		{"escalated phase done", Sprint{Status: "escalated", Phase: "done", Test: failedAt(time.Hour)}, nil},
+		{"capped dev 1h", Sprint{Status: "capped", Phase: "dev", Test: failedAt(time.Hour)}, []string{"failed_check check:" + id + ":test"}},
+		{"failed dev 1h", Sprint{Status: "failed", Phase: "dev", Test: failedAt(time.Hour)}, []string{"failed_check check:" + id + ":test"}},
+		{"escalated dev 1h", Sprint{Status: "escalated", Phase: "dev", Test: failedAt(time.Hour)}, []string{"failed_check check:" + id + ":test"}},
+		{"capped dev 25h", Sprint{Status: "capped", Phase: "dev", Test: failedAt(25 * time.Hour)}, nil},
+		{"failed dev exactly 24h", Sprint{Status: "failed", Phase: "dev", Test: failedAt(24 * time.Hour)}, []string{"failed_check check:" + id + ":test"}},
+		{"zero At falls back to UpdatedAt, fresh", Sprint{Status: "capped", Phase: "dev", UpdatedAt: now.Add(-time.Hour), Test: &Check{Failed: true}}, []string{"failed_check check:" + id + ":test"}},
+		{"zero At falls back to UpdatedAt, stale", Sprint{Status: "capped", Phase: "dev", UpdatedAt: now.Add(-25 * time.Hour), Test: &Check{Failed: true}}, nil},
+		{"test 1h plus verify 25h gives only test", Sprint{Status: "failed", Phase: "dev", Test: failedAt(time.Hour), Verify: failedAt(25 * time.Hour)}, []string{"failed_check check:" + id + ":test"}},
+		{"running gives none", Sprint{Status: "running", Phase: "dev", Test: failedAt(time.Hour)}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			c.sp.ID = id
+			c.sp.Slug = "example-window"
+			got := blockerIDs(ForemanBlockers([]Sprint{c.sp}, nil, nil, nil, now))
+			if len(got) == 0 {
+				got = nil
+			}
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("blockers\n got %v\nwant %v", got, c.want)
+			}
+		})
 	}
 }
