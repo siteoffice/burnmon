@@ -108,6 +108,10 @@ type app struct {
 	st    *store.Store
 	cache dataset.Cache
 
+	// loadedCfg is the config file loadConfig loaded at start ("" for none),
+	// recorded in the snapshot's agent view status.
+	loadedCfg string
+
 	sys         *sysmon.Store
 	sampler     *sysmon.Sampler
 	procSampler *sysmon.ProcessSampler
@@ -408,9 +412,19 @@ func startCopilotVSCPoll(a *app, st *store.Store) {
 // shares the same owner/client map and price overrides burnmon.exe already
 // reads rather than a config of its own.
 func loadConfig(dataDir string) (pricing.Config, string) {
-	var path string
+	exeDir := ""
 	if exe, err := os.Executable(); err == nil {
-		exeDir := filepath.Dir(exe)
+		exeDir = filepath.Dir(exe)
+	}
+	return loadConfigAt(exeDir, dataDir)
+}
+
+// loadConfigAt is loadConfig with the exe's folder given ("" skips that
+// tier), so a test can use a temp folder. The string is the file loaded, ""
+// when none.
+func loadConfigAt(exeDir, dataDir string) (pricing.Config, string) {
+	var path string
+	if exeDir != "" {
 		if cand := filepath.Join(exeDir, "burnmon.json"); fileExists(cand) {
 			path = cand
 		} else if cand := filepath.Join(exeDir, "claudecost.json"); fileExists(cand) {

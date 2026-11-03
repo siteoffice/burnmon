@@ -51,6 +51,9 @@ type GraphReaders struct {
 	// time.Now).
 	AgentView func(ctx context.Context) ([]byte, error)
 	Now       func() time.Time
+	// ConfigPath is the config file the app loaded at start ("" for none),
+	// copied into the off and refused agent view statuses.
+	ConfigPath string
 
 	agentViewRefused error // why EnableAgentView started no poller
 

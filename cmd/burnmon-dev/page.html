@@ -1449,7 +1449,7 @@ body.plain #mapOverlay{font-size:13.5px}
       rec.h4.style.color = color;
       rec.barFill.style.width = pct.toFixed(0) + '%';
       rec.barFill.style.background = color;
-      rec.small.textContent = 'turn ' + s.turn_count + ' · ' + fmtTokens(s.tokens) + ' tok · ' + fmtCost(s.cost);
+      rec.small.textContent = 'turn ' + s.turn_count + ' · ' + fmtTokens(s.tokens) + ' tok · ' + fmtCost(s.cost) + (s.cloud_age ? ' · ' + s.cloud_age : '');
       // Keep DOM order in sync with the incoming order (only moves a card
       // when it is actually out of place, not on every tick).
       var wantAfter = prevSibling ? prevSibling.nextSibling : el.firstChild;
@@ -4217,7 +4217,7 @@ body.plain #mapOverlay{font-size:13.5px}
     function row(x, sub){
       var cc = sessCtl(x);
       return '<tr' + (sub ? ' class="sesub"' : '') + '><td>' + esc(x.agent) + '</td><td>' + esc(secBase(x.project)) + '</td><td>' +
-        esc(secWord(x.state)) + '</td><td class="num">' + esc(fmtTokens(x.tokens)) + '</td><td class="num">' +
+        esc(secWord(x.state)) + (x.cloud_age ? ' · ' + esc(x.cloud_age) : '') + '</td><td class="num">' + esc(fmtTokens(x.tokens)) + '</td><td class="num">' +
         esc(secEuro(x.cost)) + '</td><td class="num">' + esc(secDur(x.age_seconds)) + '</td>' +
         (withCtl ? '<td class="ctlcell">' + cc.chips + '</td>' : '') + '</tr>' +
         (cc.lines ? '<tr class="ctlrow"><td colspan="7">' + cc.lines + '</td></tr>' : '');

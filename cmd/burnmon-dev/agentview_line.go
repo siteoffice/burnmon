@@ -6,7 +6,12 @@
 // window, whichever holds the lock) is the one that polls agent view.
 package main
 
-import "burnmon/internal/snapshot"
+import (
+	"os"
+	"path/filepath"
+
+	"burnmon/internal/snapshot"
+)
 
 // agentViewLine is empty when the agent view is on or the snapshot records no
 // state (no graph sources, or a file written before B8); the refusal reason
@@ -15,11 +20,17 @@ func agentViewLine(st *snapshot.AgentViewStatus) string {
 	if st == nil {
 		return ""
 	}
+	// A snapshot written before config_path existed, or by a writer that
+	// loaded no file, names the default location.
+	path := st.ConfigPath
+	if path == "" {
+		path = filepath.Join(os.Getenv("LOCALAPPDATA"), "burnmon", "burnmon.json")
+	}
 	switch st.State {
 	case snapshot.AgentViewOff:
-		return `Agent view off: set "agent_view": true in burnmon.json.`
+		return `Agent view off: set "agent_view": true in ` + path + `.`
 	case snapshot.AgentViewRefused:
-		return `Agent view refused (` + st.Reason + `): set "claude_path" in burnmon.json to claude.exe.`
+		return `Agent view refused (` + st.Reason + `): set "claude_path" in ` + path + ` to claude.exe.`
 	}
 	return ""
 }

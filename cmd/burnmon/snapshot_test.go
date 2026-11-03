@@ -11,6 +11,19 @@ import (
 	"burnmon/internal/snapshotwriter/writertest"
 )
 
+// The app's writer records the config file the app loaded at start, and
+// nothing when it loaded none.
+func TestBurnmonSnapshotWriterRecordsLoadedConfig(t *testing.T) {
+	st := writertest.Store(t)
+	for _, loaded := range []string{`C:\portable\burnmon.json`, ""} {
+		a := &app{cfg: pricing.Defaults(), loadedCfg: loaded}
+		w := a.newSnapshotWriter(st, filepath.Join(t.TempDir(), "snapshot.json"))
+		if w.Graph == nil || w.Graph.ConfigPath != loaded {
+			t.Errorf("loaded %q: graph %+v", loaded, w.Graph)
+		}
+	}
+}
+
 // The app's writer, wired as the app wires it, writes the same bytes as the
 // shared writer on the shared fixture.
 func TestBurnmonSnapshotBytesEqualGolden(t *testing.T) {

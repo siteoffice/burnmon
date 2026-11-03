@@ -1,5 +1,5 @@
 {
-  "_comment": "Optional overrides. Rename to burnmon.json next to burnmon.exe (or burnmon-cli.exe). Any subset of fields works; everything omitted keeps the compiled-in default. Values below are illustrative, not a real invoice: replace them with your own seat counts and invoice total.",
+  "_comment": "Optional overrides. Rename to burnmon.json and put it in one of two places: next to burnmon.exe (or burnmon-cli.exe), or at %LOCALAPPDATA%\\burnmon\\burnmon.json. Both are valid; when both exist, the file next to the exe wins. Any subset of fields works; everything omitted keeps the compiled-in default. Values below are illustrative, not a real invoice: replace them with your own seat counts and invoice total.",
   "fx_usd_eur": 0.92,
   "prices": {
     "opus":   {"label": "Opus",   "in": 5.0,  "out": 25.0},
@@ -39,5 +39,11 @@
   "extra_sources": [],
   "wsl_interval_hours": 4,
   "_comment_history": "B1. keep_history (default true): a transcript deleted from disk keeps its events in the store and only its read position is forgotten. Set false to drop a vanished transcript's events on the next scan.",
-  "keep_history": true
+  "keep_history": true,
+  "_comment_foreman_root": "foreman_root is the folder that holds Foreman's flows and sprints. Empty (the default) means no Foreman items. A change shows after restarting the app that writes the snapshot.",
+  "foreman_root": "",
+  "_comment_agent_view": "agent_view (default false) runs `claude agents --json` every 30 seconds, at most 10 seconds a run, with a hidden window. It is needed for background agents in Waits on you, the agent map, and stop and attach. A change shows after restarting the app that writes the snapshot.",
+  "agent_view": false,
+  "_comment_claude_path": "claude_path is the claude to run for agent_view. Empty (the default) means the first claude on PATH. An npm claude.cmd shim is read as text and the claude.exe it names is started; .ps1 and .bat are refused. A change shows after restarting the app that writes the snapshot.",
+  "claude_path": ""
 }

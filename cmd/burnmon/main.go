@@ -189,6 +189,7 @@ func main() {
 		interval:    *interval,
 		wslInterval: effectiveWSLInterval,
 		cfgPath:     cfgSavePath,
+		loadedCfg:   cfgFile,
 	}
 	a.cache.Store = st
 
@@ -559,7 +560,6 @@ func asyncResolveJS(resolverName, key string, data any) (string, error) {
 	}
 	return fmt.Sprintf("window.%s && window.%s(%s, %s)", resolverName, resolverName, keyJSON, dataJSON), nil
 }
-
 
 // ---------------------------------------------------------------------------
 // Single instance and the WebView2-missing fallback

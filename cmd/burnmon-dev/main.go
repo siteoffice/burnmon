@@ -212,7 +212,7 @@ func main() {
 
 	a := &app{
 		sys: sys, sampler: sysmon.NewSampler(), procSampler: sysmon.NewProcessSampler(),
-		st: st, cfg: cfg, initialCollectDone: make(chan struct{}), started: progStart,
+		st: st, cfg: cfg, loadedCfg: cfgFile, initialCollectDone: make(chan struct{}), started: progStart,
 	}
 	a.cache.Store = st
 	a.perf.startPerfLog()

@@ -1736,6 +1736,7 @@
       var stg = STAGES[a.stage] || STAGES.waiting;
       var moving = !!a.pending || (a.walking && a.path && a.path.length > 1);
       var line2 = a.leaving ? 'Leaving' : (moving ? '\u2192 ' : '') + stg.label + (d.tool ? ' \u00b7 ' + d.tool : '');
+      if(d.cloud_age) line2 += ' \u00b7 ' + d.cloud_age;
       var fs = clamp(13 * Math.sqrt(cam.s / 0.45), 10, 16);
       ctx.font = '600 ' + fs + 'px "Segoe UI", system-ui, sans-serif';
       var w1 = ctx.measureText(line1).width;
@@ -1804,6 +1805,7 @@
         '<div><span>Model</span>' + esc(d.model || 'n/a') + '</div>' +
         '<div><span>Stage</span><b style="color:' + stg.color + '">' + esc(stg.label) + '</b>' + (since ? ' for ' + since : '') + '</div>' +
         (d.tool ? '<div><span>Tool</span>' + esc(d.tool) + '</div>' : '') +
+        (d.cloud_age ? '<div><span>Data</span>' + esc(d.cloud_age) + '</div>' : '') +
         '<div><span>Tokens</span>' + fmtTokens(d.tokens) + (d.ctx != null ? ' \u00b7 context ' + Math.round(d.ctx * 100) + '%' : '') + '</div>' +
         (opts.onAgentClick ? '<div class="bms-tt-f">click for the latest turn</div>' : '');
       tip.style.display = 'block';
@@ -1967,7 +1969,8 @@
           color: colorFn ? colorFn(id, s.agent) : null,
           stage: s.stage || 'waiting', since: s.stage_since ? Date.parse(s.stage_since) : null,
           tool: s.stage_tool || '', tokens: s.tokens,
-          ctx: s.context_window ? s.context / s.context_window : null
+          ctx: s.context_window ? s.context / s.context_window : null,
+          cloud_age: s.cloud_age || ''
         });
         walk(s.subagents, id);
       });
