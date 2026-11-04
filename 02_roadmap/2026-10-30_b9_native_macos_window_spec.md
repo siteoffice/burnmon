@@ -39,6 +39,11 @@ show "not on macOS" for what has no documented source there (for example the Win
 score and Wi-Fi details). No undocumented API, no new dependency besides webview_go.
 Done when: unit tests for the macOS sampler on recorded inputs; `GOOS=darwin go vet ./...` clean
 from Windows for every file that does not need cgo.
+Added 2026-11-04 (OF25, Wilco: the Mac proof goes to B9): BurnMon Dev on macOS calls
+`toast.Start` behind the existing gear switch (`toast_enabled`); the notifier is in `main` since
+`9f642c3` (`internal\toast\notify_darwin.go`, argv built by `osascriptArgs`: the `-e` script lines,
+then `--`, then the title as item 1, then the text as item 2). The README gains one line under
+BurnMon Dev: on macOS the banner is attributed to Script Editor and a click does nothing.
 
 ### 3. macOS compile check in CI, before the rental
 Add a `macos-latest` job that builds both apps with cgo and runs `go test ./...`. Whether runner
@@ -58,6 +63,18 @@ Wilco rents the Mac. In the 24 hours: run `scripts/maccheck.sh` on real Claude C
 sessions, work the manual list, fix what breaks with a test first, and re-run.
 Done when: the report holds the script output, screenshots of both apps, and one line per manual
 check; every fix is committed on the sprint branch.
+OF25 proof on the same day (added 2026-11-04; OF25 is "built, not proven" until these pass):
+- `go test ./internal/toast/ -count=1 -v` on the Mac: the five darwin tests run (not skipped) and
+  pass; then set `showTimeout` to 0 in `Show` and see `TestShowHangingSeamIsCutOff` fail; revert.
+- osascript honours `--` and the item order: the command below shows one banner titled
+  "BurnMon" with the text "-e foo", and runs nothing else.
+- One real banner within 2 s of an item entering Blocked, with the gear switch on.
+```
+# runs on: the rented Mac, zsh, cwd: the BurnMon checkout
+cd ~/burnmon
+go test ./internal/toast/ -count=1 -v
+/usr/bin/osascript -e 'on run argv' -e 'display notification (item 2 of argv) with title (item 1 of argv)' -e 'end run' -- 'BurnMon' '-e foo'
+```
 
 ## Out of scope
 The B8 toast on macOS (a notification on macOS likely needs an app bundle and signing; not checked).

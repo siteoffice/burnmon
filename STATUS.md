@@ -1,5 +1,17 @@
 # BurnMon, status
 
+What is true at v0.4.0-beta.3 (2026-11-04, written on the release branch before its merge; read
+`git log main` and `git ls-remote --tags origin` live): the release lane batch for the 16 Nov test-group
+mail is merged into `main`, each through siteoffice-git after Wilco's Accept: OF24 (PR #14, `a26956b`),
+OF23 (PR #15, `ea7bdb6`), OF29 with OF28 (PR #16, `923b83d`), the controls gate-names fix after the
+Foreman gate rename (PR #17, `ce0235d`), OF15 Burn Report (PR #18, `ebe1619`) and OF25 macOS notifier
+(PR #19, `9f642c3`). The release commit sets the three exes and the `winres` ProductVersion to
+`0.4.0-beta.3` (numeric `0.4.0.0` unchanged). Measured on `main` at `9f642c3` before this commit:
+`go vet` 0, `go test` 1127 pass, 0 fail, 6 skip, darwin vet of `internal/toast` clean. OF25 is built,
+not proven: its Mac checks moved to the B9 spec's rental day (`02_roadmap\2026-10-30_b9_native_macos_window_spec.md`).
+Briefs: `04_assets\hub_agent_update_2026-11-03_*_merged.md` and `04_assets\hub_agent_update_2026-11-04_*`.
+The paragraph below describes beta.2 and is kept as history.
+
 What is true at v0.4.0-beta.2 (2026-10-31): B8, the agent half, is merged into `main` (`81a50f4`, `9df5e60`,
 read live with `git rev-parse main`), and the release commit sets all three exes and the `winres\*.json`
 ProductVersion to `0.4.0-beta.2` (numeric `0.4.0.0` unchanged); whether the tag is pushed: check
