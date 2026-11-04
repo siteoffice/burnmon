@@ -400,6 +400,7 @@ func Redact(b Bundle, salt string) Bundle {
 		t.Project = hash("project", t.Project)
 		t.Owner = hash("owner", t.Owner)
 		t.Client = hash("client", t.Client)
+		t.SessionID = hash("session", t.SessionID)
 		out.Turns[i] = t
 	}
 	out.TopTurns = make([]TurnRow, len(b.TopTurns))
@@ -407,6 +408,7 @@ func Redact(b Bundle, salt string) Bundle {
 		t.Project = hash("project", t.Project)
 		t.Owner = hash("owner", t.Owner)
 		t.Client = hash("client", t.Client)
+		t.SessionID = hash("session", t.SessionID)
 		out.TopTurns[i] = t
 	}
 	out.Redacted = true

@@ -730,6 +730,11 @@ body.plain #mapOverlay{font-size:13.5px}
     <div class="histrow" id="hist_owners"></div>
     <div class="histgrid"><span></span><span></span><button id="hist_export" class="histbtn histend" type="button">Export</button></div>
     <div class="sechint" id="hist_export_result" style="word-break:break-all"></div>
+    <div class="histrow">
+      <button id="hist_burn_report" class="histbtn" type="button">Burn Report</button>
+      <label><input id="hist_burn_names" type="checkbox"> show project names</label>
+    </div>
+    <div class="sechint" id="hist_burn_result" style="word-break:break-all"></div>
   </div>
   <div class="sechint">Esc closes this list</div>
 </div>
@@ -4567,6 +4572,18 @@ body.plain #mapOverlay{font-size:13.5px}
     histEl('hist_export_result').textContent = 'Exporting...';
     window.bdevExportHistory({ dir: histEl('hist_dir').value.trim(), since: histEl('hist_since').value.trim(),
       until: histEl('hist_until').value.trim(), label: histEl('hist_label').value.trim(), owners: owners });
+  });
+  window.__bdevBurnReportResolve = function(d){
+    histEl('hist_burn_report').disabled = false;
+    var out = histEl('hist_burn_result');
+    if(!d || d.error){ out.textContent = 'Burn Report failed: ' + ((d && d.error) || 'no answer'); return; }
+    out.textContent = 'Wrote ' + d.path + ' (' + d.days_with_data + ' of 14 days, ' +
+      (d.redacted ? 'redacted' : 'names shown') + ')';
+  };
+  histEl('hist_burn_report').addEventListener('click', function(){
+    histEl('hist_burn_report').disabled = true;
+    histEl('hist_burn_result').textContent = 'Building...';
+    window.bdevBurnReport({ dir: histEl('hist_dir').value.trim(), show_names: histEl('hist_burn_names').checked });
   });
   // First paint of the block, each time the dialog opens: keep_history, the
   // default folder (only while the field is empty) and the owner checkboxes.

@@ -353,8 +353,9 @@ We want to hear what broke and what you expected instead.
    what you did just before. Never paste prompts, keys or customer data.
 2. **"It did not do what I expected"**: use that template. This is the most useful one for us.
 3. **Idea**: use the "Idea" template, one idea per issue.
-4. **After two weeks**: attach a Burn Report export if you are willing to share it (BurnMon Dev,
-   Export button, `--redact` on; see "BurnMon Dev").
+4. **After two weeks**: attach a Burn Report if you are willing to share it (BurnMon Dev, gear
+   dialog, Export history, Burn Report button; project names are redacted unless you tick
+   "show project names"; see "BurnMon Dev").
 
 Response: we read every issue within two working days. Security problems: do not open a public
 issue; mail info@zerononsense.dev.
@@ -444,6 +445,13 @@ responsive down to a single compact column.
   findings, a ready prompt asking a model for concrete improvements), `data.json` (full
   timeline, schema-versioned) and `daily.csv`. `--redact` replaces project, client and
   owner names with stable hashes; never exports prompt or response text either way.
+- **Burn Report**: the gear dialog's Export history card has a Burn Report button (binding
+  `bdevBurnReport`) and a "show project names" checkbox, unticked, so project names are
+  redacted by default. It covers the last 14 days and writes one zip,
+  `burn-report-<YYYY-MM-DD>.zip`, into the folder typed in that card (it starts as the
+  Downloads folder). The zip holds `burn-report.html`, which opens offline, and
+  `bundle.json`. The page footer reads: "Want an analysis of this report? Send the zip to
+  info@zerononsense.dev. One-off analysis: EUR 49."
 - `refresh_ms` in `burnmon-dev.json` (default and floor both 1000) sets the shared paint
   cadence every panel renders on; the whole System zone (CPU total bar, the 20 per-core
   bars, the main chart, the process-groups rows and their sparklines, Memory/Disks/Network)

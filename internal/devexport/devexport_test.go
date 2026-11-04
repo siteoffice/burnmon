@@ -297,3 +297,10 @@ func TestWrite_CreatesThreeFilesWithReportedSizes(t *testing.T) {
 		}
 	}
 }
+
+func TestRedact_HashesSessionID(t *testing.T) {
+	b := Bundle{Turns: []TurnRow{{SessionID: "sess-raw-1"}}}
+	if got := Redact(b, "s").Turns[0].SessionID; got == "sess-raw-1" || got == "" {
+		t.Fatalf("SessionID not hashed: %q", got)
+	}
+}

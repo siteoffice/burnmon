@@ -769,6 +769,22 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bdevExportHistory:", err)
 	}
+	// bdevBurnReport (OF15): the 14 day Burn Report zip. Reads the store, so
+	// it returns at once and resolves through bdevAsyncResolveJS.
+	if err := w.Bind("bdevBurnReport", func(req burnReportRequest) {
+		go func() {
+			cfg := a.cfgSnapshot()
+			out := writeBurnReport(st, sys, &cfg, req, time.Now(), loadOrCreateRedactSalt(appDataDir()))
+			js, err := bdevAsyncResolveJS("__bdevBurnReportResolve", out)
+			if err != nil {
+				log.Println("bdevBurnReport: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+	}); err != nil {
+		log.Println("could not bind bdevBurnReport:", err)
+	}
 	if err := w.Bind("bdevHistoryInfo", func() historyInfoPayload {
 		return a.historyInfo()
 	}); err != nil {
