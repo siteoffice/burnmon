@@ -1,25 +1,19 @@
-//go:build windows
+//go:build windows || darwin
 
 // app.go holds the app struct and the small helpers shared by main.go: data
-// directory, logging, single-instance mutex, and the sysmon sampling loop.
-// Windows-only: BurnMon Dev is a WebView2 window for Wilco's own two
-// screens (04_assets 2026-09-24_burnmon_dev_design.md), not a portable tool
-// like burnmon/burnmon-cli, so unlike those there is no browser-mode
-// fallback build for darwin/linux (see main_other.go).
+// directory, logging and the sysmon sampling loop. Shared by the Windows and
+// macOS builds; the platform pieces (single instance, window) live in the
+// *_windows.go and *_darwin.go files.
 package main
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
-
-	"golang.org/x/sys/windows"
 
 	"burnmon/internal/adapter/codex"
 	"burnmon/internal/adapter/copilotcli"
@@ -55,8 +49,17 @@ func fileExists(path string) bool {
 // It is a var so a test can point it at a temp dir and never touch the real
 // folder.
 var appDataDir = func() string {
-	if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
-		return filepath.Join(lad, "burnmon")
+	return appDataDirFrom(os.Getenv("LOCALAPPDATA"), os.UserConfigDir)
+}
+
+// appDataDirFrom picks the data folder: localAppData when set, else the
+// per-user config dir (the folder the stores use on macOS), else the temp dir.
+func appDataDirFrom(localAppData string, userConfigDir func() (string, error)) string {
+	if localAppData != "" {
+		return filepath.Join(localAppData, "burnmon")
+	}
+	if dir, err := userConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "burnmon")
 	}
 	return filepath.Join(os.TempDir(), "burnmon")
 }
@@ -889,37 +892,4 @@ func (a *app) refreshTodoTasks() todoTasksPayload {
 	a.todoTasksCache = payload
 	a.slowMu.Unlock()
 	return payload
-}
-
-// ---------------------------------------------------------------------------
-// Single instance, same recipe as cmd\burnmon\main.go's own alreadyRunning/
-// bringExistingToFront, a distinct mutex and window title so the two apps
-// never mistake each other for a second instance of themselves.
-// ---------------------------------------------------------------------------
-
-var (
-	user32                  = windows.NewLazySystemDLL("user32.dll")
-	procFindWindowW         = user32.NewProc("FindWindowW")
-	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
-)
-
-func alreadyRunning() bool {
-	name, err := windows.UTF16PtrFromString(mutexName)
-	if err != nil {
-		return false
-	}
-	_, err = windows.CreateMutex(nil, false, name)
-	return errors.Is(err, windows.ERROR_ALREADY_EXISTS)
-}
-
-func bringExistingToFront() {
-	title, err := windows.UTF16PtrFromString(windowTitle)
-	if err != nil {
-		return
-	}
-	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
-	if hwnd == 0 {
-		return
-	}
-	procSetForegroundWindow.Call(hwnd)
 }

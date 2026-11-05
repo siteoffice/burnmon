@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // export_run.go is phase 4's export path (design doc "Export (AI-ready
 // bundle)"): buildExportBundle gathers everything internal/devexport.Assemble

@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !(darwin && cgo)
 
 // Command burnmon (darwin, linux; B1, 2026-09-23_v0.3_spec.md 2.4): the same
 // dashboard.html the Windows WebView2 window shows, opened in the system

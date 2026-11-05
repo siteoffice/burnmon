@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // headline.go: the ticker/headline patch's own section 4 said the headline
 // total should "visibly roll" every tick; in practice it only moved on

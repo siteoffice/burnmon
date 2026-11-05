@@ -94,12 +94,6 @@ func TestSaveDevConfigKeyRefusesUnparsableFile(t *testing.T) {
 	}
 }
 
-var toastT0 = time.Date(2026, 10, 31, 9, 0, 0, 0, time.UTC)
-
-func waitGate(id, title string) waits.Item {
-	return waits.Item{Kind: waits.KindGate, ID: id, Title: title, Group: waits.GroupBlocked}
-}
-
 func agentItem(id, title string) waits.Item {
 	return waits.Item{Kind: waits.KindQuestion, ID: id, Title: title, Group: waits.GroupBlocked, Source: waits.SourceAgentView}
 }
@@ -209,24 +203,6 @@ func TestToastTickWaitsForFirstAgentViewPoll(t *testing.T) {
 	if text, ok := step(agentReading(true, gate, q1, q2, q3)); !ok || text != "Question: site 0c0d0e0f" {
 		t.Fatalf("a new question gave %q %v", text, ok)
 	}
-}
-
-func writeToastSnapshot(t *testing.T, path string, at time.Time, items ...waits.Item) {
-	t.Helper()
-	s := snapshot.Snapshot{SchemaVersion: snapshot.SchemaVersion, WrittenAt: at.UTC().Format(time.RFC3339), TickSeconds: 2, WaitItems: items}
-	if err := snapshot.Write(path, s); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// newToastWatch is a watch on a fresh snapshot path and settings folder; the
-// test closes backfilled when its startup backfill is meant to be done.
-func newToastWatch(t *testing.T, backfilled chan struct{}) (*toastWatch, *[]string) {
-	t.Helper()
-	shown := &[]string{}
-	tw := &toastWatch{path: filepath.Join(t.TempDir(), "snapshot.json"), setDir: t.TempDir(), backfilled: backfilled,
-		show: func(s string) { *shown = append(*shown, s) }}
-	return tw, shown
 }
 
 // TestToastWatchPoll: the watch reads the file only when its stamp changed,
@@ -400,14 +376,18 @@ func TestPageToastSwitch(t *testing.T) {
 // watch reads that file itself (Ruling 17), so there is no second copy of
 // the switch to fall out of step, and it waits for the startup backfill.
 func TestToastWiring(t *testing.T) {
-	b, err := os.ReadFile("main.go")
-	if err != nil {
-		t.Fatal(err)
+	var src string
+	for _, f := range []string{"main.go", "toast_start_windows.go"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src += strings.ReplaceAll(string(b), "\r\n", "\n")
 	}
-	src := strings.ReplaceAll(string(b), "\r\n", "\n")
 	for _, want := range []string{
 		`toast.Start("BurnMon Dev", func() { bringToFront(hwnd) })`,
-		"startToastWatch(snapPath, setDir, a.initialCollectDone, n.Show)",
+		"startToastWatch(snapPath, setDir, backfilled, n.Show)",
+		"startToasts(snapPath, setDir, a.initialCollectDone, hooks)",
 		"if err := w.Bind(\"bdevSetToast\", func(on bool) error {\n\t\terr := saveDevConfigKey(setDir, \"toast_enabled\", on)",
 	} {
 		if !strings.Contains(src, want) {

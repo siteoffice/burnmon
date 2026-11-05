@@ -2250,9 +2250,14 @@ body.plain #mapOverlay{font-size:13.5px}
     renderVendorStrip(payload);
   }
 
-  function renderPressureChip(score){
+  function renderPressureChip(score, notOn){
     var el = document.getElementById('pressureChip');
     if(!el) return;
+    if(notOn){
+      el.textContent = 'PRESSURE not on ' + notOn;
+      el.style.color = 'var(--dim)';
+      return;
+    }
     el.textContent = 'PRESSURE ' + score;
     var color = score < 45 ? 'var(--grn)' : score < 75 ? 'var(--yel)' : 'var(--red)';
     el.style.color = color;
@@ -2488,6 +2493,8 @@ body.plain #mapOverlay{font-size:13.5px}
       html += '<div class="line dim">' + esc(w.SSID) + ' &middot; signal ' + w.SignalPct + '%</div>' + netBarHtml(w.SignalPct, 'var(--mag-dim)');
     } else if(w.OK){
       html += '<div class="line dim">wifi disconnected</div>';
+    } else if(sm.not_on){
+      html += '<div class="line dim">' + 'wifi not on ' + esc(sm.not_on) + '</div>';
     }
     el.innerHTML = html;
   }
@@ -2511,7 +2518,7 @@ body.plain #mapOverlay{font-size:13.5px}
     renderMemoryBox(sm);
     renderDisksBox(sm);
     renderNetworkBox(sm);
-    renderPressureChip(sm.pressure_score);
+    renderPressureChip(sm.pressure_score, sm.not_on);
   }
 
   var HARNESS_LABEL = {

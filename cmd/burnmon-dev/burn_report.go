@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // burn_report.go is the Burn Report writer (OF15): the last 14 days as a zip
 // holding one offline HTML page and bundle.json, redacted unless the page

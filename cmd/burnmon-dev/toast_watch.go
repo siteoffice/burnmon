@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // toast_watch.go feeds the snapshot's Waits on you to the toast rules
 // (internal/toast) and shows what they return. It runs on its own goroutine
@@ -13,10 +13,6 @@ import (
 	"burnmon/internal/toast"
 	"burnmon/internal/waits"
 )
-
-var procIsIconic = user32.NewProc("IsIconic")
-
-const swRestore = 9 // SW_RESTORE
 
 // toastTick steps the rules on one reading (see toastReadable for which).
 // With enabled false the rules still step, so turning toasts on later does
@@ -120,13 +116,4 @@ func startToastWatch(path, setDir string, backfilled <-chan struct{}, show func(
 			tw.poll(time.Now())
 		}
 	}()
-}
-
-// bringToFront is a toast click: restore the window when it is minimized,
-// then raise it.
-func bringToFront(hwnd uintptr) {
-	if r, _, _ := procIsIconic.Call(hwnd); r != 0 {
-		procShowWindowWS.Call(hwnd, swRestore)
-	}
-	procSetForegroundWindow.Call(hwnd)
 }

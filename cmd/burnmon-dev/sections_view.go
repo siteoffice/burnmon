@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // sections_view.go is the Go side of the gear list: what the page asks for
 // (the part switches per mode, the overall scrollbar flag, the newest

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // agentview_line.go is the one line Waits on you shows when the agent view is
 // off or refused, with the burnmon.json key that fixes it. It reads the state

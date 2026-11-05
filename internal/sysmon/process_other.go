@@ -92,7 +92,7 @@ func (ps *ProcessSampler) Tick(copilotVSCodeConfigured bool) ([]ProcessGroupSamp
 	}
 	ps.lastAt = now
 
-	sums := map[Harness]*ProcessGroupSample{}
+	readings := make([]procReading, 0, len(ps.reg))
 	for pid, tp := range ps.reg {
 		h := harnessByPID[pid]
 		if h == "" || h == HarnessOther {
@@ -117,20 +117,8 @@ func (ps *ProcessSampler) Tick(copilotVSCodeConfigured bool) ([]ProcessGroupSamp
 				tp.lastRead, tp.lastWrite = ioc.ReadBytes, ioc.WriteBytes
 			}
 		}
-
-		s := sums[h]
-		if s == nil {
-			s = &ProcessGroupSample{Ts: now, Harness: h}
-			sums[h] = s
-		}
-		s.CPUPct += pct
-		s.MemMB += memMB
-		s.IOBps += ioBps
+		readings = append(readings, procReading{PID: pid, CPUPct: pct, MemMB: memMB, IOBps: ioBps})
 	}
 
-	out := make([]ProcessGroupSample, 0, len(sums))
-	for _, s := range sums {
-		out = append(out, *s)
-	}
-	return out, nil
+	return sumProcessGroups(readings, harnessByPID, now), nil
 }

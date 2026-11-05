@@ -18,6 +18,7 @@ func TestRefusesFailsClosedWithoutPid(t *testing.T) {
 }
 
 func TestRefusesCwdForms(t *testing.T) {
+	requireWindowsPaths(t)
 	own := "this session works in BurnMon Dev's own folder"
 	unsure := "the session's working folder cannot be checked"
 	s := Self{PID: 10, ExeDir: `C:\example\burnmon`}
@@ -61,6 +62,7 @@ func TestRefusesCwdForms(t *testing.T) {
 }
 
 func TestRefusesNonASCIIFolds(t *testing.T) {
+	requireWindowsPaths(t)
 	s := Self{PID: 10, ExeDir: `C:\Ünï\Burnmon`}
 	if err := s.Refuses(40, `c:\üNï\BURNMON\x`); err == nil {
 		t.Error("non-ASCII case difference must still match")
@@ -101,6 +103,7 @@ func TestRefusesUnseenDriveAndHostAsUnsure(t *testing.T) {
 }
 
 func TestRefusesLexicalTailUnderExistingPrefix(t *testing.T) {
+	requireWindowsPaths(t)
 	base := t.TempDir()
 	exe := filepath.Join(base, "burnmon")
 	s := Self{PID: 10, ExeDir: exe}

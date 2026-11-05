@@ -5,6 +5,7 @@ import "testing"
 const containsFolder = "this session works in a folder that contains BurnMon Dev"
 
 func TestRefuses(t *testing.T) {
+	requireWindowsPaths(t)
 	s := Self{PID: 10, Ancestors: []int{20, 30}, ExeDir: `C:\example\burnmon`}
 	cases := []struct {
 		pid  int
@@ -38,6 +39,7 @@ func TestRefuses(t *testing.T) {
 }
 
 func TestRefusesEmptyExeDirNeverMatchesEverything(t *testing.T) {
+	requireWindowsPaths(t)
 	s := Self{PID: 10}
 	if err := s.Refuses(40, `C:\anything`); err != nil {
 		t.Fatalf("got %v", err)

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // viewstate.go remembers the one view preference the page has: light or dark
 // (the L key); sections_view.go keeps the section switches in the same file. It lives in burnmon-dev-view.json next to burnmon-dev.db and

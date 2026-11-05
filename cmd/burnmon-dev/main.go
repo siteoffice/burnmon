@@ -1,6 +1,7 @@
-//go:build windows
+//go:build windows || (darwin && cgo)
 
-// Command burnmon-dev is BurnMon Dev: a second WebView2 window, alongside
+// Command burnmon-dev is BurnMon Dev: a second window (WebView2 on Windows,
+// WKWebView via webview_go on macOS), alongside
 // burnmon.exe, that shows what running AI agents does to the token/cost
 // side (burn) and the machine (system) on one screen, one time axis.
 // 04_assets\2026-09-24_burnmon_dev_design.md is the design this follows.
@@ -13,21 +14,16 @@
 package main
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
-	"syscall"
 	"time"
-
-	webview2 "github.com/jchv/go-webview2"
 
 	"burnmon/internal/adapter/codex"
 	"burnmon/internal/controls"
@@ -39,26 +35,10 @@ import (
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
-	"burnmon/internal/toast"
 	"burnmon/internal/todo"
 	"burnmon/internal/vendorstrip"
+	"burnmon/internal/winbind"
 )
-
-//go:embed page.html
-var pageHTML string
-
-// The Station (02_roadmap\2026-10-01_station_secret_screen.md): the two
-// atlases (space and construction site), the startup theme and the screen,
-// spliced into page.html at stationMarker by assemblePage before SetHtml.
-//
-//go:embed station/station_atlas.js
-var stationAtlasJS string
-
-//go:embed station/station_atlas_site.js
-var stationAtlasSiteJS string
-
-//go:embed station/station.js
-var stationJS string
 
 const stationMarker = "<!--BM_STATION-->"
 
@@ -81,52 +61,6 @@ func assemblePage(theme, uiTheme string) string {
 		"<script>\n"+stationAtlasJS+"\n</script>\n<script>\n"+stationAtlasSiteJS+"\n</script>\n"+
 			`<script>window.BM_STATION_THEME = "`+theme+`";</script>`+"\n"+
 			"<script>\n"+stationJS+"\n</script>", 1)
-}
-
-// Microsoft To Do panel payloads (section 9). Kept small and purpose-built
-// per call rather than reusing internal/todo's own structs directly: the
-// unexported deviceCode/interval/expiresIn fields on todo.DeviceCodeInfo
-// never need to reach the page at all (main.go keeps the whole struct
-// server-side to hand to FinishLogin).
-type todoStatusPayload struct {
-	Enabled  bool `json:"enabled"`
-	SignedIn bool `json:"signed_in"`
-}
-
-type todoLoginStartPayload struct {
-	UserCode        string `json:"user_code"`
-	VerificationURI string `json:"verification_uri"`
-	Message         string `json:"message"`
-}
-
-type todoLoginDonePayload struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
-}
-
-type todoTasksPayload struct {
-	Items []todo.Item `json:"items"`
-	Error string      `json:"error,omitempty"`
-}
-
-// progStart marks process entry, so every startupMark call below logs an
-// elapsed time from the same zero point (section 11 step 1: "measure
-// first" before changing any startup ordering). Read only from main's own
-// goroutine before the window is up; the sampling goroutine's one
-// first-sample mark (startSampling) reads it too, but only ever after
-// main() has already set it, so no lock is needed.
-var progStart = time.Now()
-
-func startupMark(step string) {
-	log.Printf("startup: %s at %v", step, time.Since(progStart).Round(time.Millisecond))
-}
-
-// heatmapPayload is bdevActivityHeatmap's return shape: renderHeatmap
-// (page.html) only ever reads payload.rows, so this carries just that
-// field rather than the rest of history.Payload (Totals, Vendors, Owners),
-// which the merged closed+today rows below don't populate meaningfully.
-type heatmapPayload struct {
-	Rows []history.Row `json:"rows"`
 }
 
 func init() {
@@ -245,75 +179,79 @@ func main() {
 	// wait for this (startSlowRefreshers above is likewise backgrounded, for
 	// the same reason).
 
-	wv2Dir := filepath.Join(setDir, "wv2-dev")
-	_ = os.MkdirAll(wv2Dir, 0o755)
-
-	// Window, section 10: first launch is a normal 1280x860 window,
-	// centered; every launch after that remembers size, position, maximized
-	// state and monitor, restoring them only if that monitor still exists
-	// (windowstate.go). WindowOptions has no X/Y field, so a restored
-	// window is created at this same default size/center and then
-	// immediately repositioned via applyWindowState below; a very brief
-	// visible jump to the default rect is an accepted tradeoff of
-	// go-webview2's WebView interface having no "create hidden, then show"
-	// hook to avoid it.
-	savedState, hasSavedState := loadWindowState(setDir)
-	initialWidth, initialHeight := uint(1280), uint(860)
-	if hasSavedState {
-		initialWidth, initialHeight = uint(savedState.Width), uint(savedState.Height)
-	}
-	// WEBVIEW2_USER_DATA_FOLDER (alpha.7, found 2026-09-29): go-webview2
-	// (pkg/edge/chromium.go) passes DataPath to WebView2Loader as an inline
-	// windows.StringToUTF16Ptr that nothing keeps alive, and the loader reads
-	// it after the Go buffer can already be freed and reused, so some launches
-	// got a user-data folder named after whatever heap text was there (prompt
-	// and session-path fragments), created relative to the working directory.
-	// The loader also reads this environment variable, which lives in the
-	// process environment, not in Go memory, so the folder is always wv2Dir.
-	_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", wv2Dir)
-	w := webview2.NewWithOptions(webview2.WebViewOptions{
-		DataPath: wv2Dir,
-		WindowOptions: webview2.WindowOptions{
-			Title:  windowTitle,
-			Width:  initialWidth,
-			Height: initialHeight,
-			Center: true,
-			IconId: 1, // matches the "#1" icon group winres/burnmon-dev.json embeds
-		},
-	})
-	if w == nil {
-		log.Println("could not create the WebView2 window; BurnMon Dev needs the WebView2 runtime")
+	w, hooks, ok := openDevWindow(setDir)
+	if !ok {
 		return
 	}
-	hwnd := uintptr(w.Window())
-	if hasSavedState {
-		applyWindowState(hwnd, savedState)
-	}
-
-	// F11 toggles fullscreen, Esc also leaves it (section 10). fs is this
-	// window's own fullscreen state (windowstate.go), declared before
-	// startWindowStateSaver so that goroutine can skip saving while
-	// fullscreen (its own doc comment explains why). Esc reaches
-	// bdevExitFullscreen through the page's own keydown handler, same as any
-	// other binding; F11 does not, since WebView2/Chromium reserves it as a
-	// default browser accelerator key and never lets the DOM see it at all
-	// (found empirically this session) - installF11Hotkey works around that
-	// with a global hotkey plus a thread-local message hook instead (see its
-	// own doc comment, windowstate.go), so bdevToggleFullscreen below is
-	// only reachable from the uicheck dev eval channel, not from a real F11
-	// keypress.
-	fs := &fullscreenState{}
-	startWindowStateSaver(hwnd, setDir, fs)
 	startupMark("window created")
 
-	installF11Hotkey(hwnd, fs)
+	snapPath, snapPathErr := snapshot.DefaultPath()
+	if snapPathErr != nil {
+		log.Println("snapshot path:", snapPathErr)
+	}
+	stopToasts := startToasts(snapPath, setDir, a.initialCollectDone, hooks)
+	defer stopToasts()
+	ctlSvc := newControlService(cfg, setDir, snapPath, storePath)
+	bindDev(devBindEnv{
+		w: w, a: a, st: st, sys: sys,
+		setDir: setDir, dataDir: dataDir, snapPath: snapPath,
+		ctlSvc: ctlSvc, devCfg: devCfg, hooks: hooks,
+	})
+
+	// Dispatch heartbeat (alpha.7, found in the 90-minute after run on
+	// 2026-09-29): go-webview2's Dispatch queues its func and wakes the UI
+	// thread with one PostThreadMessage(WM_APP), which only w.Run's own
+	// GetMessage loop handles. A Win32 modal loop (a window drag or resize,
+	// a menu) pulls that thread message off the queue and drops it, so the
+	// queued func, here a bdevSnapshotNow resolve, waits until some later
+	// Dispatch gets through: 67s on 2026-09-29, and forever before alpha.7,
+	// when nothing else dispatched while the page waited on that one call.
+	// A no-op Dispatch every second means a lost wakeup costs at most a
+	// second once the modal loop has ended (inside it, the heartbeat's own
+	// WM_APP is dropped too), for every binding, not just the render tick.
+	go func() {
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for range t.C {
+			w.Dispatch(func() {})
+		}
+	}()
+
+	startUICheckServer(w, func() string { return assemblePage(devCfg.StationTheme, loadUITheme(setDir)) })
+
+	w.SetHtml(assemblePage(devCfg.StationTheme, loadUITheme(setDir)))
+	go startBackgroundIngest(a, st, w)
+	w.Run()
+}
+
+// devBindEnv is what the bindings read from main(): the window, the app, the
+// stores, the folders, the control service, the config and the window hooks.
+type devBindEnv struct {
+	w        winbind.Window
+	a        *app
+	st       *store.Store
+	sys      *sysmon.Store
+	setDir   string
+	dataDir  string
+	snapPath string
+	ctlSvc   *controls.Service
+	devCfg   devConfig
+	hooks    windowHooks
+}
+
+// bindDev registers every bdev binding on the window, in the order of
+// devBindingNames (binding_names.go).
+func bindDev(e devBindEnv) {
+	w, a, st, sys := e.w, e.a, e.st, e.sys
+	setDir, snapPath := e.setDir, e.snapPath
+	ctlSvc, devCfg, hooks := e.ctlSvc, e.devCfg, e.hooks
 	if err := w.Bind("bdevToggleFullscreen", func() {
-		toggleFullscreen(hwnd, fs)
+		hooks.toggleFullscreen()
 	}); err != nil {
 		log.Println("could not bind bdevToggleFullscreen:", err)
 	}
 	if err := w.Bind("bdevExitFullscreen", func() {
-		exitFullscreen(hwnd, fs)
+		hooks.exitFullscreen()
 	}); err != nil {
 		log.Println("could not bind bdevExitFullscreen:", err)
 	}
@@ -331,7 +269,7 @@ func main() {
 
 	// bdevSetHidden (WS2 item 2, "pause when nobody looks"): page.html
 	// calls this from its own document.visibilitychange listener, which
-	// WebView2/Chromium already fires when this app's own window is
+	// WebView2 and WKWebView already fire when this app's own window is
 	// minimized (the same page-visibility signal a real browser tab gets,
 	// tied here to the host window rather than a background tab). a.hidden
 	// is read by startSampling's merged system/process-walk ticker (app.go,
@@ -370,25 +308,6 @@ func main() {
 		log.Println("could not bind bdevSetStationTheme:", err)
 	}
 
-	// bdevSections (B2): the part switches per mode, the overall scrollbar flag, and the
-	// newest snapshot reading. bdevSetSections saves one change from the page
-	// (Plain Mode, the scrollbar flag, or one part switch). Both read and write files only.
-	snapPath, snapPathErr := snapshot.DefaultPath()
-	if snapPathErr != nil {
-		log.Println("snapshot path:", snapPathErr)
-	}
-	// Toasts (B8): a Windows notification when something enters Waits on you.
-	// The notifier has its own window on its own thread and the watch its own
-	// goroutine, which reads toast_enabled from burnmon-dev.json on every new
-	// snapshot and stays quiet until the startup backfill is done. On this UI
-	// thread only bdevSetToast runs, and it writes the small json file like
-	// bdevSetStationTheme does.
-	if n, err := toast.Start("BurnMon Dev", func() { bringToFront(hwnd) }); err != nil {
-		log.Println("toasts off for this run:", err)
-	} else {
-		defer n.Close()
-		startToastWatch(snapPath, setDir, a.initialCollectDone, n.Show)
-	}
 	if err := w.Bind("bdevSetToast", func(on bool) error {
 		err := saveDevConfigKey(setDir, "toast_enabled", on)
 		if err != nil {
@@ -398,7 +317,9 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bdevSetToast:", err)
 	}
-	ctlSvc := newControlService(cfg, setDir, snapPath, storePath)
+	// bdevSections (B2): the part switches per mode, the overall scrollbar flag, and the
+	// newest snapshot reading. bdevSetSections saves one change from the page
+	// (Plain Mode, the scrollbar flag, or one part switch). Both read and write files only.
 	if err := w.Bind("bdevSections", func() sectionsPayload {
 		return sectionsPayloadWith(setDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
 	}); err != nil {
@@ -480,6 +401,9 @@ func main() {
 		sysmon.Sample
 		PressureScore int     `json:"pressure_score"`
 		BaseClockGHz  float64 `json:"base_clock_ghz"`
+		// NotOn names the platform that has no source for the pressure score
+		// and wifi box; empty on Windows, so the payload is unchanged there.
+		NotOn string `json:"not_on,omitempty"`
 	}
 
 	// snapshotPayload is bdevSnapshotNow's own return shape (no-scroll patch
@@ -595,7 +519,7 @@ func main() {
 			HistGapMs: histGapThreshold.Milliseconds(),
 			Sysmon: sysmonNowPayload{
 				Sample: latest, PressureScore: sysmon.PressureScore(latest),
-				BaseClockGHz: sysmon.BaseClockGHz(),
+				BaseClockGHz: sysmon.BaseClockGHz(), NotOn: platformNotOn,
 			},
 			SysmonHistory:        sysHistory,
 			SysmonHistoryDelta:   !sysFull,
@@ -850,31 +774,6 @@ func main() {
 	// startSlowRefreshers' own 300s background loop (app.go); either way,
 	// the page just paints whatever bdevSnapshotNow's own todo_tasks field
 	// carries on its next tick.
-
-	// Dispatch heartbeat (alpha.7, found in the 90-minute after run on
-	// 2026-09-29): go-webview2's Dispatch queues its func and wakes the UI
-	// thread with one PostThreadMessage(WM_APP), which only w.Run's own
-	// GetMessage loop handles. A Win32 modal loop (a window drag or resize,
-	// a menu) pulls that thread message off the queue and drops it, so the
-	// queued func, here a bdevSnapshotNow resolve, waits until some later
-	// Dispatch gets through: 67s on 2026-09-29, and forever before alpha.7,
-	// when nothing else dispatched while the page waited on that one call.
-	// A no-op Dispatch every second means a lost wakeup costs at most a
-	// second once the modal loop has ended (inside it, the heartbeat's own
-	// WM_APP is dropped too), for every binding, not just the render tick.
-	go func() {
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-		for range t.C {
-			w.Dispatch(func() {})
-		}
-	}()
-
-	startUICheckServer(w, func() string { return assemblePage(devCfg.StationTheme, loadUITheme(setDir)) })
-
-	w.SetHtml(assemblePage(devCfg.StationTheme, loadUITheme(setDir)))
-	go startBackgroundIngest(a, st, w)
-	w.Run()
 }
 
 // startBackgroundIngest is section 11 steps 2-3: everything that used to run
@@ -885,7 +784,7 @@ func main() {
 // through the same w.Eval mechanism bdevAsyncResolveJS already uses
 // elsewhere in this file, not a bound function: the loading screen has
 // nothing to call, only something to listen for.
-func startBackgroundIngest(a *app, st *store.Store, w webview2.WebView) {
+func startBackgroundIngest(a *app, st *store.Store, w winbind.Window) {
 	// "Opening store" already finished, synchronously, before the window
 	// was created (it is fast: 24ms measured this session); shown here
 	// anyway so the loading screen's own step list reads as one coherent
@@ -946,7 +845,7 @@ func startBackgroundIngest(a *app, st *store.Store, w webview2.WebView) {
 // same w.Dispatch/w.Eval pattern every async bdev* binding in this file
 // already uses to deliver a result computed off the UI thread; neither is a
 // bound function since the page never calls either of these itself.
-func pushLoadingStep(w webview2.WebView, text string, pct int) {
+func pushLoadingStep(w winbind.Window, text string, pct int) {
 	textJSON, err := json.Marshal(text)
 	if err != nil {
 		return
@@ -955,7 +854,7 @@ func pushLoadingStep(w webview2.WebView, text string, pct int) {
 	w.Dispatch(func() { w.Eval(js) })
 }
 
-func pushHeaderStatus(w webview2.WebView, text string) {
+func pushHeaderStatus(w winbind.Window, text string) {
 	textJSON, err := json.Marshal(text)
 	if err != nil {
 		return
@@ -965,23 +864,20 @@ func pushHeaderStatus(w webview2.WebView, text string) {
 }
 
 // openBrowser opens url in the default browser (cmd\burnmon-cli\main.go's
-// own Windows branch, ported here since burnmon-dev is Windows-only and has
-// no such helper of its own yet). Only ever called with Microsoft's own
+// own Windows branch, ported here; startBrowser has a Windows and a macOS
+// variant). Only ever called with Microsoft's own
 // device-code verification_uri (internal/todo.StartLogin), never anything
 // page- or user-supplied, but still checked for an https scheme before
 // shelling out (found by review, 2026-09-25: cheap, and rules out this
 // call site ever being repurposed later with a less trusted URL).
-// HideWindow: burnmon-dev.exe is built -H windowsgui, so without it `cmd`
-// can still flash a console window.
+// startBrowser (openurl_windows.go) does the platform launch.
 func openBrowser(rawURL string) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "https" {
 		log.Println("openBrowser: refusing a non-https URL:", rawURL)
 		return
 	}
-	cmd := exec.Command("cmd", "/c", "start", "", rawURL)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	if err := cmd.Start(); err != nil {
+	if err := startBrowser(rawURL); err != nil {
 		log.Println("openBrowser: could not start:", err)
 	}
 }

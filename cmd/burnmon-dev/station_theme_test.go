@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-func devJSONPath(dir string) string { return filepath.Join(dir, "burnmon-dev.json") }
-
 // TestSaveStationThemeKeepsOtherKeys: saving the theme writes only that key;
 // every other key, known to the struct or not, keeps its value.
 func TestSaveStationThemeKeepsOtherKeys(t *testing.T) {

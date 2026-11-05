@@ -1,28 +1,23 @@
-//go:build windows
+//go:build windows || (darwin && cgo)
 
 // Command burnmon is the single-window desktop face of burnmon: a
-// WebView2 window that collects your Claude usage on startup, on an
-// interval, and on demand, and shows the same dashboard template as the CLI,
+// native window (WebView2 on Windows, WKWebView on macOS) that collects your
+// Claude usage on startup, on an interval, and on demand, and shows the same
+// dashboard template as the CLI,
 // live, in place. No server, no open port, no tray, no browser tab.
 package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"sync"
 	"time"
-	"unsafe"
-
-	webview2 "github.com/jchv/go-webview2"
-	"golang.org/x/sys/windows"
 
 	"burnmon/internal/adapter/codex"
 	"burnmon/internal/forecast"
@@ -33,6 +28,7 @@ import (
 	"burnmon/internal/scan"
 	"burnmon/internal/store"
 	"burnmon/internal/vendorstrip"
+	"burnmon/internal/winbind"
 )
 
 const (
@@ -160,9 +156,6 @@ func main() {
 		return
 	}
 
-	wv2Dir := filepath.Join(dataDir, "wv2")
-	_ = os.MkdirAll(wv2Dir, 0o755)
-
 	storePath, err := store.DefaultPath()
 	if err != nil {
 		log.Println("could not resolve the store path:", err)
@@ -193,27 +186,8 @@ func main() {
 	}
 	a.cache.Store = st
 
-	// WEBVIEW2_USER_DATA_FOLDER (alpha.7, found 2026-09-29): go-webview2
-	// (pkg/edge/chromium.go) passes DataPath to WebView2Loader as an inline
-	// windows.StringToUTF16Ptr that nothing keeps alive, and the loader reads
-	// it after the Go buffer can already be freed and reused, so some launches
-	// got a user-data folder named after whatever heap text was there (prompt
-	// and session-path fragments), created relative to the working directory.
-	// The loader also reads this environment variable, which lives in the
-	// process environment, not in Go memory, so the folder is always wv2Dir.
-	_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", wv2Dir)
-	w := webview2.NewWithOptions(webview2.WebViewOptions{
-		DataPath: wv2Dir,
-		WindowOptions: webview2.WindowOptions{
-			Title:  windowTitle,
-			Width:  1280,
-			Height: 860,
-			Center: true,
-			IconId: 1, // matches the "#1" icon group winres/app.json embeds
-		},
-	})
+	w := newAppWindow(dataDir)
 	if w == nil {
-		log.Println("could not create the WebView2 window; falling back to the default browser")
 		runWithoutWindow(a)
 		return
 	}
@@ -306,6 +280,46 @@ func main() {
 		tickerMu.Unlock()
 	}
 
+	bindApp(w, a, st, resetWSLTicker)
+	startUICheckServer(w)
+
+	go func() {
+		ticker := time.NewTicker(*interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			// The 15-minute (or whatever -interval is) tier never touches
+			// WSL: RefreshSlow false, so Collect reuses the last full
+			// pass's slow-tier file list instead of walking it again.
+			if _, err := a.rebuild(false, progressReporter(w)); err != nil {
+				log.Println("scheduled collection failed:", err)
+				continue
+			}
+			// Reload the page so the new snapshot shows without a click.
+			// ccReload (app chrome) stashes the active tab first so the
+			// reload lands back on the same tab, not on Overview.
+			w.Dispatch(func() { w.Eval("window.ccReload ? ccReload() : location.reload()") })
+		}
+	}()
+
+	if wslTicker != nil {
+		go func() {
+			defer wslTicker.Stop()
+			for range wslTicker.C {
+				if _, err := a.rebuild(true, progressReporter(w)); err != nil {
+					log.Println("scheduled WSL collection failed:", err)
+					continue
+				}
+				w.Dispatch(func() { w.Eval("window.ccReload ? ccReload() : location.reload()") })
+			}
+		}()
+	}
+
+	w.Run()
+}
+
+// bindApp registers the page-callable functions on w. The names are listed in
+// appBindingNames (binding_names.go); a test keeps the two in step.
+func bindApp(w winbind.Window, a *app, st *store.Store, resetWSLTicker func()) {
 	if err := w.Bind("ccRefresh", func() {
 		go func() {
 			if _, err := a.rebuild(true, progressReporter(w)); err != nil {
@@ -439,8 +453,6 @@ func main() {
 		log.Println("could not bind bmForecast:", err)
 	}
 
-	startUICheckServer(w)
-
 	if err := w.Bind("ccSaveSettings", func(p settingsPayload) error {
 		if err := a.applySettings(p); err != nil {
 			return err
@@ -481,46 +493,13 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bmExportHistory:", err)
 	}
-
-	go func() {
-		ticker := time.NewTicker(*interval)
-		defer ticker.Stop()
-		for range ticker.C {
-			// The 15-minute (or whatever -interval is) tier never touches
-			// WSL: RefreshSlow false, so Collect reuses the last full
-			// pass's slow-tier file list instead of walking it again.
-			if _, err := a.rebuild(false, progressReporter(w)); err != nil {
-				log.Println("scheduled collection failed:", err)
-				continue
-			}
-			// Reload the page so the new snapshot shows without a click.
-			// ccReload (app chrome) stashes the active tab first so the
-			// reload lands back on the same tab, not on Overview.
-			w.Dispatch(func() { w.Eval("window.ccReload ? ccReload() : location.reload()") })
-		}
-	}()
-
-	if wslTicker != nil {
-		go func() {
-			defer wslTicker.Stop()
-			for range wslTicker.C {
-				if _, err := a.rebuild(true, progressReporter(w)); err != nil {
-					log.Println("scheduled WSL collection failed:", err)
-					continue
-				}
-				w.Dispatch(func() { w.Eval("window.ccReload ? ccReload() : location.reload()") })
-			}
-		}()
-	}
-
-	w.Run()
 }
 
 // progressReporter turns a Collect-shaped (done,total) callback into live
 // updates on the page via ccProgress(done, total, etaSeconds|null). Call it
 // fresh immediately before each rebuild so its elapsed-time clock, which the
 // estimate is based on, starts at zero every time.
-func progressReporter(w webview2.WebView) func(done, total int) {
+func progressReporter(w winbind.Window) func(done, total int) {
 	start := time.Now()
 	return func(done, total int) {
 		if total <= 0 {
@@ -559,68 +538,4 @@ func asyncResolveJS(resolverName, key string, data any) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("window.%s && window.%s(%s, %s)", resolverName, resolverName, keyJSON, dataJSON), nil
-}
-
-// ---------------------------------------------------------------------------
-// Single instance and the WebView2-missing fallback
-// ---------------------------------------------------------------------------
-
-var (
-	user32                  = windows.NewLazySystemDLL("user32.dll")
-	procFindWindowW         = user32.NewProc("FindWindowW")
-	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
-)
-
-// alreadyRunning claims a named mutex for the life of the process. Windows
-// reports ERROR_ALREADY_EXISTS when another instance already holds it, even
-// though the returned handle is otherwise valid; that is the documented way
-// to detect this without a helper class.
-func alreadyRunning() bool {
-	name, err := windows.UTF16PtrFromString(mutexName)
-	if err != nil {
-		return false
-	}
-	_, err = windows.CreateMutex(nil, false, name)
-	return errors.Is(err, windows.ERROR_ALREADY_EXISTS)
-}
-
-func bringExistingToFront() {
-	title, err := windows.UTF16PtrFromString(windowTitle)
-	if err != nil {
-		return
-	}
-	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
-	if hwnd == 0 {
-		return
-	}
-	procSetForegroundWindow.Call(hwnd)
-}
-
-const (
-	mbOK          = 0x00000000
-	mbIconWarning = 0x00000030
-)
-
-// runWithoutWindow covers the very unlikely case of a managed machine
-// missing the WebView2 runtime: collect once, open the result in the
-// default browser, and say why there is no app window.
-func runWithoutWindow(a *app) {
-	if _, err := a.rebuild(true, nil); err != nil {
-		log.Println("fallback collection failed:", err)
-	}
-	openInBrowser(a.htmlPath)
-	showWebView2MissingMessage()
-}
-
-func openInBrowser(path string) {
-	_ = exec.Command("cmd", "/c", "start", "", path).Start()
-}
-
-func showWebView2MissingMessage() {
-	text, _ := windows.UTF16PtrFromString(
-		"Claude Cost could not open its window because the WebView2 runtime is missing.\n" +
-			"The dashboard was opened in your default browser instead. Installing the\n" +
-			"WebView2 runtime (part of Microsoft Edge) will let the app window open normally.")
-	caption, _ := windows.UTF16PtrFromString(windowTitle)
-	_, _ = windows.MessageBox(0, text, caption, mbOK|mbIconWarning)
 }

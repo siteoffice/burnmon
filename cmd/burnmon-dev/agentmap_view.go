@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // agentmap_view.go is the Go side of R7's full agent map: the boxes and lines
 // for the live snapshot or for a past window of BurnMon's store, laid out by

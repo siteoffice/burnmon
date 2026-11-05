@@ -369,3 +369,41 @@ func TestNoEmDashInChangedDocs(t *testing.T) {
 		}
 	}
 }
+
+// ignoredCorpus is a root with a .gitignore naming 04_assets/ and no such
+// folder, like a clean checkout.
+func ignoredCorpus(t *testing.T) Corpus {
+	t.Helper()
+	c := fakeCorpus(t)
+	if err := os.WriteFile(filepath.Join(c.Root, ".gitignore"), []byte("*.exe\n# note\n04_assets/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestPathInIgnoredMissingFolderIsSkipped(t *testing.T) {
+	c := ignoredCorpus(t)
+	doc := md(`See '04_assets\x_*.md' and '04_assets\y.md'.`)
+	if got := Verify("DOC.md", doc, c, nil); len(got) != 0 {
+		t.Fatalf("ignored and missing folder must be unverifiable, got %+v", got)
+	}
+}
+
+func TestPathInIgnoredPresentFolderStillChecked(t *testing.T) {
+	c := ignoredCorpus(t)
+	if err := os.MkdirAll(filepath.Join(c.Root, "04_assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := md(`See '04_assets\x_*.md'.`)
+	if got := Verify("DOC.md", doc, c, nil); len(got) != 1 {
+		t.Fatalf("existing ignored folder must still be checked, got %+v", got)
+	}
+}
+
+func TestPathInUnignoredMissingFolderStillFails(t *testing.T) {
+	c := ignoredCorpus(t)
+	doc := md(`See 'internal\nothere\x.go'.`)
+	if got := Verify("DOC.md", doc, c, nil); len(got) != 1 {
+		t.Fatalf("unignored missing path must fail, got %+v", got)
+	}
+}

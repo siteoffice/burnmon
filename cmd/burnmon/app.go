@@ -820,7 +820,11 @@ func (a *app) settingsModalHTML() string {
 }
 
 func toFileURL(path string) string {
-	u := &url.URL{Scheme: "file", Path: "/" + filepath.ToSlash(path)}
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	u := &url.URL{Scheme: "file", Path: p}
 	return u.String()
 }
 
