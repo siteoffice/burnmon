@@ -240,6 +240,9 @@ func checkPath(root, s string) string {
 	}
 	rel := filepath.FromSlash(strings.TrimRight(strings.ReplaceAll(s, "\\", "/"), "/"))
 	p := filepath.Join(root, rel)
+	if unverifiable(root, rel) {
+		return ""
+	}
 	if strings.Contains(rel, "*") {
 		if m, _ := filepath.Glob(p); len(m) > 0 {
 			return ""
@@ -250,6 +253,29 @@ func checkPath(root, s string) string {
 		return "no such file"
 	}
 	return ""
+}
+
+// unverifiable reports a path whose top-level folder is named in the repo's
+// .gitignore and absent from the checkout: a clean clone cannot hold it.
+func unverifiable(root, rel string) bool {
+	top := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
+	if top == "" || strings.ContainsAny(top, "*?[") {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(root, top)); err == nil {
+		return false
+	}
+	b, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.TrimSuffix(strings.TrimPrefix(line, "/"), "/") == top {
+			return true
+		}
+	}
+	return false
 }
 
 // CheckAllowlist reports entries without a reason and entries that no

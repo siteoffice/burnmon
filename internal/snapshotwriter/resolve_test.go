@@ -268,6 +268,9 @@ func TestEnableAgentViewWithConfiguredPath(t *testing.T) {
 		t.Fatal("no runner for a configured claude.exe")
 	}
 
+	if runtime.GOOS != "windows" {
+		t.Skip("the .ps1 shim half uses a Windows path and the .ps1 refusal is Windows-only")
+	}
 	st := snapshotTestStore(t)
 	gr2, _ := fakeReaders(t, `{"pid":4100,"sessionId":"s2","procStart":"777"}`)
 	gr2.EnableAgentViewWith("", lookOf(`C:\n\claude.ps1`, nil))

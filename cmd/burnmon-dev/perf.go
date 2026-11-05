@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // perf.go is WS2 alpha.7's measurement layer (spec
 // 02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md, items 1 and 2):
@@ -15,9 +15,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 // snapshotPerf collects bdevSnapshotNow's own per-call timings for the
@@ -117,26 +114,9 @@ func logPagePerf(r pagePerfReport) {
 		r.N, r.P50, r.P95, r.Max, r.Late, r.InFlight, r.Abandoned, r.Paints, r.MaxStreak, r.MaxGapMs, r.HeapMB, r.SysRows, r.GroupRows, r.Hidden)
 }
 
-// Sleep and power readings for the sample-gap log (spec item 2). GetTickCount64
-// counts time asleep, QueryUnbiasedInterruptTime does not, so the difference
-// between their deltas across a gap is how long the machine slept in it.
-var (
-	kernel32                       = windows.NewLazySystemDLL("kernel32.dll")
-	procGetTickCount64             = kernel32.NewProc("GetTickCount64")
-	procQueryUnbiasedInterruptTime = kernel32.NewProc("QueryUnbiasedInterruptTime")
-	procGetSystemPowerStatus       = kernel32.NewProc("GetSystemPowerStatus")
-)
-
 type clockPair struct {
 	tick     time.Duration // GetTickCount64, includes sleep
 	unbiased time.Duration // QueryUnbiasedInterruptTime, excludes sleep
-}
-
-func readClocks() clockPair {
-	t, _, _ := procGetTickCount64.Call()
-	var u uint64
-	procQueryUnbiasedInterruptTime.Call(uintptr(unsafe.Pointer(&u)))
-	return clockPair{tick: time.Duration(t) * time.Millisecond, unbiased: time.Duration(u) * 100}
 }
 
 func sleptBetween(a, b clockPair) time.Duration {
@@ -145,30 +125,4 @@ func sleptBetween(a, b clockPair) time.Duration {
 		return 0
 	}
 	return d
-}
-
-type systemPowerStatus struct {
-	ACLineStatus        byte
-	BatteryFlag         byte
-	BatteryLifePercent  byte
-	SystemStatusFlag    byte
-	BatteryLifeTime     uint32
-	BatteryFullLifeTime uint32
-}
-
-// powerState is a short "ac=on saver=off" readout, "unknown" on failure.
-func powerState() string {
-	var s systemPowerStatus
-	if r, _, _ := procGetSystemPowerStatus.Call(uintptr(unsafe.Pointer(&s))); r == 0 {
-		return "unknown"
-	}
-	ac := map[byte]string{0: "off", 1: "on"}[s.ACLineStatus]
-	if ac == "" {
-		ac = "unknown"
-	}
-	saver := "off"
-	if s.SystemStatusFlag == 1 {
-		saver = "on"
-	}
-	return "ac=" + ac + " saver=" + saver
 }

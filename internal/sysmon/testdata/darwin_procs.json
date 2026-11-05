@@ -1,0 +1,8 @@
+[
+  {"pid": 100, "ppid": 1, "name": "node", "cmdline": "node /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js", "cpu_pct": 12.5, "mem_mb": 200, "io_bps": 1000},
+  {"pid": 101, "ppid": 100, "name": "claude", "cmdline": "", "cpu_pct": 2.5, "mem_mb": 50, "io_bps": 0},
+  {"pid": 401, "ppid": 100, "name": "rg", "cmdline": "", "cpu_pct": 1.0, "mem_mb": 10, "io_bps": 500},
+  {"pid": 200, "ppid": 1, "name": "codex", "cmdline": "", "cpu_pct": 4.0, "mem_mb": 30, "io_bps": 0},
+  {"pid": 300, "ppid": 1, "name": "burnmon-dev", "cmdline": "", "cpu_pct": 1.0, "mem_mb": 80, "io_bps": 0},
+  {"pid": 400, "ppid": 1, "name": "Finder", "cpu_pct": 3.0, "mem_mb": 90, "io_bps": 0, "cmdline": ""}
+]

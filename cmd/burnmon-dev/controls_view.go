@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // controls_view.go is the Go side of the BurnMon Dev controls. The page may
 // send only two things: a control name plus a target id (PreviewRequest), and

@@ -16,6 +16,7 @@ func agentEntry() waits.AgentEntry {
 }
 
 func TestCheckAgent(t *testing.T) {
+	requireWindowsPaths(t)
 	self := Self{PID: 10, Ancestors: []int{50}, ExeDir: `C:\example\burnmon`}
 	mod := func(f func(*waits.AgentEntry)) []waits.AgentEntry {
 		e := agentEntry()

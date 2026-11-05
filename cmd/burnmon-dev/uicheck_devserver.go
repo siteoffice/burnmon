@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 package main
 
@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	webview2 "github.com/jchv/go-webview2"
+	"burnmon/internal/winbind"
 )
 
 // startUICheckServer mirrors cmd\burnmon\uicheck_devserver.go exactly, one
@@ -29,7 +29,7 @@ import (
 // page builds the document the window starts with; a request {"reload":true}
 // loads it again (the window is made with SetHtml, a plain location.reload
 // would land on about:blank), so a check can prove what survives a real reload.
-func startUICheckServer(w webview2.WebView, page func() string) {
+func startUICheckServer(w winbind.Window, page func() string) {
 	if os.Getenv("BURNMON_DEV_UICHECK") == "" {
 		return
 	}
@@ -80,7 +80,7 @@ type uicheckRequest struct {
 	Reload bool   `json:"reload,omitempty"`
 }
 
-func (s *uicheckServer) handle(conn net.Conn, w webview2.WebView, page func() string) {
+func (s *uicheckServer) handle(conn net.Conn, w winbind.Window, page func() string) {
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // station_theme.go saves the "Station starts as" setting. saveDevConfigKey
 // here is the only code that writes burnmon-dev.json, and it writes one key

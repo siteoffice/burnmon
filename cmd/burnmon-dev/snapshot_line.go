@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // snapshot_line.go turns the writer state of this process and the snapshot
 // file's reading into the one line the header, the box below it and the

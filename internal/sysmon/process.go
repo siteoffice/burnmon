@@ -1,5 +1,10 @@
 package sysmon
 
+import (
+	"sort"
+	"time"
+)
+
 // resolveHarnesses classifies every process in infoByPID via Classify,
 // resolving parent-chain inheritance (Classify's own last resort) with
 // memoized recursion so a long chain is only ever walked once per process.
@@ -54,5 +59,39 @@ func resolveHarnesses(infoByPID map[int32]Proc, copilotVSCodeConfigured bool) ma
 	for pid := range infoByPID {
 		out[pid] = resolve(pid, 0)
 	}
+	return out
+}
+
+// procReading is one process's CPU, memory and IO rate for one tick, already
+// measured by the platform sampler; sumProcessGroups only adds them up.
+type procReading struct {
+	PID                  int32
+	CPUPct, MemMB, IOBps float64
+}
+
+// sumProcessGroups sums readings per harness, dropping processes that map to
+// no harness or to HarnessOther. Output is sorted by Harness so the order is
+// stable between ticks.
+func sumProcessGroups(rs []procReading, harnessByPID map[int32]Harness, ts time.Time) []ProcessGroupSample {
+	sums := map[Harness]*ProcessGroupSample{}
+	for _, r := range rs {
+		h := harnessByPID[r.PID]
+		if h == "" || h == HarnessOther {
+			continue
+		}
+		s := sums[h]
+		if s == nil {
+			s = &ProcessGroupSample{Ts: ts, Harness: h}
+			sums[h] = s
+		}
+		s.CPUPct += r.CPUPct
+		s.MemMB += r.MemMB
+		s.IOBps += r.IOBps
+	}
+	out := make([]ProcessGroupSample, 0, len(sums))
+	for _, s := range sums {
+		out = append(out, *s)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Harness < out[j].Harness })
 	return out
 }

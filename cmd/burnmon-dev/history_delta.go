@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // history_delta.go is WS2 alpha.7 item 1 (spec
 // 02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md): the render

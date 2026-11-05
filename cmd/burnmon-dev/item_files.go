@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 // item_files.go is the Go side of the spec and result links in Waits on you
 // and Outcomes. The page names a file; this code opens it only when the newest
@@ -14,28 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sys/windows"
-
 	"burnmon/internal/snapshot"
 )
 
 // itemFileExts are the only file types a link may open. Everything else,
 // executables and scripts included, is refused even when the snapshot lists it.
 var itemFileExts = map[string]bool{".md": true, ".html": true, ".txt": true}
-
-// openItemFile opens path with the OS default handler. ShellExecute takes the
-// path as one argument, so no shell parses it. Tests swap it for a recorder.
-var openItemFile = func(path string) error {
-	verb, err := windows.UTF16PtrFromString("open")
-	if err != nil {
-		return err
-	}
-	file, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return err
-	}
-	return windows.ShellExecute(0, verb, file, nil, nil, windows.SW_SHOWNORMAL)
-}
 
 // plainDrivePath reports whether p is `X:\...` with no UNC prefix, device
 // prefix (`\.\`, `\?\`) or stream (`:` after the drive letter).

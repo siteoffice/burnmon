@@ -211,6 +211,7 @@ func gateItem(s *snapshot.Snapshot) int {
 }
 
 func TestPreviewShowsExactStopCommand(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	p, err := r.preview(Stop, "ab12")
 	if err != nil {
@@ -231,6 +232,7 @@ func TestPreviewShowsExactStopCommand(t *testing.T) {
 }
 
 func TestRunStopsAfterSecondPress(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	p, _ := r.preview(Stop, "ab12")
 	res, err := r.confirm(p.Token)
@@ -264,6 +266,7 @@ func TestRunWithoutPreviewRunsNothing(t *testing.T) {
 }
 
 func TestRunAfterTimeoutRunsNothing(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	p, _ := r.preview(Stop, "ab12")
 	r.clock.t = r.clock.t.Add(6 * time.Second)
@@ -281,6 +284,7 @@ func TestRunAfterTimeoutRunsNothing(t *testing.T) {
 }
 
 func TestSecondPressTooSoonIsAuditedAndKeepsToken(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	p, _ := r.preview(Stop, "ab12")
 	r.clock.t = r.clock.t.Add(50 * time.Millisecond)
@@ -300,6 +304,7 @@ func TestSecondPressTooSoonIsAuditedAndKeepsToken(t *testing.T) {
 }
 
 func TestRunRefusesChangedSession(t *testing.T) {
+	requireWindowsPaths(t)
 	cases := []struct{ name, agent, want string }{
 		{"new pid", agentJSON("ab12", 99, "blocked", `C:\example\other`), "the session changed since the preview, press again"},
 		{"stopped", agentJSON("ab12", 4242, "stopped", `C:\example\other`), "the session has ended, restart it from a terminal"},
@@ -330,6 +335,7 @@ func TestRunRefusesChangedSession(t *testing.T) {
 }
 
 func TestNeverSelfRefusesAtPreviewAndRun(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	r.self.Ancestors = []int{4242}
 	if _, err := r.preview(Stop, "ab12"); err == nil || !strings.Contains(err.Error(), "this session started BurnMon Dev") {
@@ -392,6 +398,7 @@ func TestPreviewNeedsOkSnapshot(t *testing.T) {
 }
 
 func TestRunFailsClosedWithoutAudit(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	blocker := filepath.Join(t.TempDir(), "afile")
 	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
@@ -438,6 +445,7 @@ func (f *svcFailWriter) Write(p []byte) (int, error) {
 func (f *svcFailWriter) Close() error { return nil }
 
 func TestRunDoesNotRunWhenAuditLineCannotBeWritten(t *testing.T) {
+	requireWindowsPaths(t)
 	for _, half := range []bool{false, true} {
 		r := newRig(t)
 		fw := &svcFailWriter{failAt: 1, half: half}
@@ -458,6 +466,7 @@ func TestRunDoesNotRunWhenAuditLineCannotBeWritten(t *testing.T) {
 }
 
 func TestAuditNewlineRepairsPartialLineFromEarlierRun(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	if err := os.WriteFile(r.audit, []byte(`{"time":"2026-10-26T09`), 0o600); err != nil {
 		t.Fatal(err)
@@ -480,6 +489,7 @@ func TestAuditNewlineRepairsPartialLineFromEarlierRun(t *testing.T) {
 }
 
 func TestRunnerNonzeroExitIsFailure(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	r.runner.code, r.runner.line = 2, "no such session"
 	p, _ := r.preview(Stop, "ab12")
@@ -496,6 +506,7 @@ func TestRunnerNonzeroExitIsFailure(t *testing.T) {
 }
 
 func TestRunnerErrorIsFailure(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	r.runner.code, r.runner.err = 0, errors.New("deadline exceeded")
 	p, _ := r.preview(Stop, "ab12")
@@ -512,6 +523,7 @@ func TestRunnerErrorIsFailure(t *testing.T) {
 }
 
 func TestAttachStartsConsole(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	p, err := r.preview(Attach, "ab12")
 	if err != nil {
@@ -659,6 +671,7 @@ func TestGateExitCodesMapToClearResults(t *testing.T) {
 }
 
 func TestAuditHoldsNoTokenOrOutput(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	r.runner.line = "SESSION-TEXT-SECRET-LINE"
 	pg, _ := r.preview(Approve, r.gateTarget())
@@ -684,6 +697,7 @@ func TestAuditHoldsNoTokenOrOutput(t *testing.T) {
 }
 
 func TestSwitchOffMeansNotReadyAndRefused(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	p, _ := r.preview(Stop, "ab12")
 	r.switches[Stop] = false
@@ -787,6 +801,7 @@ func TestNilEnvFunctionsFailClosed(t *testing.T) {
 }
 
 func TestOneRunAtATime(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	r.runner.entered = make(chan struct{}, 4)
 	r.runner.release = make(chan struct{})
@@ -813,6 +828,7 @@ func TestOneRunAtATime(t *testing.T) {
 }
 
 func TestConcurrentConfirmsOfOneTokenRunOnce(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	p, _ := r.preview(Stop, "ab12")
 	r.clock.t = r.clock.t.Add(time.Second)
@@ -852,6 +868,7 @@ func TestSecondPressCarriesOnlyTheToken(t *testing.T) {
 }
 
 func TestTokenForAIsNeverRunForB(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	r.snap = func(s *snapshot.Snapshot) {
 		for i := range s.AgentSessions {
@@ -878,6 +895,7 @@ func TestTokenForAIsNeverRunForB(t *testing.T) {
 }
 
 func TestPreviewLabelComesFromFreshRead(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	r.snap = func(s *snapshot.Snapshot) {
 		for i := range s.AgentSessions {
@@ -938,6 +956,7 @@ func TestAttachAndStopRefuseEndedSession(t *testing.T) {
 }
 
 func TestOnePreviewReadsTheAgentViewAtATime(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	entered := make(chan struct{}, 4)
 	release := make(chan struct{})
@@ -971,6 +990,7 @@ func TestOnePreviewReadsTheAgentViewAtATime(t *testing.T) {
 }
 
 func TestPanickingAgentViewDoesNotLeavePreviewLocked(t *testing.T) {
+	requireWindowsPaths(t)
 	r := newRig(t)
 	var calls atomic.Int32
 	r.env.AgentView = func(ctx context.Context) ([]byte, error) {

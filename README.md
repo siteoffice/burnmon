@@ -437,6 +437,7 @@ responsive down to a single compact column.
   thread, never the UI thread, and reads only the snapshot file and `burnmon-dev.json`.
   Its tray icon takes one of two IDs in turn, so Windows' list of other system tray icons
   (Settings, Taskbar) gains at most two entries for it, not one per notification.
+  On macOS the banner is attributed to Script Editor and a click does nothing.
 - **Export**: the header's "EXPORT" button, or
   `burnmon-dev.exe export --since --until --out DIR [--redact]` (`--since`/`--until` take
   a local day, YYYY-MM-DD, or a full RFC3339 timestamp), writes an AI-ready bundle to

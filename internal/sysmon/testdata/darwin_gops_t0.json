@@ -1,0 +1,18 @@
+{
+  "at": "2026-11-04T10:00:00Z",
+  "cpu_total": [0],
+  "cpu_per_core": [0,0,0,0],
+  "vmem": {"total": 17179869184, "used": 8589934592},
+  "swap": {"total": 2147483648, "used": 536870912},
+  "usage": [
+    {"path": "/", "fstype": "apfs", "total": 536870912000, "free": 214748364800, "usedPercent": 60},
+    {"path": "/System/Volumes/Data", "fstype": "apfs", "total": 536870912000, "free": 214748364800, "usedPercent": 60},
+    {"path": "/System/Volumes/VM", "fstype": "apfs", "total": 536870912000, "free": 214748364800, "usedPercent": 60},
+    {"path": "/Volumes/External", "fstype": "exfat", "total": 1073741824000, "free": 858993459200, "usedPercent": 20}
+  ],
+  "disk_io": {
+    "disk0": {"name": "disk0", "readBytes": 1000000, "writeBytes": 2000000},
+    "disk4": {"name": "disk4", "readBytes": 500, "writeBytes": 500}
+  },
+  "net_io": [{"name": "all", "bytesSent": 1000000, "bytesRecv": 5000000}]
+}

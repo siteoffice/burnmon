@@ -1,0 +1,36 @@
+name: macos
+
+# B9 item 3: compile and test BurnMon on Apple silicon with cgo (webview_go),
+# before the Mac rental. release.yml stays the tagged browser-mode release.
+on:
+  push:
+    branches:
+      - main
+      - "sprint/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+      - name: Build burnmon, burnmon-dev and burnmon-cli
+        run: |
+          go build -o dist/burnmon ./cmd/burnmon
+          go build -o dist/burnmon-dev ./cmd/burnmon-dev
+          go build -o dist/burnmon-cli ./cmd/burnmon-cli
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./... -count=1
+      - name: maccheck (CI mode, window steps skipped)
+        run: bash scripts/maccheck.sh --ci

@@ -88,6 +88,7 @@ func (c *closeRig) setMerged(merged, known bool) {
 }
 
 func TestCloseArgv(t *testing.T) {
+	requireWindowsPaths(t)
 	got := CloseArgv(`C:\py\python.exe`, `C:\example\root`, `C:\example\root\sprints\example\example-merged`)
 	want := []string{`C:\py\python.exe`, "-E", "-s", `C:\example\root\sprints\_lib\sprint_step.py`,
 		`C:\example\root\sprints\example\example-merged`, "--phase", "done", "--action", "sprint_done",
@@ -417,6 +418,9 @@ func TestCloseWithFakeForemanLibrary(t *testing.T) {
 	t.Setenv("PYTHONPATH", evil)
 
 	argv := CloseArgv(py, root, sprintDir)
+	if runtime.GOOS != "windows" {
+		t.Skip("ExecRunner runs controls on Windows only (sys_other.go errUnsupported)")
+	}
 	code, line, err := ExecRunner{}.Run(context.Background(), argv, lib)
 	if err != nil || code != 0 {
 		t.Fatalf("run = %d, %q, %v", code, line, err)
@@ -543,6 +547,7 @@ func (l *lastLineRunner) RunLast(ctx context.Context, argv []string, dir string)
 
 // Only the Close control asks for the last line; Stop uses plain Run.
 func TestOnlyCloseUsesRunLast(t *testing.T) {
+	requireWindowsPaths(t)
 	c := newCloseRig(t)
 	lr := &lastLineRunner{}
 	c.env.Runner = lr

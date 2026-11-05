@@ -1,5 +1,3 @@
-//go:build windows
-
 package main
 
 import (
@@ -13,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	webview2 "github.com/jchv/go-webview2"
+	"burnmon/internal/winbind"
 )
 
 // startUICheckServer is dev-only (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md,
@@ -27,7 +25,7 @@ import (
 // cooperation needed); this channel exists only for the one thing an
 // external process cannot do on its own: reading and evaluating the page's
 // own DOM/JS, which only the process hosting the WebView2 control can do.
-func startUICheckServer(w webview2.WebView) {
+func startUICheckServer(w winbind.Window) {
 	if os.Getenv("BURNMON_UICHECK") == "" {
 		return
 	}
@@ -87,7 +85,7 @@ type uicheckRequest struct {
 // the page (via w.Dispatch/w.Eval, the same UI-thread-safe path bmTurn etc.
 // use), and writes exactly one JSON response line back:
 // {"ok":true,"value":...} or {"ok":false,"error":"..."}.
-func (s *uicheckServer) handle(conn net.Conn, w webview2.WebView) {
+func (s *uicheckServer) handle(conn net.Conn, w winbind.Window) {
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
