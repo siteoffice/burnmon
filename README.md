@@ -23,6 +23,8 @@ renamed and extended from v0.2 onward. Repo:
 
 Settings live in `burnmon.json`, next to the exe or else in `%LOCALAPPDATA%\burnmon\burnmon.json`; see Configuration.
 
+The Claude desktop app can show your other Claude Code sessions that run in the app, up to the 20 most recent. It cannot see sessions you started in a terminal or in VS Code, and it cannot see other coding tools at all. BurnMon Dev reads every Claude Code, Codex and Copilot session on this machine, wherever it runs, and shows which ones are waiting on you.
+
 ## Screenshots
 
 The Now page, live burn across vendors:

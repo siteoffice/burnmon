@@ -84,7 +84,11 @@ func TestReadmeWhichAppSectionAndCloudWording(t *testing.T) {
 			t.Errorf("section lacks %q", want)
 		}
 	}
-	const last = "Settings live in `burnmon.json`, next to the exe or else in `%LOCALAPPDATA%\\burnmon\\burnmon.json`; see Configuration."
+	const settings = "Settings live in `burnmon.json`, next to the exe or else in `%LOCALAPPDATA%\\burnmon\\burnmon.json`; see Configuration."
+	if !strings.Contains(section, settings) {
+		t.Errorf("section lacks %q", settings)
+	}
+	const last = "BurnMon Dev reads every Claude Code, Codex and Copilot session on this machine, wherever it runs, and shows which ones are waiting on you."
 	if !strings.HasSuffix(section, last) {
 		t.Errorf("section must end with %q", last)
 	}
