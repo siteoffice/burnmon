@@ -1,0 +1,7 @@
+{
+  "generatedAt": "2026-11-11T08:00:00Z",
+  "sprints": [
+    {"project": "kettle", "slug": "kettle-sprint-a", "status": "passing", "phase": "done", "progress": 100, "updated_at": "2026-11-02T00:00:00Z", "last_activity": "2026-11-02T00:00:00Z", "report_available": true},
+    {"project": "lamp", "slug": "lamp-sprint-b", "status": "running", "phase": "execute", "progress": 40, "updated_at": "2026-11-10T12:00:00Z", "last_activity": "2026-11-10T12:00:00Z", "report_available": false}
+  ]
+}

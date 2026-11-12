@@ -161,6 +161,7 @@ stop_burnmon_dev() {
 step build-burnmon env CGO_ENABLED=1 go build -o "$OUT/burnmon" ./cmd/burnmon
 step build-burnmon-dev env CGO_ENABLED=1 go build -o "$OUT/burnmon-dev" ./cmd/burnmon-dev
 step build-burnmon-cli env CGO_ENABLED=1 go build -o "$OUT/burnmon-cli" ./cmd/burnmon-cli
+step build-controlcentre env CGO_ENABLED=1 go build -o "$OUT/controlcentre" ./cmd/controlcentre
 step build-uicheck build_uicheck
 step vet go vet ./...
 step test go test ./... -count=1
@@ -184,6 +185,7 @@ window_step stop-burnmon-dev stop_burnmon_dev
   printf '%s\n' '- [ ] Second screen: move and resize the window across both screens'
   printf '%s\n' '- [ ] Screen Recording permission is granted for screencapture (the screenshots are not black)'
   printf '%s\n' '- [ ] OF25 banner: the three B9 item 5 checks'
+  printf '%s\n' '- [ ] Control Centre window: run maccheck-out/controlcentre --root <a folder with a siteoffice.json>, walk every page in light and dark at 60, 80 and 100 percent'
 } >> "$REPORT"
 
 cat "$REPORT"

@@ -1,0 +1,7 @@
+{
+  "generatedAt": "2026-11-11T08:00:00Z",
+  "flows": [
+    {"project": "kettle", "slug": "kettle-brew-gate", "stage": "G1", "status": "execute", "awaiting": false, "updatedAt": "2026-10-01T00:00:00Z"},
+    {"project": "lamp", "slug": "lamp-light", "stage": "G3", "status": "awaiting-owner", "awaiting": true, "updatedAt": "2026-11-10T08:00:00Z"}
+  ]
+}

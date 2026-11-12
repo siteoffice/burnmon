@@ -111,3 +111,37 @@ func TestReadmeWhichAppSectionAndCloudWording(t *testing.T) {
 		t.Error("macOS heading is gone")
 	}
 }
+
+// TestReadmeControlCentre guards the Control Centre section (slice 1, item 8)
+// and its bullet in "Which app do I open?".
+func TestReadmeControlCentre(t *testing.T) {
+	b, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := strings.ReplaceAll(string(b), "\r\n", "\n")
+	const head = "\n## Control Centre\n"
+	at := strings.Index(readme, head)
+	dev := strings.Index(readme, "\n## BurnMon Dev\n")
+	conf := strings.Index(readme, "\n## Configuration\n")
+	if at < 0 || dev < 0 || conf < 0 || !(dev < at && at < conf) {
+		t.Fatal("README.md needs '## Control Centre' after '## BurnMon Dev' and before '## Configuration'")
+	}
+	section := readme[at+len(head) : conf]
+	for _, want := range []string{"controlcentre.exe", "--root", "controlcentre.json", "_comments",
+		"Approve", "Send back",
+		"Decisions need BurnMon Dev running, because the gate and agent checks read its snapshot."} {
+		if !strings.Contains(section, want) {
+			t.Errorf("Control Centre section lacks %q", want)
+		}
+	}
+	const which = "\n## Which app do I open?\n"
+	wat := strings.Index(readme, which)
+	shots := strings.Index(readme, "\n## Screenshots\n")
+	if wat < 0 || shots < wat {
+		t.Fatal("README.md needs '## Which app do I open?' before '## Screenshots'")
+	}
+	if !strings.Contains(readme[wat:shots], "\n- **Control Centre** (`controlcentre.exe`)") {
+		t.Error("Which app do I open? lacks the Control Centre bullet")
+	}
+}

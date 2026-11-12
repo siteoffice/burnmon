@@ -1,0 +1,9 @@
+{
+  "generatedAt": "2026-11-11T08:00:00Z",
+  "flows": [
+    {"project": "kettle", "slug": "kettle-brew-gate", "stage": "G2", "status": "awaiting-owner", "awaiting": false, "updatedAt": "2026-11-04T10:00:00Z"},
+    {"project": "acme-hub", "slug": "hub-closed-one", "stage": "close", "status": "closed", "awaiting": false, "updatedAt": "2026-10-20T09:00:00Z"},
+    {"project": "nobody", "slug": "orphan-flow", "stage": "plan", "status": "execute", "awaiting": false, "updatedAt": "2026-11-09T15:30:00Z"},
+    {"project": "stove", "slug": "stove-no-time", "stage": "G1", "status": "awaiting-owner", "awaiting": false}
+  ]
+}

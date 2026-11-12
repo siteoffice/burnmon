@@ -1,0 +1,1367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Control Centre</title>
+<style>
+/* Layout of the Control Centre mock (2026-11-11): top bar, side menu, main pane with a lead line, detail pane. The three areas keep their
+   size on every page. Fonts are system stacks; light --accent is darkened from #0F9E78 to
+   #0B7457 for 4.5:1 contrast, also on its own --accent-fill (same hue) over --surface2. */
+:root{
+  --bg:#E9EEF4; --surface:#FFFFFF; --surface2:#F1F5F9; --text:#16243A; --muted:#566579;
+  --accent:#0B7457; --accent-fill:rgba(11,116,87,.10); --line:#CBD5E1; --line-soft:#DDE4EC;
+  --amber:#975E10; --amber-fill:rgba(151,94,16,.10); --desk:#D5DEE9;
+  --font:system-ui,-apple-system,"Segoe UI",sans-serif;
+  --display:system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0A1422; --surface:#112038; --surface2:#0E1B30; --text:#EAF1F8; --muted:#8A9CB5;
+  --accent:#3EDCB0; --accent-fill:rgba(62,220,176,.12); --line:#2A3C58; --line-soft:#1C2C46;
+  --amber:#F5B950; --amber-fill:rgba(245,185,80,.12); --desk:#060D18; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0A1422; --surface:#112038; --surface2:#0E1B30; --text:#EAF1F8; --muted:#8A9CB5;
+  --accent:#3EDCB0; --accent-fill:rgba(62,220,176,.12); --line:#2A3C58; --line-soft:#1C2C46;
+  --amber:#F5B950; --amber-fill:rgba(245,185,80,.12); --desk:#060D18; color-scheme:dark }
+
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--desk);color:var(--text);font-family:var(--font);font-size:13px;line-height:1.45}
+h3{font-family:var(--display);font-size:14.5px;font-weight:600;margin:0;line-height:1.2}
+p{margin:0}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+button{font-family:var(--font);font-size:12.5px;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface2);color:var(--text);padding:4px 10px}
+button:disabled{cursor:default;opacity:.5}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:600}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* the app in the window */
+.app{width:80%;height:100%;margin:0 auto;position:relative;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:40px minmax(0,1fr);background:var(--surface);border-inline:1px solid var(--line)}
+.top{display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--surface2);border-bottom:1px solid var(--line);min-width:0}
+.crumb{display:flex;align-items:center;gap:2px;font-family:var(--display);font-size:14px;min-width:0;overflow:hidden;white-space:nowrap}
+.crumb button{border:0;background:none;padding:2px 4px;font-family:var(--display);font-size:14px;color:var(--muted)}
+.crumb button.here{color:var(--text);font-weight:600;cursor:default}
+.crumb span{color:var(--muted)}
+.seg{display:inline-flex;flex:none;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{white-space:nowrap;border:0;border-radius:0;background:none;padding:4px 8px;display:flex;align-items:center;gap:5px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-fill);color:var(--accent)}
+.top .seg{margin-left:auto}
+svg.ic{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.body{display:grid;grid-template-columns:176px minmax(0,1fr) 256px;min-height:0}
+.app.icons .body{grid-template-columns:46px minmax(0,1fr) 256px}
+.sidem{display:flex;flex-direction:column;gap:2px;padding:8px 6px;border-right:1px solid var(--line);background:var(--surface2);min-width:0}
+.sidem button{display:flex;align-items:center;gap:8px;border:0;background:none;padding:7px 8px;color:var(--muted);text-align:left;white-space:nowrap;overflow:hidden;position:relative}
+.sidem button[aria-current="page"]{background:var(--accent-fill);color:var(--accent);font-weight:600}
+.sidem .sp{flex:1}
+.sidem .bd{margin-left:auto;background:var(--amber);color:var(--bg);font-family:var(--mono);font-size:10px;font-weight:600;border-radius:20px;padding:0 5px}
+.app.icons .sidem .tx{display:none}
+.app.icons .sidem .bd{position:absolute;top:2px;right:2px;margin:0}
+.main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:52px minmax(0,1fr);min-width:0;min-height:0}
+.lead{display:flex;align-items:center;padding:0 14px;border-bottom:1px solid var(--line-soft);font-family:var(--display);font-size:15px;font-weight:500;line-height:1.25;overflow:hidden;white-space:nowrap}
+.lead b{color:var(--amber);font-weight:600}
+.pane{padding:12px 14px;overflow:hidden;min-height:0;min-width:0;display:flex;flex-direction:column}
+.pager{margin-top:auto;flex:none;display:flex;align-items:center;justify-content:flex-end;gap:8px;height:28px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.pager button{display:flex;align-items:center;padding:2px 6px}
+.fileview{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
+.boardframe{flex:1 1 auto;min-height:0;width:100%;border:0;overflow-y:auto}
+.right{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;border-left:1px solid var(--line);min-height:0;min-width:0}
+.det{padding:12px;overflow:hidden;display:flex;flex-direction:column;gap:7px;min-height:0}
+.det ul{margin:0;padding-left:16px;font-size:12.5px}
+.det p{font-size:12.5px}
+.acts{display:flex;flex-wrap:wrap;gap:6px}
+.dec{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dec .cmd{font-family:var(--mono);font-size:11px;overflow-wrap:anywhere;background:var(--surface2);border:1px solid var(--line-soft);border-radius:6px;padding:5px 7px}
+.dec .warn{color:var(--amber)}
+.cm{border-top:1px solid var(--line);padding:10px 12px;background:var(--surface2);display:flex;flex-direction:column;gap:6px}
+.cm button.primary{width:100%;padding:9px;font-size:13.5px}
+.cm .tgt{color:var(--accent)}
+.ell{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.on{color:var(--accent);border-color:var(--accent);background:var(--accent-fill)}
+.chip.warn{color:var(--amber);border-color:var(--amber);background:var(--amber-fill)}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.src{font-family:var(--mono);font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+.lead .seg{margin-right:12px}
+.lead .ell{flex:1 1 auto;min-width:0}
+
+/* overview map */
+.map{display:block;flex:1 1 auto;min-height:0;width:100%}
+.colh{font-family:var(--mono);font-size:10px;letter-spacing:.08em;fill:var(--muted);text-transform:uppercase}
+g.node{cursor:pointer}
+g.node:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+g.node rect{fill:var(--surface2);stroke:var(--line);stroke-width:1.2}
+g.node.hold rect{stroke-dasharray:4 3}
+g.node.more rect{fill:none;stroke-dasharray:2 3}
+g.node .nt{font-family:var(--font);font-size:12.5px;font-weight:600;fill:var(--text)}
+g.node .ns{font-family:var(--mono);font-size:9.5px;fill:var(--muted)}
+g.node.sel rect{stroke:var(--accent);stroke-width:2.2;fill:var(--accent-fill)}
+g.node.rel rect{stroke:var(--accent)}
+g.node circle{fill:var(--amber)}
+g.node .bt{font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--bg);text-anchor:middle}
+path.edge{fill:none;stroke:var(--muted);stroke-width:1.2;opacity:.12}
+path.edge.step{stroke-dasharray:5 4}
+path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
+.map.picked g.node:not(.sel):not(.rel){opacity:.45}
+
+/* dense rows: unit view, "+N more" rows */
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;min-height:0}
+.col{display:flex;flex-direction:column;gap:4px;min-width:0}
+.col .eyebrow{margin-top:6px}
+.rw{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;min-height:28px;padding:2px 8px;border:0;border-bottom:1px solid var(--line-soft);border-radius:0;background:none;text-align:left;min-width:0;flex:none}
+.rw:hover{background:var(--surface2)}
+.rw.sel{background:var(--accent-fill);box-shadow:inset 2px 0 0 var(--accent)}
+.rw.warn{box-shadow:inset 2px 0 0 var(--amber)}
+.rw .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);flex:0 0 62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .nm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .fn{font-family:var(--mono);font-size:12px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .ro{flex:1 1 auto;min-width:0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .rl{flex:0 0 96px;font-family:var(--mono);font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .st{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap}
+.rw .st.warn{color:var(--amber)}
+.rw .bd{background:var(--amber);color:var(--bg);font-family:var(--mono);font-size:10px;font-weight:600;border-radius:20px;padding:0 5px}
+.rw.hd{min-height:22px;border-bottom:1px solid var(--line);cursor:default}
+.rw.hd:hover{background:none}
+.rw.hd span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.c1{flex:0 0 92px;min-width:0;display:flex}
+.c1 .chip{max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
+.c2{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:12px}
+.c3{flex:0 0 70px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c4{flex:0 0 46px;text-align:right;font-family:var(--mono);color:var(--muted)}
+.c5{flex:1 1 auto;min-width:0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw.warn .c4{color:var(--amber)}
+
+/* file view */
+.blk{flex:none;text-align:left;border:0;border-left:3px solid transparent;border-radius:0 6px 6px 0;background:none;padding:5px 9px;font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.blk.h{font-family:var(--display);font-weight:600;font-size:15.5px}
+.blk:hover{background:var(--surface2)}
+.blk.sel{border-left-color:var(--accent);background:var(--accent-fill)}
+
+/* planning: one row per week, 7 day columns; fixed dates in the warning colour */
+.plan{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));flex:1 1 auto;min-height:0;box-sizing:border-box;border:1px solid var(--line-soft);border-radius:6px;overflow:hidden}
+.plan .dh{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:3px 6px;border-bottom:1px solid var(--line);background:var(--surface2)}
+.plan .wk{font-family:var(--mono);font-size:10px;color:var(--muted);padding:5px 6px;border-top:1px solid var(--line-soft);background:var(--surface2);line-height:1.3;overflow:hidden;min-width:0}
+.plan .day{border-top:1px solid var(--line-soft);border-left:1px solid var(--line-soft);padding:4px;display:flex;flex-direction:column;gap:3px;min-width:0;overflow:hidden}
+.plan .day .dn{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.plan .day.today{background:var(--accent-fill)}
+.plan .day.today .dn{color:var(--accent);font-weight:600}
+.plan .day.we{background:var(--surface2)}
+.it{display:block;flex:none;width:100%;box-sizing:border-box;padding:1px 5px;border-radius:4px;font-size:10.5px;line-height:1.5;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid var(--amber);background:var(--amber-fill);color:var(--text)}
+.it.soft{border-color:var(--line);background:var(--surface)}
+.it.sel{box-shadow:0 0 0 1.5px var(--accent)}
+.plan .day .more{flex:none;font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;cursor:default}
+
+/* settings */
+.setrow{display:flex;flex:none;align-items:center;justify-content:space-between;gap:16px;min-height:52px;border-bottom:1px solid var(--line-soft)}
+.setrow .lb{display:flex;flex-direction:column;min-width:0;font-weight:600}
+.setrow .hp{color:var(--muted);font-size:12px;font-weight:400}
+
+/* comment popup, inside the app */
+.pop{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 72%,transparent);padding:16px}
+.popbox{width:min(640px,100%);box-sizing:border-box;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.popbox textarea{font-family:var(--font);font-size:14px;height:150px;resize:none;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--surface2);color:var(--text);box-sizing:border-box;width:100%}
+.drop{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px dashed var(--line);border-radius:6px;padding:10px}
+.drop.over{border-color:var(--accent);background:var(--accent-fill)}
+.atts{display:flex;flex-wrap:wrap;gap:6px}
+.att{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:3px 4px 3px 6px;font-size:12px;background:var(--surface2);max-width:100%;box-sizing:border-box;min-width:0}
+.att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att img{width:34px;height:24px;object-fit:cover;border-radius:3px}
+.att button{border:0;background:none;padding:0 4px;font-size:14px}
+.cmrow{display:flex;align-items:center;gap:8px}
+.popmsg{color:var(--amber)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
+    <div class="seg" id="theme" role="group" aria-label="Theme"></div>
+  </header>
+  <div class="body">
+    <nav class="sidem" id="sidem" aria-label="Pages"><button type="button" id="menuToggle"></button></nav>
+    <main class="main">
+      <div class="lead" id="lead"></div>
+      <div class="pane" id="pane"></div>
+    </main>
+    <aside class="right">
+      <div class="det" id="det" aria-live="polite"></div>
+      <div class="cm">
+        <button type="button" class="primary" id="openc">Comment</button>
+        <span class="eyebrow ell">on <span class="tgt" id="tgt"></span></span>
+        <div id="res"></div>
+      </div>
+    </aside>
+  </div>
+  <div class="pop" id="pop" hidden>
+    <div class="popbox" role="dialog" aria-modal="true" aria-labelledby="poph">
+      <h3 id="poph">Comment</h3>
+      <textarea id="cmt" placeholder="Ask, decide or request work. Paste a screenshot with Ctrl+V." aria-label="Comment"></textarea>
+      <div class="drop" id="drop"><button type="button" id="pickf">Add screenshots or files</button><span class="muted">or drop them here, or paste a screenshot. At most 5 files of 10 MB each.</span><input type="file" id="files" multiple hidden></div>
+      <div class="atts" id="atts"></div>
+      <p class="popmsg" id="popmsg"></p>
+      <div class="cmrow"><button type="button" class="primary" id="send">Send</button><button type="button" id="cancel">Cancel</button></div>
+    </div>
+  </div>
+</div>
+<script>
+var api = {
+  state: function(r){ return ccState(r) },
+  file: function(p){ return ccFile(p) },
+  board: function(p){ return ccBoard(p) },
+  settingsGet: function(){ return ccSettingsGet() },
+  settingsSet: function(s){ return ccSettingsSet(s) },
+  comment: function(r){ return ccComment(r) },
+  preview: function(r){ return ccPreview(r) },
+  run: function(t){ return ccRun(t) },
+  agents: function(n){ return ccAgents(n) }
+};
+(function(){
+  var NS = 'http://www.w3.org/2000/svg';
+  var THEMES = ['system','light','dark'];
+  var THEME_UI = {system: ['sys', 'System'], light: ['sun', 'Light'], dark: ['moon', 'Dark']};
+  // Every selector with text-overflow:ellipsis, plus the clipped lead and crumb.
+  var HOVER_SEL = '.ell,.lead,.crumb,.rw .tag,.rw .nm,.rw .fn,.rw .ro,.rw .rl,.c1 .chip,.c2,.c3,.c5,.it,.att span';
+  var ROW_H = 28;
+  // Comment limits; internal\centre checks the same and stays the authority.
+  var MAX_ATT = 5;
+  var MAX_ATT_BYTES = 10 * 1024 * 1024;
+  var WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var NBSP = String.fromCharCode(160);
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // Pane padding (24), one column header row (22) and the pager (28).
+  var PANE_HEAD = 74;
+  // Overview boxes shrink from MAX_BOX to MIN_BOX px, then the rest of a column goes in one "+N more" box.
+  var MIN_BOX = 22;
+  var MAX_BOX = 40;
+  var BOX_GAP = 8;
+  var COL_GAP = 25;
+  var MAP_TOP = 24;
+  var IC = {map:'M4 10h6v4H4zM14 4h6v4h-6zM14 16h6v4h-6zM10 12h2M12 6v12M12 6h2M12 18h2',inbox:'M4 13l2-8h12l2 8v6H4zM4 13h5l1 2h4l1-2h5',cal:'M5 6h14v14H5zM5 10h14M9 4v4M15 4v4',
+    agents:'M8 4h8v6H8zM4 14h16v6H4zM12 10v4',
+    set:'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',sys:'M4 5h16v11H4zM9 20h6M12 16v4',sun:'M12 8a4 4 0 1 0 0 8a4 4 0 0 0 0-8zM12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5',
+    moon:'M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z',left:'M14 6l-6 6l6 6',right:'M10 6l6 6l-6 6'};
+  var PAGES = [['overview', 'Overview', 'map'], ['waiting', 'Waiting on you', 'inbox'], ['agents', 'Agents', 'agents'], ['planning', 'Planning', 'cal']];
+  var TITLES = {waiting: 'Waiting on you', agents: 'Agents', planning: 'Planning', settings: 'Settings'};
+
+  var app = document.getElementById('app'), crumb = document.getElementById('crumb'), lead = document.getElementById('lead'),
+    pane = document.getElementById('pane'), det = document.getElementById('det'), tgt = document.getElementById('tgt'),
+    res = document.getElementById('res'), openc = document.getElementById('openc');
+  var pop = document.getElementById('pop'), cmt = document.getElementById('cmt'), attsEl = document.getElementById('atts'),
+    fileIn = document.getElementById('files'), drop = document.getElementById('drop'), popmsg = document.getElementById('popmsg'),
+    sendb = document.getElementById('send');
+  // pend: the files picked for the open popup; popTarget: the target it was opened for.
+  var pend = [], popTarget = null;
+  var state = null;
+  var settings = {width: 80, menu: 'text', weeks: 2, theme: 'system'};
+  var view = {page: 'overview', arg: null};
+  var target = {kind: '', unit_id: '', path: '', block: 0, label: ''};
+  var resizeTimer = 0;
+  // ovView: the overview switch, kept across pages. sub: per-page view state, reset by go().
+  var ovView = '';
+  var sub = {tab: 'Structure', page: 0, more: '', sel: ''};
+  var drawSeq = 0;
+  var boxW = 0;
+
+  function h(tag, cls, txt) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt != null) e.textContent = txt;
+    return e;
+  }
+
+  function btn(cls, txt, fn) {
+    var b = h('button', cls, txt);
+    b.type = 'button';
+    if (fn) b.addEventListener('click', fn);
+    return b;
+  }
+
+  function icon(name) {
+    var s = document.createElementNS(NS, 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('class', 'ic');
+    s.setAttribute('aria-hidden', 'true');
+    var p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', IC[name]);
+    s.appendChild(p);
+    return s;
+  }
+
+  function fail(what, e) {
+    lead.textContent = what + ': ' + (e && e.message ? e.message : String(e));
+  }
+
+  function sv(tag, attrs, txt) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (txt != null) e.textContent = txt;
+    return e;
+  }
+
+  function unitById(id) {
+    for (var i = 0; i < state.units.length; i++) {
+      if (state.units[i].id === id) return state.units[i];
+    }
+    return null;
+  }
+
+  function unitLabel(id) {
+    var u = unitById(id);
+    return u ? u.display_name : String(id);
+  }
+
+  // fileUnit: the unit id of a root-relative unit file path.
+  function fileUnit(p) {
+    var cut = p.lastIndexOf('/');
+    return cut < 0 ? '.' : p.slice(0, cut);
+  }
+
+  function rootName() {
+    if (!state) return '';
+    var u = unitById('.');
+    if (u) return u.display_name;
+    return String(state.root);
+  }
+
+  // srcPath: a root-relative path from the state shown under the root, with the root's separator.
+  function srcPath(rel) {
+    var root = String(state.root), sep = root.indexOf('\\') >= 0 ? '\\' : '/';
+    if (!rel || rel === '.') return root;
+    return root.replace(/[\\/]+$/, '') + sep + String(rel).split('/').join(sep);
+  }
+
+  function capList(list, n, what) {
+    if (list.length <= n) return list;
+    return list.slice(0, n).concat(['and ' + (list.length - n) + ' more ' + what]);
+  }
+
+  function kb(n) {
+    return n < 1024 ? n + ' bytes' : (n / 1024).toFixed(1) + ' KB';
+  }
+
+  function rowsFit() {
+    return Math.max(1, Math.floor((pane.clientHeight - PANE_HEAD) / ROW_H));
+  }
+
+  function loadState() {
+    return Promise.resolve(api.state({rows: rowsFit()})).then(function(s) {
+      state = s;
+      render();
+    }, function(e) { fail('Could not read the state', e); });
+  }
+
+  function applySettings(s) {
+    settings = s;
+    app.style.width = s.width + '%';
+    app.classList.toggle('icons', s.menu === 'icons');
+    if (s.theme === 'light' || s.theme === 'dark') document.documentElement.setAttribute('data-theme', s.theme);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+
+  function saveSetting(key, value) {
+    var s = {width: settings.width, menu: settings.menu, weeks: settings.weeks, theme: settings.theme};
+    s[key] = value;
+    return Promise.resolve(api.settingsSet(s)).then(function(saved) {
+      applySettings(saved);
+      return loadState();
+    }, function(e) { fail('Could not save the setting', e); });
+  }
+
+  function themeSwitch() {
+    var g = document.getElementById('theme');
+    g.textContent = '';
+    THEMES.forEach(function(t) {
+      var b = btn('', null, function() { saveSetting('theme', t); });
+      b.appendChild(icon(THEME_UI[t][0]));
+      b.title = THEME_UI[t][1];
+      b.setAttribute('aria-label', THEME_UI[t][1]);
+      b.setAttribute('aria-pressed', String(settings.theme === t));
+      g.appendChild(b);
+    });
+  }
+
+  function menu() {
+    var m = document.getElementById('sidem'), toggle = document.getElementById('menuToggle');
+    while (m.firstChild !== toggle) m.removeChild(m.firstChild);
+    function item(page, label, ic, badge) {
+      var b = btn('', null, function() { go(page); });
+      b.appendChild(icon(ic));
+      b.appendChild(h('span', 'tx', label));
+      if (badge) b.appendChild(h('span', 'bd', String(badge)));
+      b.title = label;
+      if (view.page === page) b.setAttribute('aria-current', 'page');
+      m.insertBefore(b, toggle);
+    }
+    var waiting = state ? state.counts.waiting : 0;
+    PAGES.forEach(function(p) { item(p[0], p[1], p[2], p[0] === 'waiting' ? waiting : 0); });
+    m.insertBefore(h('span', 'sp'), toggle);
+    item('settings', 'Settings', 'set', 0);
+    var text = settings.menu === 'text';
+    var label = text ? 'Icons only' : 'Icons and text';
+    toggle.textContent = '';
+    toggle.appendChild(icon(text ? 'left' : 'right'));
+    toggle.appendChild(h('span', 'tx', label));
+    toggle.title = label;
+    toggle.onclick = function() { saveSetting('menu', text ? 'icons' : 'text'); };
+  }
+
+  function crumbs() {
+    crumb.textContent = '';
+    var trail = [[rootName(), function() { go('overview'); }]];
+    if (TITLES[view.page]) trail.push([TITLES[view.page]]);
+    else if (view.page === 'overview' && sub.more) trail.push([sub.more]);
+    else if (view.page === 'unit') trail.push([unitLabel(view.arg)]);
+    else if (view.page === 'file') {
+      var p = String(view.arg), uid = fileUnit(p);
+      trail.push([unitLabel(uid), function() { go('unit', uid); }]);
+      trail.push([p.slice(p.lastIndexOf('/') + 1)]);
+    }
+    else if (view.page === 'board') {
+      var a = view.arg;
+      trail.push([unitLabel(a.row.unit), function() { go('unit', a.row.unit, a.fl ? 'Flows' : 'Sprints'); }]);
+      trail.push([a.row.slug]);
+    }
+    else if (view.page !== 'overview' && view.arg) trail.push([String(view.arg)]);
+    trail.forEach(function(t, i) {
+      if (i) crumb.appendChild(h('span', null, '\u203A'));
+      var last = i === trail.length - 1;
+      var b = btn(last ? 'here' : '', t[0], last ? null : t[1]);
+      if (last) b.setAttribute('aria-current', 'page');
+      crumb.appendChild(b);
+    });
+  }
+
+  function detail(o) {
+    det.textContent = '';
+    if (o.k) det.appendChild(h('span', 'eyebrow', o.k));
+    det.appendChild(h('h3', null, o.t));
+    if (o.chips && o.chips.length) {
+      var c = h('div', 'chips');
+      o.chips.forEach(function(x) { c.appendChild(h('span', 'chip ' + (x[1] || ''), x[0])); });
+      det.appendChild(c);
+    }
+    if (o.d) det.appendChild(h('p', null, o.d));
+    if (o.list && o.list.length) {
+      var ul = h('ul');
+      o.list.forEach(function(x) { ul.appendChild(h('li', null, x)); });
+      det.appendChild(ul);
+    }
+    if (o.act && o.act.length) {
+      var a = h('div', 'acts');
+      o.act.forEach(function(x) { a.appendChild(btn(x[2] || '', x[0], x[1])); });
+      det.appendChild(a);
+    }
+    if (o.out) det.appendChild(o.out);
+    if (o.src) det.appendChild(h('span', 'src', o.src));
+    // o.label names the target when it differs from the title (a plan node id); the foot still shows the title.
+    target = {kind: o.kind || '', unit_id: o.unit_id || '', path: o.path || '', block: o.block || 0,
+      label: o.label != null ? o.label : o.t || ''};
+    tgt.textContent = o.t || target.label;
+    openc.disabled = !target.kind;
+    res.textContent = '';
+  }
+
+  function pager(spans, cur, onPage) {
+    if (!spans || spans.length < 2) return;
+    var p = h('div', 'pager');
+    var prev = btn('', null, function() { onPage(cur - 1); });
+    prev.appendChild(icon('left'));
+    prev.setAttribute('aria-label', 'Previous page');
+    prev.disabled = cur <= 0;
+    var next = btn('', null, function() { onPage(cur + 1); });
+    next.appendChild(icon('right'));
+    next.setAttribute('aria-label', 'Next page');
+    next.disabled = cur >= spans.length - 1;
+    p.appendChild(prev);
+    p.appendChild(h('span', null, (cur + 1) + ' of ' + spans.length));
+    p.appendChild(next);
+    pane.appendChild(p);
+  }
+
+  // go opens a page; tab picks the unit view's switch (Structure when left out).
+  function go(page, arg, tab) {
+    view = {page: page, arg: arg == null ? null : arg};
+    sub = {tab: tab || 'Structure', page: 0, more: '', sel: ''};
+    render();
+  }
+
+  function render() {
+    applySettings(settings);
+    menu();
+    themeSwitch();
+    if (!state) return;
+    crumbs();
+    drawSeq++;
+    lead.textContent = '';
+    pane.textContent = '';
+    var pages = {overview: pageOverview, unit: pageUnit, file: pageFile, board: pageBoard, waiting: pageWaiting,
+      planning: pagePlanning, settings: pageSettings, agents: pageAgents};
+    (pages[view.page] || pageOverview)(view.arg);
+  }
+
+  function rootDetail(note) {
+    detail({k: 'Root', t: rootName(), d: note, src: state.root, kind: 'unit', unit_id: '.'});
+  }
+
+  function rowSel(r) {
+    pane.querySelectorAll('.rw.sel').forEach(function(x) { x.classList.remove('sel'); });
+    r.classList.add('sel');
+  }
+
+  function planNodes() {
+    var p = state.plan;
+    return p ? (p.goals || []).concat(p.lines || [], p.items || []) : [];
+  }
+
+  function planNode(id) {
+    var all = planNodes();
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id === id) return all[i];
+    }
+    return null;
+  }
+
+  // planInfo and unitInfo: what a box shows and what its detail holds, from the state only.
+  function planInfo(id, colTitle) {
+    var n = planNode(id), conns = [], chips = [];
+    (state.plan.links || []).forEach(function(l) {
+      var a = planNode(l.from), b = planNode(l.to);
+      if (l.from === id && b) conns.push(l.relation + ' ' + b.title);
+      else if (l.to === id && a) conns.push(a.title + ' ' + l.relation + ' this');
+    });
+    var badge = state.badges[id] || 0;
+    if (badge) chips.push([badge + ' waiting on you inside', 'warn']);
+    if (n.hold) chips.push(['on hold', '']);
+    return {id: id, kind: n.kind || colTitle, title: n.title, note: n.note, conns: capList(conns, 10, 'links'), chips: chips,
+      badge: badge, hold: !!n.hold, unit_id: n.unit_id || '', path: state.plan_path, target: 'plan'};
+  }
+
+  function unitInfo(id) {
+    var u = unitById(id), conns = [];
+    var p = u.parent ? unitById(u.parent) : null;
+    if (p) conns.push('is part of ' + p.display_name);
+    u.children.forEach(function(c) { conns.push('contains ' + unitLabel(c)); });
+    return {id: id, kind: u.type || 'Unit', title: u.display_name,
+      note: u.flows.keys.length + ' flows, ' + u.sprints.keys.length + ' sprints, ' + u.files.length + ' unit files.',
+      conns: capList(conns, 10, 'units'), chips: [], badge: 0, hold: false, unit_id: id, path: id, target: 'unit'};
+  }
+
+  function boxDetail(b) {
+    sub.sel = b.id;
+    detail({k: b.kind, t: b.title, chips: b.chips, d: b.note, list: b.conns,
+      act: b.unit_id ? [['Open ' + b.title + ' \u203A', function() { go('unit', b.unit_id); }, 'primary']] : [],
+      src: srcPath(b.path), kind: b.target, unit_id: b.unit_id, path: b.path,
+      label: b.target === 'plan' ? b.id : b.title});
+  }
+
+  function clip(s, n) {
+    s = String(s);
+    return s.length > n ? s.slice(0, Math.max(1, n - 3)) + '...' : s;
+  }
+
+  // box: one SVG box; the full text is its <title>, so a cut title still shows on hover.
+  function box(s, title, line, onPick) {
+    var full = title + (line ? ', ' + line : '');
+    var g = sv('g', {'class': 'node', tabindex: 0, role: 'button', 'aria-label': full, transform: 'translate(' + s.x + ',' + s.y + ')'});
+    g.appendChild(sv('title', {}, full));
+    g.appendChild(sv('rect', {width: s.w, height: s.h, rx: 6}));
+    var two = s.h >= 34;
+    g.appendChild(sv('text', {x: 10, y: two ? 17 : s.h / 2 + 4, 'class': 'nt'}, clip(title, Math.floor((s.w - 20) / 7))));
+    if (two && line) g.appendChild(sv('text', {x: 10, y: 31, 'class': 'ns'}, clip(line, Math.floor((s.w - 20) / 6))));
+    g.addEventListener('click', onPick);
+    g.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onPick(); }
+    });
+    return g;
+  }
+
+  function mapFrame(cols) {
+    var w = Math.max(200, pane.clientWidth - 28), ht = Math.max(120, pane.clientHeight - 24);
+    var svg = sv('svg', {'class': 'map', viewBox: '0 0 ' + w + ' ' + ht, preserveAspectRatio: 'xMinYMin meet', role: 'group', 'aria-label': 'Overview map'});
+    boxW = cols.length ? (w - COL_GAP * (cols.length - 1)) / cols.length : w;
+    cols.forEach(function(c, i) { svg.appendChild(sv('text', {x: i * (boxW + COL_GAP), y: 14, 'class': 'colh'}, c.title)); });
+    var eg = sv('g', {}), ng = sv('g', {});
+    svg.appendChild(eg);
+    svg.appendChild(ng);
+    return {svg: svg, eg: eg, ng: ng, height: ht, at: {}, edges: []};
+  }
+
+  // drawColumn lays out one column: boxes shrink from MAX_BOX to MIN_BOX, then
+  // the boxes that do not fit go in one "+N more" box that opens them as paged rows.
+  function drawColumn(col, x, height) {
+    var n = col.keys.length, avail = height - MAP_TOP, out = {slots: [], more: null};
+    if (!n) return out;
+    var slot = avail / n, bh = Math.min(MAX_BOX, slot - BOX_GAP), shown = n;
+    if (bh < MIN_BOX) {
+      bh = MIN_BOX;
+      slot = MIN_BOX + BOX_GAP;
+      shown = Math.max(0, Math.floor((avail + BOX_GAP) / slot) - 1);
+    }
+    for (var i = 0; i < shown; i++) {
+      out.slots.push({key: col.keys[i], x: x, y: MAP_TOP + i * slot + (slot - bh) / 2, w: boxW, h: bh});
+    }
+    if (shown < n) {
+      var s = {x: x, y: MAP_TOP + shown * slot + (slot - bh) / 2, w: boxW, h: bh};
+      out.more = box(s, '+' + (n - shown) + ' more', col.title, function() {
+        sub.more = col.title;
+        sub.page = 0;
+        render();
+      });
+      out.more.classList.add('more');
+    }
+    return out;
+  }
+
+  function edgePath(a, b) {
+    if (a.x === b.x) {
+      var x = a.x + a.w / 2, up = b.y < a.y;
+      return 'M' + x + ' ' + (up ? a.y : a.y + a.h) + ' L' + x + ' ' + (up ? b.y + b.h : b.y);
+    }
+    if (a.x > b.x) { var t = a; a = b; b = t; }
+    var x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2, mid = (x1 + x2) / 2;
+    return 'M' + x1 + ' ' + y1 + ' C' + mid + ' ' + y1 + ' ' + mid + ' ' + y2 + ' ' + x2 + ' ' + y2;
+  }
+
+  function pickBox(m, id) {
+    var s = m.at[id];
+    if (!s) return;
+    m.svg.setAttribute('class', 'map picked');
+    for (var k in m.at) m.at[k].g.classList.remove('sel', 'rel');
+    s.g.classList.add('sel');
+    m.edges.forEach(function(e) {
+      var on = e.from === id || e.to === id;
+      e.el.classList.toggle('rel', on);
+      if (on) m.at[e.from === id ? e.to : e.from].g.classList.add('rel');
+    });
+    boxDetail(s.info);
+  }
+
+  function drawPlan() {
+    var cols = state.overview.plan_columns || [], m = mapFrame(cols);
+    cols.forEach(function(col, ci) {
+      var c = drawColumn(col, ci * (boxW + COL_GAP), m.height);
+      c.slots.forEach(function(s) {
+        var b = planInfo(s.key, col.title);
+        s.info = b;
+        s.g = box(s, b.title, b.kind, function() { pickBox(m, s.key); });
+        if (b.hold) s.g.classList.add('hold');
+        var n = state.badges[s.key];
+        if (n) {
+          s.g.appendChild(sv('circle', {cx: s.w - 3, cy: 3, r: 9}));
+          s.g.appendChild(sv('text', {x: s.w - 3, y: 6.5, 'class': 'bt'}, String(n)));
+        }
+        m.at[s.key] = s;
+        m.ng.appendChild(s.g);
+      });
+      if (c.more) m.ng.appendChild(c.more);
+    });
+    (state.plan.links || []).forEach(function(l) {
+      var a = m.at[l.from], b = m.at[l.to];
+      if (!a || !b) return;
+      var p = sv('path', {d: edgePath(a, b), 'class': 'edge' + (l.step ? ' step' : '')});
+      m.eg.appendChild(p);
+      m.edges.push({from: l.from, to: l.to, el: p});
+    });
+    pane.appendChild(m.svg);
+    return m;
+  }
+
+  function drawUnits() {
+    var cols = state.overview.unit_columns, m = mapFrame(cols);
+    cols.forEach(function(col, ci) {
+      var c = drawColumn(col, ci * (boxW + COL_GAP), m.height);
+      c.slots.forEach(function(s) {
+        var b = unitInfo(s.key);
+        s.info = b;
+        s.g = box(s, b.title, b.kind, function() { pickBox(m, s.key); });
+        m.at[s.key] = s;
+        m.ng.appendChild(s.g);
+      });
+      if (c.more) m.ng.appendChild(c.more);
+    });
+    state.units.forEach(function(u) {
+      var a = m.at[u.parent], b = m.at[u.id];
+      if (!u.parent || !a || !b) return;
+      var p = sv('path', {d: edgePath(a, b), 'class': 'edge'});
+      m.eg.appendChild(p);
+      m.edges.push({from: u.parent, to: u.id, el: p});
+    });
+    pane.appendChild(m.svg);
+    return m;
+  }
+
+  function pageOverview() {
+    var v = ovView || state.overview.default;
+    if (v === 'plan' && !state.plan) v = 'units';
+    var sw = h('div', 'seg');
+    sw.setAttribute('role', 'group');
+    sw.setAttribute('aria-label', 'View');
+    [['plan', 'Plan'], ['units', 'Units']].forEach(function(x) {
+      var b = btn('', x[1], function() { ovView = x[0]; go('overview'); });
+      b.setAttribute('data-view', x[0]);
+      b.setAttribute('aria-pressed', String(v === x[0]));
+      if (x[0] === 'plan' && !state.plan) {
+        b.disabled = true;
+        b.title = 'No plan file read from ' + srcPath(state.plan_path);
+      }
+      sw.appendChild(b);
+    });
+    lead.appendChild(sw);
+    var note = '';
+    state.problems.forEach(function(p) {
+      if (p.path === state.plan_path) note = 'The plan file was not read: ' + p.message;
+    });
+    var cols = (v === 'plan' ? state.overview.plan_columns : state.overview.unit_columns) || [], col = null;
+    cols.forEach(function(c) { if (c.title === sub.more) col = c; });
+    if (col && col.pages.length) {
+      lead.appendChild(h('span', 'ell', col.title + ': ' + col.keys.length + ' boxes. Select a row to see what it connects to.'));
+      var hd = h('div', 'rw hd');
+      hd.appendChild(h('span', null, col.title));
+      pane.appendChild(hd);
+      var cur = Math.min(sub.page, col.pages.length - 1), span = col.pages[cur];
+      col.keys.slice(span.from, span.to).forEach(function(id) {
+        var b = v === 'plan' ? planInfo(id, col.title) : unitInfo(id);
+        var r = btn('rw', null, function() { rowSel(r); boxDetail(b); });
+        r.appendChild(h('span', 'tag', b.kind));
+        r.appendChild(h('span', 'nm', b.title));
+        if (b.badge) r.appendChild(h('span', 'bd', String(b.badge)));
+        pane.appendChild(r);
+      });
+      pager(col.pages, cur, function(p) { sub.page = p; render(); });
+      rootDetail(note);
+      return;
+    }
+    var text = v === 'plan'
+      ? (state.plan.goals || []).length + ' goals, ' + (state.plan.lines || []).length + ' plan lines, ' +
+        (state.plan.items || []).length + ' products and projects. Select a box to see what it connects to.'
+      : state.counts.units + ' units on ' + cols.length + ' levels. Select a box to see what it connects to.';
+    lead.appendChild(h('span', 'ell', text));
+    var m = v === 'plan' ? drawPlan() : drawUnits();
+    if (sub.sel && m.at[sub.sel]) pickBox(m, sub.sel);
+    else rootDetail(note);
+  }
+
+  // rowDetail: a flow or sprint row's fields; Open board only when the row has a
+  // board page, and not on the board page itself (shown).
+  function rowDetail(r, fl, shown) {
+    var chips = [];
+    if (fl ? r.stage : r.phase) chips.push([fl ? r.stage : r.phase, '']);
+    if (r.waiting) chips.push(['waiting on you' + (r.waits_days >= 0 ? ', ' + r.waits_days + ' days' : ''), 'warn']);
+    else if (r.closed) chips.push(['closed', 'on']);
+    var act = r.board && !shown ? [['Open board \u203A', function() { go('board', {row: r, fl: fl}); }, 'primary']] : [];
+    detail({k: (fl ? 'Flow / ' : 'Sprint / ') + r.project, t: r.slug, chips: chips,
+      d: 'Status ' + (r.status || 'not set') + '. Updated ' + (r.updated_at || 'at an unknown time') + '.',
+      act: act, out: r.board ? null : h('p', 'muted', 'This row has no board page.'),
+      src: srcPath(r.index), kind: fl ? 'flow' : 'sprint', unit_id: r.unit, path: r.index});
+  }
+
+  function pageUnit(id) {
+    var u = unitById(id);
+    if (!u) {
+      lead.textContent = 'Unit ' + id + ' is not in the state.';
+      rootDetail('');
+      return;
+    }
+    var sw = h('div', 'seg');
+    sw.setAttribute('role', 'group');
+    sw.setAttribute('aria-label', 'View');
+    ['Structure', 'Flows', 'Sprints'].forEach(function(x) {
+      var b = btn('', x, function() { sub.tab = x; sub.page = 0; render(); });
+      b.setAttribute('aria-pressed', String(sub.tab === x));
+      sw.appendChild(b);
+    });
+    lead.appendChild(sw);
+    lead.appendChild(h('span', 'ell', u.display_name + (u.type ? ', ' + u.type : '') + '. ' + u.flows.keys.length + ' flows, ' +
+      u.sprints.keys.length + ' sprints, ' + u.files.length + ' unit files.'));
+    var folders = u.folders.map(function(f) { return f.name + '/, ' + f.entries + ' entries'; });
+    detail({k: u.type || 'Unit', t: u.display_name, d: 'Select a part or a file to see its state. Comment on anything you select.',
+      list: capList(folders, 8, 'folders'), src: srcPath(u.id), kind: 'unit', unit_id: u.id, path: u.id});
+
+    if (sub.tab === 'Structure') {
+      var cols = h('div', 'cols'), left = h('div', 'col'), right = h('div', 'col');
+      var item = null;
+      if (u.item && state.plan) (state.plan.items || []).forEach(function(n) { if (n.id === u.item) item = n; });
+      var fromPlan = !!(item && item.parts && item.parts.length);
+      var parts = fromPlan
+        ? item.parts.map(function(p) { return {role: p.role, title: p.title, note: p.note, unit_id: p.unit_id || ''}; })
+        : u.children.map(function(c) {
+          var x = unitById(c);
+          return {role: x ? x.type || 'Unit' : 'Unit', title: unitLabel(c), note: '', unit_id: c};
+        });
+      var rels = [];
+      if (item) {
+        (state.plan.links || []).forEach(function(l) {
+          if (l.from === item.id && planNode(l.to)) rels.push([l.relation, planNode(l.to).title]);
+          else if (l.to === item.id && planNode(l.from)) rels.push(['\u2190 ' + l.relation, planNode(l.from).title]);
+        });
+      } else if (u.parent) {
+        rels.push(['is part of', unitLabel(u.parent)]);
+      }
+      var room = Math.max(1, state.rows_per_page - 2);
+      rels = rels.slice(0, Math.max(0, room - 1));
+      var fit = Math.max(1, room - rels.length);
+      if (parts.length) {
+        left.appendChild(h('span', 'eyebrow', 'Inside ' + u.display_name));
+        var over = parts.length > fit ? parts.length - fit + 1 : 0;
+        parts.slice(0, over ? fit - 1 : fit).forEach(function(p) {
+          var b = btn('rw', null, function() {
+            rowSel(b);
+            detail({k: p.role, t: p.title, d: p.note,
+              act: p.unit_id ? [['Open ' + p.title + ' \u203A', function() { go('unit', p.unit_id); }, 'primary']] : [],
+              src: srcPath(fromPlan ? state.plan_path : p.unit_id), kind: fromPlan ? 'part' : 'unit',
+              unit_id: p.unit_id || u.id, path: fromPlan ? state.plan_path : p.unit_id});
+          });
+          b.appendChild(h('span', 'tag', p.role));
+          b.appendChild(h('span', 'nm', p.title));
+          b.appendChild(h('span', 'st', p.unit_id ? '\u203A' : ''));
+          left.appendChild(b);
+        });
+        if (over) left.appendChild(h('div', 'rw muted', '+' + over + ' more, see the Units view'));
+      }
+      if (rels.length) {
+        left.appendChild(h('span', 'eyebrow', 'Relations'));
+        rels.forEach(function(r) {
+          var d = h('div', 'rw');
+          d.appendChild(h('span', 'rl', r[0]));
+          d.appendChild(h('span', 'nm', r[1]));
+          left.appendChild(d);
+        });
+      }
+      right.appendChild(h('span', 'eyebrow', 'Files'));
+      var fcur = Math.min(sub.page, Math.max(0, u.file_pages.length - 1));
+      var fspan = u.file_pages[fcur] || {from: 0, to: 0};
+      u.files.slice(fspan.from, fspan.to).forEach(function(f) {
+        var path = u.id === '.' ? f.name : u.id + '/' + f.name;
+        var bad = f.state !== 'ok', st = bad ? f.state + ', ' + f.age_days + ' days' : kb(f.size) + ', ' + String(f.modified).slice(0, 10);
+        var b = btn('rw', null, function() {
+          rowSel(b);
+          detail({k: f.role, t: f.name, chips: bad ? [[st, 'warn']] : [], d: 'State: ' + st + '.',
+            act: [['Open file \u203A', function() { go('file', path); }, 'primary']],
+            src: srcPath(path), kind: 'file', unit_id: u.id, path: path});
+        });
+        b.appendChild(h('span', 'fn', f.name));
+        b.appendChild(h('span', 'ro', f.role));
+        b.appendChild(h('span', 'st' + (bad ? ' warn' : ''), st));
+        right.appendChild(b);
+      });
+      if (!u.files.length) right.appendChild(h('p', 'muted', 'No unit files.'));
+      cols.appendChild(left);
+      cols.appendChild(right);
+      pane.appendChild(cols);
+      pager(u.file_pages, fcur, function(p) { sub.page = p; render(); });
+      return;
+    }
+
+    var fl = sub.tab === 'Flows';
+    var keys = fl ? u.flows.keys : u.sprints.keys, pages = fl ? u.flows.pages : u.sprints.pages, all = fl ? state.flows : state.sprints;
+    var hd = h('div', 'rw hd');
+    [['Project', 'c1'], [fl ? 'Flow' : 'Sprint', 'c2'], [fl ? 'Stage' : 'Phase', 'c3'], ['Waits', 'c4']].forEach(function(x) {
+      hd.appendChild(h('span', x[1], x[0]));
+    });
+    pane.appendChild(hd);
+    if (!keys.length) {
+      pane.appendChild(h('p', 'muted', fl ? 'No flows in this unit.' : 'No sprints in this unit.'));
+      return;
+    }
+    var byKey = {};
+    all.forEach(function(r) { byKey[r.key] = r; });
+    var cur = Math.min(sub.page, pages.length - 1), span = pages[cur];
+    keys.slice(span.from, span.to).forEach(function(key) {
+      var r = byKey[key];
+      if (!r) return;
+      var b = btn('rw' + (r.waiting ? ' warn' : ''), null, function() { rowSel(b); rowDetail(r, fl); });
+      var c = h('span', 'c1');
+      c.appendChild(h('span', 'chip', r.project));
+      b.appendChild(c);
+      b.appendChild(h('span', 'c2', r.slug));
+      b.appendChild(h('span', 'c3', fl ? r.stage : r.phase));
+      b.appendChild(h('span', 'c4', fl && r.waits_days >= 0 ? r.waits_days + ' d' : ''));
+      pane.appendChild(b);
+    });
+    pager(pages, cur, function(p) { sub.page = p; render(); });
+  }
+
+  function pageFile(path) {
+    var p = String(path), unitId = fileUnit(p), name = p.slice(p.lastIndexOf('/') + 1), seq = drawSeq;
+    lead.appendChild(h('span', 'ell', name + ': reading the file.'));
+    detail({k: 'File', t: name, src: srcPath(p), kind: 'file', unit_id: unitId, path: p});
+    Promise.resolve(api.file(p)).then(function(ft) {
+      if (seq !== drawSeq) return;
+      var blocks = ft.blocks || [], n = blocks.length;
+      lead.textContent = '';
+      lead.appendChild(h('span', 'ell', name + ': ' + ft.role + ', ' + kb(ft.size) + ', changed ' + String(ft.modified).slice(0, 10) +
+        '. Click a block to comment on it.'));
+      var doc = h('div', 'fileview');
+      blocks.forEach(function(b, i) {
+        var e = btn('blk' + (b.heading ? ' h' : ''), b.text, function() {
+          doc.querySelectorAll('.blk.sel').forEach(function(x) { x.classList.remove('sel'); });
+          e.classList.add('sel');
+          detail({k: 'Block ' + (i + 1) + ' of ' + n, t: name + ', block ' + (i + 1),
+            d: b.text.length > 110 ? b.text.slice(0, 110) + '...' : b.text,
+            src: srcPath(p), kind: 'block', unit_id: unitId, path: p, block: i + 1});
+        });
+        doc.appendChild(e);
+      });
+      pane.appendChild(doc);
+      detail({k: ft.role, t: name, d: n + ' blocks. Click a block to comment on it.', src: srcPath(p), kind: 'file', unit_id: unitId, path: p});
+    }, function(e) { if (seq === drawSeq) fail('Could not read ' + p, e); });
+  }
+
+  // pageBoard shows a row's board page in the main pane: a sandboxed iframe
+  // (scripts yes, same origin never), the HTML set through srcdoc only.
+  function pageBoard(a) {
+    var r = a.row, seq = drawSeq;
+    lead.appendChild(h('span', 'ell', r.slug + ': reading the board page.'));
+    rowDetail(r, a.fl, true);
+    Promise.resolve(api.board(r.board)).then(function(bp) {
+      if (seq !== drawSeq) return;
+      lead.textContent = '';
+      lead.appendChild(h('span', 'ell', (a.fl ? 'Flow ' : 'Sprint ') + r.slug + ', board page ' + bp.path + '.'));
+      var f = h('iframe', 'boardframe');
+      f.setAttribute('sandbox', 'allow-scripts');
+      f.title = 'Board page of ' + r.slug;
+      f.srcdoc = bp.html;
+      pane.appendChild(f);
+    }, function(e) { if (seq === drawSeq) fail('Could not read the board page of ' + r.slug, e); });
+  }
+
+  // pageWaiting: one dense row per waiting flow row, in the state's order (the Go side sorts).
+  function pageWaiting() {
+    var n = state.counts.waiting, d = state.counts.longest_wait_days;
+    lead.appendChild(h('b', null, n + (n === 1 ? ' gate' : ' gates')));
+    lead.appendChild(h('span', 'ell', '\u00A0' + (n === 1 ? 'waits' : 'wait') + ' on you.' +
+      (n && d >= 0 ? ' The longest waits ' + d + (d === 1 ? ' day.' : ' days.') : '')));
+    var hd = h('div', 'rw hd');
+    [['Project', 'c1'], ['Flow', 'c2'], ['Stage', 'c3'], ['Waits', 'c4']].forEach(function(x) {
+      hd.appendChild(h('span', x[1], x[0]));
+    });
+    pane.appendChild(hd);
+    var byKey = {};
+    state.flows.forEach(function(r) { byKey[r.key] = r; });
+    var keys = state.waiting.keys, pages = state.waiting.pages;
+    if (!keys.length) pane.appendChild(h('p', 'muted', 'No gate waits on you.'));
+    else {
+      var cur = Math.min(sub.page, pages.length - 1), span = pages[cur];
+      keys.slice(span.from, span.to).forEach(function(key) {
+        var r = byKey[key];
+        if (!r) return;
+        var b = btn('rw warn' + (sub.sel === key ? ' sel' : ''), null, function() {
+          rowSel(b);
+          sub.sel = key;
+          sub.note = null;
+          waitDetail(r);
+        });
+        var c = h('span', 'c1');
+        c.appendChild(h('span', 'chip', r.project));
+        b.appendChild(c);
+        b.appendChild(h('span', 'c2', r.slug));
+        b.appendChild(h('span', 'c3', r.stage));
+        b.appendChild(h('span', 'c4', r.waits_days >= 0 ? r.waits_days + ' d' : ''));
+        pane.appendChild(b);
+      });
+      pager(pages, cur, function(p) { sub.page = p; render(); });
+    }
+    // After a decision the state is read again; the picked row and its result line stay in the detail pane.
+    var picked = sub.sel ? byKey[sub.sel] : null;
+    if (picked) waitDetail(picked, sub.note && sub.note.key === sub.sel ? sub.note.lines : null);
+    else rootDetail('Select a flow to approve it or send it back.');
+  }
+
+  // waitDetail: a flow row with Approve and Send back while it waits; lines are a past result.
+  function waitDetail(r, lines) {
+    var box = h('div', 'dec');
+    (lines || []).forEach(function(x) { box.appendChild(h(x[1] === 'src' ? 'span' : 'p', x[1], x[0])); });
+    var chips = [];
+    if (r.stage) chips.push([r.stage, '']);
+    if (r.waiting) chips.push(['waiting on you' + (r.waits_days >= 0 ? ', ' + r.waits_days + ' days' : ''), 'warn']);
+    else chips.push(['no longer waits', 'on']);
+    detail({k: 'Flow / ' + r.project, t: r.slug, chips: chips,
+      d: r.waiting ? 'Approve or Send back shows the command first; Confirm runs it.' : 'This flow does not wait on you now.',
+      act: r.waiting ? [['Approve', function() { decide('approve', r); }, 'primary'],
+        ['Send back', function() { decide('send_back', r); }]] : [],
+      out: box, src: srcPath(r.index), kind: 'flow', unit_id: r.unit, path: r.index});
+  }
+
+  // decide: the preview (command text, Confirm and Cancel), then the run with the token only.
+  // Confirm is enabled after 500 ms; the controls service refuses a confirm within 400 ms.
+  // Stop sends the control and the agent id only; a gate decision sends the control, project and slug.
+  function decide(control, r) {
+    var box = det.querySelector('.dec'), s0 = sub, seq = drawSeq;
+    if (!box) return;
+    var stop = control === 'stop', key = stop ? r.id : r.key;
+    var req = stop ? {control: control, agent: r.id} : {control: control, project: r.project, slug: r.slug};
+    s0.note = null;
+    box.textContent = '';
+    box.appendChild(h('p', 'muted', stop ? 'Checking the agent.' : 'Checking the gate.'));
+    Promise.resolve(api.preview(req)).then(function(pr) {
+      if (seq !== drawSeq) return;
+      box.textContent = '';
+      box.appendChild(h('span', 'eyebrow', (stop ? 'Stop' : control === 'approve' ? 'Approve' : 'Send back') + ' runs this command'));
+      box.appendChild(h('p', 'cmd', pr.command));
+      var acts = h('div', 'acts');
+      var ok = btn('primary', 'Confirm', function() {
+        ok.disabled = true;
+        no.disabled = true;
+        Promise.resolve(api.run(pr.token)).then(function(rv) {
+          var lines = [[rv.refused ? 'refused: ' + rv.refused : 'exit ' + rv.exit_code + (rv.line ? ', ' + rv.line : ''),
+            rv.refused || rv.failed ? 'warn' : '']];
+          if (rv.audit_path) lines.push(['Audit file ' + rv.audit_path, 'src']);
+          s0.note = {key: key, lines: lines};
+          return loadState();
+        }, function(e) {
+          s0.note = {key: key, lines: [['refused: ' + (e && e.message ? e.message : String(e)), 'warn']]};
+          return loadState();
+        });
+      });
+      ok.disabled = true;
+      var no = btn('', 'Cancel', function() { box.textContent = ''; });
+      setTimeout(function() { ok.disabled = false; }, 500);
+      acts.appendChild(ok);
+      acts.appendChild(no);
+      box.appendChild(acts);
+    }, function(e) {
+      if (seq !== drawSeq) return;
+      box.textContent = '';
+      box.appendChild(h('p', 'warn', 'Not possible: ' + (e && e.message ? e.message : String(e))));
+    });
+  }
+
+  // fixedLabel: "Thu 12 Nov, 12:00" from a plan date's date and time.
+  function fixedLabel(pd) {
+    var p = String(pd.date).split('-'), dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    return WD[dt.getUTCDay()] + ' ' + (+p[2]) + ' ' + MON[+p[1] - 1] + (pd.time ? ', ' + pd.time : '');
+  }
+
+  // pagePlanning: the grid from state.planning (2 or 4 weeks from this Monday, the Go side lays it out).
+  function pagePlanning() {
+    if (!state.plan) {
+      var line = 'No plan file at ' + srcPath(state.plan_path) + '.';
+      state.problems.forEach(function(p) {
+        if (p.path === state.plan_path) line = 'The plan file ' + srcPath(state.plan_path) + ' was not read: ' + p.message;
+      });
+      lead.appendChild(h('span', 'ell', line));
+      pane.appendChild(h('p', 'muted', line));
+      rootDetail('');
+      return;
+    }
+    var nf = state.next_fixed;
+    if (nf) {
+      lead.appendChild(document.createTextNode('Next fixed date:' + NBSP));
+      lead.appendChild(h('b', null, fixedLabel(nf)));
+      lead.appendChild(h('span', 'ell', NBSP + (nf.short || nf.title)));
+    } else {
+      lead.appendChild(h('span', 'ell', 'No fixed date ahead.'));
+    }
+    var rows = state.planning.rows, g = h('div', 'plan'), picked = null;
+    g.style.gridTemplateRows = '22px repeat(' + rows.length + ',minmax(0,1fr))';
+    g.appendChild(h('div', 'dh', 'Week'));
+    (rows.length ? rows[0].days : []).forEach(function(dy) { g.appendChild(h('div', 'dh', dy.weekday)); });
+    rows.forEach(function(wr) {
+      var wk = h('div', 'wk', wr.label);
+      wr.notes.forEach(function(n) {
+        wk.appendChild(h('br'));
+        wk.appendChild(document.createTextNode(n));
+      });
+      if (wr.notes.length) wk.title = wr.label + ': ' + wr.notes.join('; ');
+      g.appendChild(wk);
+      wr.days.forEach(function(dy) {
+        var cell = h('div', 'day' + (dy.weekend ? ' we' : '') + (dy.today ? ' today' : ''));
+        cell.appendChild(h('span', 'dn', dy.today ? dy.label + ', today' : dy.label));
+        dy.dates.forEach(function(pd) {
+          var key = pd.date + '|' + (pd.time || '') + '|' + pd.title;
+          var b = btn('it' + (pd.fixed ? '' : ' soft'), (pd.time ? pd.time + ' ' : '') + (pd.short || pd.title), function() {
+            g.querySelectorAll('.it.sel').forEach(function(x) { x.classList.remove('sel'); });
+            b.classList.add('sel');
+            sub.sel = key;
+            detail({k: fixedLabel(pd), t: pd.title, chips: pd.fixed ? [['fixed date', 'warn']] : [], d: pd.note,
+              list: (pd.ids && pd.ids.length ? ['Plan ids: ' + pd.ids.join(', ')] : []).concat(pd.source ? ['Source: ' + pd.source] : []),
+              src: srcPath(state.plan_path), kind: 'date', path: state.plan_path, label: pd.date + ' ' + pd.title});
+          });
+          b.title = pd.title;
+          b.setAttribute('data-title', '1');
+          b.setAttribute('data-full', (pd.time ? pd.time + ' ' : '') + pd.title);
+          cell.appendChild(b);
+          if (sub.sel === key) picked = b;
+        });
+        g.appendChild(cell);
+      });
+    });
+    pane.appendChild(g);
+    g.querySelectorAll('.day').forEach(function(c) { fitDay(c); });
+    if (picked) picked.click();
+    else rootDetail('Select a date to see it. Fixed dates are in the warning colour.');
+  }
+
+  // fitDay: when a day's items do not fit its cell, the last ones are hidden behind a "+N more"
+  // line whose hover title lists them (time and title) in the state's order.
+  function fitDay(cell) {
+    var its = cell.querySelectorAll('.it');
+    if (!its.length || cell.scrollHeight <= cell.clientHeight) return;
+    var more = h('span', 'more');
+    more.setAttribute('data-title', '1');
+    cell.appendChild(more);
+    var n = its.length;
+    function label() {
+      var cut = [];
+      for (var i = n; i < its.length; i++) cut.push(its[i].getAttribute('data-full'));
+      more.textContent = '+' + cut.length + ' more';
+      more.title = cut.join('; ');
+    }
+    label();
+    while (n > 0 && cell.scrollHeight > cell.clientHeight) {
+      n--;
+      its[n].hidden = true;
+      label();
+    }
+  }
+
+  function pageSettings() {
+    lead.textContent = 'Settings. Every setting of the app lives on this page.';
+    function row(label, help, opts, cur, fn) {
+      var r = h('div', 'setrow'), lb = h('span', 'lb', label);
+      lb.appendChild(h('span', 'hp', help));
+      r.appendChild(lb);
+      var s = h('div', 'seg');
+      s.setAttribute('role', 'group');
+      s.setAttribute('aria-label', label);
+      opts.forEach(function(o) {
+        var b = btn('', o[1], function() { fn(o[0]); });
+        b.setAttribute('aria-pressed', String(cur === o[0]));
+        s.appendChild(b);
+      });
+      r.appendChild(s);
+      pane.appendChild(r);
+    }
+    row('Screen use', 'How much of the screen width the app takes.', [[60, '60%'], [80, '80%'], [100, '100%']], settings.width,
+      function(v) { saveSetting('width', v); });
+    row('Menu', 'Icons with text, or icons only.', [['text', 'Icons and text'], ['icons', 'Icons only']], settings.menu,
+      function(v) { saveSetting('menu', v); });
+    row('Planning horizon', 'Weeks shown on the Planning page.', [[2, '2 weeks'], [4, '4 weeks']], settings.weeks,
+      function(v) { saveSetting('weeks', v); });
+    row('Theme', 'Also at the top right of every page.', [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']], settings.theme,
+      function(v) { saveSetting('theme', v); });
+    detail({k: 'Settings', t: 'Settings', d: 'Four settings, the same in every ZND UI. They are saved at once and applied at once.'});
+  }
+
+  // drawAtts: the picked files, each with a remove button; a long name is cut with hover text.
+  function drawAtts() {
+    attsEl.textContent = '';
+    pend.forEach(function(f, i) {
+      var a = h('span', 'att');
+      if (f.url) {
+        var im = h('img');
+        im.src = f.url;
+        im.alt = '';
+        a.appendChild(im);
+      }
+      a.appendChild(h('span', null, f.name));
+      var x = btn('', String.fromCharCode(215), function() {
+        if (f.url) URL.revokeObjectURL(f.url);
+        pend.splice(i, 1);
+        drawAtts();
+      });
+      x.setAttribute('aria-label', 'Remove ' + f.name);
+      a.appendChild(x);
+      attsEl.appendChild(a);
+    });
+  }
+
+  // addFiles keeps the page limits (MAX_ATT files, MAX_ATT_BYTES each) and says what it left out.
+  function addFiles(list) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i], name = f.name || 'screenshot.png';
+      if (pend.length >= MAX_ATT) { out.push('At most ' + MAX_ATT + ' files per comment.'); break; }
+      if (f.size > MAX_ATT_BYTES) { out.push(name + ' is larger than 10 MB.'); continue; }
+      pend.push({name: name, file: f, url: /^image\//.test(f.type || '') ? URL.createObjectURL(f) : ''});
+    }
+    popmsg.textContent = out.join(' ');
+    drawAtts();
+  }
+
+  // openPop opens the popup for the current target only.
+  function openPop() {
+    if (!target.kind) return;
+    popTarget = target;
+    document.getElementById('poph').textContent = 'Comment on ' + target.label;
+    popmsg.textContent = '';
+    sendb.disabled = false;
+    pop.hidden = false;
+    cmt.focus();
+  }
+
+  function closePop() {
+    pop.hidden = true;
+    cmt.value = '';
+    pend.forEach(function(f) { if (f.url) URL.revokeObjectURL(f.url); });
+    pend = [];
+    popTarget = null;
+    popmsg.textContent = '';
+    drawAtts();
+  }
+
+  // readData: a file's bytes as base64, without the data:...;base64, prefix.
+  function readData(f) {
+    return new Promise(function(ok, bad) {
+      var r = new FileReader();
+      r.onload = function() {
+        var s = String(r.result);
+        ok(s.slice(s.indexOf(',') + 1));
+      };
+      r.onerror = function() { bad(r.error); };
+      r.readAsDataURL(f);
+    });
+  }
+
+  // sendComment writes one record through api.comment and shows its path in #res, the foot of the
+  // detail pane, which never falls below the fold (detail() clears it).
+  function sendComment() {
+    var text = cmt.value, t = popTarget, files = pend.slice();
+    if (!text.trim()) { cmt.focus(); return; }
+    if (!t) return;
+    sendb.disabled = true;
+    popmsg.textContent = '';
+    Promise.all(files.map(function(f) { return readData(f.file); })).then(function(datas) {
+      return api.comment({target: t, text: text,
+        attachments: files.map(function(f, i) { return {name: f.name, data: datas[i]}; })});
+    }).then(function(rv) {
+      closePop();
+      var box = h('div', 'dec');
+      box.appendChild(h('p', null, 'Comment saved' + (files.length ? ' with ' + files.length + (files.length === 1 ? ' file.' : ' files.') : '.')));
+      box.appendChild(h('span', 'src', 'Record ' + srcPath(rv.path)));
+      res.textContent = '';
+      res.appendChild(box);
+    }, function(e) {
+      var msg = 'Not saved: ' + (e && e.message ? e.message : String(e));
+      sendb.disabled = false;
+      popmsg.textContent = msg;
+      res.textContent = '';
+      res.appendChild(h('p', 'popmsg', msg));
+    });
+  }
+
+  // popup wires the comment popup: file button, drop zone, paste of images, Escape and the backdrop.
+  function popup() {
+    openc.addEventListener('click', openPop);
+    document.getElementById('cancel').addEventListener('click', closePop);
+    sendb.addEventListener('click', sendComment);
+    pop.addEventListener('click', function(e) { if (e.target === pop) closePop(); });
+    pop.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePop(); });
+    document.getElementById('pickf').addEventListener('click', function() { fileIn.click(); });
+    fileIn.addEventListener('change', function() {
+      addFiles(fileIn.files);
+      fileIn.value = '';
+    });
+    pop.addEventListener('paste', function(e) {
+      var fl = e.clipboardData && e.clipboardData.files;
+      if (fl && fl.length) {
+        e.preventDefault();
+        addFiles(fl);
+      }
+    });
+    // A file dropped anywhere but the open drop zone is refused, so the window never opens it in
+    // place of the app page.
+    document.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      if (e.dataTransfer && (pop.hidden || !drop.contains(e.target))) e.dataTransfer.dropEffect = 'none';
+    });
+    document.addEventListener('drop', function(e) { e.preventDefault(); });
+    drop.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      if (!pop.hidden) drop.classList.add('over');
+    });
+    drop.addEventListener('dragleave', function() { drop.classList.remove('over'); });
+    drop.addEventListener('drop', function(e) {
+      e.preventDefault();
+      drop.classList.remove('over');
+      if (!pop.hidden && e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+    });
+  }
+
+  // pageAgents: the background agent sessions of the BurnMon snapshot, in the Go side's order.
+  // Without a current snapshot the Go side sends only its line, and the page offers nothing.
+  function pageAgents() {
+    var seq = drawSeq;
+    rootDetail('');
+    Promise.resolve(api.agents(rowsFit())).then(function(av) {
+      if (seq !== drawSeq) return;
+      lead.appendChild(h('span', 'ell', av.line));
+      if (!av.available) return;
+      var hd = h('div', 'rw hd');
+      [['ID', 'c1'], ['Project', 'c2'], ['State', 'c3'], ['Waiting for', 'c5']].forEach(function(x) {
+        hd.appendChild(h('span', x[1], x[0]));
+      });
+      pane.appendChild(hd);
+      var list = av.agents, pages = av.pages, picked = null;
+      list.forEach(function(r) { if (r.id === sub.sel) picked = r; });
+      if (!list.length) pane.appendChild(h('p', 'muted', 'No background agent runs.'));
+      else {
+        var cur = Math.min(sub.page, pages.length - 1), span = pages[cur];
+        list.slice(span.from, span.to).forEach(function(r) {
+          var b = btn('rw' + (r.state === 'blocked' ? ' warn' : '') + (sub.sel === r.id ? ' sel' : ''), null, function() {
+            rowSel(b);
+            sub.sel = r.id;
+            sub.agent = r;
+            sub.note = null;
+            agentDetail(r, null, true);
+          });
+          var c = h('span', 'c1');
+          c.appendChild(h('span', 'chip', r.id));
+          b.appendChild(c);
+          b.appendChild(h('span', 'c2', r.project));
+          b.appendChild(h('span', 'c3', r.state));
+          b.appendChild(h('span', 'c5', r.waiting_for));
+          pane.appendChild(b);
+        });
+        pager(pages, cur, function(p) { sub.page = p; render(); });
+      }
+      // After a Stop the list is read again; a stopped agent keeps its result line but loses Stop.
+      var lines = sub.note && sub.note.key === sub.sel ? sub.note.lines : null;
+      if (picked) agentDetail(picked, lines, true);
+      else if (sub.agent && sub.agent.id === sub.sel && lines) agentDetail(sub.agent, lines, false);
+      else rootDetail('Select an agent to stop it.');
+    }, function(e) { if (seq === drawSeq) fail('Could not read the agent list', e); });
+  }
+
+  // agentDetail: an agent with Stop while it is listed; lines are a past result.
+  function agentDetail(r, lines, listed) {
+    var box = h('div', 'dec');
+    (lines || []).forEach(function(x) { box.appendChild(h(x[1] === 'src' ? 'span' : 'p', x[1], x[0])); });
+    var chips = [];
+    if (r.state) chips.push([r.state, r.state === 'blocked' ? 'warn' : '']);
+    if (r.waiting_for) chips.push(['waiting for ' + r.waiting_for, 'warn']);
+    if (!listed) chips.push(['no longer listed', 'on']);
+    detail({k: 'Agent / ' + (r.project || ''), t: r.id, chips: chips,
+      d: listed ? 'Stop shows the command first; Confirm runs it.' : 'This agent is not in the agent list now.',
+      act: listed ? [['Stop', function() { decide('stop', r); }, 'primary']] : [],
+      out: box});
+  }
+
+  function hoverTitle(e) {
+    var el = e.target.closest && e.target.closest(HOVER_SEL);
+    // A title the page set itself (data-title) stays as it is.
+    if (!el || el.hasAttribute('data-title')) return;
+    if (el.scrollWidth > el.clientWidth) el.title = el.textContent;
+    else el.removeAttribute('title');
+  }
+
+  function start() {
+    app.addEventListener('mouseover', hoverTitle);
+    popup();
+    window.addEventListener('resize', function() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(loadState, 200);
+    });
+    render();
+    Promise.resolve(api.settingsGet()).then(function(s) {
+      applySettings(s);
+      return loadState();
+    }, function(e) { fail('Could not read the settings', e); });
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>

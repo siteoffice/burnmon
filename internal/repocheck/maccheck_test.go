@@ -53,6 +53,7 @@ func TestMaccheckScriptShape(t *testing.T) {
 		"Sleep and wake",
 		"Second screen",
 		"OF25 banner",
+		"Control Centre window",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("script lacks %q", want)
@@ -77,7 +78,7 @@ func TestMaccheckScriptShape(t *testing.T) {
 			windowSteps = append(windowSteps, m[1])
 		}
 	}
-	wantSteps := []string{"build-burnmon", "build-burnmon-dev", "build-burnmon-cli", "build-uicheck", "vet", "test"}
+	wantSteps := []string{"build-burnmon", "build-burnmon-dev", "build-burnmon-cli", "build-controlcentre", "build-uicheck", "vet", "test"}
 	if !reflect.DeepEqual(steps, wantSteps) {
 		t.Errorf("step names = %v, want %v", steps, wantSteps)
 	}
