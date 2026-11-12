@@ -1,7 +1,9 @@
 # BurnMon, status
 
-What is true now (2026-11-11, sprint branch `sprint/burnmon-control-centre-slice-1`, not merged):
-the Control Centre slice 1 is built on base `1c2e359` as a fourth exe, `controlcentre.exe`. Built:
+What is true now (2026-11-12, merged into `main` through PR #23, merge commit `803c952`, after Wilco's
+Accept; read `git log main` live): the Control Centre slice 1 is a fourth exe, `controlcentre.exe`,
+landed as one commit byte-equal to the sprint head. The macos-latest job passed on PR #23 and `main`
+measured `go vet` 0, `go test` 1293 pass, 0 fail, 6 skip after the merge. Built:
 the data layer `internal\centre` (units, files, plan, planning, boards, comments, settings, rules) and
 the window `cmd\controlcentre` (page `cmd\controlcentre\page.html`): overview, unit and file views,
 flow and sprint boards in the main pane, Waiting on you, Planning, Settings, comments, gate decisions
@@ -11,7 +13,8 @@ fourth build in `.github\workflows\macos.yml` and `scripts\maccheck.sh`; a Contr
 (base 1164 pass, 0 fail, 6 skip), `.\build.ps1` 0 with a `controlcentre.exe`, darwin vet without cgo 0
 (non-cgo files only). The window is built, not seen in a window: nothing ran in a window on Windows or
 on a Mac. Fixture unit files are checked in as `siteoffice.fixture.json`; a `controlcentre.exe` line in
-`.gitignore` is still to be added by hand. No version bump, no tag. The paragraph below describes beta.3 and is kept as history.
+`.gitignore` is still to be added by hand. No version bump, no tag: the bump goes with the release
+commit after the first look in a window. The paragraph below describes beta.3 and is kept as history.
 
 What is true at v0.4.0-beta.3 (2026-11-04, written on the release branch before its merge; read
 `git log main` and `git ls-remote --tags origin` live): the release lane batch for the 16 Nov test-group
