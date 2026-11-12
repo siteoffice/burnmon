@@ -20,6 +20,8 @@ renamed and extended from v0.2 onward. Repo:
   client, with its live Now page for a glance.
 - **BurnMon Dev** (`burnmon-dev.exe`) is for the last 30 minutes and for acting now:
   Waits on you and the agent map.
+- **Control Centre** (`controlcentre.exe`) is for steering: the units, files, plan and
+  boards under one root, gate decisions, Stop, and comments.
 
 Settings live in `burnmon.json`, next to the exe or else in `%LOCALAPPDATA%\burnmon\burnmon.json`; see Configuration.
 
@@ -636,6 +638,39 @@ that cannot be used shows its reason in the gear dialog.
 
 Not run live: no control was run against a real session, process or flow (B4 report),
 and the audit lines of a live run are not quoted anywhere.
+
+## Control Centre
+
+`controlcentre.exe` is a third window, for steering rather than watching. It shows the
+units below one root folder (every folder with a `siteoffice.json`, up to 4 levels deep),
+their files, the flow and sprint boards, a plan and what waits on you, and it records gate
+decisions, Stop and comments. The data layer is `internal\centre`, the window is
+`cmd\controlcentre` with its page in `cmd\controlcentre\page.html`. No server, no port, no
+network call: it reads below the root and writes only its settings file, the root's
+`_comments` folder and the controls audit file.
+
+- **Root**: `--root` names the folder to show; without it, the `root` in
+  `controlcentre.json`; without that, the current folder.
+- **Settings**: `controlcentre.json`, found next to the exe, then in the same app data
+  folder as `burnmon.json` (%LOCALAPPDATA%\burnmon on Windows). It holds width (60, 80 or
+  100 percent), menu (text or icons), weeks (2 or 4) and theme (system, light or dark),
+  all set from the Settings page.
+- **Pages**: Overview, a unit with its files and flows, a file, a flow or sprint board
+  inside the main pane, Waiting on you, Planning, Settings and Agents.
+- **Plan**: `siteoffice.plan.json` at the root holds the goals, lines and items of the 2
+  or 4 week Planning page. A file that does not validate is reported and treated as absent.
+- **Comments**: on a unit, a file, a block of a file, a flow, a sprint, a date or a plan
+  item, written as records under `_comments` in the root, with at most 5 attachments of at
+  most 10 MB each.
+- **Decisions**: Approve and Send back on a waiting flow, and Stop on a background agent,
+  go through the same controls and the same audit file (`controls-audit.ndjson`, next to
+  the store) as BurnMon Dev, with the same preview and Confirm step and the same control
+  switches in `burnmon-dev-view.json`. Decisions need BurnMon Dev running, because the gate and agent checks read its snapshot.
+- **Build**: `.\build.ps1` builds `controlcentre.exe` next to the other three exes. On a
+  Mac it builds with cgo, like `burnmon-dev`, in `.github\workflows\macos.yml` and
+  `scripts\maccheck.sh`.
+
+Built, not yet seen in a window.
 
 ## Configuration
 

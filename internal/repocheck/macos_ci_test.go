@@ -25,6 +25,7 @@ func TestMacOSWorkflow(t *testing.T) {
 		"go build -o dist/burnmon ./cmd/burnmon",
 		"go build -o dist/burnmon-dev ./cmd/burnmon-dev",
 		"go build -o dist/burnmon-cli ./cmd/burnmon-cli",
+		"go build -o dist/controlcentre ./cmd/controlcentre",
 		"go vet ./...",
 		"go test ./... -count=1",
 		"bash scripts/maccheck.sh --ci",

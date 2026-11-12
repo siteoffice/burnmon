@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "goals": [
+    {"id": "g1", "title": "Warm kitchen", "kind": "goal", "note": "Every morning starts with a hot drink."},
+    {"id": "g2", "title": "Quiet evenings", "kind": "goal", "note": "Cooking without noise."}
+  ],
+  "lines": [
+    {"id": "l1", "title": "Hot drinks", "kind": "line", "note": "Kettle and friends."}
+  ],
+  "items": [
+    {
+      "id": "i-kettle",
+      "title": "Kettle",
+      "kind": "product",
+      "note": "The main product.",
+      "unit": "kettle",
+      "parts": [
+        {"title": "Lamp", "role": "indicator", "note": "Shows when the water boils.", "unit": "lamp"}
+      ]
+    },
+    {
+      "id": "i-stove",
+      "title": "Stove",
+      "kind": "project",
+      "note": "On hold until the kettle ships.",
+      "unit": "stove",
+      "hold": true
+    }
+  ],
+  "links": [
+    {"from": "g1", "to": "l1", "relation": "served by"},
+    {"from": "l1", "to": "i-kettle", "relation": "contains"},
+    {"from": "g2", "to": "i-stove", "relation": "served by"},
+    {"from": "i-kettle", "to": "i-stove", "relation": "comes before", "step": true}
+  ],
+  "dates": [
+    {"date": "2026-10-01", "title": "Stove kickoff", "short": "Kickoff", "ids": ["i-stove"], "fixed": true, "source": "DEADLINES.md"},
+    {"date": "2026-11-20", "time": "10:00", "title": "Kettle review", "short": "Review", "note": "Gate review of the brew flow.", "ids": ["i-kettle"], "fixed": true, "source": "DEADLINES.md"},
+    {"date": "2026-11-25", "title": "Lamp demo", "short": "Demo", "ids": ["i-kettle"]}
+  ],
+  "weekNotes": [
+    {"week": "2026-W47", "text": "Kettle review week."}
+  ]
+}

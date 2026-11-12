@@ -1,0 +1,835 @@
+{
+  "schema_version": 1,
+  "root": "ROOT",
+  "now": "2026-11-11T12:00:00Z",
+  "today": "2026-11-11",
+  "rows_per_page": 5,
+  "units": [
+    {
+      "id": ".",
+      "name": "acme-hub",
+      "display_name": "Acme Hub",
+      "type": "hub",
+      "parent": "",
+      "level": 0,
+      "depth": 0,
+      "children": [
+        "deep/l2/l3/l4",
+        "projects/kettle",
+        "projects/stove"
+      ],
+      "item": "",
+      "files": [
+        {
+          "name": "AGENTS.md",
+          "role": "Instruction file",
+          "size": 285,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "ok"
+        },
+        {
+          "name": "README.md",
+          "role": "Readme",
+          "size": 73,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        },
+        {
+          "name": "STATUS.md",
+          "role": "State",
+          "size": 36,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        },
+        {
+          "name": "siteoffice.json",
+          "role": "Unit file",
+          "size": 59,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        },
+        {
+          "name": "siteoffice.plan.json",
+          "role": "File",
+          "size": 1611,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "ok"
+        }
+      ],
+      "folders": [
+        {
+          "name": "deep",
+          "entries": 1
+        },
+        {
+          "name": "projects",
+          "entries": 4
+        }
+      ],
+      "file_pages": [
+        {
+          "from": 0,
+          "to": 5
+        }
+      ],
+      "flows": {
+        "keys": [
+          "nobody/orphan-flow",
+          "acme-hub/hub-closed-one"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 2
+          }
+        ]
+      },
+      "sprints": {
+        "keys": [],
+        "pages": []
+      }
+    },
+    {
+      "id": "deep/l2/l3/l4",
+      "name": "deep4",
+      "display_name": "deep4",
+      "type": "",
+      "parent": ".",
+      "level": 1,
+      "depth": 4,
+      "children": [],
+      "item": "",
+      "files": [
+        {
+          "name": "siteoffice.json",
+          "role": "Unit file",
+          "size": 17,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        }
+      ],
+      "folders": [
+        {
+          "name": "l5",
+          "entries": 1
+        }
+      ],
+      "file_pages": [
+        {
+          "from": 0,
+          "to": 1
+        }
+      ],
+      "flows": {
+        "keys": [],
+        "pages": []
+      },
+      "sprints": {
+        "keys": [],
+        "pages": []
+      }
+    },
+    {
+      "id": "projects/kettle",
+      "name": "kettle",
+      "display_name": "Kettle",
+      "type": "",
+      "parent": ".",
+      "level": 1,
+      "depth": 2,
+      "children": [
+        "projects/kettle/engine",
+        "projects/lamp"
+      ],
+      "item": "i-kettle",
+      "files": [
+        {
+          "name": "CHANGELOG.md",
+          "role": "Release history",
+          "size": 275,
+          "modified": "2026-08-01T00:00:00Z",
+          "age_days": 102,
+          "state": "stale"
+        },
+        {
+          "name": "DEADLINES.md",
+          "role": "Dates and gates",
+          "size": 49,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        },
+        {
+          "name": "STATUS.md",
+          "role": "State",
+          "size": 244,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "ok"
+        },
+        {
+          "name": "siteoffice.json",
+          "role": "Unit file",
+          "size": 88,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        }
+      ],
+      "folders": [
+        {
+          "name": "engine",
+          "entries": 1
+        }
+      ],
+      "file_pages": [
+        {
+          "from": 0,
+          "to": 4
+        }
+      ],
+      "flows": {
+        "keys": [
+          "kettle/kettle-brew-gate"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 1
+          }
+        ]
+      },
+      "sprints": {
+        "keys": [
+          "kettle/kettle-sprint-a"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "projects/kettle/engine",
+      "name": "engine",
+      "display_name": "engine",
+      "type": "",
+      "parent": "projects/kettle",
+      "level": 2,
+      "depth": 3,
+      "children": [],
+      "item": "",
+      "files": [
+        {
+          "name": "siteoffice.json",
+          "role": "Unit file",
+          "size": 18,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        }
+      ],
+      "folders": [],
+      "file_pages": [
+        {
+          "from": 0,
+          "to": 1
+        }
+      ],
+      "flows": {
+        "keys": [],
+        "pages": []
+      },
+      "sprints": {
+        "keys": [],
+        "pages": []
+      }
+    },
+    {
+      "id": "projects/lamp",
+      "name": "lamp",
+      "display_name": "lamp",
+      "type": "",
+      "parent": "projects/kettle",
+      "level": 2,
+      "depth": 2,
+      "children": [],
+      "item": "",
+      "files": [
+        {
+          "name": "siteoffice.json",
+          "role": "Unit file",
+          "size": 34,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        }
+      ],
+      "folders": [],
+      "file_pages": [
+        {
+          "from": 0,
+          "to": 1
+        }
+      ],
+      "flows": {
+        "keys": [
+          "lamp/lamp-light"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 1
+          }
+        ]
+      },
+      "sprints": {
+        "keys": [
+          "lamp/lamp-sprint-b"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "projects/stove",
+      "name": "stove",
+      "display_name": "stove",
+      "type": "",
+      "parent": ".",
+      "level": 1,
+      "depth": 2,
+      "children": [],
+      "item": "i-stove",
+      "files": [
+        {
+          "name": "siteoffice.json",
+          "role": "Unit file",
+          "size": 41,
+          "modified": "2026-11-01T00:00:00Z",
+          "age_days": 10,
+          "state": "stub"
+        }
+      ],
+      "folders": [],
+      "file_pages": [
+        {
+          "from": 0,
+          "to": 1
+        }
+      ],
+      "flows": {
+        "keys": [
+          "stove/stove-no-time"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 1
+          }
+        ]
+      },
+      "sprints": {
+        "keys": [],
+        "pages": []
+      }
+    }
+  ],
+  "flows": [
+    {
+      "key": "lamp/lamp-light",
+      "project": "lamp",
+      "slug": "lamp-light",
+      "stage": "G3",
+      "status": "awaiting-owner",
+      "updated_at": "2026-11-10T08:00:00Z",
+      "waits_days": 1,
+      "waiting": true,
+      "closed": false,
+      "unit": "projects/lamp",
+      "index": "projects/kettle/_board/flows/index.json",
+      "board": ""
+    },
+    {
+      "key": "kettle/kettle-brew-gate",
+      "project": "kettle",
+      "slug": "kettle-brew-gate",
+      "stage": "G2",
+      "status": "awaiting-owner",
+      "updated_at": "2026-11-04T10:00:00Z",
+      "waits_days": 7,
+      "waiting": true,
+      "closed": false,
+      "unit": "projects/kettle",
+      "index": "_board/flows/index.json",
+      "board": "_board/flows/kettle/kettle-brew-gate/index.html"
+    },
+    {
+      "key": "stove/stove-no-time",
+      "project": "stove",
+      "slug": "stove-no-time",
+      "stage": "G1",
+      "status": "awaiting-owner",
+      "updated_at": "",
+      "waits_days": -1,
+      "waiting": true,
+      "closed": false,
+      "unit": "projects/stove",
+      "index": "_board/flows/index.json",
+      "board": ""
+    },
+    {
+      "key": "nobody/orphan-flow",
+      "project": "nobody",
+      "slug": "orphan-flow",
+      "stage": "plan",
+      "status": "execute",
+      "updated_at": "2026-11-09T15:30:00Z",
+      "waits_days": 1,
+      "waiting": false,
+      "closed": false,
+      "unit": ".",
+      "index": "_board/flows/index.json",
+      "board": ""
+    },
+    {
+      "key": "acme-hub/hub-closed-one",
+      "project": "acme-hub",
+      "slug": "hub-closed-one",
+      "stage": "close",
+      "status": "closed",
+      "updated_at": "2026-10-20T09:00:00Z",
+      "waits_days": 22,
+      "waiting": false,
+      "closed": true,
+      "unit": ".",
+      "index": "_board/flows/index.json",
+      "board": ""
+    }
+  ],
+  "sprints": [
+    {
+      "key": "lamp/lamp-sprint-b",
+      "project": "lamp",
+      "slug": "lamp-sprint-b",
+      "status": "running",
+      "phase": "execute",
+      "progress": 40,
+      "updated_at": "2026-11-10T12:00:00Z",
+      "closed": false,
+      "unit": "projects/lamp",
+      "index": "_board/sprints/index.json",
+      "board": ""
+    },
+    {
+      "key": "kettle/kettle-sprint-a",
+      "project": "kettle",
+      "slug": "kettle-sprint-a",
+      "status": "passing",
+      "phase": "done",
+      "progress": 100,
+      "updated_at": "2026-11-02T00:00:00Z",
+      "closed": true,
+      "unit": "projects/kettle",
+      "index": "_board/sprints/index.json",
+      "board": ""
+    }
+  ],
+  "waiting": {
+    "keys": [
+      "lamp/lamp-light",
+      "kettle/kettle-brew-gate",
+      "stove/stove-no-time"
+    ],
+    "pages": [
+      {
+        "from": 0,
+        "to": 3
+      }
+    ]
+  },
+  "overview": {
+    "plan_columns": [
+      {
+        "title": "Goals",
+        "keys": [
+          "g1",
+          "g2"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 2
+          }
+        ]
+      },
+      {
+        "title": "Plan",
+        "keys": [
+          "l1"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 1
+          }
+        ]
+      },
+      {
+        "title": "Products and projects",
+        "keys": [
+          "i-kettle",
+          "i-stove"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 2
+          }
+        ]
+      }
+    ],
+    "unit_columns": [
+      {
+        "title": "Root",
+        "keys": [
+          "."
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 1
+          }
+        ]
+      },
+      {
+        "title": "Level 1",
+        "keys": [
+          "deep/l2/l3/l4",
+          "projects/kettle",
+          "projects/stove"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 3
+          }
+        ]
+      },
+      {
+        "title": "Level 2",
+        "keys": [
+          "projects/kettle/engine",
+          "projects/lamp"
+        ],
+        "pages": [
+          {
+            "from": 0,
+            "to": 2
+          }
+        ]
+      }
+    ],
+    "default": "plan"
+  },
+  "plan": {
+    "schemaVersion": 1,
+    "goals": [
+      {
+        "id": "g1",
+        "title": "Warm kitchen",
+        "kind": "goal",
+        "note": "Every morning starts with a hot drink."
+      },
+      {
+        "id": "g2",
+        "title": "Quiet evenings",
+        "kind": "goal",
+        "note": "Cooking without noise."
+      }
+    ],
+    "lines": [
+      {
+        "id": "l1",
+        "title": "Hot drinks",
+        "kind": "line",
+        "note": "Kettle and friends."
+      }
+    ],
+    "items": [
+      {
+        "id": "i-kettle",
+        "title": "Kettle",
+        "kind": "product",
+        "note": "The main product.",
+        "unit": "kettle",
+        "unit_id": "projects/kettle",
+        "parts": [
+          {
+            "title": "Lamp",
+            "role": "indicator",
+            "note": "Shows when the water boils.",
+            "unit": "lamp",
+            "unit_id": "projects/lamp"
+          }
+        ]
+      },
+      {
+        "id": "i-stove",
+        "title": "Stove",
+        "kind": "project",
+        "note": "On hold until the kettle ships.",
+        "unit": "stove",
+        "unit_id": "projects/stove",
+        "hold": true
+      }
+    ],
+    "links": [
+      {
+        "from": "g1",
+        "to": "l1",
+        "relation": "served by"
+      },
+      {
+        "from": "l1",
+        "to": "i-kettle",
+        "relation": "contains"
+      },
+      {
+        "from": "g2",
+        "to": "i-stove",
+        "relation": "served by"
+      },
+      {
+        "from": "i-kettle",
+        "to": "i-stove",
+        "relation": "comes before",
+        "step": true
+      }
+    ],
+    "dates": [
+      {
+        "date": "2026-10-01",
+        "title": "Stove kickoff",
+        "short": "Kickoff",
+        "ids": [
+          "i-stove"
+        ],
+        "fixed": true,
+        "source": "DEADLINES.md"
+      },
+      {
+        "date": "2026-11-20",
+        "time": "10:00",
+        "title": "Kettle review",
+        "short": "Review",
+        "note": "Gate review of the brew flow.",
+        "ids": [
+          "i-kettle"
+        ],
+        "fixed": true,
+        "source": "DEADLINES.md"
+      },
+      {
+        "date": "2026-11-25",
+        "title": "Lamp demo",
+        "short": "Demo",
+        "ids": [
+          "i-kettle"
+        ]
+      }
+    ],
+    "weekNotes": [
+      {
+        "week": "2026-W47",
+        "text": "Kettle review week."
+      }
+    ]
+  },
+  "plan_path": "siteoffice.plan.json",
+  "badges": {
+    "i-kettle": 2,
+    "i-stove": 1
+  },
+  "planning": {
+    "weeks": 2,
+    "monday": "2026-11-09",
+    "today": "2026-11-11",
+    "rows": [
+      {
+        "week": "2026-W46",
+        "label": "W46",
+        "notes": [],
+        "days": [
+          {
+            "date": "2026-11-09",
+            "label": "9 Nov",
+            "weekday": "Mon",
+            "today": false,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-10",
+            "label": "10 Nov",
+            "weekday": "Tue",
+            "today": false,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-11",
+            "label": "11 Nov",
+            "weekday": "Wed",
+            "today": true,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-12",
+            "label": "12 Nov",
+            "weekday": "Thu",
+            "today": false,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-13",
+            "label": "13 Nov",
+            "weekday": "Fri",
+            "today": false,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-14",
+            "label": "14 Nov",
+            "weekday": "Sat",
+            "today": false,
+            "weekend": true,
+            "dates": []
+          },
+          {
+            "date": "2026-11-15",
+            "label": "15 Nov",
+            "weekday": "Sun",
+            "today": false,
+            "weekend": true,
+            "dates": []
+          }
+        ]
+      },
+      {
+        "week": "2026-W47",
+        "label": "W47",
+        "notes": [
+          "Kettle review week."
+        ],
+        "days": [
+          {
+            "date": "2026-11-16",
+            "label": "16 Nov",
+            "weekday": "Mon",
+            "today": false,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-17",
+            "label": "17 Nov",
+            "weekday": "Tue",
+            "today": false,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-18",
+            "label": "18 Nov",
+            "weekday": "Wed",
+            "today": false,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-19",
+            "label": "19 Nov",
+            "weekday": "Thu",
+            "today": false,
+            "weekend": false,
+            "dates": []
+          },
+          {
+            "date": "2026-11-20",
+            "label": "20 Nov",
+            "weekday": "Fri",
+            "today": false,
+            "weekend": false,
+            "dates": [
+              {
+                "date": "2026-11-20",
+                "time": "10:00",
+                "title": "Kettle review",
+                "short": "Review",
+                "note": "Gate review of the brew flow.",
+                "ids": [
+                  "i-kettle"
+                ],
+                "fixed": true,
+                "source": "DEADLINES.md"
+              }
+            ]
+          },
+          {
+            "date": "2026-11-21",
+            "label": "21 Nov",
+            "weekday": "Sat",
+            "today": false,
+            "weekend": true,
+            "dates": []
+          },
+          {
+            "date": "2026-11-22",
+            "label": "22 Nov",
+            "weekday": "Sun",
+            "today": false,
+            "weekend": true,
+            "dates": []
+          }
+        ]
+      }
+    ]
+  },
+  "next_fixed": {
+    "date": "2026-11-20",
+    "time": "10:00",
+    "title": "Kettle review",
+    "short": "Review",
+    "note": "Gate review of the brew flow.",
+    "ids": [
+      "i-kettle"
+    ],
+    "fixed": true,
+    "source": "DEADLINES.md"
+  },
+  "problems": [],
+  "counts": {
+    "units": 6,
+    "flows": 5,
+    "sprints": 2,
+    "waiting": 3,
+    "longest_wait_days": 7,
+    "problems": 0
+  }
+}

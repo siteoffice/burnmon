@@ -23,11 +23,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.5"
-      - name: Build burnmon, burnmon-dev and burnmon-cli
+      - name: Build burnmon, burnmon-dev, burnmon-cli and controlcentre
         run: |
           go build -o dist/burnmon ./cmd/burnmon
           go build -o dist/burnmon-dev ./cmd/burnmon-dev
           go build -o dist/burnmon-cli ./cmd/burnmon-cli
+          go build -o dist/controlcentre ./cmd/controlcentre
       - name: Vet
         run: go vet ./...
       - name: Test
