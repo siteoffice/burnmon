@@ -16,6 +16,7 @@ type flowIndex struct {
 		Slug      string `json:"slug"`
 		Stage     string `json:"stage"`
 		Status    string `json:"status"`
+		Awaiting  bool   `json:"awaiting"` // absent reads as false
 		UpdatedAt string `json:"updatedAt"`
 	} `json:"flows"`
 }
@@ -78,11 +79,14 @@ func ReadBoards(root string, units []Unit, now time.Time) ([]FlowRow, []SprintRo
 					Status:    r.Status,
 					UpdatedAt: r.UpdatedAt,
 					WaitsDays: WaitsDays(r.UpdatedAt, now),
-					Waiting:   r.Status == statusWaiting,
+					Waiting:   r.Awaiting,
 					Closed:    flowClosed(r.Status),
 					Unit:      ownerOf(r.Project, u.ID),
 					Index:     rel,
 					Board:     boardPage(root, u.ID, "flows", r.Project, r.Slug),
+				}
+				if r.Status == statusWaiting && !r.Awaiting {
+					row.StateText = StaleText
 				}
 				if i, ok := flowAt[row.Key]; ok {
 					if newerFirst(row.UpdatedAt, flows[i].UpdatedAt) < 0 {
@@ -117,6 +121,8 @@ func ReadBoards(root string, units []Unit, now time.Time) ([]FlowRow, []SprintRo
 					Unit:      ownerOf(r.Project, u.ID),
 					Index:     rel,
 					Board:     boardPage(root, u.ID, "sprints", r.Project, r.Slug),
+					WaitsDays: WaitsDays(r.UpdatedAt, now),
+					Waiting:   r.Status == sprintWaiting,
 				}
 				if i, ok := sprintAt[row.Key]; ok {
 					if newerFirst(row.UpdatedAt, sprints[i].UpdatedAt) < 0 {

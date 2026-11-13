@@ -3,9 +3,12 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -290,5 +293,77 @@ func TestRunBindingRefusalKeepsAuditPath(t *testing.T) {
 	off := bindEnv{svcWhy: "x"}
 	if rv, err := runBinding(off, "nope"); err != nil || rv.Refused == "" || rv.AuditPath != "" {
 		t.Errorf("decisions off: view %+v, err %v", rv, err)
+	}
+}
+
+// TestElevatedReasonRewritten: the elevation refusal from internal/controls
+// names BurnMon Dev; the Control Centre shows its own name (spec item 3).
+func TestElevatedReasonRewritten(t *testing.T) {
+	r := newDecisionRig(t)
+	r.env.Elevated = func() bool { return true }
+	r.svc = controls.NewService(r.env)
+	r.be.svc = r.svc
+	_, err := previewDecision(r.be, DecisionRequest{Control: controls.Stop, Agent: "ab12"})
+	if err == nil || err.Error() != ccElevatedReason {
+		t.Fatalf("elevated preview err = %v, want %q", err, ccElevatedReason)
+	}
+	if got := "Not possible: " + err.Error(); got != "Not possible: the Control Centre runs as administrator, so controls are off. Start it from a normal window." {
+		t.Errorf("pane text = %q", got)
+	}
+	if n := r.runner.calls(); n != 0 {
+		t.Errorf("runner ran %d times", n)
+	}
+}
+
+func TestElevatedReasonRewrittenOnRun(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("the fixture cwd is a Windows path; the folder checks parse it only on Windows")
+	}
+	r := newDecisionRig(t)
+	elevated := false
+	r.env.Elevated = func() bool { return elevated }
+	r.svc = controls.NewService(r.env)
+	r.be.svc = r.svc
+	view, _ := json.Marshal([]map[string]any{{"kind": "background", "id": "ab12", "cwd": `C:\example\other`,
+		"state": "blocked", "status": "waiting", "pid": 4242, "startedAt": 1761213600000}})
+	r.svc.Env.AgentView = func(ctx context.Context) ([]byte, error) { return view, nil }
+	pr, err := previewDecision(r.be, DecisionRequest{Control: controls.Stop, Agent: "ab12"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	elevated = true
+	r.clock.add(time.Second)
+	rv, err := runDecision(r.be, pr.Token)
+	if rv.Refused != ccElevatedReason {
+		t.Errorf("Refused = %q, want %q", rv.Refused, ccElevatedReason)
+	}
+	if err == nil || err.Error() != ccElevatedReason {
+		t.Errorf("err = %v, want %q", err, ccElevatedReason)
+	}
+	if n := r.runner.calls(); n != 0 {
+		t.Errorf("runner ran %d times", n)
+	}
+}
+
+func TestOtherReasonsPassThrough(t *testing.T) {
+	for _, s := range []string{
+		"",
+		"switched off in the gear",
+		"needs claude.exe: set claude_path in burnmon.json",
+		"cannot tell whether BurnMon Dev is elevated: controls are off",
+		controlsElevatedReason + " ",
+		"x " + controlsElevatedReason,
+	} {
+		if got := rewriteReason(s); got != s {
+			t.Errorf("rewriteReason(%q) = %q", s, got)
+		}
+	}
+	r := newDecisionRig(t)
+	r.env.Self = nil
+	r.svc = controls.NewService(r.env)
+	r.be.svc = r.svc
+	want := "cannot check BurnMon Dev's own process tree: controls are off"
+	if _, err := previewDecision(r.be, DecisionRequest{Control: controls.Stop, Agent: "ab12"}); err == nil || err.Error() != want {
+		t.Errorf("no Self: err = %v, want %q", err, want)
 	}
 }

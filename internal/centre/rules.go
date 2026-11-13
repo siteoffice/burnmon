@@ -5,8 +5,33 @@ import (
 	"time"
 )
 
-// statusWaiting is the flow status that means the row waits on the owner.
+// statusWaiting is the flow status that, with awaiting false or absent,
+// marks a stale flow status: the gate was decided, the flow did not move.
 const statusWaiting = "awaiting-owner"
+
+// sprintWaiting is the sprint status that means the row waits on you.
+const sprintWaiting = "waiting-on-you"
+
+// StaleText is the state text of a stale flow status.
+const StaleText = "gate decided, flow not advanced"
+
+// WaitFlow and WaitSprint prefix the keys in State.Waiting with their kind.
+const (
+	WaitFlow   = "flow:"
+	WaitSprint = "sprint:"
+)
+
+// StaleProblems returns one problem per flow row with a stale flow status,
+// in the given order. It is never nil.
+func StaleProblems(flows []FlowRow) []Problem {
+	problems := []Problem{}
+	for _, f := range flows {
+		if f.StateText == StaleText {
+			problems = append(problems, Problem{Path: f.Index, Message: "flow " + f.Key + ": " + StaleText})
+		}
+	}
+	return problems
+}
 
 // flowClosed reports whether a flow row with this status is closed.
 func flowClosed(status string) bool {

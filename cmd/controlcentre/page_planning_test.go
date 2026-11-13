@@ -197,3 +197,16 @@ func TestCommentPopup(t *testing.T) {
 		}
 	}
 }
+
+// TestPlanningChipShortNoTime: the chip shows the short label only; the time
+// moves to the hover, the detail eyebrow and the "+N more" hover.
+func TestPlanningChipShortNoTime(t *testing.T) {
+	mustContain(t, "pagePlanning",
+		"btn('it' + (pd.fixed ? '' : ' soft'), pd.short || pd.title, function()",
+		"b.title = (pd.time ? pd.time + ' ' : '') + pd.title;",
+		"detail({k: fixedLabel(pd)",
+		"b.setAttribute('data-full', (pd.time ? pd.time + ' ' : '') + pd.title);")
+	if strings.Contains(pageFunc(t, "pagePlanning"), "(pd.time ? pd.time + ' ' : '') + (pd.short") {
+		t.Error("the planning chip text still carries the time")
+	}
+}

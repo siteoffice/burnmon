@@ -39,6 +39,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 /* the app in the window */
 .app{width:80%;height:100%;margin:0 auto;position:relative;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:40px minmax(0,1fr);background:var(--surface);border-inline:1px solid var(--line)}
 .top{display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--surface2);border-bottom:1px solid var(--line);min-width:0}
+.top .back{flex:none;display:flex;align-items:center;gap:5px}
 .crumb{display:flex;align-items:center;gap:2px;font-family:var(--display);font-size:14px;min-width:0;overflow:hidden;white-space:nowrap}
 .crumb button{border:0;background:none;padding:2px 4px;font-family:var(--display);font-size:14px;color:var(--muted)}
 .crumb button.here{color:var(--text);font-weight:600;cursor:default}
@@ -90,7 +91,8 @@ svg.ic{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;stroke
 .map{display:block;flex:1 1 auto;min-height:0;width:100%}
 .colh{font-family:var(--mono);font-size:10px;letter-spacing:.08em;fill:var(--muted);text-transform:uppercase}
 g.node{cursor:pointer}
-g.node:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+g.node:focus,g.node:focus-visible{outline:none}
+g.node:focus-visible rect{stroke:var(--accent);stroke-width:2.2}
 g.node rect{fill:var(--surface2);stroke:var(--line);stroke-width:1.2}
 g.node.hold rect{stroke-dasharray:4 3}
 g.node.more rect{fill:none;stroke-dasharray:2 3}
@@ -103,7 +105,7 @@ g.node .bt{font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--bg)
 path.edge{fill:none;stroke:var(--muted);stroke-width:1.2;opacity:.12}
 path.edge.step{stroke-dasharray:5 4}
 path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
-.map.picked g.node:not(.sel):not(.rel){opacity:.45}
+.map.picked g.node:not(.sel):not(.rel){opacity:.6}
 
 /* dense rows: unit view, "+N more" rows */
 .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;min-height:0}
@@ -175,6 +177,7 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 <body>
 <div class="app" id="app">
   <header class="top">
+    <button type="button" class="back" id="back" aria-label="Back"></button>
     <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
     <div class="seg" id="theme" role="group" aria-label="Theme"></div>
   </header>
@@ -236,6 +239,8 @@ var api = {
   var MAX_BOX = 40;
   var BOX_GAP = 8;
   var COL_GAP = 25;
+  var BADGE_R = 9;
+  var MAP_PAD = 2;
   var MAP_TOP = 24;
   var IC = {map:'M4 10h6v4H4zM14 4h6v4h-6zM14 16h6v4h-6zM10 12h2M12 6v12M12 6h2M12 18h2',inbox:'M4 13l2-8h12l2 8v6H4zM4 13h5l1 2h4l1-2h5',cal:'M5 6h14v14H5zM5 10h14M9 4v4M15 4v4',
     agents:'M8 4h8v6H8zM4 14h16v6H4zM12 10v4',
@@ -249,7 +254,7 @@ var api = {
     res = document.getElementById('res'), openc = document.getElementById('openc');
   var pop = document.getElementById('pop'), cmt = document.getElementById('cmt'), attsEl = document.getElementById('atts'),
     fileIn = document.getElementById('files'), drop = document.getElementById('drop'), popmsg = document.getElementById('popmsg'),
-    sendb = document.getElementById('send');
+    sendb = document.getElementById('send'), backb = document.getElementById('back');
   // pend: the files picked for the open popup; popTarget: the target it was opened for.
   var pend = [], popTarget = null;
   var state = null;
@@ -262,6 +267,11 @@ var api = {
   var sub = {tab: 'Structure', page: 0, more: '', sel: ''};
   var drawSeq = 0;
   var boxW = 0;
+  // openNow: the open target of the thing in the detail pane, or null; set by every detail() call.
+  var openNow = null;
+  // hist: the views of this run, oldest first, the current one last; the rules mirror internal\centre\history.go.
+  var hist = [];
+  var HIST_MAX = 50;
 
   function h(tag, cls, txt) {
     var e = document.createElement(tag);
@@ -460,6 +470,77 @@ var api = {
     tgt.textContent = o.t || target.label;
     openc.disabled = !target.kind;
     res.textContent = '';
+    openNow = o.open || null;
+    remember();
+  }
+
+  // openSel: the one open function; every Open button, double-click and Enter runs it.
+  function openSel() { if (openNow) openNow(); }
+
+  // wireOpen: a double-click opens what its clicks just selected; Enter selects and opens, Space selects.
+  function wireOpen(el, pick) {
+    el.addEventListener('dblclick', function(ev) { ev.preventDefault(); openSel(); });
+    el.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); pick(); openSel(); }
+      else if (ev.key === ' ') { ev.preventDefault(); pick(); }
+    });
+  }
+
+  // curView: the view the main pane shows now, the fields of centre.View plus arg to draw it again.
+  function curView() {
+    var p = view.page;
+    return {page: p, overview: ovView, unit: p === 'unit' ? String(view.arg) : '', tab: sub.tab, list_page: sub.page,
+      file: p === 'file' ? String(view.arg) : '', board: p === 'board' ? view.arg.row.board : '', sel: sub.sel, arg: view.arg};
+  }
+
+  // viewAdds, histAdd and histBack mirror ViewAdds, HistoryAdd and HistoryBack in internal\centre\history.go.
+  function viewAdds(last, next) {
+    return last.page !== next.page || last.unit !== next.unit || last.tab !== next.tab ||
+      last.file !== next.file || last.board !== next.board;
+  }
+
+  function histAdd(h, v) {
+    var out = h.slice();
+    if (!out.length || viewAdds(out[out.length - 1], v)) out.push(v);
+    else out[out.length - 1] = v;
+    if (out.length > HIST_MAX) out = out.slice(out.length - HIST_MAX);
+    return out;
+  }
+
+  function histBack(h, popupOpen) {
+    if (popupOpen) return {history: h, closePopup: true, moved: false};
+    if (h.length < 2) return {history: h, closePopup: false, moved: false};
+    return {history: h.slice(0, h.length - 1), show: h[h.length - 2], closePopup: false, moved: true};
+  }
+
+  // remember records the current view; detail calls it, so every selection and every render lands here.
+  function remember() {
+    hist = histAdd(hist, curView());
+    backb.disabled = hist.length < 2;
+  }
+
+  // back: the one Back; the button, the mouse back button and Alt+Left run it.
+  function back() {
+    var r = histBack(hist, !pop.hidden);
+    if (r.closePopup) { closePop(); return; }
+    if (!r.moved) return;
+    hist = r.history;
+    restoreView(r.show);
+  }
+
+  function restoreView(v) {
+    view = {page: v.page, arg: v.arg};
+    ovView = v.overview;
+    sub = {tab: v.tab, page: v.list_page, more: '', sel: v.sel};
+    render();
+  }
+
+  function backButton() {
+    backb.textContent = '';
+    backb.appendChild(icon('left'));
+    backb.appendChild(h('span', null, 'Back'));
+    backb.disabled = true;
+    backb.addEventListener('click', back);
   }
 
   function pager(spans, cur, onPage) {
@@ -549,8 +630,9 @@ var api = {
 
   function boxDetail(b) {
     sub.sel = b.id;
+    var open = b.unit_id ? function() { go('unit', b.unit_id); } : null;
     detail({k: b.kind, t: b.title, chips: b.chips, d: b.note, list: b.conns,
-      act: b.unit_id ? [['Open ' + b.title + ' \u203A', function() { go('unit', b.unit_id); }, 'primary']] : [],
+      act: open ? [['Open ' + b.title + ' \u203A', openSel, 'primary']] : [], open: open,
       src: srcPath(b.path), kind: b.target, unit_id: b.unit_id, path: b.path,
       label: b.target === 'plan' ? b.id : b.title});
   }
@@ -560,8 +642,16 @@ var api = {
     return s.length > n ? s.slice(0, Math.max(1, n - 3)) + '...' : s;
   }
 
+  // selectKeys: Enter and Space only select; for a thing without an open target that re-renders on select.
+  function selectKeys(el, pick) {
+    el.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); }
+    });
+  }
+
   // box: one SVG box; the full text is its <title>, so a cut title still shows on hover.
-  function box(s, title, line, onPick) {
+  // keys replaces wireOpen when the box has no open target (the "+N more" box).
+  function box(s, title, line, onPick, keys) {
     var full = title + (line ? ', ' + line : '');
     var g = sv('g', {'class': 'node', tabindex: 0, role: 'button', 'aria-label': full, transform: 'translate(' + s.x + ',' + s.y + ')'});
     g.appendChild(sv('title', {}, full));
@@ -570,16 +660,15 @@ var api = {
     g.appendChild(sv('text', {x: 10, y: two ? 17 : s.h / 2 + 4, 'class': 'nt'}, clip(title, Math.floor((s.w - 20) / 7))));
     if (two && line) g.appendChild(sv('text', {x: 10, y: 31, 'class': 'ns'}, clip(line, Math.floor((s.w - 20) / 6))));
     g.addEventListener('click', onPick);
-    g.addEventListener('keydown', function(ev) {
-      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onPick(); }
-    });
+    if (keys) keys(g, onPick);
+    else wireOpen(g, onPick);
     return g;
   }
 
   function mapFrame(cols) {
     var w = Math.max(200, pane.clientWidth - 28), ht = Math.max(120, pane.clientHeight - 24);
     var svg = sv('svg', {'class': 'map', viewBox: '0 0 ' + w + ' ' + ht, preserveAspectRatio: 'xMinYMin meet', role: 'group', 'aria-label': 'Overview map'});
-    boxW = cols.length ? (w - COL_GAP * (cols.length - 1)) / cols.length : w;
+    boxW = cols.length ? (w - MAP_PAD - BADGE_R - COL_GAP * (cols.length - 1)) / cols.length : w - MAP_PAD - BADGE_R;
     cols.forEach(function(c, i) { svg.appendChild(sv('text', {x: i * (boxW + COL_GAP), y: 14, 'class': 'colh'}, c.title)); });
     var eg = sv('g', {}), ng = sv('g', {});
     svg.appendChild(eg);
@@ -607,7 +696,7 @@ var api = {
         sub.more = col.title;
         sub.page = 0;
         render();
-      });
+      }, selectKeys);
       out.more.classList.add('more');
     }
     return out;
@@ -648,7 +737,7 @@ var api = {
         if (b.hold) s.g.classList.add('hold');
         var n = state.badges[s.key];
         if (n) {
-          s.g.appendChild(sv('circle', {cx: s.w - 3, cy: 3, r: 9}));
+          s.g.appendChild(sv('circle', {cx: s.w - 3, cy: 3, r: BADGE_R}));
           s.g.appendChild(sv('text', {x: s.w - 3, y: 6.5, 'class': 'bt'}, String(n)));
         }
         m.at[s.key] = s;
@@ -722,7 +811,9 @@ var api = {
       var cur = Math.min(sub.page, col.pages.length - 1), span = col.pages[cur];
       col.keys.slice(span.from, span.to).forEach(function(id) {
         var b = v === 'plan' ? planInfo(id, col.title) : unitInfo(id);
-        var r = btn('rw', null, function() { rowSel(r); boxDetail(b); });
+        var pick = function() { rowSel(r); boxDetail(b); };
+        var r = btn('rw', null, pick);
+        wireOpen(r, pick);
         r.appendChild(h('span', 'tag', b.kind));
         r.appendChild(h('span', 'nm', b.title));
         if (b.badge) r.appendChild(h('span', 'bd', String(b.badge)));
@@ -749,10 +840,12 @@ var api = {
     if (fl ? r.stage : r.phase) chips.push([fl ? r.stage : r.phase, '']);
     if (r.waiting) chips.push(['waiting on you' + (r.waits_days >= 0 ? ', ' + r.waits_days + ' days' : ''), 'warn']);
     else if (r.closed) chips.push(['closed', 'on']);
-    var act = r.board && !shown ? [['Open board \u203A', function() { go('board', {row: r, fl: fl}); }, 'primary']] : [];
+    if (r.state_text) chips.push([r.state_text, '']);
+    var open = r.board && !shown ? function() { go('board', {row: r, fl: fl}); } : null;
+    var act = open ? [['Open board \u203A', openSel, 'primary']] : [];
     detail({k: (fl ? 'Flow / ' : 'Sprint / ') + r.project, t: r.slug, chips: chips,
       d: 'Status ' + (r.status || 'not set') + '. Updated ' + (r.updated_at || 'at an unknown time') + '.',
-      act: act, out: r.board ? null : h('p', 'muted', 'This row has no board page.'),
+      act: act, open: open, out: r.board ? null : h('p', 'muted', 'This row has no board page.'),
       src: srcPath(r.index), kind: fl ? 'flow' : 'sprint', unit_id: r.unit, path: r.index});
   }
 
@@ -777,6 +870,8 @@ var api = {
     var folders = u.folders.map(function(f) { return f.name + '/, ' + f.entries + ' entries'; });
     detail({k: u.type || 'Unit', t: u.display_name, d: 'Select a part or a file to see its state. Comment on anything you select.',
       list: capList(folders, 8, 'folders'), src: srcPath(u.id), kind: 'unit', unit_id: u.id, path: u.id});
+    // picked: the row whose selection key equals sub.sel, clicked after drawing so Back restores the selection.
+    var picked = null;
 
     if (sub.tab === 'Structure') {
       var cols = h('div', 'cols'), left = h('div', 'col'), right = h('div', 'col');
@@ -805,17 +900,22 @@ var api = {
         left.appendChild(h('span', 'eyebrow', 'Inside ' + u.display_name));
         var over = parts.length > fit ? parts.length - fit + 1 : 0;
         parts.slice(0, over ? fit - 1 : fit).forEach(function(p) {
-          var b = btn('rw', null, function() {
+          var pick = function() {
             rowSel(b);
+            sub.sel = 'part:' + p.title;
+            var open = p.unit_id ? function() { go('unit', p.unit_id); } : null;
             detail({k: p.role, t: p.title, d: p.note,
-              act: p.unit_id ? [['Open ' + p.title + ' \u203A', function() { go('unit', p.unit_id); }, 'primary']] : [],
+              act: open ? [['Open ' + p.title + ' \u203A', openSel, 'primary']] : [], open: open,
               src: srcPath(fromPlan ? state.plan_path : p.unit_id), kind: fromPlan ? 'part' : 'unit',
               unit_id: p.unit_id || u.id, path: fromPlan ? state.plan_path : p.unit_id});
-          });
+          };
+          var b = btn('rw', null, pick);
+          wireOpen(b, pick);
           b.appendChild(h('span', 'tag', p.role));
           b.appendChild(h('span', 'nm', p.title));
           b.appendChild(h('span', 'st', p.unit_id ? '\u203A' : ''));
           left.appendChild(b);
+          if (sub.sel === 'part:' + p.title) picked = b;
         });
         if (over) left.appendChild(h('div', 'rw muted', '+' + over + ' more, see the Units view'));
       }
@@ -834,29 +934,34 @@ var api = {
       u.files.slice(fspan.from, fspan.to).forEach(function(f) {
         var path = u.id === '.' ? f.name : u.id + '/' + f.name;
         var bad = f.state !== 'ok', st = bad ? f.state + ', ' + f.age_days + ' days' : kb(f.size) + ', ' + String(f.modified).slice(0, 10);
-        var b = btn('rw', null, function() {
+        var pick = function() {
           rowSel(b);
+          sub.sel = 'file:' + path;
           detail({k: f.role, t: f.name, chips: bad ? [[st, 'warn']] : [], d: 'State: ' + st + '.',
-            act: [['Open file \u203A', function() { go('file', path); }, 'primary']],
+            act: [['Open file \u203A', openSel, 'primary']], open: function() { go('file', path); },
             src: srcPath(path), kind: 'file', unit_id: u.id, path: path});
-        });
+        };
+        var b = btn('rw', null, pick);
+        wireOpen(b, pick);
         b.appendChild(h('span', 'fn', f.name));
         b.appendChild(h('span', 'ro', f.role));
         b.appendChild(h('span', 'st' + (bad ? ' warn' : ''), st));
         right.appendChild(b);
+        if (sub.sel === 'file:' + path) picked = b;
       });
       if (!u.files.length) right.appendChild(h('p', 'muted', 'No unit files.'));
       cols.appendChild(left);
       cols.appendChild(right);
       pane.appendChild(cols);
       pager(u.file_pages, fcur, function(p) { sub.page = p; render(); });
+      if (picked) picked.click();
       return;
     }
 
     var fl = sub.tab === 'Flows';
     var keys = fl ? u.flows.keys : u.sprints.keys, pages = fl ? u.flows.pages : u.sprints.pages, all = fl ? state.flows : state.sprints;
     var hd = h('div', 'rw hd');
-    [['Project', 'c1'], [fl ? 'Flow' : 'Sprint', 'c2'], [fl ? 'Stage' : 'Phase', 'c3'], ['Waits', 'c4']].forEach(function(x) {
+    [['Project', 'c1'], [fl ? 'Flow' : 'Sprint', 'c2'], [fl ? 'Stage' : 'Phase', 'c3'], ['Waits', 'c4'], ['State', 'c5']].forEach(function(x) {
       hd.appendChild(h('span', x[1], x[0]));
     });
     pane.appendChild(hd);
@@ -870,16 +975,21 @@ var api = {
     keys.slice(span.from, span.to).forEach(function(key) {
       var r = byKey[key];
       if (!r) return;
-      var b = btn('rw' + (r.waiting ? ' warn' : ''), null, function() { rowSel(b); rowDetail(r, fl); });
+      var pick = function() { rowSel(b); sub.sel = r.key; rowDetail(r, fl); };
+      var b = btn('rw' + (r.waiting ? ' warn' : ''), null, pick);
+      wireOpen(b, pick);
       var c = h('span', 'c1');
       c.appendChild(h('span', 'chip', r.project));
       b.appendChild(c);
       b.appendChild(h('span', 'c2', r.slug));
       b.appendChild(h('span', 'c3', fl ? r.stage : r.phase));
       b.appendChild(h('span', 'c4', fl && r.waits_days >= 0 ? r.waits_days + ' d' : ''));
+      b.appendChild(h('span', 'c5', r.state_text || r.status));
       pane.appendChild(b);
+      if (sub.sel === r.key) picked = b;
     });
     pager(pages, cur, function(p) { sub.page = p; render(); });
+    if (picked) picked.click();
   }
 
   function pageFile(path) {
@@ -892,19 +1002,22 @@ var api = {
       lead.textContent = '';
       lead.appendChild(h('span', 'ell', name + ': ' + ft.role + ', ' + kb(ft.size) + ', changed ' + String(ft.modified).slice(0, 10) +
         '. Click a block to comment on it.'));
-      var doc = h('div', 'fileview');
+      var doc = h('div', 'fileview'), picked = null;
       blocks.forEach(function(b, i) {
         var e = btn('blk' + (b.heading ? ' h' : ''), b.text, function() {
           doc.querySelectorAll('.blk.sel').forEach(function(x) { x.classList.remove('sel'); });
           e.classList.add('sel');
+          sub.sel = 'block:' + (i + 1);
           detail({k: 'Block ' + (i + 1) + ' of ' + n, t: name + ', block ' + (i + 1),
             d: b.text.length > 110 ? b.text.slice(0, 110) + '...' : b.text,
             src: srcPath(p), kind: 'block', unit_id: unitId, path: p, block: i + 1});
         });
         doc.appendChild(e);
+        if (sub.sel === 'block:' + (i + 1)) picked = e;
       });
       pane.appendChild(doc);
       detail({k: ft.role, t: name, d: n + ' blocks. Click a block to comment on it.', src: srcPath(p), kind: 'file', unit_id: unitId, path: p});
+      if (picked) picked.click();
     }, function(e) { if (seq === drawSeq) fail('Could not read ' + p, e); });
   }
 
@@ -917,7 +1030,7 @@ var api = {
     Promise.resolve(api.board(r.board)).then(function(bp) {
       if (seq !== drawSeq) return;
       lead.textContent = '';
-      lead.appendChild(h('span', 'ell', (a.fl ? 'Flow ' : 'Sprint ') + r.slug + ', board page ' + bp.path + '.'));
+      lead.appendChild(h('span', 'ell', (a.fl ? 'Flow ' : 'Sprint ') + r.slug + ', board page ' + srcPath(bp.path) + '.'));
       var f = h('iframe', 'boardframe');
       f.setAttribute('sandbox', 'allow-scripts');
       f.title = 'Board page of ' + r.slug;
@@ -926,46 +1039,77 @@ var api = {
     }, function(e) { if (seq === drawSeq) fail('Could not read the board page of ' + r.slug, e); });
   }
 
-  // pageWaiting: one dense row per waiting flow row, in the state's order (the Go side sorts).
+  // pageWaiting: one dense row per waiting flow or sprint row, in the state's order (the Go side sorts).
+  // Keys carry the kind: 'flow:' + flow key, then 'sprint:' + sprint key.
   function pageWaiting() {
-    var n = state.counts.waiting, d = state.counts.longest_wait_days;
-    lead.appendChild(h('b', null, n + (n === 1 ? ' gate' : ' gates')));
+    var d = state.counts.longest_wait_days, keys = state.waiting.keys, pages = state.waiting.pages;
+    var g = 0, s = 0;
+    keys.forEach(function(k) {
+      if (k.indexOf('flow:') === 0) g++;
+      else if (k.indexOf('sprint:') === 0) s++;
+    });
+    var n = g + s, parts = [];
+    if (g) parts.push(g + (g === 1 ? ' gate' : ' gates'));
+    if (s) parts.push(s + (s === 1 ? ' sprint' : ' sprints'));
+    lead.appendChild(h('b', null, parts.length ? parts.join(' and ') : '0 gates'));
     lead.appendChild(h('span', 'ell', '\u00A0' + (n === 1 ? 'waits' : 'wait') + ' on you.' +
       (n && d >= 0 ? ' The longest waits ' + d + (d === 1 ? ' day.' : ' days.') : '')));
     var hd = h('div', 'rw hd');
-    [['Project', 'c1'], ['Flow', 'c2'], ['Stage', 'c3'], ['Waits', 'c4']].forEach(function(x) {
+    [['Kind', 'c3'], ['Project', 'c1'], ['Name', 'c2'], ['Stage', 'c3'], ['Waits', 'c4']].forEach(function(x) {
       hd.appendChild(h('span', x[1], x[0]));
     });
     pane.appendChild(hd);
-    var byKey = {};
-    state.flows.forEach(function(r) { byKey[r.key] = r; });
-    var keys = state.waiting.keys, pages = state.waiting.pages;
-    if (!keys.length) pane.appendChild(h('p', 'muted', 'No gate waits on you.'));
+    var flows = {}, sprints = {};
+    state.flows.forEach(function(r) { flows[r.key] = r; });
+    state.sprints.forEach(function(r) { sprints[r.key] = r; });
+    function rowOf(k) {
+      if (k.indexOf('flow:') === 0) return flows[k.slice(5)];
+      if (k.indexOf('sprint:') === 0) return sprints[k.slice(7)];
+      return null;
+    }
+    if (!keys.length) pane.appendChild(h('p', 'muted', 'Nothing waits on you.'));
     else {
       var cur = Math.min(sub.page, pages.length - 1), span = pages[cur];
-      keys.slice(span.from, span.to).forEach(function(key) {
-        var r = byKey[key];
+      keys.slice(span.from, span.to).forEach(function(k) {
+        var r = rowOf(k), fl = k.indexOf('flow:') === 0;
         if (!r) return;
-        var b = btn('rw warn' + (sub.sel === key ? ' sel' : ''), null, function() {
+        var pick = function() {
           rowSel(b);
-          sub.sel = key;
+          sub.sel = k;
           sub.note = null;
-          waitDetail(r);
-        });
+          if (fl) waitDetail(r);
+          else sprintWaitDetail(r);
+        };
+        var b = btn('rw warn' + (sub.sel === k ? ' sel' : ''), null, pick);
+        wireOpen(b, pick);
+        b.appendChild(h('span', 'c3', fl ? 'Flow' : 'Sprint'));
         var c = h('span', 'c1');
         c.appendChild(h('span', 'chip', r.project));
         b.appendChild(c);
         b.appendChild(h('span', 'c2', r.slug));
-        b.appendChild(h('span', 'c3', r.stage));
+        b.appendChild(h('span', 'c3', fl ? r.stage : r.phase));
         b.appendChild(h('span', 'c4', r.waits_days >= 0 ? r.waits_days + ' d' : ''));
         pane.appendChild(b);
       });
       pager(pages, cur, function(p) { sub.page = p; render(); });
     }
     // After a decision the state is read again; the picked row and its result line stay in the detail pane.
-    var picked = sub.sel ? byKey[sub.sel] : null;
-    if (picked) waitDetail(picked, sub.note && sub.note.key === sub.sel ? sub.note.lines : null);
-    else rootDetail('Select a flow to approve it or send it back.');
+    var picked = sub.sel ? rowOf(sub.sel) : null;
+    if (picked && sub.sel.indexOf('flow:') === 0) waitDetail(picked, sub.note && sub.note.key === sub.sel ? sub.note.lines : null);
+    else if (picked) sprintWaitDetail(picked);
+    else rootDetail('Select a flow to approve it or send it back, or a sprint to open its board.');
+  }
+
+  // sprintWaitDetail: a waiting sprint row; the decision lives in the sprint session, so only Open board.
+  function sprintWaitDetail(r) {
+    var chips = [];
+    if (r.phase) chips.push([r.phase, '']);
+    if (r.waiting) chips.push(['waiting on you' + (r.waits_days >= 0 ? ', ' + r.waits_days + ' days' : ''), 'warn']);
+    var open = r.board ? function() { go('board', {row: r, fl: false}); } : null;
+    detail({k: 'Sprint / ' + r.project, t: r.slug, chips: chips, d: 'Decide in the sprint session.',
+      act: open ? [['Open board \u203A', openSel, 'primary']] : [], open: open,
+      out: r.board ? null : h('p', 'muted', 'This row has no board page.'),
+      src: srcPath(r.index), kind: 'sprint', unit_id: r.unit, path: r.index});
   }
 
   // waitDetail: a flow row with Approve and Send back while it waits; lines are a past result.
@@ -976,11 +1120,13 @@ var api = {
     if (r.stage) chips.push([r.stage, '']);
     if (r.waiting) chips.push(['waiting on you' + (r.waits_days >= 0 ? ', ' + r.waits_days + ' days' : ''), 'warn']);
     else chips.push(['no longer waits', 'on']);
+    var open = r.board ? function() { go('board', {row: r, fl: true}); } : null;
+    var act = r.waiting ? [['Approve', function() { decide('approve', r); }, 'primary'],
+      ['Send back', function() { decide('send_back', r); }]] : [];
+    if (open) act.push(['Open board \u203A', openSel]);
     detail({k: 'Flow / ' + r.project, t: r.slug, chips: chips,
       d: r.waiting ? 'Approve or Send back shows the command first; Confirm runs it.' : 'This flow does not wait on you now.',
-      act: r.waiting ? [['Approve', function() { decide('approve', r); }, 'primary'],
-        ['Send back', function() { decide('send_back', r); }]] : [],
-      out: box, src: srcPath(r.index), kind: 'flow', unit_id: r.unit, path: r.index});
+      act: act, open: open, out: box, src: srcPath(r.index), kind: 'flow', unit_id: r.unit, path: r.index});
   }
 
   // decide: the preview (command text, Confirm and Cancel), then the run with the token only.
@@ -989,7 +1135,7 @@ var api = {
   function decide(control, r) {
     var box = det.querySelector('.dec'), s0 = sub, seq = drawSeq;
     if (!box) return;
-    var stop = control === 'stop', key = stop ? r.id : r.key;
+    var stop = control === 'stop', key = stop ? r.id : 'flow:' + r.key;
     var req = stop ? {control: control, agent: r.id} : {control: control, project: r.project, slug: r.slug};
     s0.note = null;
     box.textContent = '';
@@ -1070,7 +1216,7 @@ var api = {
         cell.appendChild(h('span', 'dn', dy.today ? dy.label + ', today' : dy.label));
         dy.dates.forEach(function(pd) {
           var key = pd.date + '|' + (pd.time || '') + '|' + pd.title;
-          var b = btn('it' + (pd.fixed ? '' : ' soft'), (pd.time ? pd.time + ' ' : '') + (pd.short || pd.title), function() {
+          var b = btn('it' + (pd.fixed ? '' : ' soft'), pd.short || pd.title, function() {
             g.querySelectorAll('.it.sel').forEach(function(x) { x.classList.remove('sel'); });
             b.classList.add('sel');
             sub.sel = key;
@@ -1078,7 +1224,7 @@ var api = {
               list: (pd.ids && pd.ids.length ? ['Plan ids: ' + pd.ids.join(', ')] : []).concat(pd.source ? ['Source: ' + pd.source] : []),
               src: srcPath(state.plan_path), kind: 'date', path: state.plan_path, label: pd.date + ' ' + pd.title});
           });
-          b.title = pd.title;
+          b.title = (pd.time ? pd.time + ' ' : '') + pd.title;
           b.setAttribute('data-title', '1');
           b.setAttribute('data-full', (pd.time ? pd.time + ' ' : '') + pd.title);
           cell.appendChild(b);
@@ -1279,7 +1425,7 @@ var api = {
     });
   }
 
-  // pageAgents: the background agent sessions of the BurnMon snapshot, in the Go side's order.
+  // pageAgents: every agent session of the BurnMon snapshot with its kind, in the Go side's order.
   // Without a current snapshot the Go side sends only its line, and the page offers nothing.
   function pageAgents() {
     var seq = drawSeq;
@@ -1289,13 +1435,13 @@ var api = {
       lead.appendChild(h('span', 'ell', av.line));
       if (!av.available) return;
       var hd = h('div', 'rw hd');
-      [['ID', 'c1'], ['Project', 'c2'], ['State', 'c3'], ['Waiting for', 'c5']].forEach(function(x) {
+      [['ID', 'c1'], ['Kind', 'c3'], ['Project', 'c2'], ['State', 'c3'], ['Waiting for', 'c5']].forEach(function(x) {
         hd.appendChild(h('span', x[1], x[0]));
       });
       pane.appendChild(hd);
       var list = av.agents, pages = av.pages, picked = null;
       list.forEach(function(r) { if (r.id === sub.sel) picked = r; });
-      if (!list.length) pane.appendChild(h('p', 'muted', 'No background agent runs.'));
+      if (!list.length) pane.appendChild(h('p', 'muted', 'No agent session runs.'));
       else {
         var cur = Math.min(sub.page, pages.length - 1), span = pages[cur];
         list.slice(span.from, span.to).forEach(function(r) {
@@ -1309,6 +1455,7 @@ var api = {
           var c = h('span', 'c1');
           c.appendChild(h('span', 'chip', r.id));
           b.appendChild(c);
+          b.appendChild(h('span', 'c3', r.kind));
           b.appendChild(h('span', 'c2', r.project));
           b.appendChild(h('span', 'c3', r.state));
           b.appendChild(h('span', 'c5', r.waiting_for));
@@ -1324,8 +1471,10 @@ var api = {
     }, function(e) { if (seq === drawSeq) fail('Could not read the agent list', e); });
   }
 
-  // agentDetail: an agent with Stop while it is listed; lines are a past result.
+  // agentDetail: a session with Stop while it is listed and stoppable (background only);
+  // lines are a past result.
   function agentDetail(r, lines, listed) {
+    var canStop = r.stoppable && listed;
     var box = h('div', 'dec');
     (lines || []).forEach(function(x) { box.appendChild(h(x[1] === 'src' ? 'span' : 'p', x[1], x[0])); });
     var chips = [];
@@ -1333,8 +1482,9 @@ var api = {
     if (r.waiting_for) chips.push(['waiting for ' + r.waiting_for, 'warn']);
     if (!listed) chips.push(['no longer listed', 'on']);
     detail({k: 'Agent / ' + (r.project || ''), t: r.id, chips: chips,
-      d: listed ? 'Stop shows the command first; Confirm runs it.' : 'This agent is not in the agent list now.',
-      act: listed ? [['Stop', function() { decide('stop', r); }, 'primary']] : [],
+      d: canStop ? 'Stop shows the command first; Confirm runs it.'
+        : listed ? 'Stop works on background agents only.' : 'This agent is not in the agent list now.',
+      act: canStop ? [['Stop', function() { decide('stop', r); }, 'primary']] : [],
       out: box});
   }
 
@@ -1349,6 +1499,18 @@ var api = {
   function start() {
     app.addEventListener('mouseover', hoverTitle);
     popup();
+    backButton();
+    // The mouse back button: mousedown only stops the default, mouseup runs back() once per press.
+    window.addEventListener('mousedown', function(ev) {
+      if (ev.button !== 3) return;
+      ev.preventDefault();
+    });
+    window.addEventListener('mouseup', function(ev) {
+      if (ev.button === 3) { ev.preventDefault(); back(); }
+    });
+    document.addEventListener('keydown', function(ev) {
+      if (ev.altKey && ev.key === 'ArrowLeft') { ev.preventDefault(); back(); }
+    });
     window.addEventListener('resize', function() {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(loadState, 200);

@@ -105,10 +105,11 @@ func unitByName(units []Unit) map[string]string {
 	return m
 }
 
-// Badges counts, per plan item, the waiting flow rows owned by the item's
-// unit and by its parts' units, each unit counted once, no descendant
-// units. Only items with a count above 0 are in the map; it is never nil.
-func Badges(plan *Plan, units []Unit, flows []FlowRow) map[string]int {
+// Badges counts, per plan item, the waiting flow and sprint rows owned by
+// the item's unit and by its parts' units, each unit counted once, no
+// descendant units. Only items with a count above 0 are in the map; it is
+// never nil.
+func Badges(plan *Plan, units []Unit, flows []FlowRow, sprints []SprintRow) map[string]int {
 	badges := map[string]int{}
 	if plan == nil {
 		return badges
@@ -118,6 +119,11 @@ func Badges(plan *Plan, units []Unit, flows []FlowRow) map[string]int {
 	for _, f := range flows {
 		if f.Waiting {
 			waiting[f.Unit]++
+		}
+	}
+	for _, s := range sprints {
+		if s.Waiting {
+			waiting[s.Unit]++
 		}
 	}
 	for _, item := range plan.Items {

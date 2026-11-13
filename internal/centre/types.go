@@ -18,11 +18,11 @@ type State struct {
 	Units         []Unit         `json:"units"`   // sorted by id, "." first
 	Flows         []FlowRow      `json:"flows"`   // SortFlows order
 	Sprints       []SprintRow    `json:"sprints"` // SortSprints order
-	Waiting       List           `json:"waiting"` // keys of waiting flow rows, SortFlows order
+	Waiting       List           `json:"waiting"` // WaitFlow+key of waiting flow rows (SortFlows order), then WaitSprint+key of waiting sprint rows (SortSprints order)
 	Overview      Overview       `json:"overview"`
 	Plan          *Plan          `json:"plan"`      // null when absent or refused
 	PlanPath      string         `json:"plan_path"` // "siteoffice.plan.json"
-	Badges        map[string]int `json:"badges"`    // plan item id -> waiting count, only > 0
+	Badges        map[string]int `json:"badges"`    // plan item id -> waiting flow and sprint rows, only > 0
 	Planning      Planning       `json:"planning"`
 	NextFixed     *PlanDate      `json:"next_fixed"`
 	Problems      []Problem      `json:"problems"`
@@ -79,9 +79,10 @@ type FlowRow struct {
 	WaitsDays int    `json:"waits_days"`
 	Waiting   bool   `json:"waiting"`
 	Closed    bool   `json:"closed"`
-	Unit      string `json:"unit"`  // owning unit id
-	Index     string `json:"index"` // index.json the row came from
-	Board     string `json:"board"` // board page path, "" when the file is absent
+	Unit      string `json:"unit"`       // owning unit id
+	Index     string `json:"index"`      // index.json the row came from
+	Board     string `json:"board"`      // board page path, "" when the file is absent
+	StateText string `json:"state_text"` // StaleText for a stale flow status, else ""
 }
 type SprintRow struct {
 	Key       string `json:"key"`
@@ -95,6 +96,8 @@ type SprintRow struct {
 	Unit      string `json:"unit"`
 	Index     string `json:"index"`
 	Board     string `json:"board"`
+	WaitsDays int    `json:"waits_days"`
+	Waiting   bool   `json:"waiting"`
 }
 
 type Overview struct {

@@ -130,7 +130,8 @@ func TestReadmeControlCentre(t *testing.T) {
 	section := readme[at+len(head) : conf]
 	for _, want := range []string{"controlcentre.exe", "--root", "controlcentre.json", "_comments",
 		"Approve", "Send back",
-		"Decisions need BurnMon Dev running, because the gate and agent checks read its snapshot."} {
+		"Decisions need BurnMon Dev running, because the gate and agent checks read its snapshot.",
+		"Double-click", "Back", "mouse", "Alt+Left", "waits on you only when its gate is open"} {
 		if !strings.Contains(section, want) {
 			t.Errorf("Control Centre section lacks %q", want)
 		}

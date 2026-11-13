@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -30,21 +31,96 @@ func TestAgentsOnRecordedSnapshot(t *testing.T) {
 	for _, a := range v.Agents {
 		ids = append(ids, a.ID)
 	}
-	if strings.Join(ids, ",") != "ab12,cd34" {
-		t.Errorf("ids = %v, want [ab12 cd34] (the interactive entry left out)", ids)
+	if strings.Join(ids, ",") != "ab12,cd34,example-parent" {
+		t.Errorf("ids = %v, want [ab12 cd34 example-parent] (every session row)", ids)
 	}
 	a := v.Agents[0]
 	if a.State != "blocked" || a.WaitingFor != "input needed" || a.Project != "other" || a.PID != 4242 {
 		t.Errorf("first row = %+v", a)
 	}
-	if len(v.Pages) != 1 || v.Pages[0].From != 0 || v.Pages[0].To != 2 {
+	if len(v.Pages) != 1 || v.Pages[0].From != 0 || v.Pages[0].To != 3 {
 		t.Errorf("pages = %+v", v.Pages)
 	}
-	if v.Line != "2 agents run." {
+	if v.Line != "3 sessions, 2 can be stopped here." {
 		t.Errorf("line = %q", v.Line)
 	}
-	if p := agentsView(agentsEnv(exampleSnap, rigT0), 1).Pages; len(p) != 2 {
+	if p := agentsView(agentsEnv(exampleSnap, rigT0), 1).Pages; len(p) != 3 {
 		t.Errorf("one row per page: pages = %+v", p)
+	}
+}
+
+// agentsSnap writes the recorded snapshot with its agent_sessions replaced
+// by sessions to a temp file and returns its path.
+func agentsSnap(t *testing.T, sessions []map[string]any) string {
+	t.Helper()
+	raw, err := os.ReadFile(exampleSnap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	m["agent_sessions"] = sessions
+	out, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "snapshot.json")
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestAgentsAllSessions(t *testing.T) {
+	path := agentsSnap(t, []map[string]any{
+		{"kind": "background", "id": "ab12", "state": "blocked", "project": "other"},
+		{"kind": "interactive", "session_id": "ia01", "status": "busy", "project": "proj"},
+		{"kind": "interactive", "session_id": "ia02", "project": "proj"},
+		{"kind": "interactive", "project": "proj"},
+	})
+	v := agentsView(agentsEnv(path, rigT0), 10)
+	if !v.Available {
+		t.Fatalf("view = %+v, want available", v)
+	}
+	var ids, kinds, stop []string
+	for _, a := range v.Agents {
+		ids = append(ids, a.ID)
+		kinds = append(kinds, a.Kind)
+		if a.Stoppable {
+			stop = append(stop, a.ID)
+		}
+	}
+	if strings.Join(ids, ",") != "ab12,ia01,ia02" {
+		t.Errorf("ids = %v, want [ab12 ia01 ia02]", ids)
+	}
+	if strings.Join(kinds, ",") != "background,interactive,interactive" {
+		t.Errorf("kinds = %v", kinds)
+	}
+	if strings.Join(stop, ",") != "ab12" {
+		t.Errorf("stoppable = %v, want [ab12]", stop)
+	}
+	if v.Line != "3 sessions, 1 can be stopped here." {
+		t.Errorf("line = %q", v.Line)
+	}
+	if len(v.Pages) != 1 || v.Pages[0].From != 0 || v.Pages[0].To != 3 {
+		t.Errorf("pages = %+v", v.Pages)
+	}
+}
+
+func TestPageAgentsKindAndStopRule(t *testing.T) {
+	pa := pageFunc(t, "pageAgents")
+	for _, want := range []string{"'Kind'", "r.kind"} {
+		if !strings.Contains(pa, want) {
+			t.Errorf("pageAgents lacks %s", want)
+		}
+	}
+	ad := pageFunc(t, "agentDetail")
+	for _, want := range []string{"r.stoppable", "'Stop works on background agents only.'", "'Stop'", "decide('stop'"} {
+		if !strings.Contains(ad, want) {
+			t.Errorf("agentDetail lacks %s", want)
+		}
 	}
 }
 

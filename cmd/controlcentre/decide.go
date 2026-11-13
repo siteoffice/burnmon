@@ -16,6 +16,32 @@ import (
 	"burnmon/internal/waits"
 )
 
+// controlsElevatedReason is a copy of whyElevated in internal\controls\service.go,
+// which stays unexported and unchanged.
+const controlsElevatedReason = "BurnMon Dev runs as administrator: controls are off"
+
+// ccElevatedReason is the elevation refusal as the Control Centre shows it.
+// The page prefixes "Not possible: " (spec item 3).
+const ccElevatedReason = "the Control Centre runs as administrator, so controls are off. Start it from a normal window."
+
+// rewriteReason swaps the controls service's elevation refusal for the
+// Control Centre's own; every other reason passes through unchanged.
+func rewriteReason(s string) string {
+	if s == controlsElevatedReason {
+		return ccElevatedReason
+	}
+	return s
+}
+
+// previewOf asks the controls service for a preview and rewrites its error.
+func previewOf(e bindEnv, req controls.PreviewRequest) (controls.PreviewResult, error) {
+	pr, err := e.svc.Preview(req)
+	if err != nil {
+		err = errors.New(rewriteReason(err.Error()))
+	}
+	return pr, err
+}
+
 // DecisionRequest is what the page sends with ccPreview.
 type DecisionRequest struct {
 	Control string `json:"control"`
@@ -72,7 +98,7 @@ func previewDecision(e bindEnv, req DecisionRequest) (controls.PreviewResult, er
 		if e.svc == nil {
 			return controls.PreviewResult{}, decisionsOff(e)
 		}
-		return e.svc.Preview(controls.PreviewRequest{Control: controls.Stop, Target: req.Agent})
+		return previewOf(e, controls.PreviewRequest{Control: controls.Stop, Target: req.Agent})
 	}
 	if req.Control != controls.Approve && req.Control != controls.SendBack {
 		return controls.PreviewResult{}, errors.New("unknown control")
@@ -91,7 +117,7 @@ func previewDecision(e bindEnv, req DecisionRequest) (controls.PreviewResult, er
 	if err != nil {
 		return controls.PreviewResult{}, err
 	}
-	return e.svc.Preview(controls.PreviewRequest{Control: req.Control, Target: target})
+	return previewOf(e, controls.PreviewRequest{Control: req.Control, Target: target})
 }
 
 // runDecision is the ccRun handler. The token is the only input. A refusal
@@ -102,5 +128,9 @@ func runDecision(e bindEnv, token string) (RunView, error) {
 		return RunView{RunResult: controls.RunResult{ExitCode: -1, Refused: err.Error()}, AuditPath: e.auditPath}, err
 	}
 	res, err := e.svc.Run(token)
+	res.Refused = rewriteReason(res.Refused)
+	if err != nil {
+		err = errors.New(rewriteReason(err.Error()))
+	}
 	return RunView{RunResult: res, AuditPath: e.auditPath}, err
 }
