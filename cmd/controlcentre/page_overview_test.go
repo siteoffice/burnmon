@@ -4,6 +4,7 @@ package main
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -201,5 +202,95 @@ func TestPageNoScriptOverflow(t *testing.T) {
 		if !hit {
 			t.Errorf("the scan misses %q", probe)
 		}
+	}
+}
+
+// pageVar reads an integer constant declared as "var NAME = N;" in page.html.
+func pageVar(t *testing.T, name string) float64 {
+	t.Helper()
+	m := regexp.MustCompile(`var ` + name + ` = (\d+);`).FindStringSubmatch(pageHTML)
+	if m == nil {
+		t.Fatalf("page.html has no var %s", name)
+	}
+	v, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		t.Fatalf("var %s: %v", name, err)
+	}
+	return v
+}
+
+// TestMapColumnsFit: every Overview column, its box and the badge radius
+// lie inside the map, at most the viewBox width minus 2.
+func TestMapColumnsFit(t *testing.T) {
+	gap, badge, pad := pageVar(t, "COL_GAP"), pageVar(t, "BADGE_R"), pageVar(t, "MAP_PAD")
+	line := "boxW = cols.length ? (w - MAP_PAD - BADGE_R - COL_GAP * (cols.length - 1)) / cols.length : w - MAP_PAD - BADGE_R;"
+	if !strings.Contains(pageFunc(t, "mapFrame"), line) {
+		t.Errorf("mapFrame does not set %q", line)
+	}
+	if !strings.Contains(pageFunc(t, "drawPlan"), "r: BADGE_R") {
+		t.Error("drawPlan badge circle does not use r: BADGE_R")
+	}
+	for _, w := range []float64{200, 360, 640, 1000, 1536, 1920} {
+		for n := 1; n <= 4; n++ {
+			boxW := (w - pad - badge - gap*float64(n-1)) / float64(n)
+			for i := 0; i < n; i++ {
+				right := float64(i)*(boxW+gap) + boxW + badge
+				if right > w-2+1e-9 {
+					t.Errorf("w=%v n=%d column %d: right edge %v > %v", w, n, i, right, w-2)
+				}
+			}
+		}
+	}
+}
+
+// TestNodeNoOutline: a selected or focused box shows only the accent
+// border, never an outline on g.node.
+func TestNodeNoOutline(t *testing.T) {
+	focusNone, ringAccent := false, false
+	outlineDecl := regexp.MustCompile(`outline[\w-]*:[^;]*`)
+	for _, r := range cssRules(t) {
+		sels := strings.Join(r.Selectors, ",")
+		if !strings.Contains(sels, "g.node") {
+			continue
+		}
+		body := compact(r.Body)
+		if strings.Contains(body, "outline") {
+			for _, d := range outlineDecl.FindAllString(body, -1) {
+				if d != "outline:none" {
+					t.Errorf("rule %q sets %q, want only outline:none", sels, d)
+				}
+			}
+		}
+		for _, s := range r.Selectors {
+			if (s == "g.node:focus" || s == "g.node:focus-visible") && strings.Contains(body, "outline:none") {
+				focusNone = true
+			}
+			if s == "g.node:focus-visible rect" && strings.Contains(body, "stroke:var(--accent)") {
+				ringAccent = true
+			}
+		}
+	}
+	if !focusNone {
+		t.Error("no rule for g.node:focus or g.node:focus-visible sets outline:none")
+	}
+	if !ringAccent {
+		t.Error("no rule g.node:focus-visible rect sets stroke:var(--accent)")
+	}
+}
+
+// TestUnpickedOpacity: boxes not selected and not related keep an opacity
+// of at least 0.6.
+func TestUnpickedOpacity(t *testing.T) {
+	body := compact(ruleFor(t, ".map.picked g.node:not(.sel):not(.rel)"))
+	m := regexp.MustCompile(`opacity:([0-9.]+)`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("unpicked rule has no opacity: %q", body)
+	}
+	v, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		t.Fatalf("opacity %q: %v", m[1], err)
+	}
+	if v < 0.6 {
+		t.Errorf("unpicked opacity %v, want >= 0.6", v)
 	}
 }

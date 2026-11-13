@@ -71,7 +71,7 @@ func Build(root string, opt Options) State {
 			units[i].Flows.Keys = append(units[i].Flows.Keys, f.Key)
 		}
 		if f.Waiting {
-			st.Waiting.Keys = append(st.Waiting.Keys, f.Key)
+			st.Waiting.Keys = append(st.Waiting.Keys, WaitFlow+f.Key)
 			if f.WaitsDays > st.Counts.LongestWaitDays {
 				st.Counts.LongestWaitDays = f.WaitsDays
 			}
@@ -81,7 +81,14 @@ func Build(root string, opt Options) State {
 		if i, ok := index[s.Unit]; ok {
 			units[i].Sprints.Keys = append(units[i].Sprints.Keys, s.Key)
 		}
+		if s.Waiting {
+			st.Waiting.Keys = append(st.Waiting.Keys, WaitSprint+s.Key)
+			if s.WaitsDays > st.Counts.LongestWaitDays {
+				st.Counts.LongestWaitDays = s.WaitsDays
+			}
+		}
 	}
+	st.Problems = append(st.Problems, StaleProblems(flows)...)
 	for i := range units {
 		units[i].Flows.Pages = Pages(len(units[i].Flows.Keys), rows)
 		units[i].Sprints.Pages = Pages(len(units[i].Sprints.Keys), rows)
@@ -118,7 +125,7 @@ func Build(root string, opt Options) State {
 			column("Products and projects", nodeIDs(plan.Items), rows),
 		}
 	}
-	st.Badges = Badges(plan, units, flows)
+	st.Badges = Badges(plan, units, flows, sprints)
 
 	maxLevel := -1
 	for _, u := range units {

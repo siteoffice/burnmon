@@ -360,35 +360,8 @@
       "closed": false,
       "unit": "projects/lamp",
       "index": "projects/kettle/_board/flows/index.json",
-      "board": ""
-    },
-    {
-      "key": "kettle/kettle-brew-gate",
-      "project": "kettle",
-      "slug": "kettle-brew-gate",
-      "stage": "G2",
-      "status": "awaiting-owner",
-      "updated_at": "2026-11-04T10:00:00Z",
-      "waits_days": 7,
-      "waiting": true,
-      "closed": false,
-      "unit": "projects/kettle",
-      "index": "_board/flows/index.json",
-      "board": "_board/flows/kettle/kettle-brew-gate/index.html"
-    },
-    {
-      "key": "stove/stove-no-time",
-      "project": "stove",
-      "slug": "stove-no-time",
-      "stage": "G1",
-      "status": "awaiting-owner",
-      "updated_at": "",
-      "waits_days": -1,
-      "waiting": true,
-      "closed": false,
-      "unit": "projects/stove",
-      "index": "_board/flows/index.json",
-      "board": ""
+      "board": "",
+      "state_text": ""
     },
     {
       "key": "nobody/orphan-flow",
@@ -402,7 +375,38 @@
       "closed": false,
       "unit": ".",
       "index": "_board/flows/index.json",
-      "board": ""
+      "board": "",
+      "state_text": ""
+    },
+    {
+      "key": "kettle/kettle-brew-gate",
+      "project": "kettle",
+      "slug": "kettle-brew-gate",
+      "stage": "G2",
+      "status": "awaiting-owner",
+      "updated_at": "2026-11-04T10:00:00Z",
+      "waits_days": 7,
+      "waiting": false,
+      "closed": false,
+      "unit": "projects/kettle",
+      "index": "_board/flows/index.json",
+      "board": "_board/flows/kettle/kettle-brew-gate/index.html",
+      "state_text": "gate decided, flow not advanced"
+    },
+    {
+      "key": "stove/stove-no-time",
+      "project": "stove",
+      "slug": "stove-no-time",
+      "stage": "G1",
+      "status": "awaiting-owner",
+      "updated_at": "",
+      "waits_days": -1,
+      "waiting": false,
+      "closed": false,
+      "unit": "projects/stove",
+      "index": "_board/flows/index.json",
+      "board": "",
+      "state_text": "gate decided, flow not advanced"
     },
     {
       "key": "acme-hub/hub-closed-one",
@@ -416,7 +420,8 @@
       "closed": true,
       "unit": ".",
       "index": "_board/flows/index.json",
-      "board": ""
+      "board": "",
+      "state_text": ""
     }
   ],
   "sprints": [
@@ -431,7 +436,9 @@
       "closed": false,
       "unit": "projects/lamp",
       "index": "_board/sprints/index.json",
-      "board": ""
+      "board": "",
+      "waits_days": 1,
+      "waiting": false
     },
     {
       "key": "kettle/kettle-sprint-a",
@@ -444,19 +451,19 @@
       "closed": true,
       "unit": "projects/kettle",
       "index": "_board/sprints/index.json",
-      "board": ""
+      "board": "",
+      "waits_days": 9,
+      "waiting": false
     }
   ],
   "waiting": {
     "keys": [
-      "lamp/lamp-light",
-      "kettle/kettle-brew-gate",
-      "stove/stove-no-time"
+      "flow:lamp/lamp-light"
     ],
     "pages": [
       {
         "from": 0,
-        "to": 3
+        "to": 1
       }
     ]
   },
@@ -660,8 +667,7 @@
   },
   "plan_path": "siteoffice.plan.json",
   "badges": {
-    "i-kettle": 2,
-    "i-stove": 1
+    "i-kettle": 1
   },
   "planning": {
     "weeks": 2,
@@ -823,13 +829,22 @@
     "fixed": true,
     "source": "DEADLINES.md"
   },
-  "problems": [],
+  "problems": [
+    {
+      "path": "_board/flows/index.json",
+      "message": "flow kettle/kettle-brew-gate: gate decided, flow not advanced"
+    },
+    {
+      "path": "_board/flows/index.json",
+      "message": "flow stove/stove-no-time: gate decided, flow not advanced"
+    }
+  ],
   "counts": {
     "units": 6,
     "flows": 5,
     "sprints": 2,
-    "waiting": 3,
-    "longest_wait_days": 7,
-    "problems": 0
+    "waiting": 1,
+    "longest_wait_days": 1,
+    "problems": 2
   }
 }

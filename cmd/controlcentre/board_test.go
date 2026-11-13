@@ -95,3 +95,12 @@ func TestCrumbsBoard(t *testing.T) {
 	mustContain(t, "crumbs", "view.page === 'board'", "a.row.slug", "go('unit', a.row.unit, a.fl ? 'Flows' : 'Sprints')")
 	mustContain(t, "go", "sub = {tab: tab || 'Structure'")
 }
+
+// TestBoardLeadFullPath: the board lead names the board page by its full
+// platform path, not the root-relative one.
+func TestBoardLeadFullPath(t *testing.T) {
+	mustContain(t, "pageBoard", "', board page ' + srcPath(bp.path)")
+	if strings.Contains(pageFunc(t, "pageBoard"), "' + bp.path + '") {
+		t.Error("the board lead still shows the relative bp.path")
+	}
+}

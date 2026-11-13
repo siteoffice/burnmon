@@ -669,6 +669,12 @@ network call: it reads below the root and writes only its settings file, the roo
 - **Build**: `.\build.ps1` builds `controlcentre.exe` next to the other three exes. On a
   Mac it builds with cgo, like `burnmon-dev`, in `.github\workflows\macos.yml` and
   `scripts\maccheck.sh`.
+- **Open and Back**: Double-click a box, an item or a file name to open its next page or
+  the file; Enter does the same and Space selects. Back, at the left of the top bar,
+  returns to the previous view with its selection; the back button of the mouse and
+  Alt+Left do the same. A flow waits on you only when its gate is open (its awaiting field
+  is true), a sprint when its status is waiting-on-you; a flow whose gate was decided but
+  that did not move on shows "gate decided, flow not advanced".
 
 Built, not yet seen in a window.
 

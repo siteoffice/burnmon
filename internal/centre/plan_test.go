@@ -96,8 +96,9 @@ func TestBadges(t *testing.T) {
 	if prob != nil {
 		t.Fatalf("problem %+v", *prob)
 	}
-	got := Badges(plan, units, flows)
-	want := map[string]int{"i-kettle": 2, "i-stove": 1}
+	sprints := []SprintRow{{Unit: "projects/kettle", Waiting: true}}
+	got := Badges(plan, units, flows, sprints)
+	want := map[string]int{"i-kettle": 2}
 	if len(got) != len(want) {
 		t.Errorf("badges %v, want %v", got, want)
 	}
@@ -109,7 +110,7 @@ func TestBadges(t *testing.T) {
 
 	// A part on the item's own unit counts that unit once.
 	same := &Plan{Items: []PlanNode{{ID: "i-k", Unit: "kettle", Parts: []PlanPart{{Title: "Self", Unit: "kettle"}}}, {ID: "i-none", Unit: "engine"}}}
-	got = Badges(same, units, flows)
+	got = Badges(same, units, flows, sprints)
 	if got["i-k"] != 1 {
 		t.Errorf("i-k = %d, want 1", got["i-k"])
 	}
@@ -117,7 +118,7 @@ func TestBadges(t *testing.T) {
 		t.Error("item without waiting rows has a badge")
 	}
 
-	if got := Badges(nil, units, flows); got == nil || len(got) != 0 {
+	if got := Badges(nil, units, flows, nil); got == nil || len(got) != 0 {
 		t.Errorf("no plan: %v, want empty map", got)
 	}
 }

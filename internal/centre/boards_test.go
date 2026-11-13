@@ -110,19 +110,53 @@ func TestLaterRowWins(t *testing.T) {
 	}
 }
 
-func TestWaitingFromStatusOnly(t *testing.T) {
+func TestFlowWaitingFromAwaiting(t *testing.T) {
 	root := fixtureTree(t)
 	writeFile(t, root, "projects/stove/_board/flows/index.json",
-		`{"flows":[{"project":"stove","slug":"stove-flagged","stage":"G2","status":"execute","awaiting":true,"updatedAt":"2026-11-10T00:00:00Z"}]}`)
+		`{"flows":[{"project":"stove","slug":"s-flag","stage":"G2","status":"execute","awaiting":true,"updatedAt":"2026-11-10T00:00:00Z"},{"project":"stove","slug":"s-absent","stage":"G2","status":"awaiting-owner","updatedAt":"2026-11-10T00:00:00Z"},{"project":"stove","slug":"s-false","stage":"G2","status":"awaiting-owner","awaiting":false,"updatedAt":"2026-11-10T00:00:00Z"}]}`)
 	flows, _, _ := readFixtureBoards(t, root)
-	if !flowByKey(t, flows, "kettle/kettle-brew-gate").Waiting {
-		t.Error("kettle-brew-gate not waiting although status is awaiting-owner")
+	cases := []struct {
+		row     string
+		waiting bool
+		text    string
+	}{
+		{"stove/s-flag", true, ""},
+		{"stove/s-absent", false, StaleText},
+		{"stove/s-false", false, StaleText},
+		{"lamp/lamp-light", true, ""},
+		{"kettle/kettle-brew-gate", false, StaleText},
+		{"nobody/orphan-flow", false, ""},
 	}
-	if flowByKey(t, flows, "stove/stove-flagged").Waiting {
-		t.Error("stove-flagged waiting although status is execute")
+	for _, c := range cases {
+		f := flowByKey(t, flows, c.row)
+		if f.Waiting != c.waiting {
+			t.Errorf("%s waiting %v, want %v", c.row, f.Waiting, c.waiting)
+		}
+		if f.StateText != c.text {
+			t.Errorf("%s state text %q, want %q", c.row, f.StateText, c.text)
+		}
 	}
-	if !flowByKey(t, flows, "lamp/lamp-light").Waiting {
-		t.Error("lamp-light not waiting")
+}
+
+func TestSprintWaitingOnlyOnWaitingOnYou(t *testing.T) {
+	root := fixtureTree(t)
+	writeFile(t, root, "projects/lamp/_board/sprints/index.json",
+		`{"sprints":[{"project":"lamp","slug":"l-wait","status":"waiting-on-you","phase":"execute","updated_at":"2026-11-08T12:00:00Z"},{"project":"lamp","slug":"l-run","status":"running","phase":"execute","updated_at":"2026-11-08T12:00:00Z"},{"project":"lamp","slug":"l-aw","status":"awaiting-owner","phase":"execute","updated_at":"2026-11-08T12:00:00Z"}]}`)
+	_, sprints, _ := readFixtureBoards(t, root)
+	s := sprintByKey(t, sprints, "lamp/l-wait")
+	if !s.Waiting || s.WaitsDays != 3 {
+		t.Errorf("l-wait waiting %v waits %d, want true and 3", s.Waiting, s.WaitsDays)
+	}
+	for _, k := range []string{"lamp/l-run", "lamp/l-aw"} {
+		if sprintByKey(t, sprints, k).Waiting {
+			t.Errorf("%s waiting", k)
+		}
+	}
+	if got := sprintByKey(t, sprints, "kettle/kettle-sprint-a").WaitsDays; got != 9 {
+		t.Errorf("kettle-sprint-a waits %d, want 9", got)
+	}
+	if got := sprintByKey(t, sprints, "lamp/lamp-sprint-b").WaitsDays; got != 1 {
+		t.Errorf("lamp-sprint-b waits %d, want 1", got)
 	}
 }
 
@@ -265,7 +299,7 @@ func TestReadBoardsSortsAndArrays(t *testing.T) {
 	for _, f := range flows {
 		keys = append(keys, f.Key)
 	}
-	want := "lamp/lamp-light,kettle/kettle-brew-gate,stove/stove-no-time,nobody/orphan-flow,acme-hub/hub-closed-one"
+	want := "lamp/lamp-light,nobody/orphan-flow,kettle/kettle-brew-gate,stove/stove-no-time,acme-hub/hub-closed-one"
 	if got := strings.Join(keys, ","); got != want {
 		t.Errorf("flow order %s\nwant       %s", got, want)
 	}

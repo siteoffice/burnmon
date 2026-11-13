@@ -1,6 +1,20 @@
 # BurnMon, status
 
-What is true now (2026-11-12, merged into `main` through PR #23, merge commit `803c952`, after Wilco's
+What is true now on `sprint/burnmon-control-centre-first-look-fixes` (2026-11-12, base `3445456`,
+read `git log` and `git status` live): the Control Centre first look fixes are built in the sprint
+worktree and are uncommitted, not merged, not tagged. git_flow `save` refused the regenerated golden
+`internal\centre\testdata\state_golden.json` on its secret rule (the fixture's "key" lines), and the
+run does not reshape test data, so the commit is Wilco's hand step after Accept. Built: a flow waits
+on you only when its gate is open (`awaiting` true), a sprint when its status is waiting-on-you,
+with kinded waiting keys and the stale line "gate decided, flow not advanced"; interactive sessions
+on the Agents page; the elevation reason rewrite; Open on double-click and Enter; a Back button with
+a view history (mouse back and Alt+Left); the reworked Waiting on you lead and Flows tab State column;
+the README Open and Back bullet pinned by `TestReadmeControlCentre`. Measured on Windows in the
+worktree: `go vet` 0, `go test` 1332 pass, 0 fail, 6 skip (base 1293, 0, 6), `.\build.ps1` 0 with
+all four exes, darwin vet without cgo 0. Built, not seen: nothing was looked at in a window; the
+second look is Wilco's. The paragraph below describes slice 1 on `main` and is still true there.
+
+What is true on `main` (2026-11-12, merged into `main` through PR #23, merge commit `803c952`, after Wilco's
 Accept; read `git log main` live): the Control Centre slice 1 is a fourth exe, `controlcentre.exe`,
 landed as one commit byte-equal to the sprint head. The macos-latest job passed on PR #23 and `main`
 measured `go vet` 0, `go test` 1293 pass, 0 fail, 6 skip after the merge. Built:

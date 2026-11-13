@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -96,5 +97,56 @@ func TestBuildEmptySlicesAreArrays(t *testing.T) {
 	}
 	if st.RowsPerPage != 12 || st.Planning.Weeks != 2 || st.Overview.Default != "units" {
 		t.Errorf("defaults: rows %d weeks %d default %q", st.RowsPerPage, st.Planning.Weeks, st.Overview.Default)
+	}
+}
+
+func TestStaleProblems(t *testing.T) {
+	rows := []FlowRow{
+		{Key: "a/s1", Index: "_board/flows/index.json", StateText: StaleText},
+		{Key: "a/s2", Index: "_board/flows/index.json"},
+	}
+	got := StaleProblems(rows)
+	want := []Problem{{Path: "_board/flows/index.json", Message: "flow a/s1: gate decided, flow not advanced"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("StaleProblems = %+v, want %+v", got, want)
+	}
+	if got := StaleProblems(nil); got == nil || len(got) != 0 {
+		t.Errorf("StaleProblems(nil) = %#v, want empty non-nil", got)
+	}
+}
+
+func TestBuildWaitingRule(t *testing.T) {
+	root := fixtureTree(t)
+	writeFile(t, root, "projects/lamp/_board/sprints/index.json",
+		`{"sprints":[{"project":"lamp","slug":"l-wait","status":"waiting-on-you","phase":"execute","updated_at":"2026-11-08T12:00:00Z"}]}`)
+	st := Build(root, Options{Now: goldenNow, Weeks: 2, Rows: 5})
+	if want := []string{"flow:lamp/lamp-light", "sprint:lamp/l-wait"}; !reflect.DeepEqual(st.Waiting.Keys, want) {
+		t.Errorf("waiting keys %v, want %v", st.Waiting.Keys, want)
+	}
+	if st.Counts.Waiting != 2 || st.Counts.LongestWaitDays != 3 {
+		t.Errorf("counts waiting %d longest %d, want 2 and 3", st.Counts.Waiting, st.Counts.LongestWaitDays)
+	}
+	if want := map[string]int{"i-kettle": 2}; !reflect.DeepEqual(st.Badges, want) {
+		t.Errorf("badges %v, want %v", st.Badges, want)
+	}
+	want := []Problem{
+		{Path: "_board/flows/index.json", Message: "flow kettle/kettle-brew-gate: gate decided, flow not advanced"},
+		{Path: "_board/flows/index.json", Message: "flow stove/stove-no-time: gate decided, flow not advanced"},
+	}
+	if !reflect.DeepEqual(st.Problems, want) {
+		t.Errorf("problems %+v, want %+v", st.Problems, want)
+	}
+}
+
+func TestBuildWaitingKeysCarryKind(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "siteoffice.json", `{"name":"hub"}`)
+	writeFile(t, root, "_board/flows/index.json",
+		`{"flows":[{"project":"p","slug":"s","stage":"G1","status":"execute","awaiting":true,"updatedAt":"2026-11-10T00:00:00Z"}]}`)
+	writeFile(t, root, "_board/sprints/index.json",
+		`{"sprints":[{"project":"p","slug":"s","status":"waiting-on-you","phase":"execute","updated_at":"2026-11-10T00:00:00Z"}]}`)
+	st := Build(root, Options{Now: goldenNow})
+	if want := []string{"flow:p/s", "sprint:p/s"}; !reflect.DeepEqual(st.Waiting.Keys, want) {
+		t.Errorf("waiting keys %v, want %v", st.Waiting.Keys, want)
 	}
 }

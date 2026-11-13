@@ -67,3 +67,56 @@ func TestPageDecideAuditLineGuarded(t *testing.T) {
 		t.Error("pageWaiting must leave the longest-waits sentence out when longest_wait_days < 0")
 	}
 }
+
+// TestPageWaitingBothKinds: Waiting on you lists flow and sprint rows by their
+// kind-prefixed keys, with a Kind column and a lead that counts both kinds.
+func TestPageWaitingBothKinds(t *testing.T) {
+	pw := pageFunc(t, "pageWaiting")
+	for _, want := range []string{"state.sprints", "'flow:'", "'sprint:'", "'Kind'", "'Name'", "sprintWaitDetail(",
+		"'Nothing waits on you.'", "' sprint'"} {
+		if !strings.Contains(pw, want) {
+			t.Errorf("pageWaiting does not contain %s", want)
+		}
+	}
+	if strings.Contains(pw, "'No gate waits on you.'") {
+		t.Error("pageWaiting still says 'No gate waits on you.'")
+	}
+}
+
+// TestSprintWaitDetailNoDecision: a waiting sprint offers Open board and the
+// sprint-session line, never Approve or Send back.
+func TestSprintWaitDetailNoDecision(t *testing.T) {
+	sd := pageFunc(t, "sprintWaitDetail")
+	for _, want := range []string{"'Decide in the sprint session.'", "r.board", "'Open board \\u203A'"} {
+		if !strings.Contains(sd, want) {
+			t.Errorf("sprintWaitDetail does not contain %s", want)
+		}
+	}
+	for _, bad := range []string{"decide(", "'Approve'", "'Send back'"} {
+		if strings.Contains(sd, bad) {
+			t.Errorf("sprintWaitDetail contains %s", bad)
+		}
+	}
+}
+
+// TestDecideNoteKeyCarriesKind: a gate's result note is stored under the
+// prefixed waiting key, so the restore finds it on Waiting on you.
+func TestDecideNoteKeyCarriesKind(t *testing.T) {
+	if !strings.Contains(pageFunc(t, "decide"), "'flow:' + r.key") {
+		t.Error("decide does not store the note under 'flow:' + r.key")
+	}
+}
+
+// TestFlowsTabStaleText: the Flows and Sprints tabs show a State column with
+// the stale text when set, and the row detail adds it as a chip.
+func TestFlowsTabStaleText(t *testing.T) {
+	pu := pageFunc(t, "pageUnit")
+	for _, want := range []string{"'State'", "r.state_text || r.status"} {
+		if !strings.Contains(pu, want) {
+			t.Errorf("pageUnit does not contain %s", want)
+		}
+	}
+	if !strings.Contains(pageFunc(t, "rowDetail"), "r.state_text") {
+		t.Error("rowDetail does not contain r.state_text")
+	}
+}
