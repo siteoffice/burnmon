@@ -50,6 +50,7 @@ of the graph edge they come from) and its `age_seconds`. `agent_sessions[]` item
 | `waits_on_you[]` | sessions whose turn ended and who wait for a person: `vendor`, `session_id`, `project`, `since`, `waiting_seconds`, `source`, `age_seconds` |
 | `wait_items[]` | items that wait on the person (added in R9, still version 1). See "Waits and outcomes" |
 | `outcome_items[]` | items finished or failed in the last 24 hours (added in R9, still version 1). See "Waits and outcomes" |
+| `wait_counts` | the count of `wait_items[]` per `group`: `blocked`, `your_turn`, `done`. See "The wait contract" |
 | `agent_sessions[]` | the last agent view poll (added in R10, still version 1). See "Agent sessions" |
 | `agent_view` | the writer's agent view state (added in B8, still version 1). See "Agent view state" |
 
@@ -227,6 +228,35 @@ that already has a `failed_check` outcome is not listed a second time as `finish
 its `failed_check` items only, one per failing check, so two when both test and verify failed
 within the window. A sprint has at most one `finished` row. A sprint whose failing check is older than 24
 hours has no `failed_check` outcome and shows as `finished`.
+
+### Group, counts and the rest of the item (still version 1)
+
+Every item also carries `group`, `holds` and, when there is something to say, `cost_tokens`,
+`cost_partial`, `sprint_id`, `parked_lines`, `report_path`, `close_ok` and `close_reason`. The last
+five are set only on `close_out` items.
+
+`group` is `blocked`, `your_turn` or `done`, in ranking order. The kind decides it: `your_turn` is the
+kind `your_turn`; the kinds `close_out`, `can_close` and `branch_gone` are `done`; every other kind
+is `blocked`. Only `blocked` is the amber number in BurnMon Dev. `holds` counts the sessions, sprints
+and flows the item holds, itself included. `cost_tokens` is the tokens burned by what waits on the item
+since `since`; `cost_partial` is true when that figure misses tokens older than the live window.
+
+`wait_counts` is a top-level object with one number per group: `blocked`, `your_turn` and `done`. It
+counts `wait_items[]` by `group`, and every place that shows a number reads this one count.
+
+Four more kinds exist besides the table above: `your_turn` and the `done` kinds `close_out`,
+`can_close` and `branch_gone`. Their rules are in `internal\waits\waits.go`.
+
+## The wait contract: what other tools may rely on
+
+Groundwork's Fleet reads `wait_counts` and, per item, `id` and `group`. So these are public:
+
+- The names `wait_counts`, `blocked`, `your_turn`, `done`, and the item fields `id` and `group`.
+- The three `group` values and their meaning above.
+
+A rename, removal or change of meaning of any of them needs a `schema_version` bump, the same as for
+every other version 1 field. A new kind, a new item field or a new top-level field does not: readers
+ignore what they do not know. The Fleet never reads `title`, `detail` or paths.
 
 ## Agent sessions: agent_sessions[] (added in R10, still version 1)
 
