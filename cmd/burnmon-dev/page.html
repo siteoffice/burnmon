@@ -101,6 +101,18 @@ header{
 .hstat{font-size:11.5px; color:var(--dim); white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis}
 .hstat b{color:var(--txt); font-weight:600; font-variant-numeric:tabular-nums}
 .hdrspacer{flex:1 1 auto; min-width:4px}
+/* One header line from 1280 px up (second look 2026-11-15: at 1600 px it
+   wrapped and cost about 70 px). The big number scales with the width (24 px
+   at 1280, 48 px from about 2530), the gaps tighten, and a readout shrinks
+   with an ellipsis (hover shows it) instead of pushing the Plain and gear
+   line onto a second row. Below 1280 px two lines stay allowed. This block
+   sits after the 1152 px rule above, so it wins from 1280 px. */
+@media (min-width: 1280px){
+  header{flex-wrap:nowrap; gap:6px 14px}
+  .hltotal{font-size:clamp(24px, 1.9vw, 48px); min-width:13ch}
+  .hstat{flex:0 1 auto; min-width:0}
+  .hdrline{flex:1 0 auto}
+}
 .textbtn{background:none; border:none; color:var(--blu); font:700 11.5px/1 var(--mono);
   letter-spacing:.06em; text-transform:uppercase; cursor:pointer; padding:2px 0}
 .textbtn:hover{text-decoration:underline}
@@ -542,14 +554,25 @@ body.plain #mapOverlay{font-size:13.5px}
 #secSizeGrid .pantot{color:var(--dim); font-weight:normal; font-size:11px}
 #secSizeGrid .pantot.over{color:var(--amber)}
 #secSizeTotals{display:flex; flex-direction:column; gap:2px; color:var(--dim)}
+#secSizeGrid input.pctlow{border-color:var(--amber)}
+/* Every pane clips to its box (second look 2026-11-15); pctWhole hides the
+   rows its edge would cut and puts one "+N more" line in their place. */
+#secRow1 > .secpanel, #secPanels > [data-sec="sessions"], .burnchart, #burnLegend, #sessionCards, #vendorStripPanel,
+#activityHeatmapRow > *, #turnTickerPanel, .cpubox, .histwrap, #processGroupsPanel, .sysbottom > *, #processesHost > *,
+#todoPanel{overflow:hidden}
+.pct-cut{display:none !important}
+.pct-more{color:var(--dim); font-size:11px; white-space:nowrap}
+tr.pct-more td{padding-top:1px; padding-bottom:1px}
 #secSizes .setsave{display:flex; gap:10px; align-items:center; margin-top:4px}
+/* Every gear button sits at the right end of its row, its hint text at the left (second look 2026-11-15). */
+#secSizes .setsave .setbtn, #histAdmin .histrow .histbtn{order:2; margin-left:auto; flex:none}
 #secSizes .setbtn:disabled{opacity:.5; cursor:default}
 #secSettings h4{margin:0 0 2px; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase}
 #secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
 #secSettings input{margin:0; accent-color:var(--amber)}
 #histAdmin{display:flex; flex-direction:column; gap:6px; margin-top:6px; padding-top:8px; border-top:1px solid var(--bd)}
 #histAdmin .histgrid{display:grid; grid-template-columns:auto auto 1fr; gap:6px 10px; align-items:center}
-#histAdmin .histgrid .histend{justify-self:end}
+#histAdmin .histgrid .histbtn{justify-self:end}
 #histAdmin .histrow{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
 #histAdmin input[type=text], #histAdmin input[type=number]{background:var(--bg); color:inherit; border:1px solid var(--bd); padding:2px 4px; font:inherit}
 #histAdmin .histbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
@@ -704,12 +727,8 @@ body.plain #mapOverlay{font-size:13.5px}
   </div>
   <div id="secControls">
     <h4>Controls</h4>
-    <div class="sechint ctlwhy">Off until you tick them. Stop a session and Attach to a session need claude_path and agent_view in burnmon.json. <span data-ctl-needs="foreman">Approve a gate and Send a gate back need python on PATH and foreman_root.</span> Each press first shows the exact command; a second press on Confirm runs it within 5 seconds.</div>
+    <div class="sechint ctlwhy">Off until you tick it. Stop a session needs claude_path and agent_view in burnmon.json. Each press first shows the exact command; a second press on Confirm runs it within 5 seconds. Attach, Approve, Send back and Close sprint live in the Control Centre.</div>
     <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="stop"> Stop a session</label><div class="dim ctlwhy" data-ctl-why="stop"></div></div>
-    <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="attach"> Attach to a session</label><div class="dim ctlwhy" data-ctl-why="attach"></div></div>
-    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="approve"> Approve a gate</label><div class="dim ctlwhy" data-ctl-why="approve"></div></div>
-    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="send_back"> Send a gate back</label><div class="dim ctlwhy" data-ctl-why="send_back"></div></div>
-    <div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint"> Close sprint</label><div class="dim ctlwhy" data-ctl-why="close_sprint"></div></div>
   </div>
   <label class="setrow"><input type="checkbox" id="secToast"> Show a notification when something waits on you</label>
   <div class="setrow setstation">Station starts as
@@ -3298,6 +3317,24 @@ body.plain #mapOverlay{font-size:13.5px}
     keys.forEach(function(k){ cum += pct[k]; var end = Math.round(total * cum / 100); out[k] = end - prev; prev = end; });
     return out;
   }
+  // A pane never gets less than its minimum (header plus one full row, second
+  // look 2026-11-15): one under it is raised to it and the others above theirs
+  // give up the px in proportion to their spare. With not enough spare every
+  // pane keeps its minimum and the section clips whole rows. Pure, no DOM.
+  function pctClampMin(keys, px, min){
+    var out = {}, need = 0;
+    keys.forEach(function(k){ out[k] = px[k]; var m = min[k] || 0; if(out[k] < m){ need += m - out[k]; out[k] = m; } });
+    for(var i = 0; i < 4 && need > 0.5; i++){
+      var spare = 0;
+      keys.forEach(function(k){ spare += Math.max(0, out[k] - (min[k] || 0)); });
+      if(spare <= 0) break;
+      var take = Math.min(need, spare);
+      keys.forEach(function(k){ var s = Math.max(0, out[k] - (min[k] || 0)); out[k] -= take * s / spare; });
+      need -= take;
+    }
+    keys.forEach(function(k){ out[k] = Math.round(out[k]); });
+    return out;
+  }
   // Pure, no DOM: the percent per shown key. See Plan in pct.go.
   function pctPlan(shown, vals, restKey){
     var out = { pct:{}, sum:0, over:false, starved:'' }, empty = [];
@@ -3346,7 +3383,10 @@ body.plain #mapOverlay{font-size:13.5px}
   // the mode) add up; an empty box reads auto.
   var PCT_SECTION_SHORT = { status:'Status', sessions_30min:'Sessions', processes_30min:'Processes', todo:'To Do' };
   function pctHas(vals, k){ return !!vals && Object.prototype.hasOwnProperty.call(vals, k); }
-  function pctTotalLine(mode, secs){
+  // The side by side row: the two section percents added (see applyPanelFit).
+  function pctRowPct(p){ return p.sessions_30min + p.processes_30min; }
+  // wide: the layout puts Sessions and Processes side by side (1600 px and up).
+  function pctTotalLine(mode, secs, wide){
     var shown = pctShownSections(mode), sum = 0, terms = [];
     shown.forEach(function(s){
       if(pctHas(secs, s)){ sum += secs[s]; terms.push(PCT_SECTION_SHORT[s] + ' ' + secs[s]); }
@@ -3354,7 +3394,12 @@ body.plain #mapOverlay{font-size:13.5px}
     });
     var hidden = PCT_SECTIONS.filter(function(s){ return shown.indexOf(s) < 0; }).map(function(s){ return PCT_SECTION_SHORT[s]; });
     var line = (mode === 'plain' ? 'Plain: ' : 'Standard: ') + (terms.length ? terms.join(' + ') + ' = ' + sum : 'nothing shown');
-    return line + (hidden.length ? ' (' + hidden.join(', ') + ' hidden)' : '');
+    line += hidden.length ? ' (' + hidden.join(', ') + ' hidden)' : '';
+    if(wide && shown.indexOf('sessions_30min') >= 0 && shown.indexOf('processes_30min') >= 0){
+      var both = pctHas(secs, 'sessions_30min') && pctHas(secs, 'processes_30min');
+      line += '; wide layout: Sessions and Processes share one row' + (both ? ' of ' + pctRowPct(secs) : '');
+    }
+    return line;
   }
   // 'panes 100 of 100' for a section with two panes or more, '' otherwise or when hidden.
   function pctPaneTotal(mode, sec, panes){
@@ -3458,18 +3503,196 @@ body.plain #mapOverlay{font-size:13.5px}
     var spans = 0;
     groups.forEach(function(g){ spans += pctSpan(g.els); });
     var room = pctContentH(box) - (pctUsed(box) - spans);
-    var pxs = pctPixels(groups.map(function(g){ return g.id; }), pct, room);
+    var ids = groups.map(function(g){ return g.id; }), mins = {};
+    groups.forEach(function(g){ mins[g.id] = pctPaneMin(g); });
+    var pxs = pctClampMin(ids, pctPixels(ids, pct, room), mins);
     groups.forEach(function(g){
       var px = pxs[g.id], extra = pctSpan(g.els) - g.grow.getBoundingClientRect().height;
       pctHeight(g.grow, px - extra);
-      rec[g.id] = { pct: pct[g.id], px: px };
+      rec[g.id] = { pct: pct[g.id], px: px, min: mins[g.id], room: Math.round(room) };
     });
   }
+  // A pane's minimum height: its fixed parts (legend, cards, CPU box) plus
+  // the box's padding, its header and one full row (a chart counts 40 px).
+  function pctPaneMin(g){
+    var gr = g.grow, c = getComputedStyle(gr);
+    var fixed = pctSpan(g.els) - gr.getBoundingClientRect().height;
+    var pad = fitPx(c.paddingTop) + fitPx(c.paddingBottom) + fitPx(c.borderTopWidth) + fitPx(c.borderBottomWidth);
+    var head = gr.querySelector('.panelhead, .zonelabel, h4, thead');
+    var row = gr.querySelector('tbody tr, .secitem, .todorow, li, .line, .tkrow');
+    var rowH = row ? row.getBoundingClientRect().height : 0;
+    if(!rowH) rowH = gr.querySelector('canvas, svg, .bars') ? 40 : 20;
+    return Math.ceil(Math.max(0, fixed) + pad + (head ? head.getBoundingClientRect().height : 0) + rowH);
+  }
+
+  // ---- Whole rows (second look 2026-11-15) ---------------------------------
+  // No pane draws outside its box and no line is cut by its edge. Every pane
+  // box clips (CSS above). pctWhole then finds each line the edge of its box,
+  // or of a clipping box inside it, would cut, hides that line's row and every
+  // row after it, and puts one "+N more" line in their place; it loops until
+  // nothing is cut. A row is the table row or list item holding the line, else
+  // the biggest ancestor that starts where the line starts. A list that
+  // scrolls in its own box (Waits, Outcomes, Sessions) keeps scrolling. It
+  // runs after each layout pass and, through a MutationObserver, after each
+  // render of a pane; the observer is off while it changes the page.
+  var PCT_PANE_BOXES = '#secRow1 > .secpanel, #secPanels > [data-sec="sessions"], .burnchart, #burnLegend, #sessionCards, #vendorStripPanel, ' +
+    '#activityHeatmapRow > *, #turnTickerPanel, .cpubox, .histwrap, #processGroupsPanel, .sysbottom > *, #processesHost > *, #todoPanel';
+  function pctVisible(e){ var c = getComputedStyle(e); return c.display !== 'none' && c.visibility !== 'hidden' && e.getClientRects().length > 0; }
+  function pctScrolls(e){ var o = getComputedStyle(e).overflowY; return o === 'auto' || o === 'scroll'; }
+  // The first cut line in box: { el, clip, edge } or null.
+  function pctFirstCut(box){
+    var br = box.getBoundingClientRect(), all = box.querySelectorAll('*');
+    for(var i = 0; i < all.length; i++){
+      var el = all[i], tag = el.tagName.toLowerCase();
+      if(el.classList.contains('pct-more')) continue;
+      if(!(el.children.length === 0 && (el.textContent || '').trim() !== '') && tag !== 'canvas' && tag !== 'svg') continue;
+      if(!pctVisible(el)) continue;
+      var a, skip = false, clip = box;
+      for(a = el.parentElement; a && a !== box; a = a.parentElement){ if(pctScrolls(a)){ skip = true; break; } }
+      if(skip) continue;
+      // The edge is the nearest bottom of every clipping box up to the pane;
+      // clip is the box that makes it (its rows are the ones to hide).
+      var edge = br.bottom;
+      for(a = el.parentElement; a && a !== box; a = a.parentElement){
+        if(getComputedStyle(a).overflowY === 'visible') continue;
+        var ab = a.getBoundingClientRect().bottom;
+        if(ab < edge){ edge = ab; clip = a; }
+      }
+      var r = el.getBoundingClientRect();
+      if(r.height >= 1 && r.top < edge - 1 && r.bottom > edge + 1) return { el: el, clip: clip, top: r.top, edge: edge };
+    }
+    return null;
+  }
+  function pctRowOf(cut){
+    var el = cut.el, row = el.closest('tr, li, .secitem, .todorow');
+    if(row && cut.clip.contains(row) && row !== cut.clip) return row;
+    row = el;
+    while(row.parentElement && row.parentElement !== cut.clip && row.parentElement.getBoundingClientRect().top >= cut.top - 1) row = row.parentElement;
+    return row;
+  }
+  // Hides row and every row after it in its parent; a list (two rows or more
+  // of the same kind) gets one "+N more" line where they were.
+  function pctCutFrom(row, edge){
+    var p = row.parentElement, hide = [], n = row;
+    for(; n; n = n.nextElementSibling) if(!n.classList.contains('pct-more') && pctVisible(n)) hide.push(n);
+    hide.forEach(function(x){ x.classList.add('pct-cut'); });
+    var old = p.querySelector(':scope > .pct-more'), count = (old ? +old.getAttribute('data-n') : 0) + hide.length;
+    if(old) old.remove();
+    var kids = Array.prototype.filter.call(p.children, function(x){ return x.tagName === row.tagName && !x.classList.contains('pct-more'); });
+    if(kids.length < 2 || row.tagName === 'TBODY') return;
+    var more;
+    if(row.tagName === 'TR'){
+      more = document.createElement('tr');
+      var td = document.createElement('td');
+      td.colSpan = Math.max(1, row.children.length);
+      more.appendChild(td);
+    } else more = document.createElement(row.tagName === 'LI' ? 'li' : 'div');
+    more.className = 'pct-more';
+    p.appendChild(more);
+    // The "+N more" line must fit too: while it crosses the edge, one more
+    // row above it goes; with no row left it goes itself.
+    for(;;){
+      more.setAttribute('data-n', String(count));
+      (more.firstChild || more).textContent = '+' + count + ' more';
+      if(more.getBoundingClientRect().bottom <= edge + 1) return;
+      var last = null;
+      for(n = more.previousElementSibling; n; n = n.previousElementSibling) if(pctVisible(n) && !n.classList.contains('pct-more')){ last = n; break; }
+      if(!last){ more.remove(); return; }
+      last.classList.add('pct-cut');
+      count++;
+    }
+  }
+  var pctWholeObs = null, pctWholeQueued = false;
+  function pctWholeReset(){
+    Array.prototype.forEach.call(document.querySelectorAll('.pct-more'), function(x){ x.remove(); });
+    Array.prototype.forEach.call(document.querySelectorAll('.pct-cut'), function(x){ x.classList.remove('pct-cut'); });
+    // A scrolled list keeps its snapped height: changing it under the user
+    // would move the rows they are reading (and a Confirm they are reaching).
+    pctSnapped = pctSnapped.filter(function(c){
+      if(c.isConnected && c.scrollTop > 0) return true;
+      c.style.maxHeight = c.__pctMaxH || '';
+      return false;
+    });
+  }
+  function pctWhole(){
+    if(pctWholeObs) pctWholeObs.disconnect();
+    pctWholeReset();
+    pctFitCharts();
+    Array.prototype.forEach.call(document.querySelectorAll(PCT_PANE_BOXES), function(box){
+      if(!pctVisible(box)) return;
+      for(var i = 0; i < 40; i++){
+        var cut = pctFirstCut(box);
+        if(!cut) break;
+        pctCutFrom(pctRowOf(cut), cut.edge);
+      }
+      pctSnapLists(box);
+    });
+    pctWholeWatch();
+  }
+  // A chart scales to its box: the Activity grid (fixed 9 px cells, seven
+  // rows and the month line) shrinks as a whole when its box is shorter.
+  var PCT_CHARTS = ['#heatmapGrid'];
+  function pctFitCharts(){
+    PCT_CHARTS.forEach(function(s){
+      var g = document.querySelector(s), wrap = g && g.parentElement;
+      if(!g || !wrap || !pctVisible(g)) return;
+      g.style.transform = '';
+      var c = getComputedStyle(wrap), room = wrap.clientHeight - fitPx(c.paddingTop) - fitPx(c.paddingBottom);
+      var need = g.scrollHeight, scale = need > 0 ? Math.min(1, room / need) : 1;
+      g.style.transformOrigin = 'top left';
+      g.style.transform = scale < 0.999 ? 'scale(' + Math.max(0.3, scale).toFixed(3) + ')' : '';
+    });
+  }
+  // A list that scrolls in its own box shows whole rows: at its top, its
+  // height ends at the last row that fits (scrolled, the rows move freely).
+  // Only row lists snap: a control preview box (.ctlprev) also scrolls, but it
+  // holds one command, and shrinking it would move Confirm (uicheck d46).
+  var PCT_SNAP_LISTS = '.seclist, .ticker, .todobody';
+  var pctSnapped = [];
+  function pctSnapLists(box){
+    Array.prototype.forEach.call(box.querySelectorAll(PCT_SNAP_LISTS), function(c){
+      if(!pctScrolls(c) || !pctVisible(c) || c.scrollTop > 0) return;
+      // Measured, not computed from the box model: the visible bottom is the
+      // padding edge; each round takes off exactly the part of the row it cuts.
+      // The pane box can be the shorter of the two: it cuts the list too.
+      var bb = box.getBoundingClientRect(), boxBottom = bb.top + box.clientTop + box.clientHeight;
+      for(var round = 0; round < 6; round++){
+        var cr = c.getBoundingClientRect(), bottom = Math.min(cr.top + c.clientTop + c.clientHeight, boxBottom), over = 0;
+        var rows = Array.prototype.filter.call(c.children, pctVisible);
+        for(var i = 0; i < rows.length; i++){
+          var r = rows[i].getBoundingClientRect();
+          if(r.top < bottom - 1 && r.bottom > bottom + 1){ over = bottom - r.top; break; }
+        }
+        if(!over) return;
+        // Shrink so the list's own visible bottom lands on the cut row's top.
+        var cs = getComputedStyle(c), h = fitPx(cs.height) - (cr.top + c.clientTop + c.clientHeight - (bottom - over));
+        if(h < 1) return;
+        if(pctSnapped.indexOf(c) < 0){ pctSnapped.push(c); c.__pctMaxH = c.style.maxHeight; }
+        c.style.maxHeight = Math.floor(h) + 'px';
+      }
+    });
+  }
+  function pctWholeWatch(){
+    if(typeof MutationObserver !== 'function') return;
+    // Rows added or removed only (a number tween rewrites text every frame and
+    // seldom changes a row's height), at most once a second.
+    if(!pctWholeObs) pctWholeObs = new MutationObserver(function(){
+      if(pctWholeQueued) return;
+      pctWholeQueued = true;
+      setTimeout(function(){ pctWholeQueued = false; pctWhole(); }, PCT_WHOLE_MS);
+    });
+    var el = document.getElementById('pageScroll');
+    if(el) pctWholeObs.observe(el, { childList: true, subtree: true });
+  }
+  var PCT_WHOLE_MS = 1000;
   function applyPanelFit(){
     var sp = stationPanel; if(sp) stationPeek(true);
     // A pass changes list heights; each list goes back where the user scrolled it.
     var tops = secListTops();
     var hist = document.querySelector('.histwrap'), histBefore = hist ? hist.getBoundingClientRect().height : 0;
+    // Hidden rows count again while the minimums are measured; pctWhole at the end hides what is cut.
+    if(pctWholeObs) pctWholeObs.disconnect();
+    pctWholeReset();
     pctUndo();
     var mode = secState.plain ? 'plain' : 'standard', scroll = !!secState.scrollbar;
     var ps = document.getElementById('pageScroll'), host = document.getElementById('secHost');
@@ -3490,15 +3713,11 @@ body.plain #mapOverlay{font-size:13.5px}
       fit.two = row;
       var draw = {};
       secs.forEach(function(s){ draw[s] = pct[s]; });
-      if(row){
-        var big = Math.max(draw.sessions_30min, draw.processes_30min), small = Math.min(draw.sessions_30min, draw.processes_30min);
-        // What the row frees goes to Status (or the row) only up to where the page fits.
-        var total = 0;
-        secs.forEach(function(s){ total += draw[s]; });
-        var give = Math.max(0, Math.min(small, 100 - (total - small)));
-        if(secs.indexOf('status') >= 0){ draw.status += give; draw.sessions_30min = draw.processes_30min = big; }
-        else draw.sessions_30min = draw.processes_30min = big + give;
-      }
+      // Side by side (second look 2026-11-15) the shared row is the SUM of the
+      // two section percents, counted once, so Status and To Do keep theirs and
+      // the page still adds up to what was typed. pctRowPct is the same rule
+      // the total line under the gear table uses.
+      if(row) draw.sessions_30min = draw.processes_30min = pctRowPct(draw);
       // Stacked zones are their own boxes; side by side they keep their width share.
       [zb, zs].forEach(function(z){ if(z && fitShown(z)) pctFix(z); });
       // The room: the page height less what is not a section (margins, gaps, the notice box of an empty host).
@@ -3523,11 +3742,46 @@ body.plain #mapOverlay{font-size:13.5px}
     }
     secListRestore(tops);
     secHostSync();
+    pctMinRecord(fit, el);
     window.__bdevFit = fit;
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
     // The chart canvas was drawn at the height it had before this pass.
     if(hist && Math.abs(hist.getBoundingClientRect().height - histBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
+    pctWhole();
+    pctMinTips();
     if(sp) stationPeek(false);
+  }
+  // The minimum of each section (its panes' minimums plus what is not a pane:
+  // labels, padding, gaps) and of each pane, in px and in percent of what it
+  // is a percent of, measured in this window. Settings shows them on hover.
+  function pctMinRecord(fit, el){
+    fit.mins = { sections: {}, panes: {} };
+    Object.keys(fit.panes).forEach(function(id){
+      var p = fit.panes[id];
+      if(p.min == null || !p.room) return;
+      fit.mins.panes[id] = { px: p.min, pct: Math.ceil(100 * p.min / p.room) };
+    });
+    Object.keys(fit.sections).forEach(function(s){
+      var box = el[s], panes = PCT_PANES.filter(function(p){ return p.section === s && fit.panes[p.id]; });
+      if(!box || !fit.room) return;
+      var sum = 0, px = 0;
+      panes.forEach(function(p){ sum += fit.panes[p.id].px; px += fit.panes[p.id].min || 0; });
+      var chrome = Math.max(0, box.getBoundingClientRect().height - sum);
+      var min = Math.ceil(chrome + px);
+      fit.mins.sections[s] = { px: min, pct: Math.ceil(100 * min / fit.room) };
+    });
+  }
+  // Each shown percent box says its minimum on hover and turns amber when the
+  // typed number is under it at this window size (it is drawn at the minimum).
+  function pctMinTips(){
+    var mins = (window.__bdevFit && window.__bdevFit.mins) || { sections: {}, panes: {} };
+    Array.prototype.forEach.call(document.querySelectorAll('#secSizeGrid input[data-pct-id]'), function(i){
+      if(i.disabled) return;
+      var m = (i.getAttribute('data-pct-kind') === 'sections' ? mins.sections : mins.panes)[i.getAttribute('data-pct-id')];
+      var v = Number(i.value);
+      i.title = m ? 'minimum ' + m.px + ' px, about ' + m.pct + ' percent at this window size' : '';
+      i.classList.toggle('pctlow', !!m && v > 0 && v < m.pct);
+    });
   }
 
   // resize (and F11, which is itself a resize of the window's client area):
@@ -3658,7 +3912,10 @@ body.plain #mapOverlay{font-size:13.5px}
   // 400 ms and lets the token live 5 s; the page mirrors both so a double
   // click sends at most one run.
   var CTL_WORD = { stop:['stop','Stop'], attach:['attach','Open'], approve:['approve','Approve'], send_back:['send back','Send back'], close_sprint:['Close sprint','Close this job'] };
-  var CTL_ORDER = ['stop','attach','approve','send_back','close_sprint'];
+  // BurnMon Dev keeps one control, Stop (decision 2026-11-11; second look
+  // 2026-11-15). Attach, Approve, Send back and Close sprint are switched and
+  // pressed in the Control Centre; their switches stay in burnmon-dev-view.json.
+  var CTL_ORDER = ['stop'];
   var CTL_GAP = 400;
   var CTL_TTL = 5000;
   var CTL_RESULT_MS = 10000;
@@ -3814,9 +4071,6 @@ body.plain #mapOverlay{font-size:13.5px}
     if(!box) return;
     Array.prototype.forEach.call(box.querySelectorAll('input[data-ctl-sw]'), function(i){
       i.checked = !!ctlState.on[i.getAttribute('data-ctl-sw')];
-    });
-    Array.prototype.forEach.call(box.querySelectorAll('[data-ctl-needs]'), function(e){
-      e.style.display = ctlState[e.getAttribute('data-ctl-needs')] ? '' : 'none';
     });
     Array.prototype.forEach.call(box.querySelectorAll('[data-ctl-why]'), function(s){
       var c = s.getAttribute('data-ctl-why');
@@ -4333,6 +4587,10 @@ body.plain #mapOverlay{font-size:13.5px}
     });
     pctValidateBoxes();
   }
+  // The CSS rule that puts main in a row (the 1600 px media query above);
+  // crossing it redraws the total lines.
+  var PCT_WIDE_MQ = window.matchMedia ? window.matchMedia('(min-width: 1600px)') : null;
+  if(PCT_WIDE_MQ && PCT_WIDE_MQ.addEventListener) PCT_WIDE_MQ.addEventListener('change', function(){ pctValidateBoxes(); });
   // The section row's pane totals and the one total line per mode under the table.
   function pctRenderTotals(pct){
     Array.prototype.forEach.call(document.querySelectorAll('#secSizeGrid [data-pantot]'), function(el){
@@ -4341,7 +4599,8 @@ body.plain #mapOverlay{font-size:13.5px}
       el.classList.toggle('over', t.over);
     });
     var tot = document.getElementById('secSizeTotals');
-    if(tot) tot.innerHTML = ['standard', 'plain'].map(function(m){ return '<div>' + esc(pctTotalLine(m, pct[m].sections)) + '</div>'; }).join('');
+    var wide = !!(PCT_WIDE_MQ && PCT_WIDE_MQ.matches);
+    if(tot) tot.innerHTML = ['standard', 'plain'].map(function(m){ return '<div>' + esc(pctTotalLine(m, pct[m].sections, wide)) + '</div>'; }).join('');
   }
   // The typed numbers per mode, or a sentence when a box is not a whole number from 1 to 100.
   function pctReadBoxes(){
@@ -4366,6 +4625,7 @@ body.plain #mapOverlay{font-size:13.5px}
     if(save) save.disabled = !!why;
     if(line) line.textContent = why;
     pctRenderTotals(r.pct);
+    pctMinTips();
     return { pct: r.pct, why: why };
   }
   document.getElementById('secSizeGrid').addEventListener('input', function(){ pctDirty = true; pctValidateBoxes(); });

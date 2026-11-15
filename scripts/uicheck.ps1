@@ -25,7 +25,7 @@ Set-Location $PSScriptRoot\..
 
 # Same order as devGroups in tools\uicheck\groups.go. Matched by name, not by
 # prefix: "waits" starts with "w".
-$devGroups = @("fit", "charts", "station", "layout", "pct", "map", "waits", "shell")
+$devGroups = @("fit", "charts", "station", "layout", "pct", "panes", "map", "waits", "shell")
 function Test-DevCheck([string]$name) {
     return ($devGroups -contains $name) -or ($name -match '^[a-z]+/') -or ($name -match '^d\d+$')
 }

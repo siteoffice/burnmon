@@ -42,7 +42,7 @@ func TestAppStartIsAppDefault(t *testing.T) {
 // Every group starts from the app default; only the window size differs.
 func TestGroupStartDefaults(t *testing.T) {
 	want := map[string][2]int32{
-		"fit": {1152, 2048}, "charts": {1280, 860}, "station": {1600, 900}, "layout": {1152, 2048}, "pct": {1280, 900},
+		"fit": {1152, 2048}, "charts": {1280, 860}, "station": {1600, 900}, "layout": {1152, 2048}, "pct": {1280, 900}, "panes": {1600, 900},
 		"map": {1152, 2048}, "waits": {1920, 1080}, "shell": {1152, 2048},
 	}
 	for _, g := range devGroups {

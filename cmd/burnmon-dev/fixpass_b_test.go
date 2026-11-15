@@ -50,11 +50,16 @@ func TestPageOneDoneTier(t *testing.T) {
 	}
 }
 
-func TestPageForemanGearLinesNeedForeman(t *testing.T) {
-	for _, sw := range []string{"approve", "send_back", "close_sprint"} {
-		want := `<div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="` + sw + `">`
-		if !strings.Contains(pageHTML, want) {
-			t.Errorf("the %s gear line is not marked data-ctl-needs=\"foreman\"", sw)
-		}
+// Second look 2026-11-15: BurnMon Dev keeps one control, Stop. The gear has
+// only its switch, and the page draws only Stop chips.
+func TestPageGearHasOnlyStop(t *testing.T) {
+	if n := strings.Count(pageHTML, `data-ctl-sw="`); n != 1 || !strings.Contains(pageHTML, `data-ctl-sw="stop"> Stop a session</label>`) {
+		t.Errorf("the gear has %d control switches, want only Stop a session", n)
+	}
+	if !strings.Contains(pageHTML, "  var CTL_ORDER = ['stop'];") {
+		t.Error("CTL_ORDER is not just stop")
+	}
+	if strings.Contains(pageHTML, "data-ctl-needs") {
+		t.Error("the gear still has Foreman-only parts")
 	}
 }

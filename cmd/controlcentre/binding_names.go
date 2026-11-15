@@ -20,4 +20,6 @@ var ccBindingNames = []string{
 	"ccRootBrowse",
 	"ccGit",
 	"ccGitRepo",
+	"ccControls",
+	"ccControlSet",
 }

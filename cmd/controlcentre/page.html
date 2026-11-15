@@ -171,6 +171,8 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 .rootf button{display:flex;align-items:center;gap:5px;flex:none}
 .rootline{flex:none;font-size:12px;color:var(--muted);min-height:18px;padding:4px 0 6px;border-bottom:1px solid var(--line-soft)}
 .rootline.warn{color:var(--amber)}
+.ctlsw{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px 14px;flex:1 1 auto;min-width:0}
+.ctlsw label{display:flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer}
 
 /* Git page: one dense row per repo, a unit line before each unit's first row */
 .g1{flex:1 1 0;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -249,7 +251,9 @@ var api = {
   rootSet: function(p){ return ccRootSet(p) },
   rootBrowse: function(p){ return ccRootBrowse(p) },
   git: function(r){ return ccGit(r) },
-  gitRepo: function(id){ return ccGitRepo(id) }
+  gitRepo: function(id){ return ccGitRepo(id) },
+  controls: function(){ return ccControls() },
+  controlSet: function(c){ return ccControlSet(c) }
 };
 (function(){
   var NS = 'http://www.w3.org/2000/svg';
@@ -1373,6 +1377,7 @@ var api = {
     row('Right panel width', 'Or drag the panel edge; a double-click on the edge goes back to this width.',
       [['narrow', 'Narrow'], ['normal', 'Normal'], ['wide', 'Wide']], settings.panel_px ? '' : settings.panel,
       function(v) { saveSetting('panel', v); });
+    controlsRows();
     rootRow();
     detail({k: 'Settings', t: 'Settings', d: 'Width, menu, horizon and theme are the same in every ZND UI. They and the pull request switch ' +
       'are saved and applied at once. The root is checked first and saved with its own Save.'});
@@ -1382,6 +1387,41 @@ var api = {
   // folder and shows how many units it holds; Save is enabled only for a good folder that differs from the
   // root now. Save writes controlcentre.json and every page reads the new root at once. With --root the
   // field is read-only.
+  // controlsRows: the four controls the Control Centre presses, switched here (they moved from BurnMon Dev's
+  // gear on 2026-11-15; BurnMon Dev keeps Stop). The switches are the same keys in burnmon-dev-view.json. One
+  // row with a tick per control, and a line with the reason a ticked control cannot run now.
+  function controlsRows() {
+    var seq = drawSeq, NAMES = {attach: 'Attach to a session', approve: 'Approve a gate', send_back: 'Send a gate back', close_sprint: 'Close sprint'};
+    var r = h('div', 'setrow'), lb = h('span', 'lb', 'Controls');
+    lb.appendChild(h('span', 'hp', 'Off until you tick them. Attach needs claude_path and agent_view in burnmon.json; Approve, ' +
+      'Send back and Close sprint need python on PATH and foreman_root. Each press shows the exact command first; Confirm runs it.'));
+    r.appendChild(lb);
+    var box = h('div', 'ctlsw'), line = h('div', 'rootline');
+    r.appendChild(box);
+    pane.appendChild(r);
+    pane.appendChild(line);
+    function draw(v) {
+      if (seq !== drawSeq) return;
+      box.textContent = '';
+      var why = [];
+      v.ids.forEach(function(id) {
+        var l = h('label', null), c = h('input', null);
+        c.type = 'checkbox';
+        c.checked = !!v.on[id];
+        c.onchange = function() {
+          Promise.resolve(api.controlSet({id: id, on: c.checked})).then(draw, function(e) { fail('Could not save the switch', e); });
+        };
+        l.appendChild(c);
+        l.appendChild(document.createTextNode(' ' + NAMES[id]));
+        box.appendChild(l);
+        if (v.on[id] && !v.ready[id] && v.why[id]) why.push(NAMES[id] + ': ' + v.why[id]);
+      });
+      line.textContent = why.length ? why.join('. ') + '.' : 'Ticked controls are ready.';
+      line.classList.toggle('warn', why.length > 0);
+    }
+    Promise.resolve(api.controls()).then(draw, function(e) { fail('Could not read the controls', e); });
+  }
+
   function rootRow() {
     var seq = drawSeq, cur = '', n = 0, timer = 0;
     var r = h('div', 'setrow'), lb = h('span', 'lb', 'Root');

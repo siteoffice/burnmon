@@ -15,13 +15,24 @@ Stage or Phase | Waits | State), Waits right-aligned. Git page: the rows "ZND10_
 shell that ate the backslashes of a `...\.git\info\exclude` path; the scanner now skips a git dir without HEAD,
 as git does (fixture test with a worktree and a Windows gitdir line). controlcentre.exe has its own icon (the
 tree, option A of three in `04_assets\2026-11-15_controlcentre_icon_options`), `winres\cc-icon-*.png`, plus
-`winres\controlcentre.icns` for a future macOS bundle (none exists yet). Measured on Windows: `go vet` 0, `go
-test` 1401 pass, 0 fail, 6 skip, `.\build.ps1` 0, the exe shows the new icon, `.\scripts\uicheck.ps1 dev` 0 (all
-eight groups) on the laptop panel alone at 200%. Two uicheck fixes made that possible (Wilco's call to add them):
-`screenCoords` now measures the CSS-to-physical ratio (client width over `window.innerWidth`) instead of assuming
-1:1, which put every real click at half the distance at 200% and failed d40, d43 and d44 on `main` too; and d29
-skips only its vendor strip check on a window the screen could not hold, the rule d19 already used. Still open:
-d29's `StripShrunk` reads `window.__bdevFit`, which lane A's removal of the fit pass left without a writer.
+`winres\controlcentre.icns` for a future macOS bundle (none exists yet). uicheck: `screenCoords` measures the
+CSS-to-physical ratio (at 200% every real click landed at half the distance, d40, d43 and d44 failed on `main` too),
+and d29 skips only its vendor strip check on a window the screen could not hold. Wilco's second look (same day,
+Control Centre accepted): BurnMon Dev keeps one control, Stop; Attach, Approve, Send back and Close sprint are
+switched on the Control Centre Settings page (`ccControls`, `ccControlSet`, the same keys in
+`burnmon-dev-view.json`) and BurnMon Dev draws no chips for them. Every gear button sits at the right of its row.
+Side by side the Sessions and Processes row is the sum of their two percents (Status and To Do keep theirs; the
+total line says "wide layout: Sessions and Processes share one row of 70"). The header stays one line from 1280 px
+(the big number scales 24 to 48 px). Every pane clips to its box: a row its edge would cut is hidden with the rows
+after it and one "+N more" line takes their place, a row list that scrolls (Waits, Outcomes, Sessions, Turn ticker,
+To Do) ends on a whole row at its top, the Activity grid scales to its box, and a pane never gets less than header
+plus one row (clamped when drawn; each percent box shows its minimum on hover and turns amber below it). New
+uicheck group `panes` (d48, 1600x900 and 2560x1440; `UICHECK_D48_SIZE` picks another size). Measured on Windows:
+`go vet` 0 (both modules), `go test` 1403 pass, 0 fail, 6 skip, `.\build.ps1` 0; uicheck groups fit, charts,
+station, layout, pct, panes, waits and shell pass and map passes except d30, which fails the same with the last
+committed page (it reads the real store: 42 boxes this week with 6 foldable groups open). d48 ran at 1500x900
+and 1280x800 only: this panel at 200% holds neither 1600x900 nor 2560x1440, so those runs, and their screenshots,
+wait for the external monitors. Still open: d29's `StripShrunk` reads `__bdevFit.items`, which no longer exists.
 
 What is true on branch `sprint/burnmon-dev-layout-pct` (2026-11-15, lane A of the big run plan, not
 merged, not tagged): BurnMon Dev's section sizes are typed numbers in Settings, not dragged. The drag

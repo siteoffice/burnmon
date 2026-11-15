@@ -116,6 +116,12 @@ func bindAll(e bindEnv) {
 	bind("ccGitRepo", func(id string) centre.GitDetailView {
 		return gitRepo(e, id)
 	})
+	bind("ccControls", func() ControlsView {
+		return controlsView(e)
+	})
+	bind("ccControlSet", func(c ControlSwitch) (ControlsView, error) {
+		return controlSet(e, c)
+	})
 }
 
 // settingsSet is the ccSettingsSet handler: it keeps the current Root,

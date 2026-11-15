@@ -11,8 +11,9 @@ import (
 )
 
 func TestCCBindingNamesMatchPage(t *testing.T) {
-	if len(ccBindingNames) != 15 {
-		t.Fatalf("ccBindingNames has %d names, want 15", len(ccBindingNames))
+	// 17 since 2026-11-15: ccControls and ccControlSet (the four controls moved from BurnMon Dev's gear).
+	if len(ccBindingNames) != 17 {
+		t.Fatalf("ccBindingNames has %d names, want 17", len(ccBindingNames))
 	}
 	seen := map[string]bool{}
 	for _, n := range ccBindingNames {

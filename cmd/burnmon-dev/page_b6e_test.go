@@ -51,9 +51,10 @@ func TestPageCloseChipOnlyWhenForemanWouldAccept(t *testing.T) {
 	}
 }
 
-// The gear names the control as the spec does: "Close sprint".
+// The Close control's switch moved to the Control Centre (2026-11-15, its
+// label "Close sprint" is checked there); BurnMon Dev has no Close switch.
 func TestPageGearLabelIsCloseSprint(t *testing.T) {
-	if !strings.Contains(pageHTML, `data-ctl-sw="close_sprint"> Close sprint</label>`) || strings.Contains(pageHTML, "Close a merged sprint") {
-		t.Error("the gear label is not 'Close sprint'")
+	if strings.Contains(pageHTML, `data-ctl-sw="close_sprint"`) || strings.Contains(pageHTML, "Close a merged sprint") {
+		t.Error("BurnMon Dev still has a Close switch")
 	}
 }

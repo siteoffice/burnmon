@@ -295,8 +295,9 @@ func TestPageWithoutForemanRoot(t *testing.T) {
 	if q := sectionsPayloadWith(dir, snap, now, withRoot.Availability, nil); !q.Controls.Foreman {
 		t.Error("with foreman_root the payload says foreman false")
 	}
-	if !strings.Contains(pageHTML, `<div class="ctlsw" data-ctl-needs="foreman"><label><input type="checkbox" data-ctl-sw="close_sprint">`) {
-		t.Error("the page's close_sprint gear line is not marked data-ctl-needs=\"foreman\"")
+	// Since 2026-11-15 the gear has no close_sprint line at all (it moved to the Control Centre).
+	if strings.Contains(pageHTML, `data-ctl-sw="close_sprint"`) {
+		t.Error("the page still has a close_sprint gear line")
 	}
 }
 
