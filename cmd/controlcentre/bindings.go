@@ -34,16 +34,21 @@ func (b *settingsBox) set(s centre.Settings) {
 	b.s = s
 }
 
-// bindEnv is what the bindings read from main(): the window, the root, the
-// folders and files, the clock, the controls service (nil when main could
-// not build it, svcWhy says why) and the settings.
+// bindEnv is what the bindings read from main(): the window, the root (roots
+// when main made a box; root is the fixed one tests pass), the folders and
+// files, the clock, the controls service (nil when main could not build it,
+// svcWhy says why), the settings, the Git page scanner and the native folder
+// picker (nil without one).
 type bindEnv struct {
 	w                                                winbind.Window
 	root, dataDir, settingsPath, snapPath, auditPath string
+	roots                                            *rootBox
 	now                                              func() time.Time
 	svc                                              *controls.Service
 	svcWhy                                           string
 	settings                                         *settingsBox
+	git                                              *centre.GitScanner
+	pickFolder                                       func(start string) (string, bool, error)
 }
 
 func (e bindEnv) clock() time.Time {
@@ -67,10 +72,10 @@ func bindAll(e bindEnv) {
 		}
 	}
 	bind("ccState", func(req StateRequest) centre.State {
-		return centre.Build(e.root, centre.Options{Now: e.clock(), Weeks: e.settings.get().Weeks, Rows: req.Rows})
+		return centre.Build(e.rootNow(), centre.Options{Now: e.clock(), Weeks: e.settings.get().Weeks, Rows: req.Rows})
 	})
 	bind("ccFile", func(path string) (centre.FileText, error) {
-		return centre.ReadUnitFile(e.root, path)
+		return centre.ReadUnitFile(e.rootNow(), path)
 	})
 	bind("ccBoard", func(path string) (centre.BoardPage, error) {
 		return boardPage(e, path)
@@ -92,6 +97,24 @@ func bindAll(e bindEnv) {
 	})
 	bind("ccAgents", func(rows int) AgentsView {
 		return agentsView(e, rows)
+	})
+	bind("ccRoot", func() RootView {
+		return rootView(e)
+	})
+	bind("ccRootCheck", func(p string) centre.RootCheck {
+		return rootCheck(e, p)
+	})
+	bind("ccRootSet", func(p string) (RootView, error) {
+		return rootSet(e, p)
+	})
+	bind("ccRootBrowse", func(start string) BrowseResult {
+		return rootBrowse(e, start)
+	})
+	bind("ccGit", func(req GitRequest) centre.GitView {
+		return gitView(e, req)
+	})
+	bind("ccGitRepo", func(id string) centre.GitDetailView {
+		return gitRepo(e, id)
 	})
 }
 
@@ -120,10 +143,10 @@ func runBinding(e bindEnv, token string) (RunView, error) {
 
 // commentWrite is the ccComment handler.
 func commentWrite(e bindEnv, req centre.CommentRequest) (centre.CommentResult, error) {
-	return centre.WriteComment(e.root, e.clock(), rand.Reader, req)
+	return centre.WriteComment(e.rootNow(), e.clock(), rand.Reader, req)
 }
 
 // boardPage is the ccBoard handler.
 func boardPage(e bindEnv, path string) (centre.BoardPage, error) {
-	return centre.ReadBoard(e.root, path)
+	return centre.ReadBoard(e.rootNow(), path)
 }

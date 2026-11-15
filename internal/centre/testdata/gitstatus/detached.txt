@@ -1,0 +1,2 @@
+# branch.oid 542e46912345678901234567890123456789abcd
+# branch.head (detached)
