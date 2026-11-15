@@ -309,8 +309,7 @@ func TestPageNamesStoppedOutcomeStatus(t *testing.T) {
 func TestPageHasControls(t *testing.T) {
 	for _, want := range []string{"bdevControlPreview", "bdevControlRun", "function ctlChips(", "function ctlLines(",
 		"agent_sessions", `class="ctlcmd"`, "again within 5 s", "again within 5 seconds", "'Send back'",
-		"Stop a session", "data-ctl-sw", "Attach to a session", "Approve a gate", "Send a gate back",
-		"claude_path", "agent_view", `class="ctl ctlgo"`, ">Confirm<"} {
+		"Stop a session", "data-ctl-sw", "claude_path", "agent_view", `class="ctl ctlgo"`, ">Confirm<"} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %q", want)
 		}
@@ -489,14 +488,17 @@ func TestPageCloseChipOnlyOnCloseOut(t *testing.T) {
 	}
 }
 
+// Amended 2026-11-15: the gear has no Foreman-only lines left to hide (the
+// Foreman controls moved to the Control Centre); the payload's foreman flag is
+// still read for the Done tier wording.
 func TestPageHidesForemanPartsWithoutForemanRoot(t *testing.T) {
-	for _, want := range []string{`[data-ctl-needs]`, `ctlState.foreman`, `foreman:!!cp.foreman`} {
+	for _, want := range []string{`ctlState.foreman`, `foreman:!!cp.foreman`} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %q", want)
 		}
 	}
-	if body := pageFuncBody(t, "secControlsSync"); !strings.Contains(body, "data-ctl-needs") {
-		t.Error("secControlsSync does not hide the gear lines that need Foreman")
+	if strings.Contains(pageHTML, "data-ctl-needs") {
+		t.Error("the page still has data-ctl-needs parts")
 	}
 }
 

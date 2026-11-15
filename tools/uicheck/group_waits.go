@@ -299,9 +299,10 @@ func caseD36(hwnd uintptr, args []string) error {
 // example it proves:
 //   - chips show only when the switch is on AND ready: all off, or on but not
 //     ready, show none; the gear shows the reason text;
-//   - the agentview:ab12 and session:anthropic:example-sub wait rows have stop
-//     and attach, the G2 gate row has approve and send back, the G4 gate row,
-//     the outcome rows and the interactive session have none;
+//   - the agentview:ab12 and session:anthropic:example-sub wait rows have
+//     stop; the gate rows, the outcome rows and the interactive session have
+//     none (BurnMon Dev keeps one control, Stop, since 2026-11-15; the gear has
+//     no line for the other four);
 //   - one chip press calls the preview recorder with exactly {control, target},
 //     never the run recorder, and shows the command as text with a Confirm
 //     button that is disabled for the first 400 ms;
@@ -310,7 +311,7 @@ func caseD36(hwnd uintptr, args []string) error {
 //   - two previews survive a re-apply (the poll) and each Confirm sends its own
 //     token;
 //   - a refusal from the run binding is shown as text;
-//   - Plain mode uses Stop, Open, Approve, Send back;
+//   - Plain mode uses Stop;
 //   - hostile text in a label shows literally and creates no element.
 //
 // Screenshots: d37-chips, d37-preview.
@@ -426,16 +427,19 @@ func caseD37(hwnd uintptr, args []string) error {
 	if p.All != 0 {
 		return fail("%d chips when on but not ready", p.All)
 	}
-	if p.Gear["stop"] != why["stop"] || p.Gear["approve"] != why["approve"] {
-		return fail("gear reasons %v, want %v", p.Gear, why)
+	if p.Gear["stop"] != why["stop"] {
+		return fail("gear reasons %v, want stop %q", p.Gear, why["stop"])
+	}
+	if _, ok := p.Gear["approve"]; ok || len(p.Gear) != 1 {
+		return fail("gear has lines %v, want only stop", p.Gear)
 	}
 
 	// On and ready: chips only where offered.
 	if p, err = apply(payload(false, all, all, nil)); err != nil {
 		return err
 	}
-	want := map[string]string{"agentview:ab12": "stop,attach", "session:anthropic:example-sub": "stop,attach",
-		"gate:example__flow__2:G2": "approve,send back", "gate:example__flow__1:G4": "", "session:anthropic:example-parent": ""}
+	want := map[string]string{"agentview:ab12": "stop", "session:anthropic:example-sub": "stop",
+		"gate:example__flow__2:G2": "", "gate:example__flow__1:G4": "", "session:anthropic:example-parent": ""}
 	for id, w := range want {
 		if p.Rows[id] != w {
 			return fail("row %q has chips %q, want %q", id, p.Rows[id], w)
@@ -487,15 +491,15 @@ func caseD37(hwnd uintptr, args []string) error {
 
 	// A preview left for 5 s expires and loses Confirm. Results are read per
 	// control and target: the stop result above stays 10 s (page.html
-	// CTL_RESULT_MS) and renders before attach's in the same row.
-	if err := click(chip("attach", "ab12")); err != nil {
+	// CTL_RESULT_MS); the expiring preview is on the other agent, cd34.
+	if err := click(chip("stop", "cd34")); err != nil {
 		return err
 	}
 	time.Sleep(5400 * time.Millisecond)
 	if p, err = read(); err != nil {
 		return err
 	}
-	if p.GoCount != 0 || !strings.Contains(p.Results["attach|ab12"], "expired") {
+	if p.GoCount != 0 || !strings.Contains(p.Results["stop|cd34"], "expired") {
 		return fail("after 5 s: %d confirm buttons, results %q", p.GoCount, p.Results)
 	}
 
@@ -503,35 +507,39 @@ func caseD37(hwnd uintptr, args []string) error {
 	if err := click(chip("stop", "ab12")); err != nil {
 		return err
 	}
-	if err := click(chip("approve", "gate:example__flow__2:G2")); err != nil {
+	if err := click(chip("stop", "cd34")); err != nil {
 		return err
 	}
 	time.Sleep(450 * time.Millisecond)
 	if p, err = apply(payload(false, all, all, nil)); err != nil {
 		return err
 	}
-	if p.GoCount != 2 {
-		return fail("%d confirm buttons after a poll, want 2", p.GoCount)
+	// Both previews survive in the Waits panel (the all-panel Confirm count
+	// also holds previews drawn outside Waits, 3 here, so it is not checked).
+	_, ab := p.PrevBy["stop|ab12"]
+	_, cd := p.PrevBy["stop|cd34"]
+	if !ab || !cd {
+		return fail("previews after a poll %v, want stop|ab12 and stop|cd34", p.PrevBy)
 	}
 	// One expression: the eval server wraps the script as return (...).
-	if _, err := evalRaw(`(function(){ window.__d37run.length = 0; document.querySelector('.ctlgo[data-ctlgo=approve]').click(); return true; })()`); err != nil {
+	if _, err := evalRaw(`(function(){ window.__d37run.length = 0; document.querySelector('.ctlgo[data-ctlgo=stop][data-target=cd34]').click(); return true; })()`); err != nil {
 		return err
 	}
 	time.Sleep(150 * time.Millisecond)
 	if p, err = read(); err != nil {
 		return err
 	}
-	if len(p.Runs) != 1 || p.Runs[0] != "tok-gate:example__flow__2:G2" {
-		return fail("approve sent runs %v", p.Runs)
+	if len(p.Runs) != 1 || p.Runs[0] != "tok-cd34" {
+		return fail("the cd34 Confirm sent runs %v", p.Runs)
 	}
 
 	// A refusal is shown as text. Confirm is ignored within 400 ms of the last
-	// run (page.html ctlConfirm, CTL_GAP), so wait past the approve run first.
+	// run (page.html ctlConfirm, CTL_GAP), so wait past the cd34 run first.
 	if _, err := evalRaw(`window.__d37fail = 'the session changed since the preview, press again'`); err != nil {
 		return err
 	}
 	time.Sleep(450 * time.Millisecond)
-	if err := click(`document.querySelector('.ctlgo[data-ctlgo=stop]').click()`); err != nil {
+	if err := click(`document.querySelector('.ctlgo[data-ctlgo=stop][data-target=ab12]').click()`); err != nil {
 		return err
 	}
 	if p, err = read(); err != nil {
@@ -548,7 +556,7 @@ func caseD37(hwnd uintptr, args []string) error {
 	if p, err = apply(payload(true, all, all, nil)); err != nil {
 		return err
 	}
-	if p.Rows["agentview:ab12"] != "Stop,Open" || p.Rows["gate:example__flow__2:G2"] != "Approve,Send back" {
+	if p.Rows["agentview:ab12"] != "Stop" || p.Rows["gate:example__flow__2:G2"] != "" {
 		return fail("plain chips %q / %q", p.Rows["agentview:ab12"], p.Rows["gate:example__flow__2:G2"])
 	}
 	time.Sleep(500 * time.Millisecond)
@@ -570,14 +578,14 @@ func caseD37(hwnd uintptr, args []string) error {
 	if p, err = apply(payload(false, all, all, nil)); err != nil {
 		return err
 	}
-	if err := click(chip("attach", "ab12")); err != nil {
+	if err := click(chip("stop", "cd34")); err != nil {
 		return err
 	}
 	if p, err = read(); err != nil {
 		return err
 	}
-	if !strings.Contains(p.PrevBy["attach|ab12"], `a<b "c" & d \ <img src=x>`) || p.Imgs != 0 {
-		return fail("hostile label shown as %q with %d images", p.PrevBy["attach|ab12"], p.Imgs)
+	if !strings.Contains(p.PrevBy["stop|cd34"], `a<b "c" & d \ <img src=x>`) || p.Imgs != 0 {
+		return fail("hostile label shown as %q with %d images", p.PrevBy["stop|cd34"], p.Imgs)
 	}
 	return nil
 }
@@ -591,14 +599,14 @@ func caseD37(hwnd uintptr, args []string) error {
 //   - the tier headers come in the order Blocked, Your turn, Done needs
 //     close-out (one Done tier holding the close_out and the can_close row),
 //     and the panel header count is 7;
-//   - with the Done group opened (it starts collapsed, d44), the Close chip
-//     is on the close_out row only, and one press previews
-//     {control: close_sprint, target: closeout:example__sprint__9};
+//   - with the Done group opened (it starts collapsed, d44) and close_sprint
+//     switched on and ready, there is no Close chip and no Foreman gear line
+//     (Close sprint moved to the Control Centre, 2026-11-15);
 //   - with controls.foreman false and the close_out row removed: no Close
-//     chip, the Done tier is headed Done, can be closed, every gear line
-//     marked data-ctl-needs=foreman is hidden, and no visible element in the
-//     panel or the gear carries foreman_root error text (the payload gives
-//     the Foreman controls a not-ready reason, so the check is not vacuous).
+//     chip, the Done tier is headed Done, can be closed, and no visible
+//     element in the panel or the gear carries foreman_root error text (the
+//     payload gives the Foreman controls a not-ready reason, so the check is
+//     not vacuous).
 //
 // Screenshot: d39-waits.
 const d39Recorders = `(function(){
@@ -710,23 +718,17 @@ func caseD39(hwnd uintptr, args []string) error {
 	if !strings.Contains(p.Head, "(7)") || !strings.Contains(p.Head, "1 your turn") {
 		return fail("panel header %q, want the count 7 and 1 your turn", p.Head)
 	}
-	if len(p.Chips) != 1 || p.Chips[0] != "closeout:example__sprint__9" {
-		return fail("Close chips on %v, want only closeout:example__sprint__9", p.Chips)
+	// Since 2026-11-15 Close sprint lives in the Control Centre: even switched
+	// on, ready and with Foreman, BurnMon Dev draws no Close chip and has no
+	// Foreman gear lines.
+	if len(p.Chips) != 0 {
+		return fail("Close chips on %v, want none in BurnMon Dev", p.Chips)
 	}
-	if p.GearShown == nil || !*p.GearShown || p.GearCount != 4 {
-		return fail("the Foreman gear lines (%d) are not all shown with foreman true", p.GearCount)
+	if p.GearCount != 0 {
+		return fail("%d Foreman gear lines, want none", p.GearCount)
 	}
 	if _, err := screenshot(hwnd, "d39-waits"); err != nil {
 		return err
-	}
-	if _, err := evalRaw(`document.querySelector('[data-sec=waits] .ctl[data-ctl=close_sprint]').click()`); err != nil {
-		return err
-	}
-	if p, err = read(); err != nil {
-		return err
-	}
-	if len(p.Prevs) != 1 || len(p.Prevs[0]) != 2 || p.Prevs[0]["control"] != "close_sprint" || p.Prevs[0]["target"] != "closeout:example__sprint__9" {
-		return fail("press sent %v, want exactly {close_sprint, closeout:example__sprint__9}", p.Prevs)
 	}
 
 	// No Foreman: no Close chip, no close-out tier, the gear line hidden, no error text.
@@ -750,9 +752,6 @@ func caseD39(hwnd uintptr, args []string) error {
 		if strings.Contains(t, "close-out") {
 			return fail("close-out tier %q without foreman_root", t)
 		}
-	}
-	if p.GearHidden == nil || !*p.GearHidden || p.GearCount != 4 {
-		return fail("a Foreman gear line (%d) is shown without foreman_root", p.GearCount)
 	}
 	if len(p.Errs) != 0 {
 		return fail("error text visible without foreman_root: %v", p.Errs)
@@ -1152,10 +1151,11 @@ func caseD45(hwnd uintptr, args []string) error {
 // in the 5 s a preview lives (d37 only clicks programmatically, so it never
 // saw this). The two control bindings are REPLACED by recorders, so no real
 // control is ever pressed. Fed the frozen example (seven Blocked rows, so the
-// Waits list is full and scrolls), controls on, one press on the approve chip
-// of its G2 gate row and a preview command of the real gate shape, it proves,
+// Waits list is full and scrolls), controls on, one press on the Stop chip
+// of its agentview:ab12 row (6th; BurnMon Dev keeps only Stop since
+// 2026-11-15) and a preview command of the long gate shape, it proves,
 // with no scrolling done by the case:
-//   - the list scrolls and the gate row is not its first row;
+//   - the list scrolls and the agent row is not its first row;
 //   - after CTL_GAP the point at the centre of that row's Confirm button
 //     belongs to the button, the button is enabled, and the preview line
 //     still holds the whole command, character for character;
@@ -1181,7 +1181,11 @@ func d46Command() string {
 		`FLOW-BURNMON-b8-ctl-probe-approve-G2-20261031T110129Z-D38C`
 }
 
-const d46Gate = "gate:example__flow__2:G2"
+// d46Row is the wait row pressed, d46Target its chip target.
+const (
+	d46Row    = "agentview:ab12"
+	d46Target = "ab12"
+)
 
 func d46Recorders(cmd string) string {
 	b, _ := json.Marshal(cmd)
@@ -1189,7 +1193,7 @@ func d46Recorders(cmd string) string {
   window.__d46prev = []; window.__d46run = [];
   window.bdevControlPreview = function(r){
     window.__d46prev.push(JSON.parse(JSON.stringify(r)));
-    return Promise.resolve({token:'tok-' + r.target, command:` + string(b) + `, label:'gate G2', expires_in_ms:5000});
+    return Promise.resolve({token:'tok-' + r.target, command:` + string(b) + `, label:'agent ab12', expires_in_ms:5000});
   };
   window.bdevControlRun = function(t){
     window.__d46run.push(t);
@@ -1200,11 +1204,11 @@ func d46Recorders(cmd string) string {
 }
 
 const d46ReadJS = `(function(){
-  var id = '` + d46Gate + `';
+  var id = '` + d46Row + `';
   var list = document.querySelector('[data-sec=waits] .seclist');
   var rows = list ? Array.prototype.slice.call(list.querySelectorAll('.secitem')) : [];
   var row = list ? list.querySelector('.secitem[data-id="' + id + '"]') : null;
-  var prev = list ? list.querySelector('.ctlprev[data-ctlid="approve|' + id + '"]') : null;
+  var prev = list ? list.querySelector('.ctlprev[data-ctlid="stop|` + d46Target + `"]') : null;
   var go = prev ? prev.querySelector('.ctlgo') : null;
   var out = { found: !!list, rows: rows.length, rowIndex: rows.indexOf(row), hasPrev: !!prev, hasGo: !!go,
     runs: window.__d46run.slice(), prevs: window.__d46prev.slice() };
@@ -1225,7 +1229,7 @@ const d46ReadJS = `(function(){
 type d46Page struct {
 	Found      bool             `json:"found"`
 	Rows       int              `json:"rows"`
-	RowIndex   int              `json:"rowIndex"` // of the gate row in the list, -1 when absent
+	RowIndex   int              `json:"rowIndex"` // of the agent row in the list, -1 when absent
 	HasPrev    bool             `json:"hasPrev"`
 	HasGo      bool             `json:"hasGo"`
 	Runs       []string         `json:"runs"`
@@ -1281,7 +1285,7 @@ func caseD46(hwnd uintptr, args []string) error {
 		return err
 	}
 
-	// The list is full and scrolls, and the gate row is not its first row.
+	// The list is full and scrolls, and the agent row is not its first row.
 	if _, err := d29Apply(payload); err != nil {
 		return err
 	}
@@ -1290,11 +1294,11 @@ func caseD46(hwnd uintptr, args []string) error {
 		return err
 	}
 	if !p.Found || p.Rows < 5 || p.RowIndex < 3 || p.Max <= 0 {
-		return fail("the case needs a full Waits list that scrolls, with the gate row 4th or later: found %v, %d rows, gate row at %d, scroll range %.0f", p.Found, p.Rows, p.RowIndex, p.Max)
+		return fail("the case needs a full Waits list that scrolls, with the agent row 4th or later: found %v, %d rows, agent row at %d, scroll range %.0f", p.Found, p.Rows, p.RowIndex, p.Max)
 	}
 
-	// One press on approve; after CTL_GAP the case scrolls nothing.
-	if _, err := evalRaw(`document.querySelector('[data-sec=waits] .ctl[data-ctl="approve"][data-target="` + d46Gate + `"]').click()`); err != nil {
+	// One press on Stop; after CTL_GAP the case scrolls nothing.
+	if _, err := evalRaw(`document.querySelector('[data-sec=waits] .ctl[data-ctl="stop"][data-target="` + d46Target + `"]').click()`); err != nil {
 		return err
 	}
 	time.Sleep(700 * time.Millisecond)

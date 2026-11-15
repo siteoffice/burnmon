@@ -50,8 +50,8 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .seg button[aria-pressed="true"]{background:var(--accent-fill);color:var(--accent)}
 .top .seg{margin-left:auto}
 svg.ic{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.body{display:grid;grid-template-columns:176px minmax(0,1fr) 256px;min-height:0}
-.app.icons .body{grid-template-columns:46px minmax(0,1fr) 256px}
+.body{display:grid;grid-template-columns:176px minmax(0,1fr) var(--rp,320px);min-height:0}
+.app.icons .body{grid-template-columns:46px minmax(0,1fr) var(--rp,320px)}
 .sidem{display:flex;flex-direction:column;gap:2px;padding:8px 6px;border-right:1px solid var(--line);background:var(--surface2);min-width:0}
 .sidem button{display:flex;align-items:center;gap:8px;border:0;background:none;padding:7px 8px;color:var(--muted);text-align:left;white-space:nowrap;overflow:hidden;position:relative}
 .sidem button[aria-current="page"]{background:var(--accent-fill);color:var(--accent);font-weight:600}
@@ -67,7 +67,10 @@ svg.ic{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;stroke
 .pager button{display:flex;align-items:center;padding:2px 6px}
 .fileview{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
 .boardframe{flex:1 1 auto;min-height:0;width:100%;border:0;overflow-y:auto}
-.right{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;border-left:1px solid var(--line);min-height:0;min-width:0}
+.right{position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;border-left:1px solid var(--line);min-height:0;min-width:0}
+/* the panel edge: drag to size the panel, double-click to go back to the Settings width */
+.redge{position:absolute;left:-4px;top:0;bottom:0;width:7px;cursor:col-resize;z-index:2}
+.redge:hover,.redge.drag{background:var(--accent-fill);box-shadow:inset -1px 0 0 var(--accent)}
 .det{padding:12px;overflow:hidden;display:flex;flex-direction:column;gap:7px;min-height:0}
 .det ul{margin:0;padding-left:16px;font-size:12.5px}
 .det p{font-size:12.5px}
@@ -133,6 +136,9 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 .c4{flex:0 0 46px;text-align:right;font-family:var(--mono);color:var(--muted)}
 .c5{flex:1 1 auto;min-width:0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rw.warn .c4{color:var(--amber)}
+/* the unit Flows and Sprints tables: one column grid, so both tabs line up (Project | Name | Stage or Phase | Waits | State) */
+.rw.ugrid{display:grid;grid-template-columns:92px minmax(0,3fr) 110px 52px minmax(0,2fr);column-gap:8px}
+.rw.ugrid .c4{text-align:right}
 
 /* file view */
 .blk{flex:none;text-align:left;border:0;border-left:3px solid transparent;border-radius:0 6px 6px 0;background:none;padding:5px 9px;font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -165,6 +171,8 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 .rootf button{display:flex;align-items:center;gap:5px;flex:none}
 .rootline{flex:none;font-size:12px;color:var(--muted);min-height:18px;padding:4px 0 6px;border-bottom:1px solid var(--line-soft)}
 .rootline.warn{color:var(--amber)}
+.ctlsw{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px 14px;flex:1 1 auto;min-width:0}
+.ctlsw label{display:flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer}
 
 /* Git page: one dense row per repo, a unit line before each unit's first row */
 .g1{flex:1 1 0;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -207,6 +215,7 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
       <div class="pane" id="pane"></div>
     </main>
     <aside class="right">
+      <div class="redge" id="redge" title="Drag to size the panel; double-click for the Settings width"></div>
       <div class="det" id="det" aria-live="polite"></div>
       <div class="cm">
         <button type="button" class="primary" id="openc">Comment</button>
@@ -242,7 +251,9 @@ var api = {
   rootSet: function(p){ return ccRootSet(p) },
   rootBrowse: function(p){ return ccRootBrowse(p) },
   git: function(r){ return ccGit(r) },
-  gitRepo: function(id){ return ccGitRepo(id) }
+  gitRepo: function(id){ return ccGitRepo(id) },
+  controls: function(){ return ccControls() },
+  controlSet: function(c){ return ccControlSet(c) }
 };
 (function(){
   var NS = 'http://www.w3.org/2000/svg';
@@ -287,7 +298,11 @@ var api = {
   // pend: the files picked for the open popup; popTarget: the target it was opened for.
   var pend = [], popTarget = null;
   var state = null;
-  var settings = {width: 80, menu: 'text', weeks: 2, theme: 'system', git_prs: false};
+  var settings = {width: 80, menu: 'text', weeks: 2, theme: 'system', git_prs: false, panel: 'normal', panel_px: 0};
+  // The right panel's preset widths in px. Normal fits Approve, Send back and Open board on one line: the three
+  // labels measure 188 px in Segoe UI 12.5 px bold (2026-11-15), with padding, borders, gaps and the panel's own
+  // padding 291 px. PANEL_MIN and PANEL_MAX are PanelMinPx and PanelMaxPx in internal\centre\settings.go.
+  var PANEL_PX = {narrow: 256, normal: 320, wide: 400}, PANEL_MIN = 220, PANEL_MAX = 640;
   // rootSaved: the line the Root row shows once after a Save, then the check line again.
   var rootSaved = '';
   var view = {page: 'overview', arg: null};
@@ -395,14 +410,49 @@ var api = {
   function applySettings(s) {
     settings = s;
     app.style.width = s.width + '%';
+    app.style.setProperty('--rp', panelWidth(s) + 'px');
     app.classList.toggle('icons', s.menu === 'icons');
     if (s.theme === 'light' || s.theme === 'dark') document.documentElement.setAttribute('data-theme', s.theme);
     else document.documentElement.removeAttribute('data-theme');
   }
 
+  // panelWidth: the dragged width while set, else the preset's.
+  function panelWidth(s) {
+    return s.panel_px >= PANEL_MIN && s.panel_px <= PANEL_MAX ? s.panel_px : (PANEL_PX[s.panel] || PANEL_PX.normal);
+  }
+
+  // panelEdge: dragging the panel edge sizes the panel live and saves panel_px on release; a double-click sets
+  // panel_px back to 0, the Settings width. The panel never takes more than half the app.
+  function panelEdge() {
+    var edge = document.getElementById('redge'), start = 0, w0 = 0, w = 0;
+    function clamp(v) { return Math.round(Math.max(PANEL_MIN, Math.min(PANEL_MAX, app.clientWidth / 2, v))); }
+    edge.addEventListener('pointerdown', function(e) {
+      if (e.button !== 0) return;
+      start = e.clientX;
+      w0 = w = panelWidth(settings);
+      edge.setPointerCapture(e.pointerId);
+      edge.classList.add('drag');
+      e.preventDefault();
+    });
+    edge.addEventListener('pointermove', function(e) {
+      if (!edge.classList.contains('drag')) return;
+      w = clamp(w0 + start - e.clientX);
+      app.style.setProperty('--rp', w + 'px');
+    });
+    edge.addEventListener('pointerup', function(e) {
+      if (!edge.classList.contains('drag')) return;
+      edge.classList.remove('drag');
+      edge.releasePointerCapture(e.pointerId);
+      if (w !== w0) saveSetting('panel_px', w);
+    });
+    edge.addEventListener('dblclick', function() { saveSetting('panel_px', 0); });
+  }
+
   function saveSetting(key, value) {
-    var s = {width: settings.width, menu: settings.menu, weeks: settings.weeks, theme: settings.theme, git_prs: !!settings.git_prs};
+    var s = {width: settings.width, menu: settings.menu, weeks: settings.weeks, theme: settings.theme, git_prs: !!settings.git_prs,
+      panel: settings.panel, panel_px: settings.panel_px || 0};
     s[key] = value;
+    if (key === 'panel') s.panel_px = 0; // a preset replaces a dragged width
     return Promise.resolve(api.settingsSet(s)).then(function(saved) {
       applySettings(saved);
       return loadState();
@@ -995,8 +1045,8 @@ var api = {
 
     var fl = sub.tab === 'Flows';
     var keys = fl ? u.flows.keys : u.sprints.keys, pages = fl ? u.flows.pages : u.sprints.pages, all = fl ? state.flows : state.sprints;
-    var hd = h('div', 'rw hd');
-    [['Project', 'c1'], [fl ? 'Flow' : 'Sprint', 'c2'], [fl ? 'Stage' : 'Phase', 'c3'], ['Waits', 'c4'], ['State', 'c5']].forEach(function(x) {
+    var hd = h('div', 'rw hd ugrid');
+    [['Project', 'c1'], ['Name', 'c2'], [fl ? 'Stage' : 'Phase', 'c3'], ['Waits', 'c4'], ['State', 'c5']].forEach(function(x) {
       hd.appendChild(h('span', x[1], x[0]));
     });
     pane.appendChild(hd);
@@ -1011,7 +1061,7 @@ var api = {
       var r = byKey[key];
       if (!r) return;
       var pick = function() { rowSel(b); sub.sel = r.key; rowDetail(r, fl); };
-      var b = btn('rw' + (r.waiting ? ' warn' : ''), null, pick);
+      var b = btn('rw ugrid' + (r.waiting ? ' warn' : ''), null, pick);
       wireOpen(b, pick);
       var c = h('span', 'c1');
       c.appendChild(h('span', 'chip', r.project));
@@ -1324,6 +1374,10 @@ var api = {
       function(v) { saveSetting('theme', v); });
     row('GitHub pull requests', 'Show GitHub pull requests (runs gh, needs network).', [[false, 'Off'], [true, 'On']], !!settings.git_prs,
       function(v) { saveSetting('git_prs', v); });
+    row('Right panel width', 'Or drag the panel edge; a double-click on the edge goes back to this width.',
+      [['narrow', 'Narrow'], ['normal', 'Normal'], ['wide', 'Wide']], settings.panel_px ? '' : settings.panel,
+      function(v) { saveSetting('panel', v); });
+    controlsRows();
     rootRow();
     detail({k: 'Settings', t: 'Settings', d: 'Width, menu, horizon and theme are the same in every ZND UI. They and the pull request switch ' +
       'are saved and applied at once. The root is checked first and saved with its own Save.'});
@@ -1333,6 +1387,41 @@ var api = {
   // folder and shows how many units it holds; Save is enabled only for a good folder that differs from the
   // root now. Save writes controlcentre.json and every page reads the new root at once. With --root the
   // field is read-only.
+  // controlsRows: the four controls the Control Centre presses, switched here (they moved from BurnMon Dev's
+  // gear on 2026-11-15; BurnMon Dev keeps Stop). The switches are the same keys in burnmon-dev-view.json. One
+  // row with a tick per control, and a line with the reason a ticked control cannot run now.
+  function controlsRows() {
+    var seq = drawSeq, NAMES = {attach: 'Attach to a session', approve: 'Approve a gate', send_back: 'Send a gate back', close_sprint: 'Close sprint'};
+    var r = h('div', 'setrow'), lb = h('span', 'lb', 'Controls');
+    lb.appendChild(h('span', 'hp', 'Off until you tick them. Attach needs claude_path and agent_view in burnmon.json; Approve, ' +
+      'Send back and Close sprint need python on PATH and foreman_root. Each press shows the exact command first; Confirm runs it.'));
+    r.appendChild(lb);
+    var box = h('div', 'ctlsw'), line = h('div', 'rootline');
+    r.appendChild(box);
+    pane.appendChild(r);
+    pane.appendChild(line);
+    function draw(v) {
+      if (seq !== drawSeq) return;
+      box.textContent = '';
+      var why = [];
+      v.ids.forEach(function(id) {
+        var l = h('label', null), c = h('input', null);
+        c.type = 'checkbox';
+        c.checked = !!v.on[id];
+        c.onchange = function() {
+          Promise.resolve(api.controlSet({id: id, on: c.checked})).then(draw, function(e) { fail('Could not save the switch', e); });
+        };
+        l.appendChild(c);
+        l.appendChild(document.createTextNode(' ' + NAMES[id]));
+        box.appendChild(l);
+        if (v.on[id] && !v.ready[id] && v.why[id]) why.push(NAMES[id] + ': ' + v.why[id]);
+      });
+      line.textContent = why.length ? why.join('. ') + '.' : 'Ticked controls are ready.';
+      line.classList.toggle('warn', why.length > 0);
+    }
+    Promise.resolve(api.controls()).then(draw, function(e) { fail('Could not read the controls', e); });
+  }
+
   function rootRow() {
     var seq = drawSeq, cur = '', n = 0, timer = 0;
     var r = h('div', 'setrow'), lb = h('span', 'lb', 'Root');
@@ -1840,6 +1929,7 @@ var api = {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(loadState, 200);
     });
+    panelEdge();
     render();
     Promise.resolve(api.settingsGet()).then(function(s) {
       applySettings(s);

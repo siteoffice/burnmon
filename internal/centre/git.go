@@ -162,17 +162,25 @@ func isRepoFolder(dir string) bool {
 		return false
 	}
 	if fi.IsDir() {
-		return true
+		return hasHead(dot)
 	}
 	if !fi.Mode().IsRegular() {
 		return false
 	}
 	gd := worktreeGitDir(dir)
-	if gd == "" {
+	if gd == "" || !hasHead(gd) {
 		return false
 	}
 	_, err = os.Stat(filepath.Join(gd, "commondir"))
 	return err != nil // a commondir file marks a linked worktree
+}
+
+// hasHead reports whether a git dir holds a HEAD file. Git treats a folder
+// without one as no repo; a stray .git\info\exclude left by a shell that ate
+// backslashes is such a folder.
+func hasHead(gd string) bool {
+	fi, err := os.Stat(filepath.Join(gd, "HEAD"))
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // worktreeGitDir is the per-worktree git dir of dir: dir\.git when it is a

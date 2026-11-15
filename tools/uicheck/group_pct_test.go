@@ -40,11 +40,11 @@ func TestD47CheckBranches(t *testing.T) {
 	}
 }
 
-// The wide variant expects the side-by-side rule: the row takes the larger
-// number, Status the rest (Wilco, 2026-11-15).
+// The wide variant expects the side-by-side rule: the row is the sum of the
+// two section numbers, Status keeps its own (Wilco's second look, 2026-11-15).
 func TestD47WideVariantWantsTheLarger(t *testing.T) {
 	v := d47Variants()[1]
-	if !v.wide() || v.want["status"] != 50 || v.want["sessions_30min"] != 50 || v.want["processes_30min"] != 50 {
+	if !v.wide() || v.want["status"] != 30 || v.want["sessions_30min"] != 70 || v.want["processes_30min"] != 70 {
 		t.Fatalf("wide variant = %+v", v)
 	}
 	for _, x := range d47Variants() {

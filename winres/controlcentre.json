@@ -1,6 +1,6 @@
 {
   "RT_GROUP_ICON": { "#1": { "0000": [
-    "icon-256.png","icon-128.png","icon-64.png","icon-48.png","icon-32.png","icon-24.png","icon-16.png" ] } },
+    "cc-icon-256.png","cc-icon-128.png","cc-icon-64.png","cc-icon-48.png","cc-icon-32.png","cc-icon-24.png","cc-icon-16.png" ] } },
   "RT_MANIFEST": { "#1": { "0409": {
     "identity": { "name": "controlcentre", "version": "0.4.0.0" },
     "description": "Control Centre, units, flows and sprints below one root",

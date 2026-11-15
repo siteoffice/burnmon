@@ -105,13 +105,13 @@ func TestPageSettingsFour(t *testing.T) {
 	for _, c := range calls {
 		got[c[1]] = true
 	}
-	for _, k := range []string{"width", "menu", "weeks", "theme", "git_prs"} {
+	for _, k := range []string{"width", "menu", "weeks", "theme", "git_prs", "panel"} {
 		if !got[k] {
 			t.Errorf("pageSettings does not call saveSetting('%s'", k)
 		}
 	}
-	if len(got) != 5 || strings.Count(ps, "saveSetting(") != len(calls) {
-		t.Errorf("pageSettings calls saveSetting with keys %v; want only width, menu, weeks, theme, git_prs as literals", got)
+	if len(got) != 6 || strings.Count(ps, "saveSetting(") != len(calls) {
+		t.Errorf("pageSettings calls saveSetting with keys %v; want only width, menu, weeks, theme, git_prs, panel as literals", got)
 	}
 	for _, label := range []string{"'Screen use'", "'Menu'", "'Planning horizon'", "'Theme'",
 		"'60%'", "'80%'", "'100%'", "'Icons and text'", "'Icons only'", "'2 weeks'", "'4 weeks'",

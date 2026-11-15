@@ -181,7 +181,7 @@ func TestPctGearSaveAndBoxes(t *testing.T) {
 		"if(save) save.disabled = !!why;",
 		"if(line) line.textContent = why;",
 		"i.disabled = !shown;",
-		"if(panes.length < 2) return;",
+		"(multi ? box('panes', p.id, m, p.label) : '')",
 		"placeholder=\"auto\"",
 		"secSend({ pct: v.pct });",
 		"Type a whole number from 1 to 100, or leave the box empty",
@@ -197,18 +197,37 @@ func TestPctGearSaveAndBoxes(t *testing.T) {
 	}
 }
 
-// Side by side the shared row is as tall as the larger number, Status takes
-// what that leaves (Wilco, 2026-11-15).
+// Side by side the shared row is the SUM of the two section percents, counted
+// once; Status and To Do keep theirs (Wilco's second look, 2026-11-15, replacing
+// "as tall as the larger number").
 func TestPctSideBySideRowIsTheLarger(t *testing.T) {
 	body := idleFn(t, "applyPanelFit")
 	for _, want := range []string{
-		"var big = Math.max(draw.sessions_30min, draw.processes_30min), small = Math.min(draw.sessions_30min, draw.processes_30min);",
-		"var give = Math.max(0, Math.min(small, 100 - (total - small)));",
-		"draw.status += give; draw.sessions_30min = draw.processes_30min = big;",
+		"if(row) draw.sessions_30min = draw.processes_30min = pctRowPct(draw);",
+		"var order = secs.filter(function(s){ return !(row && s === 'processes_30min'); });",
+		"if(row) pxs.processes_30min = pxs.sessions_30min;",
 		"stationPeek(true)", "stationPeek(false)",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("applyPanelFit lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "draw.status += give") {
+		t.Error("Status still takes what the row frees")
+	}
+	out := gearNode(t, sections.Default(), "console.log(pctRowPct({sessions_30min:40, processes_30min:30}));"+
+		" console.log(pctTotalLine('standard', {status:20, sessions_30min:40, processes_30min:30, todo:10}, true));"+
+		" console.log(pctTotalLine('standard', {status:20, sessions_30min:40, processes_30min:30, todo:10}, false));")
+	lines := strings.Split(strings.ReplaceAll(out, "\r\n", "\n"), "\n")
+	want := []string{"70",
+		"Standard: Status 20 + Sessions 40 + Processes 30 + To Do 10 = 100; wide layout: Sessions and Processes share one row of 70",
+		"Standard: Status 20 + Sessions 40 + Processes 30 + To Do 10 = 100"}
+	if len(lines) != 3 {
+		t.Fatalf("node printed %q", lines)
+	}
+	for i := range want {
+		if lines[i] != want[i] {
+			t.Errorf("line %d = %q, want %q", i, lines[i], want[i])
 		}
 	}
 }

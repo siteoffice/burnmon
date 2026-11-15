@@ -13,7 +13,7 @@ import (
 
 // The seven groups, in the order a full run takes (B7.2 spec item 6).
 func TestDevGroupOrder(t *testing.T) {
-	want := []string{"fit", "charts", "station", "layout", "pct", "map", "waits", "shell"}
+	want := []string{"fit", "charts", "station", "layout", "pct", "panes", "map", "waits", "shell"}
 	var got []string
 	for _, g := range devGroups {
 		got = append(got, g.Name)

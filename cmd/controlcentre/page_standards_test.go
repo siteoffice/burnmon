@@ -80,13 +80,14 @@ func TestPageOneSettingsPage(t *testing.T) {
 	if in == 0 || all != in {
 		t.Errorf("api.settingsSet( appears %d times, %d of them in saveSetting; want all in saveSetting", all, in)
 	}
-	allowed := map[string]bool{"pageSettings": true, "themeSwitch": true, "menu": true}
+	// panelEdge saves the width dragged at the right panel edge (first look 2026-11-15).
+	allowed := map[string]bool{"pageSettings": true, "themeSwitch": true, "menu": true, "panelEdge": true}
 	for _, loc := range regexp.MustCompile(`\bsaveSetting\(`).FindAllStringIndex(pageHTML, -1) {
 		if strings.HasSuffix(pageHTML[:loc[0]], "function ") {
 			continue
 		}
 		if f := enclosingFunc(loc[0]); !allowed[f] {
-			t.Errorf("saveSetting( is called from %q, want only pageSettings, themeSwitch or menu", f)
+			t.Errorf("saveSetting( is called from %q, want only pageSettings, themeSwitch, menu or panelEdge", f)
 		}
 	}
 }
@@ -192,11 +193,11 @@ func TestPageWidthSetting(t *testing.T) {
 }
 
 func TestPageLayoutFixed(t *testing.T) {
-	if !strings.Contains(compact(ruleFor(t, ".body")), "grid-template-columns:176pxminmax(0,1fr)256px") {
-		t.Error(".body does not have grid-template-columns:176px minmax(0,1fr) 256px")
+	if !strings.Contains(compact(ruleFor(t, ".body")), "grid-template-columns:176pxminmax(0,1fr)var(--rp,320px)") {
+		t.Error(".body does not have grid-template-columns:176px minmax(0,1fr) var(--rp,320px)")
 	}
-	if !strings.Contains(compact(ruleFor(t, ".app.icons .body")), "grid-template-columns:46pxminmax(0,1fr)256px") {
-		t.Error(".app.icons .body does not have grid-template-columns:46px minmax(0,1fr) 256px")
+	if !strings.Contains(compact(ruleFor(t, ".app.icons .body")), "grid-template-columns:46pxminmax(0,1fr)var(--rp,320px)") {
+		t.Error(".app.icons .body does not have grid-template-columns:46px minmax(0,1fr) var(--rp,320px)")
 	}
 	for _, label := range []string{"Overview", "Waiting on you", "Agents", "Planning", "Settings"} {
 		if !strings.Contains(pageHTML, "'"+label+"'") {

@@ -1,5 +1,39 @@
 # BurnMon, status
 
+What is true on branch `work/wilco-de-tree/first-look-fixes-15-nov` (2026-11-15, Wilco's first look fixes,
+not merged, not tagged; check `git log main` live): BurnMon Dev's gear shows one table for "Sections each mode
+shows" (name | Standard tick and percent | Plain tick and percent, header once): each section row is bold on a
+band with its own tick (all its parts; half-ticked when some are on) and percent, plus "panes N of 100"; panes and
+parts are indented below it; a hidden section or pane box is greyed with the hover text "hidden in this mode, not
+counted"; under the table one line per mode adds up only the counted sections. The Control Centre's right panel
+is 320 px by default (Approve, Send back and Open board measure 291 px on one line), with a Settings row "Right
+panel width" (narrow 256, normal 320, wide 400) and a draggable edge that saves `panel_px` to `controlcentre.json`;
+a double-click on the edge resets it. The unit Flows and Sprints tables share one column grid (Project | Name |
+Stage or Phase | Waits | State), Waits right-aligned. Git page: the rows "ZND10_holding" and
+"ZND50_projectssiteoffice" were real stray folders (`C:\ZND\10_holding\ZND10_holding`,
+`C:\ZND\50_projects\siteoffice\ZND50_projectssiteoffice`), each a `.git` holding only `info\exclude`, left by a
+shell that ate the backslashes of a `...\.git\info\exclude` path; the scanner now skips a git dir without HEAD,
+as git does (fixture test with a worktree and a Windows gitdir line). controlcentre.exe has its own icon (the
+tree, option A of three in `04_assets\2026-11-15_controlcentre_icon_options`), `winres\cc-icon-*.png`, plus
+`winres\controlcentre.icns` for a future macOS bundle (none exists yet). uicheck: `screenCoords` measures the
+CSS-to-physical ratio (at 200% every real click landed at half the distance, d40, d43 and d44 failed on `main` too),
+and d29 skips only its vendor strip check on a window the screen could not hold. Wilco's second look (same day,
+Control Centre accepted): BurnMon Dev keeps one control, Stop; Attach, Approve, Send back and Close sprint are
+switched on the Control Centre Settings page (`ccControls`, `ccControlSet`, the same keys in
+`burnmon-dev-view.json`) and BurnMon Dev draws no chips for them. Every gear button sits at the right of its row.
+Side by side the Sessions and Processes row is the sum of their two percents (Status and To Do keep theirs; the
+total line says "wide layout: Sessions and Processes share one row of 70"). The header stays one line from 1280 px
+(the big number scales 24 to 48 px). Every pane clips to its box: a row its edge would cut is hidden with the rows
+after it and one "+N more" line takes their place, a row list that scrolls (Waits, Outcomes, Sessions, Turn ticker,
+To Do) ends on a whole row at its top, the Activity grid scales to its box, and a pane never gets less than header
+plus one row (clamped when drawn; each percent box shows its minimum on hover and turns amber below it). New
+uicheck group `panes` (d48, 1600x900 and 2560x1440; `UICHECK_D48_SIZE` picks another size). Measured on Windows:
+`go vet` 0 (both modules), `go test` 1403 pass, 0 fail, 6 skip, `.\build.ps1` 0; uicheck groups fit, charts,
+station, layout, pct, panes, waits and shell pass and map passes except d30, which fails the same with the last
+committed page (it reads the real store: 42 boxes this week with 6 foldable groups open). d48 ran at 1500x900
+and 1280x800 only: this panel at 200% holds neither 1600x900 nor 2560x1440, so those runs, and their screenshots,
+wait for the external monitors. Still open: d29's `StripShrunk` reads `__bdevFit.items`, which no longer exists.
+
 What is true on branch `sprint/burnmon-dev-layout-pct` (2026-11-15, lane A of the big run plan, not
 merged, not tagged): BurnMon Dev's section sizes are typed numbers in Settings, not dragged. The drag
 bars, the Reset heights button and the B7 fit pass are gone; an old `heights_*` key in

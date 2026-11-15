@@ -94,8 +94,9 @@ func caseD43(hwnd uintptr, args []string) error {
 		if !r.Open {
 			bad = append(bad, "the gear did not open")
 		}
-		if len(r.Texts) != 6 {
-			bad = append(bad, fmt.Sprintf("%d text elements, want 6 (explanation and five needs lines)", len(r.Texts)))
+		// One control since 2026-11-15 (Stop); the other four moved to the Control Centre.
+		if len(r.Texts) != 2 {
+			bad = append(bad, fmt.Sprintf("%d text elements, want 2 (explanation and the Stop needs line)", len(r.Texts)))
 		}
 		var ws []string
 		for _, t := range r.Texts {

@@ -16,7 +16,7 @@ import (
 //             pass measured, each Sessions pane within 2 px of its percent of
 //             its section, and the page does not scroll.
 //   wide      1920x1080, same numbers: Sessions and Processes side by side
-//             share one row as tall as the larger (50), Status takes 30 + 20.
+//             share one row of the sum (50 + 20 = 70), Status keeps its 30.
 //   scroll    1280x900, scrollbar on, sections 40/50/30 (120): drawn as typed
 //             and the page scrolls.
 //   refused   1280x900, scrollbar off, the same 120: drawn scaled to fit,
@@ -112,7 +112,8 @@ func d47Variants() []d47Variant {
 	over := map[string]int{"status": 40, "sessions_30min": 50, "processes_30min": 30}
 	return []d47Variant{
 		{name: "stacked", w: 1280, h: 900, secs: secs, panes: panes, want: map[string]float64{"status": 30, "sessions_30min": 50, "processes_30min": 20}},
-		{name: "wide", w: 1920, h: 1080, secs: secs, panes: panes, want: map[string]float64{"status": 50, "sessions_30min": 50, "processes_30min": 50}},
+		// Side by side the row is the sum, 50 + 20 = 70; Status keeps its 30 (second look 2026-11-15).
+		{name: "wide", w: 1920, h: 1080, secs: secs, panes: panes, want: map[string]float64{"status": 30, "sessions_30min": 70, "processes_30min": 70}},
 		{name: "scroll", w: 1280, h: 900, scrollbar: true, secs: over, want: map[string]float64{"status": 40, "sessions_30min": 50, "processes_30min": 30}, scrolls: true},
 		{name: "refused", w: 1280, h: 900, secs: over, want: map[string]float64{"status": 40.0 / 1.2, "sessions_30min": 50.0 / 1.2, "processes_30min": 30.0 / 1.2},
 			err: "Sections add up to 120 percent; switch on Overall scrollbar or lower a number", gear: true},

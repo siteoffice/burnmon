@@ -5,26 +5,24 @@ import (
 	"testing"
 )
 
-// OF23: the gear hint names Foreman only inside an element that secControlsSync
-// hides without foreman_root. The hint sits inside #secControls, which
-// secControlsSync walks.
+// OF23, amended 2026-11-15: the gear names Foreman nowhere. Approve, Send
+// back and Close sprint moved to the Control Centre, so the BurnMon Dev hint
+// speaks only of Stop and points there.
 func TestPageHintNamesForemanOnlyWithRoot(t *testing.T) {
-	const sentence = "Approve a gate and Send a gate back need python on PATH and foreman_root."
-	i := strings.Index(pageHTML, sentence)
-	if i < 0 {
-		t.Fatal("the gear hint no longer holds its Foreman sentence")
+	s := strings.Index(pageHTML, `<div id="secControls">`)
+	e := strings.Index(pageHTML, `<label class="setrow"><input type="checkbox" id="secToast">`)
+	if s < 0 || e < s {
+		t.Fatal("cannot find the gear's Controls block")
 	}
-	open := strings.LastIndex(pageHTML[:i], "<")
-	if tag := pageHTML[open:i]; !strings.HasPrefix(tag, `<span data-ctl-needs="foreman">`) {
-		t.Errorf("the Foreman sentence is not inside a data-ctl-needs=\"foreman\" element, nearest tag %q", tag)
+	block := pageHTML[s:e]
+	for _, bad := range []string{"foreman_root", "python on PATH", "Approve a gate"} {
+		if strings.Contains(block, bad) {
+			t.Errorf("the Controls block still names %q", bad)
+		}
 	}
-	if after := pageHTML[i+len(sentence):]; !strings.HasPrefix(strings.TrimLeft(after, " "), "</span>") {
-		t.Error("the Foreman span does not close right after the sentence, so it would hide more than the Foreman clause")
-	}
-	if c := strings.Index(pageHTML, `<div id="secControls">`); c < 0 || c > i {
-		t.Error("the hint is not inside #secControls, so secControlsSync would not reach it")
-	}
-	if body := pageFuncBody(t, "secControlsSync"); !strings.Contains(body, "[data-ctl-needs]") {
-		t.Error("secControlsSync no longer toggles [data-ctl-needs] elements")
+	for _, want := range []string{"Stop a session needs claude_path and agent_view in burnmon.json.", "live in the Control Centre"} {
+		if !strings.Contains(block, want) {
+			t.Errorf("the Controls block lacks %q", want)
+		}
 	}
 }
