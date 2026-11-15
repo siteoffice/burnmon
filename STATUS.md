@@ -1,7 +1,7 @@
 # BurnMon, status
 
-What is true on branch `work/wilco-de-tree/first-look-fixes-15-nov` (2026-11-15, Wilco's first look fixes,
-not merged, not tagged; check `git log main` live): BurnMon Dev's gear shows one table for "Sections each mode
+What is true on `main` (2026-11-15, Wilco's first and second look fixes, merged after his Accept through
+siteoffice-git as PR #29, merge commit `f278675`; not tagged, no release; check `git log main` live): BurnMon Dev's gear shows one table for "Sections each mode
 shows" (name | Standard tick and percent | Plain tick and percent, header once): each section row is bold on a
 band with its own tick (all its parts; half-ticked when some are on) and percent, plus "panes N of 100"; panes and
 parts are indented below it; a hidden section or pane box is greyed with the hover text "hidden in this mode, not
@@ -27,8 +27,9 @@ total line says "wide layout: Sessions and Processes share one row of 70"). The 
 after it and one "+N more" line takes their place, a row list that scrolls (Waits, Outcomes, Sessions, Turn ticker,
 To Do) ends on a whole row at its top, the Activity grid scales to its box, and a pane never gets less than header
 plus one row (clamped when drawn; each percent box shows its minimum on hover and turns amber below it). New
-uicheck group `panes` (d48, 1600x900 and 2560x1440; `UICHECK_D48_SIZE` picks another size). Measured on Windows:
-`go vet` 0 (both modules), `go test` 1403 pass, 0 fail, 6 skip, `.\build.ps1` 0; uicheck groups fit, charts,
+uicheck group `panes` (d48, 1600x900 and 2560x1440; `UICHECK_D48_SIZE` picks another size). Measured on Windows
+on `main` after the merge: `go vet` 0, `go test` 1407 pass, 0 fail, 6 skip, `.\build.ps1` 0; macos-latest passed on
+PR #29. Measured on the branch before it: `go vet` 0 (both modules), `go test` 1403 pass, 0 fail, 6 skip; uicheck groups fit, charts,
 station, layout, pct, panes, waits and shell pass and map passes except d30, which fails the same with the last
 committed page (it reads the real store: 42 boxes this week with 6 foldable groups open). d48 ran at 1500x900
 and 1280x800 only: this panel at 200% holds neither 1600x900 nor 2560x1440, so those runs, and their screenshots,
