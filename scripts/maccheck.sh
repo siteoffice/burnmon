@@ -50,6 +50,7 @@ write_header() {
     printf '%s\n' "- Go: $gov"
     printf '%s\n' "- macOS: $swv"
     printf '%s\n' "- Commit: $sha"
+    printf '%s\n' "- Describe: $(git describe --tags --always 2>/dev/null || echo 'unknown')"
     printf '\n'
   } > "$REPORT"
 }
@@ -60,6 +61,7 @@ write_header
 MISSING=""
 if ! command -v go >/dev/null 2>&1; then MISSING="$MISSING go"; fi
 if ! xcode-select -p >/dev/null 2>&1; then MISSING="$MISSING xcode-select"; fi
+if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; then MISSING="$MISSING python3-3.9"; fi
 if [ -n "$MISSING" ]; then
   printf '%s\n' "Preflight failed, missing:$MISSING" | tee -a "$REPORT"
   if ! xcode-select -p >/dev/null 2>&1; then
@@ -68,6 +70,9 @@ if [ -n "$MISSING" ]; then
   if ! command -v go >/dev/null 2>&1; then
     printf 'Install Go from https://go.dev/dl/ and run this script again.\n' | tee -a "$REPORT"
   fi
+  case "$MISSING" in *python3-3.9*)
+    printf 'Install Python 3.9 or newer from https://www.python.org/downloads/ and run this script again.\n' | tee -a "$REPORT" ;;
+  esac
   exit 1
 fi
 
@@ -184,8 +189,12 @@ window_step stop-burnmon-dev stop_burnmon_dev
   printf '%s\n' '- [ ] Sleep and wake: close the lid for 2 minutes, sampling resumes, no rate spike'
   printf '%s\n' '- [ ] Second screen: move and resize the window across both screens'
   printf '%s\n' '- [ ] Screen Recording permission is granted for screencapture (the screenshots are not black)'
-  printf '%s\n' '- [ ] OF25 banner: the three B9 item 5 checks'
+  printf '%s\n' '- [ ] OF25 banner: the three B9 item 5 checks (toast tests run and pass, osascript honours --, one real banner within 2 s)'
+  printf '%s\n' '- [ ] Percent settings: BurnMon Dev gear, "Sections each mode shows": set 30, 50 and 20, Save, the sections draw about that tall; over 100 needs Overall scrollbar on'
   printf '%s\n' '- [ ] Control Centre window: run maccheck-out/controlcentre --root <a folder with a siteoffice.json>, walk every page in light and dark at 60, 80 and 100 percent'
+  printf '%s\n' '- [ ] Root picker: start maccheck-out/controlcentre with no --root, Settings, Browse opens the macOS folder picker, Save reloads the pages'
+  printf '%s\n' '- [ ] Git page: under Agents, one row per repo below the root, double-click opens the detail, no horizontal scrollbar'
+  printf '%s\n' '- [ ] Groundwork: plugin install in Claude Code and the first 15 minutes from its README (GW26), see 02_roadmap/2026-11-16_mac_day_checklist.md'
 } >> "$REPORT"
 
 cat "$REPORT"
