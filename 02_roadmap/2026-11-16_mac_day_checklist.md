@@ -195,7 +195,7 @@ cd ~/work/burnmon
       sections draw about 30, 50 and 20 percent of the window height. Screenshot.
 - [ ] Set Status 60, Sessions 50. With Overall scrollbar OFF, Save is disabled and one line says
       why. Switch Overall scrollbar ON: Save works and the page scrolls. Screenshot of each.
-- [ ] Put the numbers back (or delete the settings file, see step 11).
+- [ ] Put the numbers back (or delete the settings file, see step 12).
 - [ ] OF25 real banner: in the gear, tick "Show a notification when something waits on you".
       In a second Terminal start `claude` in `~/work/groundwork` and ask something that makes it
       stop and ask for permission. One banner must appear within 2 seconds of the item entering
