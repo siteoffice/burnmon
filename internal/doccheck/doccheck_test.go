@@ -196,6 +196,10 @@ func TestRealCorpusHasWhatTheSpecNames(t *testing.T) {
 	if !c.PartIDs["agents_map"] || len(c.PartIDs) != 15 {
 		t.Errorf("part ids: want 15 incl. agents_map, got %d", len(c.PartIDs))
 	}
+	// d34 runs d47 through devAliases (2026-11-15); d42 is gone.
+	if !c.UICheck["d34"] || !c.UICheck["d47"] || c.UICheck["d42"] {
+		t.Errorf("uicheck d34 %v, d47 %v, d42 %v; want true, true, false", c.UICheck["d34"], c.UICheck["d47"], c.UICheck["d42"])
+	}
 	for _, id := range []string{"d36", "d37"} {
 		if !c.UICheck[id] {
 			t.Errorf("uicheck id %s missing", id)

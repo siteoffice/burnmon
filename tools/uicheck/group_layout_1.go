@@ -11,13 +11,12 @@ import (
 
 // layout/d19: moved from check_d19.go.
 
-// d19: with the To Do panel visible it is never hidden (B7 replaced the old
-// 70 percent chart rule and the drop order): the fit pass shares the free
-// height, To Do reaches the window bottom edge (the end of the scrolled
-// page when every part sits at its floor) and no zone overflows. At a window
-// too small for To Do in the plain layout (1280x860 today) it sits at its
-// floor of three rows and the page scrolls. The three To Do
-// on sizes are ones that fit this laptop's primary screen: uicheck places
+// d19: with the To Do panel visible it is never hidden: with the default sizes
+// (2026-11-15) To Do, the last section, sits at the end of the scrolled page:
+// section, reaches the window bottom edge and the page itself never
+// overflows. A zone may clip its own content when its share is small (the
+// person sets the numbers), so zone overflow is printed, not asserted. The
+// To Do on sizes are ones that fit this laptop's primary screen: uicheck places
 // the window at (100,100) there and caps it to that screen, so the portrait
 // 1152x2048 size cannot be reached from here. Fake mode only, with made-up
 // task titles: a uicheck run never shows real To Do rows (todo_gate.go).
@@ -82,7 +81,7 @@ func caseD19(hwnd uintptr, args []string) error {
   var zones = document.querySelectorAll('.zonebody'), zoneOver = false;
   for(var z = 0; z < zones.length; z++) if(zones[z].scrollHeight > zones[z].clientHeight + 1) zoneOver = true;
   return {
-    layout: window.__bdevTodoLayout,
+    todoPx: ((window.__bdevFit.sections || {}).todo || {}).px || 0,
     todoDropped: todo.classList.contains('fit-dropped'),
     todoBottom: tr.bottom, innerH: window.innerHeight,
     bodyOver: document.body.scrollHeight > document.body.clientHeight + 1 || document.body.scrollWidth > document.body.clientWidth + 1,
@@ -90,11 +89,7 @@ func caseD19(hwnd uintptr, args []string) error {
   };
 })(%v)`, c.todo)
 		var out struct {
-			Layout struct {
-				Applied    bool    `json:"applied"`
-				PlainHistH float64 `json:"plainHistH"`
-				HistH      float64 `json:"histH"`
-			} `json:"layout"`
+			TodoPx      float64 `json:"todoPx"`
 			TodoDropped bool    `json:"todoDropped"`
 			TodoBottom  float64 `json:"todoBottom"`
 			InnerH      float64 `json:"innerH"`
@@ -112,15 +107,10 @@ func caseD19(hwnd uintptr, args []string) error {
 		if _, err := screenshot(hwnd, fmt.Sprintf("d19-todo-%s-%dx%d", state, c.w, c.h)); err != nil {
 			return err
 		}
-		l := out.Layout
-		ratio := 0.0
-		if l.PlainHistH > 0 {
-			ratio = l.HistH / l.PlainHistH
-		}
-		fmt.Printf("uicheck: d19 %dx%d todo=%s: applied=%v chart %.0fpx of plain %.0fpx (ratio %.3f), To Do bottom %.0f of %.0f, dropped=%v\n",
-			c.w, c.h, state, l.Applied, l.HistH, l.PlainHistH, ratio, out.TodoBottom, out.InnerH, out.TodoDropped)
-		if out.BodyOver || out.ZoneOver {
-			errs = append(errs, fmt.Sprintf("%dx%d todo=%s: page or a zone overflows", c.w, c.h, state))
+		fmt.Printf("uicheck: d19 %dx%d todo=%s: To Do section %.0f px, bottom %.0f of %.0f, dropped=%v, a zone clips=%v\n",
+			c.w, c.h, state, out.TodoPx, out.TodoBottom, out.InnerH, out.TodoDropped, out.ZoneOver)
+		if out.BodyOver {
+			errs = append(errs, fmt.Sprintf("%dx%d todo=%s: the page overflows", c.w, c.h, state))
 		}
 		if !c.todo {
 			continue
@@ -141,7 +131,7 @@ func caseD19(hwnd uintptr, args []string) error {
 		fmt.Printf("uicheck: d19: PARTIAL, %d of %d cases skipped because the screen is too small; run on a screen that holds 2560x1300 CSS px for a full pass\n", skipped, len(cases))
 		return nil
 	}
-	fmt.Println("uicheck: d19: To Do layout clean (To Do never hidden, fills the bottom, no overflow)")
+	fmt.Println("uicheck: d19: To Do layout clean (To Do never hidden, fills the bottom, the page does not overflow)")
 	return nil
 }
 
@@ -398,7 +388,8 @@ func caseD29(hwnd uintptr, args []string) error {
 	}
 	wantAll := strings.Join(d29Parts, ",")
 
-	// Standard, every part on, scrollbar on: all shown, none dropped, the page scrolls.
+	// Standard, every part on, scrollbar on: all shown, none dropped. The default
+	// sizes add up to 160 percent (2026-11-15), so the page scrolls.
 	p, err := d29Apply(d29Payload(std(nil)))
 	if err != nil {
 		return err
@@ -517,7 +508,7 @@ func caseD29(hwnd uintptr, args []string) error {
 		return d29Fail("plain with two burn parts: shown %v, burn zone %v, system zone %v", p.shown(), p.BurnZone, p.SystemZone)
 	}
 
-	// B7: everything on in a small window hides nothing. Parts shrink to their floors and the page scrolls.
+	// Everything on in a small window hides nothing: every section keeps its percent and clips.
 	if err := ensureWindowSizeWH(hwnd, 1024, 480); err != nil {
 		return err
 	}
@@ -528,8 +519,9 @@ func caseD29(hwnd uintptr, args []string) error {
 	if len(p.shown()) < len(d29Parts) {
 		return d29Fail("plain at 1024x480 with all parts hid some: shown %v", p.shown())
 	}
-	if p.BodyOver > 1 || p.OverflowY != "auto" {
-		return d29Fail("plain at 1024x480: body overflow %.0f px, overflow-y %s (want the page to scroll)", p.BodyOver, p.OverflowY)
+	// Scrollbar off: the page never scrolls (2026-11-15); numbers over 100 are drawn scaled to fit.
+	if p.BodyOver > 1 || p.OverflowY != "hidden" {
+		return d29Fail("plain at 1024x480, scrollbar off: body overflow %.0f px, overflow-y %s (want no overflow and no page scroll)", p.BodyOver, p.OverflowY)
 	}
 	if _, err := screenshot(hwnd, "d29-plain-small"); err != nil {
 		return err
@@ -967,48 +959,10 @@ func caseD33(hwnd uintptr, args []string) error {
 	return nil
 }
 
-// layout/d34: moved from check_d34.go.
+// d34 (the B7 layout fill) is retired with the fit pass (2026-11-15); pct/d47
+// checks the typed sizes. Its page read, snapshot and apply helpers stay:
+// d41 and d47 use them.
 
-// d34: the layout fill (B7, spec 2026-10-27, items 1, 2, 3, 6). The B2 check
-// that asserted the old hide order is replaced; the id stays. Driven by
-// window.__bdevSections.apply with the frozen example. For each window size in
-// 1280x800, 1920x1080 and 2560x1440, in Standard and in Plain, with the Overall
-// scrollbar on and off, these cases run:
-//   a  every part on
-//   b  turn ticker off
-//   c  Plain with only Burn last 30 min on (Plain only)
-//   d  every part on at 1280x800 with the scrollbar off
-//   e  every part on at 1280x800, scrollbar off, with long lists (12 wait items,
-//      8 outcome items, 8 sessions): the page scrolls only when every list sits
-//      at three rows
-// Each case asserts:
-//   - no vertical empty area over 24 px inside a column (the largest gap
-//     between a column's children, below the last child, or inside a panel
-//     below its last child);
-//   - no part hidden: every [data-part] without .sec-off draws, and the old
-//     "sections hidden" note is gone;
-//   - To Do is drawn in every case that has it on (the page is put in the check
-//     fake mode with a snapshot that switches To Do on, the way d19 does, so the
-//     real To Do never shows rows) and counts in "no part hidden" and in the
-//     24 px measure (gaps between the rows below the columns, and slack inside
-//     the Processes and To Do panels);
-//   - the Processes table sits above To Do (it comes first in the document and
-//     its bottom is at or above To Do's top, compared as rectangles), and below
-//     Process groups, Memory, Disks and Network;
-//   - scrollbar off: the page scrolls only when window.__bdevFit.fitScroll says
-//     every part is at its floor; otherwise nothing overflows, and in two
-//     columns both columns end on the same line (within 2 px).
-// The drag handles (.hdl, B7.1) are 4 px bars laid over the row gap: the gap
-// measures ignore them, and each handle is checked for its own rectangle (4 px
-// tall, inside its zonebody, not over a part). A handle with no room (iteration 2:
-// even with the host lists at their floor) is hidden, so at fit-scroll, where every
-// part and list sits at its floor, no handle may be drawn: a drawn dead bar fails.
-// A probe proves the measure can fail: a 100 px gap is pushed into a column
-// and the same read must report it (d34Probe), once per run.
-// A window size the screen cannot hold prints SKIPPED and is not a pass.
-// Screenshots: d34-<size>-<mode>-<case>-<sb>.
-
-const d34MaxEmpty = 24.0
 
 type d34Page struct {
 	OverflowY  string    `json:"overflowY"`
@@ -1181,139 +1135,6 @@ func d34Apply(payload string, snap []byte) (d34Page, error) {
 	return p, err
 }
 
-// d34Verify returns the problems found in one read, empty when the case passes.
-func d34Verify(p d34Page, scrollbar, wantTodo, caseE bool) []string {
-	var bad []string
-	if !p.Fit {
-		return []string{"window.__bdevFit is missing"}
-	}
-	if wantTodo && !p.TodoDrawn {
-		bad = append(bad, "To Do is on but not drawn")
-	}
-	if wantTodo && p.ProcOn && !p.AboveSeen {
-		bad = append(bad, "Processes and To Do are both on but the rectangles were not compared")
-	}
-	if p.Empty > d34MaxEmpty+0.5 {
-		bad = append(bad, fmt.Sprintf("empty area %.0f px (%s), limit %.0f", p.Empty, p.EmptyWhere, d34MaxEmpty))
-	}
-	if len(p.Hidden) != 0 || len(p.FitHidden) != 0 {
-		bad = append(bad, fmt.Sprintf("hidden parts %v, fit hidden %v", p.Hidden, p.FitHidden))
-	}
-	if p.CutNote {
-		bad = append(bad, "#secCutNote still exists")
-	}
-	if !p.ProcFirst || !p.ProcAbove || !p.ProcBelow {
-		bad = append(bad, fmt.Sprintf("Processes order: before To Do %v, above To Do %v, below groups/Memory/Disks/Network %v", p.ProcFirst, p.ProcAbove, p.ProcBelow))
-	}
-	if p.BodyOver > 1 {
-		bad = append(bad, fmt.Sprintf("the body itself overflows by %.0f px", p.BodyOver))
-	}
-	if p.HandleBad != "" {
-		bad = append(bad, "drag handles: "+p.HandleBad)
-	}
-	if p.FitScroll && p.Handles != 0 {
-		bad = append(bad, fmt.Sprintf("%d drag handle(s) are drawn although every part sits at its floor (a handle without room must be hidden)", p.Handles))
-	}
-	if caseE {
-		long := 0
-		for _, l := range p.Lists {
-			if l.Rows > 3 {
-				long++
-			}
-		}
-		if len(p.Lists) < 3 || long != len(p.Lists) {
-			bad = append(bad, fmt.Sprintf("case e needs at least three long lists (more than three rows each), got %d lists, %d long (%s)", len(p.Lists), long, strings.TrimSpace(d34ListNote(p, true)[7:])))
-		}
-	}
-	if scrollbar {
-		return bad
-	}
-	if p.FitScroll != p.FitClass {
-		bad = append(bad, fmt.Sprintf("fitScroll %v but body.fit-scroll %v", p.FitScroll, p.FitClass))
-	}
-	if !p.FitScroll {
-		if p.PageOver > 1 || p.HostOver > 1 || p.ZoneOver > 1 || p.Scrolls {
-			bad = append(bad, fmt.Sprintf("not at floors yet overflows: page %.0f, host %.0f, zone %.0f, scrolls %v", p.PageOver, p.HostOver, p.ZoneOver, p.Scrolls))
-		}
-		if p.TwoCols && p.ColDiff > 2 {
-			bad = append(bad, fmt.Sprintf("two columns end %.0f px apart, want at most 2", p.ColDiff))
-		}
-		for _, l := range p.Lists {
-			want := l.Rows
-			if want > 3 {
-				want = 3
-			}
-			if l.Seen < want {
-				bad = append(bad, fmt.Sprintf("list %s shows %d of its first %d rows without the page scrolling", l.Sec, l.Seen, want))
-			}
-		}
-	} else {
-		for _, it := range p.Items {
-			if it.H > it.Floor+1 {
-				bad = append(bad, fmt.Sprintf("page scrolls but %s %s is at %.0f px, above its floor %.0f", it.Kind, it.ID, it.H, it.Floor))
-			}
-		}
-		for _, l := range p.Lists {
-			if l.Rows <= 3 {
-				continue
-			}
-			fl := -1.0
-			for _, it := range p.Items {
-				if it.Kind == "seclist" && it.ID == l.Sec {
-					fl = it.Floor
-				}
-			}
-			switch {
-			case fl < 0:
-				bad = append(bad, fmt.Sprintf("list %s has no fit item", l.Sec))
-			case l.H > fl+2:
-				bad = append(bad, fmt.Sprintf("page scrolls but list %s is %.0f px, floor %.0f", l.Sec, l.H, fl))
-			case l.SH <= l.H:
-				bad = append(bad, fmt.Sprintf("page scrolls and list %s does not scroll inside itself (%.0f of %.0f px)", l.Sec, l.H, l.SH))
-			case l.Seen < 3:
-				bad = append(bad, fmt.Sprintf("list %s shows %d rows at its floor, want 3", l.Sec, l.Seen))
-			}
-		}
-	}
-	return bad
-}
-
-// d34Probe proves the empty-area measure can fail. It moves the last child of
-// the first visible column 100 px down with a transform (a layout change would
-// let the flex column squeeze the gap away), reads the page with the same
-// script and puts the transform back. The read must report at least 99 px and
-// d34Verify must turn that into a failure. Returns an error when it does not.
-func d34Probe() error {
-	if _, err := evalRaw(`(function(){ var zb = Array.prototype.filter.call(document.querySelectorAll('.zone .zonebody'), function(e){ return e.getClientRects().length > 0; })[0];
-		if(!zb) return false;
-		var kids = Array.prototype.filter.call(zb.children, function(c){ return !c.classList.contains('hdl') && c.getBoundingClientRect().height > 0.5; });
-		var k = kids[kids.length - 1]; if(!k) return false;
-		k.setAttribute('data-d34probe', k.style.transform || '-'); k.style.transform = 'translateY(100px)'; return true; })()`); err != nil {
-		return err
-	}
-	var p d34Page
-	err := evalInto(d34ReadJS, &p)
-	_, _ = evalRaw(`(function(){ var k = document.querySelector('[data-d34probe]'); if(!k) return false;
-		var o = k.getAttribute('data-d34probe'); k.style.transform = o === '-' ? '' : o; k.removeAttribute('data-d34probe'); return true; })()`)
-	if err != nil {
-		return err
-	}
-	if p.Empty < 99 {
-		return fmt.Errorf("probe: a 100 px gap measured as %.0f px (%s), the measure cannot fail", p.Empty, p.EmptyWhere)
-	}
-	failed := false
-	for _, b := range d34Verify(p, true, true, false) {
-		if strings.HasPrefix(b, "empty area") {
-			failed = true
-		}
-	}
-	if !failed {
-		return fmt.Errorf("probe: a %.0f px gap did not fail d34Verify", p.Empty)
-	}
-	fmt.Printf("uicheck: d34: probe OK, a deliberate 100 px gap measured %.0f px (%s) and failed the check\n", p.Empty, p.EmptyWhere)
-	return nil
-}
-
 // d34Snapshot returns the frozen example with To Do switched on and 14 tasks.
 // With extended true it also grows the lists to 12 wait items, 8 outcome items
 // and 8 sessions (clones of the first entry, invented names only).
@@ -1361,125 +1182,4 @@ func d34Snapshot(extended bool) ([]byte, error) {
 		grow("sessions", 8, "example-session-%s", "example-session-%s", "parent_id")
 	}
 	return json.Marshal(snapMap)
-}
-func caseD34(hwnd uintptr, args []string) error {
-	snap, err := d34Snapshot(false)
-	if err != nil {
-		return err
-	}
-	snapE, err := d34Snapshot(true)
-	if err != nil {
-		return err
-	}
-	allBut := func(off string) map[string]bool {
-		m := map[string]bool{}
-		for _, id := range d29Parts {
-			if id != off {
-				m[id] = true
-			}
-		}
-		return m
-	}
-	payload := func(plain bool, c string, scrollbar bool, snap []byte) string {
-		o := d29Opts{Plain: plain, Scrollbar: scrollbar, Status: "ok", Snap: snap}
-		switch c {
-		case "a", "d", "e":
-			o.PlainAll = true
-		case "b":
-			o.StandardOff = map[string]bool{"turn_ticker": true}
-			o.PlainOnly = allBut("turn_ticker")
-		case "c":
-			o.PlainOnly = map[string]bool{"burn_30min": true}
-		}
-		return d29Payload(o)
-	}
-	wantTodo := func(plain bool, c string) bool { return !(plain && c == "c") }
-	probed := false
-	sizes := [][2]int32{{1280, 800}, {1920, 1080}, {2560, 1440}}
-	var fails []string
-	ran, skipped := 0, 0
-	for _, sz := range sizes {
-		w, h := sz[0], sz[1]
-		tag := fmt.Sprintf("%dx%d", w, h)
-		if err := ensureWindowSizeWH(hwnd, w, h); err != nil {
-			return err
-		}
-		if windowCapped {
-			fmt.Printf("uicheck: d34: SKIPPED %s, this screen is too small\n", tag)
-			skipped++
-			continue
-		}
-		time.Sleep(500 * time.Millisecond)
-		for _, plain := range []bool{false, true} {
-			mode := map[bool]string{false: "standard", true: "plain"}[plain]
-			for _, c := range []string{"a", "b", "c", "d", "e"} {
-				if c == "c" && !plain {
-					continue
-				}
-				if (c == "d" || c == "e") && w != 1280 {
-					continue
-				}
-				for _, sb := range []bool{true, false} {
-					if (c == "d" || c == "e") && sb {
-						continue
-					}
-					sbName := map[bool]string{true: "on", false: "off"}[sb]
-					useSnap := snap
-					if c == "e" {
-						useSnap = snapE
-					}
-					p, err := d34Apply(payload(plain, c, sb, useSnap), useSnap)
-					if err != nil {
-						return err
-					}
-					ran++
-					name := fmt.Sprintf("d34-%s-%s-%s-%s", tag, mode, c, sbName)
-					if _, err := screenshot(hwnd, name); err != nil {
-						return err
-					}
-					if !probed {
-						probed = true
-						if err := d34Probe(); err != nil {
-							return err
-						}
-					}
-					bad := d34Verify(p, sb, wantTodo(plain, c), c == "e")
-					if len(bad) == 0 {
-						fmt.Printf("uicheck: d34: PASS %s %s scrollbar %s case %s (parts %d, largest empty %.0f px, fitScroll %v, two columns %v, To Do drawn %v, handles %d%s)\n", tag, mode, sbName, c, p.Parts, p.Empty, p.FitScroll, p.TwoCols, p.TodoDrawn, p.Handles, d34ListNote(p, c == "e"))
-					} else {
-						msg := fmt.Sprintf("%s %s scrollbar %s case %s: %s", tag, mode, sbName, c, strings.Join(bad, "; "))
-						fmt.Printf("uicheck: d34: FAIL %s\n", msg)
-						fails = append(fails, msg)
-					}
-				}
-			}
-		}
-	}
-	fmt.Printf("uicheck: d34: %d cases ran, %d sizes skipped, %d failed\n", ran, skipped, len(fails))
-	if len(fails) > 0 {
-		return fmt.Errorf("d34: %d case(s) failed, first: %s", len(fails), fails[0])
-	}
-	if ran == 0 {
-		return fmt.Errorf("d34: no size ran")
-	}
-	return nil
-}
-
-// d34ListNote formats the host lists of case e as ", lists <sec> h/floor/nat rows N".
-func d34ListNote(p d34Page, on bool) string {
-	if !on {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString(", lists")
-	for _, l := range p.Lists {
-		fl, nat := 0.0, 0.0
-		for _, it := range p.Items {
-			if it.Kind == "seclist" && it.ID == l.Sec {
-				fl, nat = it.Floor, it.Nat
-			}
-		}
-		fmt.Fprintf(&b, " %s %.0f/%.0f/%.0f rows %d", l.Sec, l.H, fl, nat, l.Rows)
-	}
-	return b.String()
 }

@@ -9,7 +9,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"time"
 
@@ -29,6 +28,8 @@ type sectionsPayload struct {
 	Mode   string           `json:"mode"`
 	Parts  map[string]bool  `json:"parts"`
 	Groups []sections.Group `json:"groups"`
+	// Panes gives the page the panes of each section for the size boxes.
+	Panes []sections.Pane `json:"panes"`
 	// StationTheme is the saved startup theme ("space" or "site") for the
 	// gear's "Station starts as" setting.
 	StationTheme string `json:"station_theme"`
@@ -75,11 +76,17 @@ type sectionsChange struct {
 	On        *bool  `json:"on,omitempty"`
 	// Control with On, alone, switches one control (sections.ControlIDs).
 	Control string `json:"control,omitempty"`
-	// HeightsMode with Heights, alone, replaces one mode's saved part heights
-	// (shares per sections.HeightKeys). ResetHeights true, alone, clears both.
-	HeightsMode  string             `json:"heights_mode,omitempty"`
-	Heights      map[string]float64 `json:"heights,omitempty"`
-	ResetHeights *bool              `json:"reset_heights,omitempty"`
+	// Pct, alone, replaces the section and pane numbers of the modes it names
+	// (the gear's one Save sends both). Each mode is checked with the page's
+	// rules (sections.CheckPct); one refused mode saves nothing.
+	Pct map[string]pctModeChange `json:"pct,omitempty"`
+}
+
+// pctModeChange is one mode's numbers: section id or pane id to a percent.
+// A missing key is an empty box.
+type pctModeChange struct {
+	Sections map[string]int `json:"sections"`
+	Panes    map[string]int `json:"panes"`
 }
 
 func loadSections(dataDir string) sections.State {
@@ -107,6 +114,7 @@ func sectionsPayloadWith(dataDir, snapPath string, now time.Time, avail func() c
 		Mode:         st.Mode(),
 		Parts:        st.Current(),
 		Groups:       sections.Groups,
+		Panes:        sections.Panes,
 		StationTheme: dc.StationTheme,
 		ToastEnabled: dc.ToastEnabled,
 		Reading:      snapshot.Load(snapPath, now),
@@ -153,13 +161,13 @@ func snapshotStamp(path string) string {
 // it does not understand is refused and the file is left as it was.
 func applySectionsChange(dataDir string, c sectionsChange) error {
 	cur := loadSections(dataDir)
-	hasPart := c.Mode != "" || c.Section != "" || c.On != nil || c.Control != "" || c.HeightsMode != "" || c.Heights != nil || c.ResetHeights != nil
+	hasPart := c.Mode != "" || c.Section != "" || c.On != nil || c.Control != "" || c.Pct != nil
 	switch {
 	case c.Plain != nil && c.Scrollbar == nil && !hasPart:
 		return saveSections(dataDir, cur.WithPlain(*c.Plain))
 	case c.Scrollbar != nil && c.Plain == nil && !hasPart:
 		return saveSections(dataDir, cur.WithScrollbar(*c.Scrollbar))
-	case c.Plain == nil && c.Scrollbar == nil && c.Control == "" && c.Mode != "" && c.Section != "" && c.On != nil:
+	case c.Plain == nil && c.Scrollbar == nil && c.Control == "" && c.Pct == nil && c.Mode != "" && c.Section != "" && c.On != nil:
 		if c.Mode != sections.ModeStandard && c.Mode != sections.ModePlain {
 			return fmt.Errorf("mode %q is not standard or plain", c.Mode)
 		}
@@ -169,40 +177,34 @@ func applySectionsChange(dataDir string, c sectionsChange) error {
 			}
 		}
 		return fmt.Errorf("part %q is not known", c.Section)
-	case c.Plain == nil && c.Scrollbar == nil && c.Mode == "" && c.Section == "" && c.Control != "" && c.On != nil:
+	case c.Plain == nil && c.Scrollbar == nil && c.Mode == "" && c.Section == "" && c.Pct == nil && c.Control != "" && c.On != nil:
 		for _, id := range sections.ControlIDs {
 			if id == c.Control {
 				return saveSections(dataDir, cur.WithControl(id, *c.On))
 			}
 		}
 		return fmt.Errorf("control %q is not known", c.Control)
-	case c.ResetHeights != nil && c.Plain == nil && c.Scrollbar == nil && c.Mode == "" && c.Section == "" && c.On == nil && c.Control == "" && c.HeightsMode == "" && c.Heights == nil:
-		if !*c.ResetHeights {
-			return fmt.Errorf("reset_heights must be true")
+	case c.Pct != nil && c.Plain == nil && c.Scrollbar == nil && c.Mode == "" && c.Section == "" && c.On == nil && c.Control == "":
+		if len(c.Pct) == 0 {
+			return fmt.Errorf("pct names no mode")
 		}
-		return saveSections(dataDir, cur.ResetHeights())
-	case c.HeightsMode != "" && c.Plain == nil && c.Scrollbar == nil && c.Mode == "" && c.Section == "" && c.On == nil && c.Control == "" && c.ResetHeights == nil:
-		if c.HeightsMode != sections.ModeStandard && c.HeightsMode != sections.ModePlain {
-			return fmt.Errorf("heights mode %q is not standard or plain", c.HeightsMode)
-		}
-		if len(c.Heights) < 2 {
-			return fmt.Errorf("heights needs at least two parts")
-		}
-		for k, v := range c.Heights {
-			known := false
-			for _, id := range sections.HeightKeys {
-				if id == k {
-					known = true
-				}
-			}
-			if !known {
-				return fmt.Errorf("height key %q is not known", k)
-			}
-			if math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > 1 {
-				return fmt.Errorf("height for %q must be above 0 and at most 1", k)
+		for mode := range c.Pct {
+			if mode != sections.ModeStandard && mode != sections.ModePlain {
+				return fmt.Errorf("mode %q is not standard or plain", mode)
 			}
 		}
-		return saveSections(dataDir, cur.WithHeights(c.HeightsMode, c.Heights))
+		next := cur
+		for _, mode := range []string{sections.ModeStandard, sections.ModePlain} {
+			m, ok := c.Pct[mode]
+			if !ok {
+				continue
+			}
+			if err := cur.CheckPct(mode, m.Sections, m.Panes); err != nil {
+				return fmt.Errorf("%s: %w", mode, err)
+			}
+			next = next.WithPct(mode, m.Sections, m.Panes)
+		}
+		return saveSections(dataDir, next)
 	}
-	return fmt.Errorf("sections change needs plain, scrollbar, control with on, mode with section and on, heights with heights_mode, or reset_heights")
+	return fmt.Errorf("sections change needs plain, scrollbar, control with on, mode with section and on, or pct")
 }

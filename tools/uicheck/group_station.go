@@ -1360,9 +1360,9 @@ func caseD28(hwnd uintptr, args []string) error {
 // d41: the Station takes exactly the height of the parts it replaces (B7.1,
 // spec 2026-10-28, item 4). At 1280x800 and 1920x1080 (a size the screen
 // cannot hold prints SKIPPED and is not a pass), Standard, Overall scrollbar
-// off, three variants: all parts on; turn ticker off; saved shares injected
-// through heights_standard (burn_30min 0.25, vendor_strip 0.15,
-// activity_heatmap 0.3, turn_ticker 0.3, system_chart 0.6, process_groups 0.4).
+// off, three variants: all parts on; turn ticker off; typed pane sizes
+// injected through panes_pct (burn_30min 25, vendor_strip 15,
+// activity_heatmap 30, turn_ticker 30, system 50, process_groups 30).
 // Each variant applies the payload and the frozen example through fake mode,
 // reads the page, presses a real O (the window must be in front for keys),
 // reads again, presses O again and reads a third time.
@@ -1378,7 +1378,6 @@ const d41ReadJS = `(function(){
   var zb = document.querySelector('.zone.burn .zonebody');
   var parts = [], top = Infinity, bot = -Infinity, box = 0;
   Array.prototype.forEach.call(zb.children, function(c){
-    if(c.classList.contains('hdl')) return;
     var r = c.getBoundingClientRect();
     if(c.id === 'stationPanel'){ box = shown(c) ? r.height : 0; return; }
     if(!shown(c) || r.height <= 0.5) return;
@@ -1467,7 +1466,7 @@ func caseD41(hwnd uintptr, args []string) error {
 	if err != nil {
 		return err
 	}
-	shares := map[string]any{"burn_30min": 0.25, "vendor_strip": 0.15, "activity_heatmap": 0.3, "turn_ticker": 0.3, "system_chart": 0.6, "process_groups": 0.4}
+	panes := map[string]any{"standard": map[string]any{"burn_30min": 25, "vendor_strip": 15, "activity_heatmap": 30, "turn_ticker": 30, "system": 50, "process_groups": 30}}
 	variants := []struct {
 		name  string
 		off   map[string]bool
@@ -1475,7 +1474,7 @@ func caseD41(hwnd uintptr, args []string) error {
 	}{
 		{"all", nil, nil},
 		{"no-ticker", map[string]bool{"turn_ticker": true}, nil},
-		{"saved-shares", nil, map[string]any{"heights_standard": shares}},
+		{"typed-panes", nil, map[string]any{"panes_pct": panes}},
 	}
 	var fails []string
 	ran := 0

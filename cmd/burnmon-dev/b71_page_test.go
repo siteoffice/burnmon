@@ -39,11 +39,18 @@ func TestGearControlsTextFullWidth(t *testing.T) {
 	}
 }
 
-func TestSeclistJoinsTheFitPass(t *testing.T) {
+// The Status lists fill the pane they sit in (2026-11-15): no fixed cap, the
+// list scrolls inside its own box.
+func TestSeclistFillsItsPane(t *testing.T) {
 	page := idlePage()
-	for _, want := range []string{"function fitCollectHost(", "function fitListFloor(", "kind:'seclist'", "hostGain", "fit.items = ", "body.fit-scroll .sechost.sec-fill{flex:0 0 auto}"} {
+	for _, want := range []string{".seclist{flex:1 1 auto; min-height:0; overflow-y:auto;", ".secpanel .secbody{flex:1 1 auto; min-height:0;"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page.html lacks %q", want)
+		}
+	}
+	for _, gone := range []string{"max-height:8.3em", "function fitCollectHost(", "function fitListFloor(", "sec-fill"} {
+		if strings.Contains(page, gone) {
+			t.Errorf("page.html still carries %q", gone)
 		}
 	}
 }
@@ -123,48 +130,15 @@ func TestStationSwapsPartsNotTheZone(t *testing.T) {
 	}
 }
 
-func TestHandlesAndSharesInPage(t *testing.T) {
+// Step 1 of 2026-11-15: the drag bars, the Reset heights button, its hint and
+// the saved heights are gone from the page.
+func TestNoDragBarsOrHeights(t *testing.T) {
 	page := idlePage()
-	for _, want := range []string{"function fitSplit(", "function fitApplyShares(", "function fitPlaceHandles(", "function fitDragRange(",
-		"window.__bdevFitHandles", `id="secResetHeights"`, "heights_standard", "heights_plain", "reset_heights", "heights_mode"} {
-		if !strings.Contains(page, want) {
-			t.Errorf("page lacks %q", want)
+	for _, gone := range []string{".hdl", "'hdl'", "fitDrag", "fitSplit", "fitPlaceHandles", "fitApplyShares", "__bdevFitHandles",
+		"secResetHeights", "Reset heights", "Drag the bar", "heights_standard", "heights_plain", "reset_heights", "heights_mode",
+		"heightsStandard", "heightsPlain", "host_lists", "row-resize"} {
+		if strings.Contains(page, gone) {
+			t.Errorf("page still carries %q", gone)
 		}
-	}
-	rule := func(sel string) string {
-		s := strings.Index(page, sel)
-		if s < 0 {
-			t.Fatalf("page lacks the rule %q", sel)
-		}
-		return page[s : s+strings.Index(page[s:], "}")]
-	}
-	hdl := rule(".hdl{")
-	for _, want := range []string{"position:absolute", "height:4px"} {
-		if !strings.Contains(hdl, want) {
-			t.Errorf(".hdl rule lacks %q", want)
-		}
-	}
-	if !strings.Contains(rule("\n.zonebody{"), "position:relative") {
-		t.Error(".zonebody rule lacks position:relative")
-	}
-	s := strings.Index(page, "function applyPanelFit(){")
-	e := strings.Index(page[s:], "\n  // resize (and F11")
-	if s < 0 || e < 0 {
-		t.Fatal("applyPanelFit not found")
-	}
-	body := page[s : s+e]
-	for _, want := range []string{"fitApplyShares(", "fitPlaceHandles(", "fitDrawLists(", "host_lists"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("applyPanelFit lacks %q", want)
-		}
-	}
-	// B7.1 iteration 2: a drag may take from the host lists, a handle without room is hidden.
-	for _, want := range []string{"function fitDrawLists(", "function fitHostAvail(", "function fitColHasShares(", "hdl-off", "hidden: h.classList.contains('hdl-off')", "merged.host_lists"} {
-		if !strings.Contains(page, want) {
-			t.Errorf("page lacks %q", want)
-		}
-	}
-	if !strings.Contains(rule(".hdl.hdl-off{"), "display:none") {
-		t.Error(".hdl-off rule lacks display:none")
 	}
 }

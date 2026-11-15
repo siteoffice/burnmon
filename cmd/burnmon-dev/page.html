@@ -132,10 +132,6 @@ main{flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; pad
   font:700 12px/1 var(--mono); letter-spacing:.1em; padding:6px 10px; text-transform:uppercase;
 }
 .zonebody{flex:1; min-height:0; padding:4px; display:flex; flex-direction:column; gap:4px; overflow:hidden; position:relative}
-.hdl{position:absolute; left:4px; right:4px; height:4px; cursor:row-resize; background:transparent; z-index:3; touch-action:none}
-.hdl:hover, .hdl.drag{background:var(--amber)}
-.hdl.hdl-off{display:none}
-.hdl:focus-visible{outline:2px solid var(--amber2)}
 /* overflow:hidden is a blanket no-scroll patch section 3 backstop: any
    panel squeezed below its own content's natural size (a genuinely tiny
    window, after every droppable panel is already gone) clips silently
@@ -348,12 +344,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 #processGroupsWrap table{table-layout:fixed}
 #processGroups td:first-child{overflow:hidden; text-overflow:ellipsis}
 .trendsvg{display:block; width:100%; height:14px}
-#processGroupsWrap{max-height:200px; overflow:hidden}
+#processGroupsWrap{flex:1 1 auto; min-height:0; overflow:hidden}
 
 /* Microsoft To Do panel, section 9: off by default, full width, sits below
    the two-column layout too (a sibling of main, not inside either zone). */
 .todopanel{flex:0 1 auto; max-height:200px; margin:0 4px 4px; display:none; flex-direction:column}
-#processesHost{flex:0 0 auto; margin:0 4px 4px; display:flex; flex-direction:column; min-height:0}
+#processesHost{flex:0 0 auto; display:flex; flex-direction:column; min-height:0}
 #processesHost > .secpanel{flex:1 1 auto; min-height:0}
 #processesHost:empty{display:none}
 .todobody{flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px;
@@ -377,24 +373,20 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
    With Overall scrollbar on (body.scroll-on, both modes) the page scrolls: the sections host sits
    above the older Burn and System zones inside #pageScroll, and #legacy gets
    exactly the window's height so those zones lay out as they always did.
-   With it off the page fits the window: parts shrink to their floors and share the free
-   height (applyPanelFit); only when every part sits at its floor does body.fit-scroll let the
-   page scroll. Nothing the person switched on is hidden. Everything a switch turns
-   off gets .sec-off. */
+   Every section and pane takes the percent the gear gives it (applyPanelFit); sections
+   over 100 percent are allowed only with the scrollbar on, and then the page scrolls.
+   Nothing the person switched on is hidden. Everything a switch turns off gets .sec-off. */
 .sec-off{display:none !important}
 #pageScroll{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden}
-body.scroll-on #pageScroll, body.fit-scroll #pageScroll{overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
+body.scroll-on #pageScroll{overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--sb) transparent}
 #legacy{flex:1 1 auto; min-height:0; display:flex; flex-direction:column}
-body.scroll-on #legacy{flex:0 0 auto}
 .sechost{flex:0 0 auto; overflow:hidden; margin:4px 4px 0; display:flex; flex-direction:column; gap:4px; min-height:0}
-.sechost.sec-fill{flex:1 1 auto; margin-bottom:4px}
-body.fit-scroll .sechost.sec-fill{flex:0 0 auto}
 .secnotice{padding:6px 8px; border:1px solid var(--bd); background:var(--panel2); color:var(--txt); font-size:12px}
 .secnotice.warn{border-color:var(--amber)}
 .secpanels{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:4px}
 .secrow1{grid-column:1 / -1; display:flex; gap:4px}
 .secrow1 > .secpanel{flex:1 1 0; min-width:0}
-.secpanel .secbody{padding:6px 8px; display:flex; flex-direction:column; gap:3px; font-size:12px; overflow:hidden}
+.secpanel .secbody{flex:1 1 auto; min-height:0; padding:6px 8px; display:flex; flex-direction:column; gap:3px; font-size:12px; overflow:hidden}
 body.plain .secpanel .secbody{font-size:13.5px}
 .secpanel.secwide{grid-column:1 / -1}
 .secbig{font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--strong)}
@@ -404,7 +396,7 @@ body.plain .secpanel .secbody{font-size:13.5px}
 .secrow b{color:var(--txt)}
 .sechint{color:var(--dim); font-size:11px}
 .secitem{white-space:nowrap; align-items:baseline}
-.seclist{flex:0 1 auto; min-height:0; max-height:8.3em; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
+.seclist{flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:3px; scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
 .seclist > .secitem{flex:0 0 auto}
 .seclist::-webkit-scrollbar{width:8px}
 .seclist::-webkit-scrollbar-track{background:var(--panel2)}
@@ -537,7 +529,12 @@ body.plain #mapOverlay{font-size:13.5px}
 #secSettings .setgrid input{justify-self:center}
 #secSettings .setstation{display:flex; gap:14px; align-items:center}
 #secSettings .setbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
-.setheights{display:flex; gap:10px; align-items:center}
+#secSizes .setgrid input{width:56px; background:var(--bg); color:inherit; border:1px solid var(--bd); padding:1px 4px; font:inherit}
+#secSizes .setgrid input:disabled{opacity:.4}
+#secSizes .setgrid .setpane{padding-left:14px}
+#secSizes .setgrid .setsec{font-weight:600}
+#secSizes .setsave{display:flex; gap:10px; align-items:center; margin-top:4px}
+#secSizes .setbtn:disabled{opacity:.5; cursor:default}
 #secSettings h4{margin:0 0 2px; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase}
 #secSettings label{display:flex; gap:6px; align-items:center; cursor:pointer; white-space:nowrap}
 #secSettings input{margin:0; accent-color:var(--amber)}
@@ -677,10 +674,10 @@ body.plain #mapOverlay{font-size:13.5px}
           <div class="sysrows" id="netBody"></div>
         </div>
       </div>
+      <div id="processesHost"></div>
     </div>
   </section>
 </main>
-<div id="processesHost"></div>
 <section class="panel todopanel" id="todoPanel" data-part="todo">
   <div class="panelhead">Microsoft To Do</div>
   <div class="todobody" id="todoBody"></div>
@@ -705,7 +702,12 @@ body.plain #mapOverlay{font-size:13.5px}
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
   </div>
-  <div class="setrow setheights"><button id="secResetHeights" class="setbtn" type="button">Reset heights</button><span class="sechint">Drag the bar between two parts</span></div>
+  <div id="secSizes">
+    <h4>Sizes</h4>
+    <div class="sechint">A section is a percent of the window height, a pane a percent of its section. An empty box shares what is left.</div>
+    <div class="setgrid" id="secSizeGrid"></div>
+    <div class="setsave"><button id="secSizeSave" class="setbtn" type="button">Save</button><span class="sechint" id="secSizeWhy"></span></div>
+  </div>
   <div id="histAdmin">
     <h4>History</h4>
     <div class="sechint" id="hist_keep"></div>
@@ -1928,7 +1930,7 @@ body.plain #mapOverlay{font-size:13.5px}
   function stationSpan(kids){
     var top = Infinity, bot = -Infinity;
     kids.forEach(function(el){
-      if(el.id === 'stationPanel' || (el.classList && el.classList.contains('hdl'))) return;
+      if(el.id === 'stationPanel') return;
       if(el.getClientRects().length === 0) return;
       var r = el.getBoundingClientRect();
       if(r.top < top) top = r.top;
@@ -3247,529 +3249,254 @@ body.plain #mapOverlay{font-size:13.5px}
   // already-cached lastSysmonHistory on resize, debounced to one redraw per
   // animation frame rather than once per resize event, fixes it without
   // waiting on the next tick.
-  // B7 fit pass (spec 2026-10-27, items 1, 2, 6). Never hides a part the person
-  // switched on. Every visible part has a natural height (measured in the
-  // scrollbar-on layout, the one the older CSS always had) and a floor.
-  //   Too much: parts give height in this order, each down to its floor and no
-  //   further: System chart, Sessions last 30 min chart, turn ticker, To Do,
-  //   then the lists (process groups, Processes, vendor strip).
-  //   Too little: the free height goes to growers, per column. Charts first
-  //   (up to 1.6 times natural), then the turn ticker and To Do (up to their
-  //   content), then the charts without the cap, then the column's last panel,
-  //   so no column leaves an empty block. In two columns both columns end on
-  //   the same line; To Do and Processes sit below both.
-  //   The host lists (Waits on you, Outcomes, Sessions) give last, after every
-  //   legacy part, down to three rows each, scrollbar off only (B7.1).
-  //   A drag on a handle is an explicit choice and overrides that order: the part
-  //   that grows takes from its partner, then from the host lists (fitDragRange),
-  //   and the fraction of the lists' range taken is saved as host_lists next to the
-  //   shares; a handle with no room even then is hidden (iteration 2).
-  //   Every part at its floor and still too tall: body.fit-scroll lets the page
-  //   scroll. Nothing is hidden, so window.__bdevFit.hidden is always [].
-  // Every pass starts from the CSS layout again: fitUndo gives the inline sizes back.
-  var FIT_CHART_MIN = 60, FIT_ROWS_MIN = 3, FIT_TABLE_MIN_ROWS = 2, FIT_CHART_GROW = 1.6;
-  // __bdevFit and __bdevTodoLayout are tools\uicheck's own reads (check_d34.go, check_d19.go).
-  window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [], items: [] };
-  window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
-  var fitTouched = [];
-  var fitLast = null, fitDrag = null;
-  function fitHistH(){
-    var h = document.querySelector('.histwrap');
-    return h ? h.getBoundingClientRect().height : 0;
+  // Section and pane sizes (2026-11-15, replaces the B7 fit pass and the B7.1
+  // drag bars). Each mode keeps one number per section (percent of the page
+  // height under the header) and one per pane (percent of its section), typed
+  // in the gear. pctPlan holds the rules, the same as Plan in
+  // internal\sections\pct.go: hidden keys do not count, empty boxes share what
+  // the numbers leave equally, with no empty box the rest under 100 goes to the
+  // rest key (Status, or the first shown pane), and over 100 is reported. A mode
+  // whose numbers break a rule draws a fallback until they are fixed, and the
+  // gear says why: over 100 with the scrollbar off draws them scaled to fit, an
+  // empty box with nothing left draws equal shares. Side by side (1600 px and
+  // up) Sessions and Processes share one row as tall as the larger of the two;
+  // Status gets what that leaves, up to where the page fits. A pane smaller than its content clips
+  // (lists crop or scroll in their own box); nothing is hidden.
+  var PCT_SECTIONS = ['status', 'sessions_30min', 'processes_30min', 'todo'];
+  var PCT_SECTION_LABEL = { status:'Status', sessions_30min:'Sessions last 30 min', processes_30min:'Processes last 30 min', todo:'Microsoft To Do' };
+  // The panes come from the payload (sections.Panes); this copy is the fallback before the first one.
+  var PCT_PANES = [
+    { id:'status_row1', label:'Waits on you, Outcomes, Burn, Git, Agents map', section:'status', parts:['waits','outcomes','burn','git','agents_map'] },
+    { id:'sessions', label:'Sessions', section:'status', parts:['sessions'] },
+    { id:'burn_30min', label:'Burn last 30 min', section:'sessions_30min', parts:['burn_30min'] },
+    { id:'vendor_strip', label:'Vendor strip', section:'sessions_30min', parts:['vendor_strip'] },
+    { id:'activity_heatmap', label:'Activity and Heatmap', section:'sessions_30min', parts:['activity','heatmap'] },
+    { id:'turn_ticker', label:'Turn ticker', section:'sessions_30min', parts:['turn_ticker'] },
+    { id:'system', label:'System', section:'processes_30min', parts:['system'] },
+    { id:'process_groups', label:'Process groups', section:'processes_30min', parts:['process_groups'] },
+    { id:'processes', label:'Processes', section:'processes_30min', parts:['processes'] },
+    { id:'todo', label:'To Do', section:'todo', parts:['todo'] }
+  ];
+  // The numbers a fresh install starts with in both modes (DefaultSectionsPct and
+  // DefaultPanesPct in pct.go, a test keeps them equal). A payload without the
+  // keys (uicheck's frozen ones) draws these, as Go's Load does for a file without them.
+  var PCT_DEFAULT_SECTIONS = { status:30, sessions_30min:60, processes_30min:60, todo:10 };
+  var PCT_DEFAULT_PANES = { status_row1:50, sessions:50, burn_30min:40, vendor_strip:20, activity_heatmap:20, turn_ticker:20,
+    system:50, process_groups:30, processes:20 };
+  function pctDefaults(d){ return { standard: Object.assign({}, d), plain: Object.assign({}, d) }; }
+  // Whole pixels per key that add up to the room: each key ends at the rounded running sum.
+  function pctPixels(keys, pct, room){
+    var out = {}, cum = 0, prev = 0, total = Math.floor(room);
+    keys.forEach(function(k){ cum += pct[k]; var end = Math.round(total * cum / 100); out[k] = end - prev; prev = end; });
+    return out;
   }
-  function fitShown(el){ return !!el && getComputedStyle(el).display !== 'none'; }
-  function fitPx(v){ return parseFloat(v) || 0; }
-  function fitBoxV(el){
-    var c = getComputedStyle(el);
-    return fitPx(c.paddingTop) + fitPx(c.paddingBottom) + fitPx(c.borderTopWidth) + fitPx(c.borderBottomWidth);
-  }
-  function fitMarginV(el){
-    var c = getComputedStyle(el);
-    return fitPx(c.marginTop) + fitPx(c.marginBottom);
-  }
-  function fitSetPx(el, px){
-    if(!el.__fitOrig) el.__fitOrig = { flex: el.style.flex, minHeight: el.style.minHeight, maxHeight: el.style.maxHeight };
-    if(fitTouched.indexOf(el) < 0) fitTouched.push(el);
-    el.style.flex = '0 0 ' + Math.floor(px) + 'px';
-    el.style.minHeight = '0';
-    el.style.maxHeight = 'none';
-  }
-  function fitUndo(){
-    fitTouched.forEach(function(el){
-      var o = el.__fitOrig;
-      el.style.flex = o.flex; el.style.minHeight = o.minHeight; el.style.maxHeight = o.maxHeight;
+  // Pure, no DOM: the percent per shown key. See Plan in pct.go.
+  function pctPlan(shown, vals, restKey){
+    var out = { pct:{}, sum:0, over:false, starved:'' }, empty = [];
+    vals = vals || {};
+    shown.forEach(function(k){
+      if(Object.prototype.hasOwnProperty.call(vals, k)){ out.pct[k] = vals[k]; out.sum += vals[k]; }
+      else empty.push(k);
     });
-    fitTouched = [];
-    document.body.classList.remove('fit-scroll');
-    var lg = document.getElementById('legacy');
-    if(lg) lg.style.flex = '';
-  }
-  // Process groups crops its own rows to its box; measure it with every row shown.
-  function fitUncropGroups(){
-    Array.prototype.forEach.call(document.querySelectorAll('#processGroups tr'), function(tr){ tr.style.display = ''; });
-  }
-  function fitRowH(el, sel, fallback){
-    var r = el.querySelector(sel);
-    return r && r.offsetHeight ? r.offsetHeight : fallback;
-  }
-  // One item per direct child of a column body, and the three rows below main.
-  function fitItem(col, el, kind, rank){
-    var nat = el.offsetHeight, o = { el: el, col: col, kind: kind, rank: rank, nat: nat, floor: nat, cap: nat, h: nat };
-    var head = el.querySelector('.panelhead'), hh = head ? head.offsetHeight : 0;
-    if(kind === 'chart'){
-      o.floor = FIT_CHART_MIN; o.nat = Math.max(nat, FIT_CHART_MIN); o.cap = Math.round(o.nat * FIT_CHART_GROW);
-    } else if(kind === 'ticker'){
-      var tk = el.querySelector('.ticker');
-      o.cap = Math.max(nat, hh + (tk ? tk.scrollHeight : 0) + 2);
-      o.floor = Math.min(o.cap, hh + FIT_ROWS_MIN * fitRowH(el, '.trow', 22) + (FIT_ROWS_MIN - 1) * 2 + 10);
-      o.nat = Math.max(nat, o.floor);
-    } else if(kind === 'todo'){
-      var tb = el.querySelector('.todobody');
-      o.cap = Math.max(nat, hh + (tb ? tb.scrollHeight : 0) + 2);
-      o.floor = Math.min(o.cap, hh + FIT_ROWS_MIN * fitRowH(el, '.todorow', 17) + (FIT_ROWS_MIN - 1) * 3 + 14);
-      o.nat = Math.max(nat, o.floor);
-    } else if(kind === 'list'){
-      var th = el.querySelector('thead');
-      var extra = el.querySelector('.secbody') ? 14 : 2;
-      o.floor = Math.min(nat, hh + (th ? th.offsetHeight : 0) + FIT_TABLE_MIN_ROWS * fitRowH(el, 'tbody tr', 22) + extra);
+    out.over = out.sum > 100;
+    var rest = 100 - out.sum;
+    if(empty.length){
+      if(rest <= 0){ out.starved = empty[0]; rest = 0; }
+      empty.forEach(function(k){ out.pct[k] = rest / empty.length; });
+      return out;
     }
-    o.key = (col === 'burn' || col === 'sys') ? fitKeyOf(el) : '';
-    o.h = o.nat;
+    if(rest > 0 && shown.length) out.pct[shown.indexOf(restKey) >= 0 ? restKey : shown[0]] += rest;
+    return out;
+  }
+  function pctOnIn(mode, part){ return !!(mode === 'plain' ? secState.plainSet : secState.standard)[part]; }
+  function pctShownPanes(mode, sec){
+    return PCT_PANES.filter(function(p){ return p.section === sec && p.parts.some(function(x){ return pctOnIn(mode, x); }); })
+      .map(function(p){ return p.id; });
+  }
+  function pctShownSections(mode){
+    return PCT_SECTIONS.filter(function(s){ return pctShownPanes(mode, s).length > 0; });
+  }
+  function pctPaneLabel(id){
+    var p = PCT_PANES.filter(function(x){ return x.id === id; })[0];
+    return p ? p.label : id;
+  }
+  // The gear's sentence for one mode's numbers, '' when they are fine. The
+  // same sentences as CheckPct in pct.go.
+  function pctCheck(mode, secs, panes, scrollbar){
+    var sp = pctPlan(pctShownSections(mode), secs, 'status');
+    if(sp.over && !scrollbar) return 'Sections add up to ' + sp.sum + ' percent; switch on Overall scrollbar or lower a number';
+    if(sp.starved) return 'Sections add up to ' + sp.sum + ' percent and ' + PCT_SECTION_LABEL[sp.starved] + ' has no number; give it a number or lower another';
+    var shownSecs = pctShownSections(mode);
+    for(var i = 0; i < shownSecs.length; i++){
+      var shown = pctShownPanes(mode, shownSecs[i]), pp = pctPlan(shown, panes, shown[0]);
+      if(pp.over) return 'Panes in ' + PCT_SECTION_LABEL[shownSecs[i]] + ' add up to ' + pp.sum + ' percent; lower a number';
+      if(pp.starved) return 'Panes in ' + PCT_SECTION_LABEL[shownSecs[i]] + ' add up to ' + pp.sum + ' percent and ' + pctPaneLabel(pp.starved) + ' has no number; give it a number or lower another';
+    }
+    return '';
+  }
+  function pctScaled(keys, pct, sum){
+    var o = {};
+    keys.forEach(function(k){ o[k] = pct[k] * 100 / sum; });
     return o;
   }
-  function fitCollect(){
+  function pctEqual(keys){
+    var o = {};
+    keys.forEach(function(k){ o[k] = 100 / keys.length; });
+    return o;
+  }
+  function pctSaved(kind, mode){ return ((kind === 'sections' ? secState.sectionsPct : secState.panesPct) || {})[mode] || {}; }
+  // The elements of one pane, in page order, and the one that takes the height.
+  function pctPaneEls(id){
     var q = function(s){ return document.querySelector(s); };
-    var cols = {}, below = [];
-    [['burn', '.zone.burn'], ['sys', '.zone.system']].forEach(function(c){
-      var zone = q(c[1]);
-      if(!fitShown(zone) || !fitShown(zone.parentNode)) return;
-      var bodyEl = zone.querySelector('.zonebody'), items = [];
-      Array.prototype.forEach.call(bodyEl.children, function(el){
-        if(!fitShown(el) || el.classList.contains('hdl')) return;
-        var id = el.id, kind = 'fixed', rank = -1;
-        if(el.classList.contains('burnchart')){ kind = 'chart'; rank = 1; }
-        else if(el.classList.contains('histwrap')){ kind = 'chart'; rank = 0; }
-        else if(id === 'turnTickerPanel'){ kind = 'ticker'; rank = 2; }
-        else if(id === 'processGroupsPanel'){ kind = 'list'; rank = 4; }
-        else if(id === 'vendorStripPanel'){ kind = 'list'; rank = 6; }
-        items.push(fitItem(c[0], el, kind, rank));
-      });
-      cols[c[0]] = { zone: zone, bodyEl: bodyEl, items: items, label: zone.querySelector('.zonelabel') };
+    var m = {
+      status_row1: [[q('#secRow1')], 0], sessions: [[q('#secPanels > [data-sec="sessions"]')], 0],
+      burn_30min: [[q('.burnchart'), q('#burnLegend'), q('#sessionCards')], 0],
+      vendor_strip: [[q('#vendorStripPanel')], 0], activity_heatmap: [[q('#activityHeatmapRow')], 0],
+      turn_ticker: [[q('#turnTickerPanel')], 0],
+      system: [[q('.cpubox'), q('.histwrap')], 1], process_groups: [[q('#processGroupsPanel'), q('.sysbottom')], 0],
+      processes: [[q('#processesHost')], 0], todo: [[q('#todoPanel')], 0]
+    }[id];
+    if(!m) return null;
+    var grow = m[0][m[1]];
+    var els = m[0].filter(function(el){ return el && fitShown(el); });
+    if(!els.length || !grow || !fitShown(grow)) return null;
+    return { els: els, grow: grow };
+  }
+  // window.__bdevFit is tools\uicheck's read of the last pass (the pct dev group, d45's mark).
+  window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], sections: {}, panes: {} };
+  var pctTouched = [];
+  function fitShown(el){ return !!el && getComputedStyle(el).display !== 'none'; }
+  function fitPx(v){ return parseFloat(v) || 0; }
+  function pctSet(el, prop, val){
+    if(!el.__pctOrig) el.__pctOrig = {};
+    if(!(prop in el.__pctOrig)) el.__pctOrig[prop] = el.style[prop];
+    if(pctTouched.indexOf(el) < 0) pctTouched.push(el);
+    el.style[prop] = val;
+  }
+  function pctUndo(){
+    pctTouched.forEach(function(el){
+      var o = el.__pctOrig || {};
+      Object.keys(o).forEach(function(k){ el.style[k] = o[k]; });
+      el.__pctOrig = null;
     });
-    var ph = document.getElementById('processesHost');
-    if(ph && ph.firstElementChild && fitShown(ph)) below.push(fitItem('below', ph, 'list', 5));
-    var td = document.getElementById('todoPanel');
-    if(fitShown(td)) below.push(fitItem('below', td, 'todo', 3));
-    return { cols: cols, below: below };
+    pctTouched = [];
   }
-  // Host lists (B7.1): each visible .seclist in #secHost, floor = three rows.
-  function fitListFloor(el, nat){
-    el.scrollTop = 0;
-    var rows = el.querySelector('table') ? el.querySelectorAll('tbody tr:not(.ctlrow)') : el.querySelectorAll('.secitem');
-    if(rows.length <= FIT_ROWS_MIN) return nat;
-    return Math.min(nat, Math.ceil(rows[FIT_ROWS_MIN - 1].getBoundingClientRect().bottom - el.getBoundingClientRect().top) + 1);
+  // A box that keeps the height it is given: no grow, no shrink in a column.
+  // In a row the flex value is its width, so it stays.
+  function pctFix(el){
+    var p = el.parentNode, pc = p && p.nodeType === 1 ? getComputedStyle(p) : null;
+    if(pc && pc.display.indexOf('flex') >= 0 && pc.flexDirection.indexOf('row') === 0) return;
+    pctSet(el, 'flex', '0 0 auto');
   }
-  function fitCollectHost(){
-    var out = [];
-    Array.prototype.forEach.call(document.querySelectorAll('#secHost .seclist'), function(el, i){
-      if(!fitShown(el) || el.closest('.sec-off')) return;
-      var h = el.offsetHeight;
-      out.push({ el: el, col: 'host', kind:'seclist', rank: 7 + i, nat: h, cap: h, h: h, floor: fitListFloor(el, h),
-        id: (el.closest('[data-sec]') || el).getAttribute('data-sec') || '' });
-    });
-    return out;
+  function pctHeight(el, px){
+    pctFix(el);
+    pctSet(el, 'height', Math.max(0, Math.floor(px)) + 'px');
+    pctSet(el, 'minHeight', '0');
+    pctSet(el, 'maxHeight', 'none');
   }
-  function fitColNeed(c){
-    var sum = 0;
-    c.items.forEach(function(it){ sum += it.h; });
-    var gap = fitPx(getComputedStyle(c.bodyEl).rowGap);
-    return (c.label ? c.label.offsetHeight : 0) + fitBoxV(c.zone) + fitBoxV(c.bodyEl) + gap * Math.max(0, c.items.length - 1) + sum;
+  function pctSpan(els){
+    var top = Infinity, bot = -Infinity;
+    els.forEach(function(el){ var r = el.getBoundingClientRect(); if(r.top < top) top = r.top; if(r.bottom > bot) bot = r.bottom; });
+    return bot > top ? bot - top : 0;
   }
-  // Gives amt to the growers of one chain, tier by tier; the last tier always takes the rest.
-  function fitAbsorb(items, amt){
-    function tier(pick, roomOf){
-      if(amt <= 0.5) return;
-      var list = items.filter(pick), rooms = list.map(roomOf), sum = 0;
-      rooms.forEach(function(r){ sum += r; });
-      if(sum <= 0.5) return;
-      var give = Math.min(amt, sum);
-      list.forEach(function(it, i){ it.h += give * rooms[i] / sum; });
-      amt -= give;
-    }
-    tier(function(it){ return it.kind === 'chart'; }, function(it){ return Math.max(0, it.cap - it.h); });
-    tier(function(it){ return it.kind === 'ticker' || it.kind === 'todo'; }, function(it){ return Math.max(0, it.cap - it.h); });
-    var charts = items.filter(function(it){ return it.kind === 'chart'; });
-    if(amt > 0.5 && charts.length){
-      charts.forEach(function(it){ it.h += amt / charts.length; });
-      amt = 0;
-    }
-    if(amt > 0.5 && items.length) items[items.length - 1].h += amt;
+  function pctKids(el){ return Array.prototype.filter.call(el.children, fitShown); }
+  // The height the visible children of a column take, from its content top to
+  // the last child's bottom margin.
+  function pctUsed(box){
+    var kids = pctKids(box);
+    if(!kids.length) return 0;
+    var c = getComputedStyle(box), r = box.getBoundingClientRect(), last = kids[kids.length - 1];
+    var top = r.top + fitPx(c.borderTopWidth) + fitPx(c.paddingTop);
+    return last.getBoundingClientRect().bottom + fitPx(getComputedStyle(last).marginBottom) - top;
   }
-  // Saved part heights (B7.1). A part key per resizable part; shares are per column.
-  function fitKeyOf(el){
-    if(el.classList.contains('burnchart')) return 'burn_30min';
-    if(el.classList.contains('histwrap')) return 'system_chart';
-    return { vendorStripPanel: 'vendor_strip', activityHeatmapRow: 'activity_heatmap', turnTickerPanel: 'turn_ticker', processGroupsPanel: 'process_groups' }[el.id] || '';
+  function pctContentH(box){
+    var c = getComputedStyle(box);
+    return box.clientHeight - fitPx(c.paddingTop) - fitPx(c.paddingBottom);
   }
-  // Water-fill: heights follow the shares, never below a floor, never above a cap. Pure, no DOM.
-  function fitSplit(list, total){
-    var n = list.length, out = [], i;
-    for(i = 0; i < n; i++) out.push(null);
-    for(var round = 0; round < n + 2; round++){
-      var fixed = 0, sh = 0;
-      for(i = 0; i < n; i++){ if(out[i] === null) sh += list[i].share; else fixed += out[i]; }
-      if(sh <= 0) break;
-      var free = total - fixed, t = [], low = false, high = false;
-      for(i = 0; i < n; i++) if(out[i] === null){ t[i] = free * list[i].share / sh; if(t[i] < list[i].floor) low = true; }
-      if(low){
-        for(i = 0; i < n; i++) if(out[i] === null && t[i] < list[i].floor) out[i] = list[i].floor;
-        continue;
-      }
-      for(i = 0; i < n; i++) if(out[i] === null && t[i] > list[i].cap){ out[i] = list[i].cap; high = true; }
-      if(high) continue;
-      for(i = 0; i < n; i++) if(out[i] === null) out[i] = t[i];
-      break;
-    }
-    for(i = 0; i < n; i++) if(out[i] === null) out[i] = list[i].floor;
-    return out;
-  }
-  function fitApplyShares(cols, keys){
-    var sh = secState.plain ? secState.heightsPlain : secState.heightsStandard;
-    if(!sh) return;
-    keys.forEach(function(k){
-      var its = cols[k].items.filter(function(it){ return it.key; });
-      if(its.length < 2) return;
-      var S = 0, tot = 0, ok = true;
-      its.forEach(function(it){ S += it.h; if(!(sh[it.key] > 0)) ok = false; else tot += sh[it.key]; });
-      if(!ok) return;
-      var res = fitSplit(its.map(function(it){
-        return { share: sh[it.key] / tot, floor: it.floor, cap: it.kind === 'list' ? Math.max(it.nat, it.h) : Infinity };
-      }), S);
-      var fl = 0;
-      its.forEach(function(it, i){ it.h = res[i]; fl += Math.floor(res[i]); });
-      var first = its.filter(function(it){ return it.kind !== 'list'; })[0];
-      if(first) first.h += S - fl;
+  // The panes of one section get their percent of the room the section leaves
+  // them (its height less labels, padding and gaps, measured).
+  function pctPanes(mode, sec, box, rec){
+    var shown = pctShownPanes(mode, sec);
+    if(!shown.length || !box) return;
+    var pp = pctPlan(shown, pctSaved('panes', mode), shown[0]);
+    var pct = (pp.over || pp.starved) ? pctEqual(shown) : pp.pct;
+    var groups = [];
+    shown.forEach(function(id){ var g = pctPaneEls(id); if(g){ g.id = id; groups.push(g); } });
+    if(!groups.length) return;
+    if(groups.length === 1 && groups[0].grow === box){ rec[groups[0].id] = { pct: 100, px: box.offsetHeight }; return; }
+    pctKids(box).forEach(pctFix);
+    var spans = 0;
+    groups.forEach(function(g){ spans += pctSpan(g.els); });
+    var room = pctContentH(box) - (pctUsed(box) - spans);
+    var pxs = pctPixels(groups.map(function(g){ return g.id; }), pct, room);
+    groups.forEach(function(g){
+      var px = pxs[g.id], extra = pctSpan(g.els) - g.grow.getBoundingClientRect().height;
+      pctHeight(g.grow, px - extra);
+      rec[g.id] = { pct: pct[g.id], px: px };
     });
   }
-  function fitFind(key){
-    if(!fitLast) return null;
-    var r = null;
-    fitLast.keys.forEach(function(k){ fitLast.cols[k].items.forEach(function(it){ if(it.key === key) r = it; }); });
-    return r;
-  }
-  // The range of one handle in px. The part that grows takes first from its partner (down to the
-  // partner's floor), then from the host lists (Waits, Outcomes, Sessions) down to their three-row
-  // floor: avail is what the lists can give. A drag is an explicit choice, so it may take from the
-  // lists although the automatic fit pass lets them give last (B7.1, iteration 2).
-  function fitDragRange(A, B, hA, hB, avail){
-    avail = avail || 0;
-    var capA = A.kind === 'list' ? Math.max(A.nat, hA) : Infinity, capB = B.kind === 'list' ? Math.max(B.nat, hB) : Infinity;
-    return { min: Math.max(A.floor - hA - avail, hB - capB), max: Math.min(capA - hA, hB - B.floor + avail) };
-  }
-  // Pure: the host list heights after taking y px from them, in proportion to the room each has above its floor.
-  function fitDrawLists(items, hs, y){
-    var rooms = items.map(function(it, i){ return Math.max(0, hs[i] - it.floor); }), sum = 0;
-    rooms.forEach(function(r){ sum += r; });
-    if(sum <= 0.5 || y <= 0) return hs.slice();
-    var g = Math.min(y, sum);
-    return hs.map(function(h, i){ return h - g * rooms[i] / sum; });
-  }
-  function fitColHasShares(c, sh){
-    var its = c.items.filter(function(it){ return it.key; });
-    return its.length >= 2 && its.every(function(it){ return sh[it.key] > 0; });
-  }
-  function fitHostAvail(){
-    if(!fitLast || !fitLast.canDraw) return 0;
-    var s = 0;
-    fitLast.host.forEach(function(it){ s += Math.max(0, fitLiveH(it) - it.floor); });
-    return s;
-  }
-  function fitClearHandles(){
-    Array.prototype.forEach.call(document.querySelectorAll('.zonebody > .hdl'), function(h){ h.parentNode.removeChild(h); });
-  }
-  // One 4 px bar over the row gap between two neighbouring resizable parts of a column.
-  function fitPlaceHandles(cols, keys, host, hostX, hostR, canDraw){
-    fitClearHandles();
-    fitLast = { cols: cols, keys: keys, host: host, X: hostX, R: hostR, canDraw: canDraw };
-    keys.forEach(function(k){
-      var c = cols[k], bodyEl = c.bodyEl, bodyRect = bodyEl.getBoundingClientRect(), groups = [];
-      Array.prototype.forEach.call(bodyEl.children, function(el){
-        if(!fitShown(el) || el.classList.contains('hdl')) return;
-        var key = fitKeyOf(el), prev = groups[groups.length - 1];
-        if((el.id === 'burnLegend' || el.id === 'sessionCards') && prev && prev.key === 'burn_30min'){ prev.last = el; return; }
-        groups.push({ key: key, first: el, last: el });
-      });
-      for(var i = 0; i + 1 < groups.length; i++){
-        var g1 = groups[i], g2 = groups[i + 1];
-        if(!g1.key || !g2.key) continue;
-        var r1 = g1.last.getBoundingClientRect(), r2 = g2.first.getBoundingClientRect();
-        var h = document.createElement('div');
-        h.className = 'hdl'; h.setAttribute('role', 'separator'); h.setAttribute('aria-orientation', 'horizontal');
-        h.setAttribute('data-above', g1.key); h.setAttribute('data-below', g2.key);
-        h.setAttribute('aria-label', 'Resize ' + g1.key + ' and ' + g2.key);
-        h.style.top = Math.round(r1.bottom - bodyRect.top + (r2.top - r1.bottom - 4) / 2) + 'px';
-        bodyEl.appendChild(h);
-        // No room even with the host lists at their floor: not drawn, not a dead bar.
-        var A = fitFind(g1.key), B = fitFind(g2.key);
-        if(A && B){
-          var rg = fitDragRange(A, B, fitLiveH(A), fitLiveH(B), fitHostAvail());
-          if(rg.max - rg.min < 1) h.classList.add('hdl-off');
-        }
-      }
-    });
-  }
-  function fitLiveH(it){ return it.el.getBoundingClientRect().height; }
-  document.addEventListener('pointerdown', function(e){
-    var h = e.target && e.target.closest ? e.target.closest('.hdl') : null;
-    if(!h || (e.button !== undefined && e.button !== 0)) return;
-    var A = fitFind(h.getAttribute('data-above')), B = fitFind(h.getAttribute('data-below'));
-    if(!A || !B) return;
-    var hA = fitLiveH(A), hB = fitLiveH(B);
-    var host = (fitLast && fitLast.canDraw) ? fitLast.host.map(function(it){ return { it: it, h0: fitLiveH(it) }; }) : [];
-    fitDrag = { h: h, A: A, B: B, hA: hA, hB: hB, y0: e.clientY, top0: parseFloat(h.style.top) || 0,
-      r: fitDragRange(A, B, hA, hB, fitHostAvail()), d: 0, y: 0, host: host, X0: fitLast ? fitLast.X : 0, R0: fitLast ? fitLast.R : 0 };
-    h.classList.add('drag');
-    try { h.setPointerCapture(e.pointerId); } catch(err) {}
-    e.preventDefault();
-  });
-  document.addEventListener('pointermove', function(e){
-    if(!fitDrag) return;
-    var d = Math.max(fitDrag.r.min, Math.min(fitDrag.r.max, e.clientY - fitDrag.y0));
-    fitDrag.d = d;
-    // The growing part takes from its partner down to the partner's floor, the rest from the host lists.
-    var up = d > 0, g = Math.abs(d), G = up ? fitDrag.A : fitDrag.B, S = up ? fitDrag.B : fitDrag.A;
-    var hG = up ? fitDrag.hA : fitDrag.hB, hS = up ? fitDrag.hB : fitDrag.hA;
-    var take = Math.max(0, Math.min(g, hS - S.floor));
-    fitDrag.y = g - take;
-    fitSetPx(G.el, hG + g);
-    fitSetPx(S.el, hS - take);
-    var nh = fitDrawLists(fitDrag.host.map(function(x){ return x.it; }), fitDrag.host.map(function(x){ return x.h0; }), fitDrag.y);
-    fitDrag.host.forEach(function(x, i){ fitSetPx(x.it.el, nh[i]); });
-    fitDrag.h.style.top = Math.round(fitDrag.top0 + d) + 'px';
-  });
-  function fitDragEnd(){
-    var dr = fitDrag; if(!dr) return;
-    fitDrag = null;
-    dr.h.classList.remove('drag');
-    if(!dr.d) return;
-    var col = null;
-    fitLast.keys.forEach(function(k){ if(fitLast.cols[k].items.indexOf(dr.A) >= 0) col = fitLast.cols[k]; });
-    if(!col) return;
-    var its = col.items.filter(function(it){ return it.key; }), sum = 0;
-    its.forEach(function(it){ sum += fitLiveH(it); });
-    var cur = secState.plain ? secState.heightsPlain : secState.heightsStandard, merged = {};
-    if(cur) Object.keys(cur).forEach(function(k){ merged[k] = cur[k]; });
-    its.forEach(function(it){ merged[it.key] = Math.round(fitLiveH(it) / sum * 10000) / 10000; });
-    // What the drag took from the host lists, as a fraction of their shrink range (nat down to floor).
-    var X = (dr.X0 || 0) + (dr.y || 0);
-    if(X >= 1 && dr.R0 > 0) merged.host_lists = Math.max(0.0001, Math.min(1, Math.round(X / dr.R0 * 10000) / 10000));
-    else delete merged.host_lists;
-    if(secState.plain) secState.heightsPlain = merged; else secState.heightsStandard = merged;
-    secSend({ heights_mode: secState.plain ? 'plain' : 'standard', heights: merged });
-    applyPanelFit();
-  }
-  document.addEventListener('pointerup', fitDragEnd);
-  document.addEventListener('pointercancel', fitDragEnd);
-  // uicheck only (check_d42.go): the feasible drag range in px of every handle.
-  window.__bdevFitHandles = function(){
-    var out = [];
-    if(!fitLast) return out;
-    var cl = function(v){ return Math.max(-9999, Math.min(9999, Math.round(v))); };
-    Array.prototype.forEach.call(document.querySelectorAll('.zonebody > .hdl'), function(h){
-      var a = h.getAttribute('data-above'), b = h.getAttribute('data-below'), A = fitFind(a), B = fitFind(b);
-      if(!A || !B) return;
-      var r = fitDragRange(A, B, fitLiveH(A), fitLiveH(B), fitHostAvail());
-      out.push({ above: a, below: b, min: cl(r.min), max: cl(r.max), hidden: h.classList.contains('hdl-off') });
-    });
-    return out;
-  };
   function applyPanelFit(){
     var sp = stationPanel; if(sp) stationPeek(true);
-    // The pass resizes the host lists and measures them from their top
-    // (fitListFloor); each goes back where the user scrolled it at the end.
-    // Taken before fitUndo, whose un-shrink of a list can already clamp it.
+    // A pass changes list heights; each list goes back where the user scrolled it.
     var tops = secListTops();
-    var body = document.body, hist = document.querySelector('.histwrap');
-    var histBefore = fitHistH();
-    var scroll = !!secState.scrollbar;
+    var hist = document.querySelector('.histwrap'), histBefore = hist ? hist.getBoundingClientRect().height : 0;
+    pctUndo();
+    var mode = secState.plain ? 'plain' : 'standard', scroll = !!secState.scrollbar;
+    var ps = document.getElementById('pageScroll'), host = document.getElementById('secHost');
     var lg = document.getElementById('legacy'), mainEl = document.querySelector('main');
-    fitUndo();
-    fitClearHandles();
-    fitUncropGroups();
-    // Natural heights come from the scrollbar-on layout, as before B7.
-    body.classList.add('scroll-on');
-    secSizeLegacy();
-    var found = fitCollect();
-    if(!scroll) body.classList.remove('scroll-on');
-    secSizeLegacy();
-    var cols = found.cols, below = found.below, keys = Object.keys(cols);
-    var all = [], two = false, mainShown = fitShown(mainEl) && keys.length > 0;
-    keys.forEach(function(k){ all = all.concat(cols[k].items); });
-    all = all.concat(below);
-    var hostItems = scroll ? [] : fitCollectHost();
-    all = all.concat(hostItems);
-    var fit = { scroll: scroll, fitScroll: false, hidden: [], columns: [], items: [] };
-    if(lg && all.length){
-      two = mainShown && getComputedStyle(mainEl).flexDirection === 'row';
-      // The room: the legacy block's own height. Scrollbar on with main off has no fixed room.
-      var B = lg.clientHeight, free0 = scroll && !mainShown;
-      var mainChrome = mainShown ? fitBoxV(mainEl) + (!two && keys.length > 1 ? fitPx(getComputedStyle(mainEl).rowGap) : 0) : 0;
-      var belowExtra = 0;
-      below.forEach(function(it){ belowExtra += fitMarginV(it.el); });
-      var needOf = function(k){ return fitColNeed(cols[k]); };
-      var host = document.getElementById('secHost'), ps = document.getElementById('pageScroll');
-      var lgOn = fitShown(lg) && (keys.length > 0 || below.length > 0);
-      // Waits on you and Outcomes can sit side by side, so the gain is measured: the
-      // current heights go on the lists and the host's own height is read back.
-      var hostH0 = host ? host.offsetHeight : 0;
-      var hostGain = function(){
-        hostItems.forEach(function(it){ fitSetPx(it.el, it.h); });
-        return host ? hostH0 - host.offsetHeight : 0;
-      };
-      var fitDeficit = function(){
-        if(lgOn) return total() - B - hostGain();
-        hostItems.forEach(function(it){ fitSetPx(it.el, it.h); });
-        return host.scrollHeight + fitMarginV(host) - ps.clientHeight;
-      };
-      var mainNeed = function(){
-        if(!mainShown) return 0;
-        var v = keys.map(needOf);
-        return mainChrome + (two ? Math.max.apply(null, v) : v.reduce(function(a, b){ return a + b; }, 0));
-      };
-      var total = function(){
-        var s = mainNeed() + belowExtra;
-        below.forEach(function(it){ s += it.h; });
-        return s;
-      };
-      if(free0) B = total();
-      // Give, in the order of give, never below a floor.
-      var ranked = all.filter(function(it){ return it.rank >= 0; }).sort(function(a, b){ return a.rank - b.rank; });
-      for(var guard = 0; guard < 400; guard++){
-        var deficit = fitDeficit();
-        if(deficit <= 0.5) break;
-        var moved = false;
-        for(var i = 0; i < ranked.length; i++){
-          var it = ranked[i], room = it.h - it.floor;
-          if(room <= 0.5) continue;
-          var take = Math.min(room, deficit);
-          if(two && it.col !== 'below' && it.col !== 'host'){
-            var other = keys.filter(function(k){ return k !== it.col; })[0];
-            if(other){
-              var d = needOf(it.col) - needOf(other);
-              if(d < -0.5) continue;
-              if(d > 0.5) take = Math.min(take, d);
-            }
-          }
-          it.h -= take; moved = true;
-          break;
-        }
-        if(!moved) break;
+    var zb = document.querySelector('.zone.burn'), zs = document.querySelector('.zone.system'), td = document.getElementById('todoPanel');
+    var fit = { scroll: scroll, fitScroll: false, hidden: [], mode: mode, err: '', two: false, room: 0, sections: {}, panes: {} };
+    var secs = pctShownSections(mode);
+    fit.err = pctCheck(mode, pctSaved('sections', mode), pctSaved('panes', mode), scroll);
+    var sp0 = pctPlan(secs, pctSaved('sections', mode), 'status');
+    var pct = sp0.starved ? pctEqual(secs) : (sp0.over && !scroll) ? pctScaled(secs, sp0.pct, sp0.sum) : sp0.pct;
+    var el = { status: host, sessions_30min: zb, processes_30min: zs, todo: td };
+    if(ps && lg && mainEl){
+      [host, lg, mainEl, td].forEach(function(x){ if(x && fitShown(x)) pctFix(x); });
+      var secPanels = document.getElementById('secPanels');
+      if(secPanels) pctFix(secPanels);
+      var two = fitShown(mainEl) && getComputedStyle(mainEl).flexDirection.indexOf('row') === 0;
+      var row = two && secs.indexOf('sessions_30min') >= 0 && secs.indexOf('processes_30min') >= 0;
+      fit.two = row;
+      var draw = {};
+      secs.forEach(function(s){ draw[s] = pct[s]; });
+      if(row){
+        var big = Math.max(draw.sessions_30min, draw.processes_30min), small = Math.min(draw.sessions_30min, draw.processes_30min);
+        // What the row frees goes to Status (or the row) only up to where the page fits.
+        var total = 0;
+        secs.forEach(function(s){ total += draw[s]; });
+        var give = Math.max(0, Math.min(small, 100 - (total - small)));
+        if(secs.indexOf('status') >= 0){ draw.status += give; draw.sessions_30min = draw.processes_30min = big; }
+        else draw.sessions_30min = draw.processes_30min = big + give;
       }
-      // A deficit that started below zero never shrank a host item, so the free-height branch below needs no host term.
-      var over = fitDeficit();
-      if(over > 0.5){
-        fit.fitScroll = true;
-      } else {
-        // Two columns end on one line: the shorter one absorbs the difference with its own growers.
-        if(two && keys.length > 1){
-          var hc = Math.max.apply(null, keys.map(needOf));
-          keys.forEach(function(k){ fitAbsorb(cols[k].items, hc - needOf(k)); });
-        }
-      }
-      if(over < -0.5){
-        // Free height: each column absorbs its own.
-        if(!two){
-          var chain = [];
-          keys.forEach(function(k){ chain = chain.concat(cols[k].items); });
-          fitAbsorb(chain.concat(below), B - total());
-        }
-        var f2 = B - total();
-        if(two && f2 > 0.5){
-          var chartRoom = function(k){
-            var r = 0;
-            cols[k].items.forEach(function(it){ if(it.kind === 'chart') r += Math.max(0, it.cap - it.h); });
-            return r;
-          };
-          var dh1 = keys.length ? Math.min.apply(null, keys.map(chartRoom)) : 0;
-          dh1 = Math.min(f2, dh1);
-          if(dh1 > 0.5) keys.forEach(function(k){ fitAbsorb(cols[k].items.filter(function(it){ return it.kind === 'chart'; }), dh1); });
-          f2 = B - total();
-          // To Do and the ticker share what is left, in proportion to the room each has.
-          var tdo = below.filter(function(it){ return it.kind === 'todo'; })[0];
-          var tRoom = tdo ? Math.max(0, tdo.cap - tdo.h) : 0, kRoom = 0;
-          keys.forEach(function(k){ cols[k].items.forEach(function(it){ if(it.kind === 'ticker') kRoom += Math.max(0, it.cap - it.h); }); });
-          if(f2 > 0.5 && tRoom + kRoom > 0.5){
-            var toTodo = Math.min(tRoom, f2 * tRoom / (tRoom + kRoom));
-            if(tdo) tdo.h += toTodo;
-            f2 -= toTodo;
-          }
-          if(f2 > 0.5){
-            if(keys.length > 1){
-              var cur = Math.max.apply(null, keys.map(needOf));
-              keys.forEach(function(k){ fitAbsorb(cols[k].items, cur + f2 - needOf(k)); });
-            } else if(keys.length === 1){
-              fitAbsorb(cols[keys[0]].items, f2);
-            }
-            f2 = B - total();
-          }
-          if(f2 > 0.5 && below.length) below[below.length - 1].h += f2;
-        }
-        if(!keys.length && below.length) fitAbsorb(below, B - total());
-      }
-      // A drag took height from the host lists (B7.1 iteration 2): shrink them by the saved fraction of
-      // their range, down to their floor, and give the same height to every column (two side by side
-      // end on one line; one column takes it alone). Stacked columns do not take part, the freed height
-      // could not be told apart between them. The automatic order above is untouched: this runs only
-      // when a column carries saved shares.
-      var hostX = 0, hostR = 0;
-      hostItems.forEach(function(it){ hostR += it.nat - it.floor; });
-      var canDraw = hostItems.length > 0 && lgOn && keys.length > 0 && (two || keys.length === 1);
-      var shm = secState.plain ? secState.heightsPlain : secState.heightsStandard;
-      if(canDraw && shm && shm.host_lists > 0 && hostR > 0 && keys.some(function(k){ return fitColHasShares(cols[k], shm); })){
-        var avail0 = 0;
-        hostItems.forEach(function(it){ avail0 += Math.max(0, it.h - it.floor); });
-        hostX = Math.min(shm.host_lists * hostR, avail0);
-        if(hostX >= 1){
-          var nh = fitDrawLists(hostItems, hostItems.map(function(it){ return it.h; }), hostX);
-          hostItems.forEach(function(it, i){ it.h = nh[i]; });
-          keys.forEach(function(k){ fitAbsorb(cols[k].items, hostX); });
-          B += hostX;
-        } else hostX = 0;
-      }
-      fitApplyShares(cols, keys);
-      // Apply the sizes.
-      all.forEach(function(it){
-        if(it.kind === 'fixed' && Math.abs(it.h - it.nat) < 0.5) return;
-        if(it.kind === 'seclist' && it.h >= it.nat - 0.5) return;
-        fitSetPx(it.el, it.h);
+      // Stacked zones are their own boxes; side by side they keep their width share.
+      [zb, zs].forEach(function(z){ if(z && fitShown(z)) pctFix(z); });
+      // The room: the page height less what is not a section (margins, gaps, the notice box of an empty host).
+      var spans = 0;
+      secs.forEach(function(s){ if(!(row && s === 'processes_30min') && el[s] && fitShown(el[s])) spans += el[s].getBoundingClientRect().height; });
+      var room = ps.clientHeight - (pctUsed(ps) - spans);
+      fit.room = Math.round(room);
+      // Side by side the row counts once: Processes takes the px Sessions gets.
+      var order = secs.filter(function(s){ return !(row && s === 'processes_30min'); });
+      var pxs = pctPixels(order, draw, room);
+      if(row) pxs.processes_30min = pxs.sessions_30min;
+      secs.forEach(function(s){
+        if(!el[s] || !fitShown(el[s])) return;
+        pctHeight(el[s], pxs[s]);
+        fit.sections[s] = { pct: pct[s], px: pxs[s] };
       });
-      if(mainShown){
-        keys.forEach(function(k){ if(!two) fitSetPx(cols[k].zone, needOf(k)); });
-        fitSetPx(mainEl, mainNeed());
-      }
-      if(fit.fitScroll){
-        body.classList.add('fit-scroll');
-        lg.style.flex = '0 0 auto';
-        if(scroll) lg.style.height = Math.ceil(total()) + 'px';
-      }
-      fitPlaceHandles(cols, keys, hostItems, hostX, hostR, canDraw);
-      keys.forEach(function(k){
-        var g = cols[k].items.filter(function(it){ return it.kind === 'chart' || it.kind === 'ticker'; })[0];
-        fit.columns.push({ name: k, free: Math.round(B - total()), grower: g ? (g.el.id || g.kind) : '' });
-      });
-      fit.items = all.map(function(it){ return { id: it.id || it.el.id || it.kind, kind: it.kind, h: Math.round(it.h), floor: Math.round(it.floor), nat: Math.round(it.nat) }; });
-      var hi = all.filter(function(it){ return it.el === hist; })[0];
-      window.__bdevTodoLayout = { applied: true, plainHistH: hi ? hi.nat : 0, histH: hi ? hi.h : 0 };
-    } else {
-      window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
-      fitLast = null;
+      pctPanes(mode, 'status', host, fit.panes);
+      pctPanes(mode, 'sessions_30min', zb && zb.querySelector('.zonebody'), fit.panes);
+      pctPanes(mode, 'processes_30min', zs && zs.querySelector('.zonebody'), fit.panes);
+      pctPanes(mode, 'todo', td, fit.panes);
+      fit.fitScroll = pctUsed(ps) > ps.clientHeight + 1;
     }
     secListRestore(tops);
     secHostSync();
     window.__bdevFit = fit;
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
     // The chart canvas was drawn at the height it had before this pass.
-    if(hist && Math.abs(fitHistH() - histBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
+    if(hist && Math.abs(hist.getBoundingClientRect().height - histBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
     if(sp) stationPeek(false);
   }
 
@@ -3816,7 +3543,7 @@ body.plain #mapOverlay{font-size:13.5px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, heightsStandard:null, heightsPlain:null };
+  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
   var secReading = { status:'missing', age_seconds:0 };
   // secLine is Go's sentence about the snapshot. The window opens before the
   // first payload, so it starts as the starting line; null means the last
@@ -4302,6 +4029,7 @@ body.plain #mapOverlay{font-size:13.5px}
     });
     var tg = document.getElementById('secToast');
     if(tg) tg.checked = !!secState.toast;
+    pctRenderSizes();
   }
   // A poll or a tick must never move a list the user scrolled. The scroll
   // position of each list in #secPanels, by its part (one list per part), so a
@@ -4399,35 +4127,21 @@ body.plain #mapOverlay{font-size:13.5px}
     set(document.getElementById('activityHeatmapRow'), !secPartOn('activity') && !secPartOn('heatmap'));
     document.getElementById('activityHeatmapRow').classList.toggle('split-one', secPartOn('activity') !== secPartOn('heatmap'));
     // Only the scrollbar-off page fills the window; with it on the host keeps its natural height so the page scrolls.
-    document.getElementById('secHost').classList.toggle('sec-fill', hideLegacy && !secState.scrollbar);
     secHostSync();
     document.body.classList.toggle('scroll-on', !!secState.scrollbar);
     document.body.classList.toggle('plain', plain);
-    secSizeLegacy();
     // The charts were drawn at a size they no longer have; the resize handler redraws them.
     var sig = [plain, secState.scrollbar, showBurn, showSys, Object.keys(secState.parts).filter(secPartOn).join('|')].join();
     if(sig !== secLastSig){ secLastSig = sig; window.dispatchEvent(new Event('resize')); }
   }
-  // Scrollbar on (body.scroll-on): the older zones get exactly the height of
-  // the scroll area, the same room they had before R8, so they fit as they
-  // always did. The sections host sits above them and the page scrolls. With
-  // it off the older block takes what the host leaves (CSS flex), nothing here.
-  // applyPanelFit adds and removes body.scroll-on while it measures, so this
-  // reads the class and not secState.
-  function secSizeLegacy(){
-    var lg = document.getElementById('legacy'), ps = document.getElementById('pageScroll'), main = document.querySelector('main');
-    if(!lg || !ps) return;
-    var on = document.body.classList.contains('scroll-on');
-    lg.style.height = (!on || !main || main.classList.contains('sec-off')) ? '' : ps.clientHeight + 'px';
-  }
-
   // secRender draws first, then asks for one fit pass.
   function secFit(){ applyPanelFit(); }
 
   function secApplyPayload(p){
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space',
-      toast:p.toast_enabled !== false, heightsStandard:p.heights_standard || null, heightsPlain:p.heights_plain || null };
+      toast:p.toast_enabled !== false, sectionsPct:p.sections_pct || pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:p.panes_pct || pctDefaults(PCT_DEFAULT_PANES) };
+    if(p.panes && p.panes.length) PCT_PANES = p.panes;
     secReading = p.reading || { status:'missing', age_seconds:0 };
     secLine = p.snapshot_line || null;
     var cp = p.controls || {};
@@ -4514,10 +4228,75 @@ body.plain #mapOverlay{font-size:13.5px}
       }
     }
   });
-  document.getElementById('secResetHeights').addEventListener('click', function(){
-    secState.heightsStandard = null; secState.heightsPlain = null;
-    secSend({ reset_heights: true });
-    applyPanelFit();
+  // The gear's size boxes: one per section and per pane (a section with one
+  // pane has no pane box), a Standard and a Plain box each. Built once; a poll
+  // fills them only while nobody has typed since the last Save. A hidden part's
+  // box is greyed. Save is off with the sentence of the first broken rule.
+  var pctDirty = false;
+  function pctRenderSizes(){
+    var grid = document.getElementById('secSizeGrid');
+    if(!grid) return;
+    if(!grid.firstChild){
+      var html = '<span></span><span class="sethead">Standard</span><span class="sethead">Plain</span>';
+      var box = function(kind, id, mode, label){
+        return '<input type="number" min="1" max="100" step="1" placeholder="auto" data-pct-kind="' + kind + '" data-pct-id="' + id +
+          '" data-mode="' + mode + '" aria-label="' + esc(label) + ', ' + (mode === 'plain' ? 'Plain' : 'Standard') + ', percent">';
+      };
+      PCT_SECTIONS.forEach(function(sec){
+        var lbl = PCT_SECTION_LABEL[sec];
+        html += '<span class="setlbl setsec">' + esc(lbl) + '</span>' + box('sections', sec, 'standard', lbl) + box('sections', sec, 'plain', lbl);
+        var panes = PCT_PANES.filter(function(p){ return p.section === sec; });
+        if(panes.length < 2) return;
+        panes.forEach(function(p){
+          html += '<span class="setlbl setpane" title="' + esc(p.label) + '">' + esc(p.label) + '</span>' + box('panes', p.id, 'standard', p.label) + box('panes', p.id, 'plain', p.label);
+        });
+      });
+      grid.innerHTML = html;
+    }
+    Array.prototype.forEach.call(grid.querySelectorAll('input[data-pct-id]'), function(i){
+      var kind = i.getAttribute('data-pct-kind'), id = i.getAttribute('data-pct-id'), mode = i.getAttribute('data-mode');
+      if(!pctDirty){
+        var v = pctSaved(kind, mode)[id];
+        i.value = v ? String(v) : '';
+      }
+      var shown = kind === 'sections' ? pctShownSections(mode).indexOf(id) >= 0
+        : PCT_PANES.some(function(p){ return p.id === id && pctShownPanes(mode, p.section).indexOf(id) >= 0; });
+      i.disabled = !shown;
+    });
+    pctValidateBoxes();
+  }
+  // The typed numbers per mode, or a sentence when a box is not a whole number from 1 to 100.
+  function pctReadBoxes(){
+    var out = { standard: { sections: {}, panes: {} }, plain: { sections: {}, panes: {} } }, bad = '';
+    Array.prototype.forEach.call(document.querySelectorAll('#secSizeGrid input[data-pct-id]'), function(i){
+      var t = String(i.value).trim();
+      if(t === '') return;
+      var n = Number(t);
+      if(!/^\d+$/.test(t) || n < 1 || n > 100){ bad = bad || 'Type a whole number from 1 to 100, or leave the box empty'; return; }
+      out[i.getAttribute('data-mode')][i.getAttribute('data-pct-kind')][i.getAttribute('data-pct-id')] = n;
+    });
+    return { pct: out, bad: bad };
+  }
+  function pctValidateBoxes(){
+    var r = pctReadBoxes(), why = r.bad;
+    ['standard', 'plain'].forEach(function(mode){
+      if(why) return;
+      var e = pctCheck(mode, r.pct[mode].sections, r.pct[mode].panes, !!secState.scrollbar);
+      if(e) why = (mode === 'plain' ? 'Plain: ' : 'Standard: ') + e;
+    });
+    var save = document.getElementById('secSizeSave'), line = document.getElementById('secSizeWhy');
+    if(save) save.disabled = !!why;
+    if(line) line.textContent = why;
+    return { pct: r.pct, why: why };
+  }
+  document.getElementById('secSizeGrid').addEventListener('input', function(){ pctDirty = true; pctValidateBoxes(); });
+  document.getElementById('secSizeSave').addEventListener('click', function(){
+    var v = pctValidateBoxes();
+    if(v.why) return;
+    pctDirty = false;
+    if(secFrozen){ secState.sectionsPct = { standard: v.pct.standard.sections, plain: v.pct.plain.sections };
+      secState.panesPct = { standard: v.pct.standard.panes, plain: v.pct.plain.panes }; secRender(); return; }
+    secSend({ pct: v.pct });
   });
   document.addEventListener('click', function(){ if(secSettingsEl.classList.contains('open')) secSettingsOpen(false); });
   // ---- B1 History block (delete, export) inside the gear dialog ----------
@@ -4975,7 +4754,7 @@ body.plain #mapOverlay{font-size:13.5px}
   window.__bdevSections = { apply: function(p){ secFrozen = true; secApplyPayload(p); }, state: function(){
     return { plain:secState.plain, scrollbar:secState.scrollbar, parts:secState.parts, standard:secState.standard,
       plainSet:secState.plainSet, groups:secState.groups, stationTheme:secState.stationTheme,
-      heightsStandard:secState.heightsStandard, heightsPlain:secState.heightsPlain };
+      sectionsPct:secState.sectionsPct, panesPct:secState.panesPct };
   } };
   secPoll();
   setInterval(secPoll, 5000);
