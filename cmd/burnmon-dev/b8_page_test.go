@@ -132,8 +132,8 @@ func TestPageDoneToggleKeepsHeaderInView(t *testing.T) {
 
 // A poll or a tick never moves a list the user scrolled (B8 final review fix
 // 1): secRender writes new lists, so it takes each list's scrollTop before the
-// write and puts it back after the fit pass; the fit pass measures the host
-// lists from their top (fitListFloor), so it does the same around its work.
+// write and puts it back after the fit pass; the fit pass resizes the lists'
+// panes, so it does the same around its work.
 // uicheck waits/d45 proves the DOM.
 func TestPageListsKeepScroll(t *testing.T) {
 	order := func(fn string, steps ...string) {
@@ -149,9 +149,9 @@ func TestPageListsKeepScroll(t *testing.T) {
 		}
 	}
 	order("secRender", "var tops = secListTops();", "document.getElementById('secPanels').innerHTML =", "secFit();", "secListRestore(tops);")
-	// Taken before fitUndo (its un-shrink of a list can already clamp the
-	// position) and put back after both branches, once every height is set.
-	order("applyPanelFit", "var tops = secListTops();", "fitUndo();", "fitCollectHost()", "fitPlaceHandles(cols, keys, hostItems", "fitLast = null;", "secListRestore(tops);", "window.__bdevFit = fit;")
+	// Taken before pctUndo (its un-sizing of a list can already clamp the
+	// position) and put back once every height is set.
+	order("applyPanelFit", "var tops = secListTops();", "pctUndo();", "pctPanes(mode, 'status'", "pctPanes(mode, 'todo'", "secListRestore(tops);", "window.__bdevFit = fit;")
 	// Keyed by the part, so a render's new list finds the old one's position.
 	body := idleFn(t, "secListTops")
 	for _, want := range []string{"#secPanels .seclist", "closest('[data-sec]')", "scrollTop"} {

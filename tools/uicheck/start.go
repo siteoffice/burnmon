@@ -37,6 +37,11 @@ var devPartIDs = []string{
 	"todo",
 }
 
+// startClearSizes puts the default section and pane sizes back in both modes
+// (sections.DefaultSectionsPct and DefaultPanesPct, what a fresh settings
+// folder has). They pass every rule in any part state, so it can go first.
+const startClearSizes = `{pct:{standard:{sections:{status:30,sessions_30min:60,processes_30min:60,todo:10},panes:{status_row1:50,sessions:50,burn_30min:40,vendor_strip:20,activity_heatmap:20,turn_ticker:20,system:50,process_groups:30,processes:20}},plain:{sections:{status:30,sessions_30min:60,processes_30min:60,todo:10},panes:{status_row1:50,sessions:50,burn_30min:40,vendor_strip:20,activity_heatmap:20,turn_ticker:20,system:50,process_groups:30,processes:20}}}}`
+
 // devControlIDs mirrors sections.ControlIDs.
 var devControlIDs = []string{"stop", "attach", "approve", "send_back", "close_sprint"}
 
@@ -47,8 +52,8 @@ var appDefaultPlain = map[string]bool{"waits": true, "outcomes": true, "burn": t
 // appStart is what a fresh settings folder gives, which is what every run
 // starts with since scripts\uicheck-dev.ps1 makes one per launch:
 // sections.Default (internal\sections\sections.go:169) is Standard, scrollbar
-// on, every Standard part on, the five Plain parts, every control off and no
-// saved heights; loadUITheme (cmd\burnmon-dev\viewstate.go:29) is dark. The
+// on, every Standard part on, the five Plain parts, every control off and the
+// default sizes; loadUITheme (cmd\burnmon-dev\viewstate.go:29) is dark. The
 // size is the primary viewport (1152x2048, check_d2.go:16); groups override it.
 func appStart() startState {
 	s := startState{Width: 1152, Height: 2048, Scrollbar: true, Theme: "dark",
@@ -100,8 +105,6 @@ var devCaseStart = map[string]func(*startState){
 	"d20": startSize(1920, 1080),
 	"d22": startSize(1920, 1080),
 	"d24": startSize(1600, 900),
-	// layout: d42's drag size, d42DragW x d42DragH.
-	"d42": startSize(d42DragW, d42DragH),
 	// map (check_d31.go:73, check_d38.go:105).
 	"d31": startSize(1280, 900),
 	"d38": startSize(1920, 1080),
@@ -132,11 +135,11 @@ type startSaved struct {
 }
 
 // startChanges lists the bdevSetSections changes (as JS object literals) that
-// take cur to want, in a fixed order: heights reset, controls off, part
-// switches, scrollbar, mode. The heights reset is always sent: it is one
-// cheap write, and the saved split is not worth comparing key by key.
+// take cur to want, in a fixed order: controls off, part switches, scrollbar
+// on, default sizes, scrollbar off when wanted, mode. The default sizes are always sent: it is one
+// cheap write and the typed numbers are not worth comparing key by key.
 func startChanges(cur startSaved, want startState) []string {
-	ch := []string{`{reset_heights:true}`}
+	var ch []string
 	for _, id := range devControlIDs {
 		if cur.Controls[id] {
 			ch = append(ch, fmt.Sprintf(`{control:%s,on:false}`, jsString(id)))
@@ -150,8 +153,14 @@ func startChanges(cur startSaved, want startState) []string {
 			ch = append(ch, fmt.Sprintf(`{mode:'plain',section:%s,on:%t}`, jsString(id), want.PlainSet[id]))
 		}
 	}
-	if cur.Scrollbar != want.Scrollbar {
-		ch = append(ch, fmt.Sprintf(`{scrollbar:%t}`, want.Scrollbar))
+	// The default sizes add up to 160, which Go saves only with the scrollbar
+	// on: switch it on around the size write when needed.
+	if !cur.Scrollbar {
+		ch = append(ch, `{scrollbar:true}`)
+	}
+	ch = append(ch, startClearSizes)
+	if !want.Scrollbar {
+		ch = append(ch, `{scrollbar:false}`)
 	}
 	if cur.Plain != want.Plain {
 		ch = append(ch, fmt.Sprintf(`{plain:%t}`, want.Plain))

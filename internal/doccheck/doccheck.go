@@ -71,6 +71,9 @@ var (
 	keydownRe  = regexp.MustCompile(`k === '([a-z0-9])'`)
 	uicheckFnm = regexp.MustCompile(`^check_([dw]\d+)\.go$`)
 	caseFuncRe = regexp.MustCompile(`(?m)^func caseD(\d+)\(`)
+	// aliasRe reads an entry of devAliases in tools\uicheck\groups.go: an old
+	// name that runs another case (d34 runs d47 since 2026-11-15).
+	aliasRe    = regexp.MustCompile(`(?m)^\s*"(d\d+)":\s*"d\d+",`)
 	topFolders = []string{"cmd", "internal", "tools", "scripts", "testdata", "assets", "docs", "02_roadmap", "04_assets"}
 )
 
@@ -494,6 +497,15 @@ func LoadCorpus(root string) (Corpus, error) {
 			}
 			for _, m := range caseFuncRe.FindAllStringSubmatch(string(b), -1) {
 				c.UICheck["d"+m[1]] = true
+			}
+		}
+		if e.Name() == "groups.go" {
+			b, err := os.ReadFile(filepath.Join(root, "tools", "uicheck", e.Name()))
+			if err != nil {
+				return Corpus{}, err
+			}
+			for _, m := range aliasRe.FindAllStringSubmatch(string(b), -1) {
+				c.UICheck[m[1]] = true
 			}
 		}
 	}

@@ -42,7 +42,7 @@ func TestAppStartIsAppDefault(t *testing.T) {
 // Every group starts from the app default; only the window size differs.
 func TestGroupStartDefaults(t *testing.T) {
 	want := map[string][2]int32{
-		"fit": {1152, 2048}, "charts": {1280, 860}, "station": {1600, 900}, "layout": {1152, 2048},
+		"fit": {1152, 2048}, "charts": {1280, 860}, "station": {1600, 900}, "layout": {1152, 2048}, "pct": {1280, 900},
 		"map": {1152, 2048}, "waits": {1920, 1080}, "shell": {1152, 2048},
 	}
 	for _, g := range devGroups {
@@ -104,7 +104,7 @@ func TestCaseStartSizes(t *testing.T) {
 		"d10": {1280, 860}, "d11": {1280, 860}, "d13": {1280, 860}, "d14": {1920, 1080}, "d15": {1280, 860},
 		"d16": {1280, 860}, "d17": {1280, 860}, "d18": {1280, 860}, "d20": {1920, 1080}, "d22": {1920, 1080},
 		"d23": {1600, 900}, "d24": {1600, 900}, "d25": {1600, 900}, "d26": {1600, 900}, "d27": {1600, 900}, "d28": {1600, 900},
-		"d29": {1152, 2048}, "d42": {1920, 1080},
+		"d29": {1152, 2048},
 		"d30": {1152, 2048}, "d31": {1280, 900}, "d38": {1920, 1080},
 		"d36": {1920, 1080}, "d37": {1920, 1080}, "d39": {1920, 1080},
 	}
@@ -136,12 +136,12 @@ func TestCloneOwnsItsMaps(t *testing.T) {
 	}
 }
 
-// A page already at the start state gets only the heights reset; a dirty one
+// A page already at the start state gets only the sizes cleared; a dirty one
 // gets each difference, in the fixed order.
 func TestStartChanges(t *testing.T) {
 	want := appStart()
 	clean := startSaved{Scrollbar: true, Standard: want.Standard, PlainSet: want.PlainSet, Parts: devPartIDs}
-	if got := startChanges(clean, want); !reflect.DeepEqual(got, []string{`{reset_heights:true}`}) {
+	if got := startChanges(clean, want); !reflect.DeepEqual(got, []string{startClearSizes}) {
 		t.Fatalf("clean page: %v", got)
 	}
 
@@ -157,15 +157,22 @@ func TestStartChanges(t *testing.T) {
 	dirty.PlainSet["todo"] = true
 	got := startChanges(dirty, want)
 	exp := []string{
-		`{reset_heights:true}`,
 		`{control:"stop",on:false}`,
 		`{mode:'standard',section:"git",on:true}`,
 		`{mode:'plain',section:"todo",on:false}`,
 		`{scrollbar:true}`,
+		startClearSizes,
 		`{plain:false}`,
 	}
 	if !reflect.DeepEqual(got, exp) {
 		t.Fatalf("dirty page:\n got %v\nwant %v", got, exp)
+	}
+
+	// A start with the scrollbar off gets the sizes while it is still on.
+	off := appStart()
+	off.Scrollbar = false
+	if got := startChanges(clean, off); !reflect.DeepEqual(got, []string{startClearSizes, `{scrollbar:false}`}) {
+		t.Fatalf("to scrollbar off: %v", got)
 	}
 
 	// A Plain start is reached from the app default too.

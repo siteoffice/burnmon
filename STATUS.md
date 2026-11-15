@@ -1,5 +1,29 @@
 # BurnMon, status
 
+What is true on branch `sprint/burnmon-dev-layout-pct` (2026-11-15, lane A of the big run plan, not
+merged, not tagged): BurnMon Dev's section sizes are typed numbers in Settings, not dragged. The drag
+bars, the Reset heights button and the B7 fit pass are gone; an old `heights_*` key in
+`burnmon-dev-view.json` is ignored on load and dropped on the next save. The gear's new Sizes block has
+one box per section (percent of the window height) and per pane (percent of its section) for Standard
+and Plain, stored as `sections_pct` and `panes_pct`, checked by the same rules in Go
+(`internal\sections\pct.go`) and in the page (`pctPlan`, `pctCheck`): hidden parts do not count, an
+empty box shares what is left equally, with no empty box the rest goes to Status or the first pane,
+sections over 100 only with Overall scrollbar on (the page scrolls), otherwise Save is off with one
+sentence and the page draws the numbers scaled to fit. Wilco's calls in the run: the percent layout is
+always on; from 1600 px wide Sessions and Processes share one row as tall as the larger number and
+Status takes the rest (up to where the page fits); a fresh install starts with prefilled numbers
+(sections Status 30, Sessions 60, Processes 60, To Do 10, so the page scrolls as before; panes in
+`sections.DefaultPanesPct`). The Processes table moved into the Processes section box. uicheck: d42
+(drag) removed, d34 (the B7 fill) now runs the new case `pct/d47` through `devAliases` (doccheck reads
+the aliases), d29, d19, d41 and the start state follow the new rules. Measured on Windows in the
+worktree: `go vet` 0, `go test` 1346 pass, 0 fail, 6 skip (1393 pass, 0 fail, 6 skip on top of `main`
+at `070ac3d` with lane B), `.\build.ps1` 0; uicheck groups fit,
+charts, station, layout, pct, map and shell pass in full; waits: d36, d39, d45, d46 pass, d37 passed 2 of
+3 runs (its 400 ms Confirm timing, code this branch does not touch), d44 passes alone but fails after
+d39, and fails the same way on `main` at `070ac3d` (not from this branch). Known limit: a pane whose
+fixed parts (Burn legend and cards, CPU box) are taller than its share overflows, and its section clips
+at the bottom.
+
 Lane B of the big run (2026-11-15, branch `sprint/controlcentre-root-and-git`, not merged; check `git log main`
 live): the Control Centre gets a Root row on its Settings page (a folder field, Browse with the native folder
 picker, a check that shows the unit count, and Save that writes `root` to `controlcentre.json` and reloads every

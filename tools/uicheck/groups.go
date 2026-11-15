@@ -43,9 +43,11 @@ var devGroups = []devGroup{
 	// d19 sits here, not in charts: it asserts the fit pass shares the free
 	// height and To Do reaches the window bottom, a layout rule.
 	{"layout", []devCase{
-		{"d19", caseD19}, {"d29", caseD29}, {"d33", caseD33}, {"d34", caseD34},
-		{"d42", caseD42}, {"d43", caseD43},
+		{"d19", caseD19}, {"d29", caseD29}, {"d33", caseD33},
+		{"d43", caseD43},
 	}, sizedStart(1152, 2048)}, // size as in check_d29.go:227
+	// The typed section and pane sizes (2026-11-15), each variant sets its own size.
+	{"pct", []devCase{{"d47", caseD47}}, sizedStart(1280, 900)},
 	{"map", []devCase{
 		{"d30", caseD30}, {"d31", caseD31}, {"d35", caseD35}, {"d38", caseD38},
 		{"d40", caseD40},
@@ -70,7 +72,10 @@ var devNamedGroups = []devGroup{
 // devAliases maps an old name that was merged into another case to the case
 // that now covers its assert. Empty: no case was merged in B7.2 Task 3; the
 // per-group merge analysis is in the sprint's findings.md, Task 3 iteration 2.
-var devAliases = map[string]string{}
+var devAliases = map[string]string{
+	// d34 (the B7 layout fill) was replaced by the typed sizes (2026-11-15).
+	"d34": "d47",
+}
 
 // devNames holds every name that targets burnmon-dev.exe: group, group/case,
 // case and alias. main.go's isDevCheck reads it, since "waits" and "shell" do
@@ -154,7 +159,7 @@ func readFixture(name string) ([]byte, error) {
 }
 
 // readSnapshotExample reads lane A's frozen example, the fixture the layout
-// and waits cases (d29, d33, d34, d36, d37, d39) load with the same error text.
+// and waits cases (d29, d33, d36, d37, d39) load with the same error text.
 func readSnapshotExample() ([]byte, error) {
 	b, err := readFixture("snapshot_example.json")
 	if err != nil {

@@ -212,19 +212,15 @@ func TestPageHasScrollbarFitPass(t *testing.T) {
 		t.Errorf("page still uses the body.sec-standard class")
 	}
 }
-// Review findings of iteration 3: the host fills the window only with the
-// scrollbar off, the old greedy hide pass is gone (B7).
+
+// The host fills nothing by itself any more (2026-11-15): the layout pass
+// gives Status its percent, so the sec-fill class is gone.
 func TestPageFitPassReviewFixes(t *testing.T) {
-	for _, want := range []string{
-		`classList.toggle('sec-fill', hideLegacy && !secState.scrollbar)`,
-		`function secHostSync()`,
-	} {
-		if !strings.Contains(pageHTML, want) {
-			t.Errorf("page lacks %s", want)
-		}
+	if !strings.Contains(pageHTML, `function secHostSync()`) {
+		t.Errorf("page lacks secHostSync")
 	}
-	if strings.Contains(pageHTML, "toggle('sec-fill', hideLegacy)") {
-		t.Errorf("sec-fill still ignores the scrollbar switch")
+	if strings.Contains(pageHTML, "sec-fill") {
+		t.Errorf("page still uses sec-fill")
 	}
 }
 
@@ -518,35 +514,47 @@ func TestPageCostLineEscaped(t *testing.T) {
 		t.Error("secItemRow assigns innerHTML")
 	}
 }
-func TestSetSectionsHeightsFromPage(t *testing.T) {
+
+// Section and pane percentages (2026-11-15): one Save sends both modes; Go
+// checks them with the page's rules and the file keeps them per mode.
+func TestSetSectionsPctFromPage(t *testing.T) {
 	dir := t.TempDir()
 	snapPath := filepath.Join("..", "..", "testdata", "snapshot_example.json")
 	now := time.Date(2026, 10, 23, 10, 0, 7, 0, time.UTC)
-	on, off := true, false
-	std := map[string]float64{"burn_30min": 0.4, "turn_ticker": 0.6}
-
-	if err := applySectionsChange(dir, sectionsChange{HeightsMode: "standard", Heights: std}); err != nil {
+	on := true
+	good := map[string]pctModeChange{
+		"standard": {Sections: map[string]int{"status": 30, "sessions_30min": 50, "processes_30min": 20}, Panes: map[string]int{"burn_30min": 40}},
+		"plain":    {Sections: map[string]int{"status": 100}},
+	}
+	// Standard shows To Do too; its empty box would be starved at 100, so hide it first.
+	if err := applySectionsChange(dir, sectionsChange{Mode: "standard", Section: "todo", On: new(bool)}); err != nil {
+		t.Fatal(err)
+	}
+	// The default has the scrollbar on, which allows over 100; start with it off.
+	if err := applySectionsChange(dir, sectionsChange{Scrollbar: new(bool)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := applySectionsChange(dir, sectionsChange{Pct: good}); err != nil {
 		t.Fatal(err)
 	}
 	p := sectionsPayloadFor(dir, snapPath, now)
-	if len(p.HeightsStandard) != 2 || p.HeightsStandard["burn_30min"] != 0.4 || p.HeightsStandard["turn_ticker"] != 0.6 || p.HeightsPlain != nil {
-		t.Fatalf("payload heights %v / %v", p.HeightsStandard, p.HeightsPlain)
+	if p.SectionsPct["standard"]["sessions_30min"] != 50 || p.SectionsPct["plain"]["status"] != 100 || p.PanesPct["standard"]["burn_30min"] != 40 {
+		t.Fatalf("payload %v / %v", p.SectionsPct, p.PanesPct)
+	}
+	if len(p.Panes) != len(sections.Panes) {
+		t.Fatalf("payload panes %d, want %d", len(p.Panes), len(sections.Panes))
 	}
 	b, err := json.Marshal(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), `"heights_standard"`) || strings.Contains(string(b), `"heights_plain"`) {
-		t.Errorf("payload json keys wrong: %s", b)
+	for _, k := range []string{`"sections_pct"`, `"panes_pct"`, `"panes"`} {
+		if !strings.Contains(string(b), k) {
+			t.Errorf("payload json lacks %s", k)
+		}
 	}
-
-	// A plain write leaves the standard map alone.
-	if err := applySectionsChange(dir, sectionsChange{HeightsMode: "plain", Heights: map[string]float64{"system_chart": 0.5, "process_groups": 0.5}}); err != nil {
-		t.Fatal(err)
-	}
-	got := loadSections(dir)
-	if len(got.HeightsStandard) != 2 || len(got.HeightsPlain) != 2 {
-		t.Fatalf("after plain write: %v / %v", got.HeightsStandard, got.HeightsPlain)
+	if strings.Contains(string(b), `"heights_`) {
+		t.Errorf("payload still carries heights: %s", b)
 	}
 
 	// Refusals leave the file byte-identical.
@@ -555,12 +563,13 @@ func TestSetSectionsHeightsFromPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	bad := []sectionsChange{
-		{HeightsMode: "standard", Heights: map[string]float64{"example-part": 0.5, "turn_ticker": 0.5}},
-		{HeightsMode: "x", Heights: std},
-		{HeightsMode: "standard", Heights: map[string]float64{"burn_30min": 2, "turn_ticker": 0.5}},
-		{HeightsMode: "plain", Heights: std, Plain: &on},
-		{HeightsMode: "plain", Heights: std, Scrollbar: &off},
-		{ResetHeights: &off},
+		{Pct: map[string]pctModeChange{"standard": {Sections: map[string]int{"status": 60, "sessions_30min": 42, "processes_30min": 10}}}},
+		{Pct: map[string]pctModeChange{"standard": {Panes: map[string]int{"burn_30min": 70, "turn_ticker": 40}}}},
+		{Pct: map[string]pctModeChange{"example-mode": {}}},
+		{Pct: map[string]pctModeChange{"standard": {Sections: map[string]int{"example-section": 10}}}},
+		{Pct: map[string]pctModeChange{"plain": {Sections: map[string]int{"status": 0}}}},
+		{Pct: good, Plain: &on},
+		{Pct: map[string]pctModeChange{}},
 	}
 	for i, c := range bad {
 		if err := applySectionsChange(dir, c); err == nil {
@@ -571,25 +580,45 @@ func TestSetSectionsHeightsFromPage(t *testing.T) {
 			t.Errorf("bad change %d changed the file", i)
 		}
 	}
+	// The error is the page's sentence.
+	err = applySectionsChange(dir, bad[0])
+	if err == nil || !strings.Contains(err.Error(), "Sections add up to 112 percent; switch on Overall scrollbar or lower a number") {
+		t.Errorf("over 100 error = %v", err)
+	}
 
-	if err := applySectionsChange(dir, sectionsChange{ResetHeights: &on}); err != nil {
+	// With the scrollbar on, over 100 is saved.
+	if err := applySectionsChange(dir, sectionsChange{Scrollbar: &on}); err != nil {
 		t.Fatal(err)
 	}
-	got = loadSections(dir)
-	if got.HeightsStandard != nil || got.HeightsPlain != nil {
-		t.Errorf("reset left %v / %v", got.HeightsStandard, got.HeightsPlain)
+	if err := applySectionsChange(dir, bad[0]); err != nil {
+		t.Fatalf("scrollbar on: %v", err)
+	}
+	if got := loadSections(dir).SectionsPctOf("standard"); got["sessions_30min"] != 42 {
+		t.Fatalf("saved %v", got)
+	}
+	// Empty maps clear a mode.
+	if err := applySectionsChange(dir, sectionsChange{Pct: map[string]pctModeChange{"standard": {}, "plain": {}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadSections(dir); len(got.SectionsPctOf("standard")) != 0 || len(got.PanesPctOf("plain")) != 0 {
+		t.Fatalf("not cleared %v / %v", got.SectionsPct, got.PanesPct)
 	}
 }
 
-func TestSetSectionsHeightsAcceptsHostLists(t *testing.T) {
+// The drag heights are gone: the old change keys are refused.
+func TestSetSectionsRefusesOldHeights(t *testing.T) {
 	dir := t.TempDir()
-	h := map[string]float64{"burn_30min": 0.4, "turn_ticker": 0.6, "host_lists": 0.25}
-	if err := applySectionsChange(dir, sectionsChange{HeightsMode: "standard", Heights: h}); err != nil {
-		t.Fatal(err)
+
+	for _, body := range []string{`{"heights_mode":"standard","heights":{"burn_30min":0.4,"turn_ticker":0.6}}`, `{"reset_heights":true}`} {
+		var ch sectionsChange
+		if err := json.Unmarshal([]byte(body), &ch); err != nil {
+			t.Fatal(err)
+		}
+		if err := applySectionsChange(dir, ch); err == nil {
+			t.Errorf("%s accepted", body)
+		}
 	}
-	if got := loadSections(dir).HeightsStandard; got["host_lists"] != 0.25 || len(got) != 3 {
-		t.Fatalf("saved %v", got)
-	}
+
 }
 
 // The page's 1 s tick compares this stamp to see a new snapshot (B8): empty

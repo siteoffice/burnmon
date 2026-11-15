@@ -13,7 +13,7 @@ import (
 
 // The seven groups, in the order a full run takes (B7.2 spec item 6).
 func TestDevGroupOrder(t *testing.T) {
-	want := []string{"fit", "charts", "station", "layout", "map", "waits", "shell"}
+	want := []string{"fit", "charts", "station", "layout", "pct", "map", "waits", "shell"}
 	var got []string
 	for _, g := range devGroups {
 		got = append(got, g.Name)
@@ -55,10 +55,22 @@ func TestDevCaseInOneGroup(t *testing.T) {
 }
 
 // Every old name d0 to d43 still runs, as a case or an alias, and is a dev
-// check; so are the group and group/case names.
+// check; so are the group and group/case names. d42 (the drag handles) is
+// gone with the drag bars (2026-11-15) and must not resolve.
 func TestOldNamesResolve(t *testing.T) {
+	// d42 (the drag handles) is retired with the drag bars (2026-11-15) and
+	// must not resolve; d34 (the B7 fill) runs d47 through devAliases.
+	if checks["d42"] != nil {
+		t.Error("d42 still resolves; it was retired")
+	}
+	if devAliases["d34"] != "d47" {
+		t.Errorf("d34 alias = %q, want d47", devAliases["d34"])
+	}
 	for i := 0; i <= 43; i++ {
 		name := fmt.Sprintf("d%d", i)
+		if name == "d42" {
+			continue
+		}
 		if checks[name] == nil {
 			t.Errorf("old check %s does not resolve", name)
 		}

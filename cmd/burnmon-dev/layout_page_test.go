@@ -8,14 +8,17 @@ import (
 	"testing"
 )
 
-// B7 item 3: the Processes table sits in #processesHost inside #legacy, after
-// the closing main and before To Do, and is no longer a #secPanels panel.
+// 2026-11-15: the Processes table is a pane of the Processes last 30 min
+// section, so #processesHost sits inside that zone's body, after the process
+// groups and before </main>; it is still not a #secPanels panel.
 func TestProcessesHostAboveTodo(t *testing.T) {
+	sys := strings.Index(pageHTML, `<section class="zone system">`)
+	groups := strings.Index(pageHTML, `id="processGroupsPanel"`)
 	host := strings.Index(pageHTML, `id="processesHost"`)
 	mainEnd := strings.Index(pageHTML, "</main>")
 	todo := strings.Index(pageHTML, `id="todoPanel"`)
-	if host < 0 || mainEnd < 0 || todo < 0 || !(mainEnd < host && host < todo) {
-		t.Fatalf("processesHost must sit between </main> and #todoPanel: main=%d host=%d todo=%d", mainEnd, host, todo)
+	if sys < 0 || host < 0 || mainEnd < 0 || todo < 0 || !(sys < groups && groups < host && host < mainEnd && mainEnd < todo) {
+		t.Fatalf("processesHost must sit in the system zone after the process groups: sys=%d groups=%d host=%d main=%d todo=%d", sys, groups, host, mainEnd, todo)
 	}
 	m := regexp.MustCompile(`var SEC_ORDER = \[([^\]]*)\];`).FindStringSubmatch(pageHTML)
 	if m == nil {

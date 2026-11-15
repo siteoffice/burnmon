@@ -9,7 +9,7 @@ package sections
 
 import (
 	"encoding/json"
-	"math"
+
 	"os"
 	"path/filepath"
 )
@@ -93,55 +93,12 @@ type State struct {
 	// Controls holds one switch per control (ControlIDs). Every control is off
 	// until the person turns it on; a missing key is off.
 	Controls map[string]bool `json:"controls"`
-	// HeightsStandard and HeightsPlain hold the saved split of a column per mode:
-	// layout key (HeightKeys) to the part's share of the column's resizable
-	// height. Nil when nothing is saved; the view file then has no such key.
-	HeightsStandard map[string]float64 `json:"heights_standard,omitempty"`
-	HeightsPlain    map[string]float64 `json:"heights_plain,omitempty"`
-}
-
-// HeightKeys are layout keys, not part ids: the Activity and Heatmap halves
-// share one row, and the System part draws a CPU box and a chart.
-// host_lists is not a part: it is the fraction of the host lists' shrink range
-// (natural height down to three rows) that a drag took from the Waits,
-// Outcomes and Sessions lists. It lives in the same map so an old file and an
-// older reader see nothing new.
-var HeightKeys = []string{"burn_30min", "vendor_strip", "activity_heatmap", "turn_ticker", "system_chart", "process_groups", "host_lists"}
-
-// cleanHeights keeps known keys with a finite value in (0, 1]; empty gives nil.
-func cleanHeights(h map[string]float64) map[string]float64 {
-	var out map[string]float64
-	for _, k := range HeightKeys {
-		v, ok := h[k]
-		if !ok || math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > 1 {
-			continue
-		}
-		if out == nil {
-			out = map[string]float64{}
-		}
-		out[k] = v
-	}
-	return out
-}
-
-// WithHeights returns a copy with one mode's saved heights replaced. An
-// unknown mode changes nothing.
-func (s State) WithHeights(mode string, h map[string]float64) State {
-	out := s.Normalize()
-	switch mode {
-	case ModeStandard:
-		out.HeightsStandard = cleanHeights(h)
-	case ModePlain:
-		out.HeightsPlain = cleanHeights(h)
-	}
-	return out
-}
-
-// ResetHeights returns a copy with the saved heights of both modes cleared.
-func (s State) ResetHeights() State {
-	out := s.Normalize()
-	out.HeightsStandard, out.HeightsPlain = nil, nil
-	return out
+	// SectionsPct and PanesPct hold the typed sizes per mode (pct.go): mode to
+	// section id (a Group id) or pane id (Panes) to a whole percent, 1 to 100.
+	// A missing key is an empty box. A file without them loads the defaults
+	// (DefaultSectionsPct, DefaultPanesPct); an empty mode stays empty.
+	SectionsPct map[string]map[string]int `json:"sections_pct"`
+	PanesPct    map[string]map[string]int `json:"panes_pct"`
 }
 
 // ControlIDs are the control switch ids, the same list as controls.All (a test
@@ -169,10 +126,12 @@ func listOf(on func(id string) bool) map[string]bool {
 func Default() State {
 	plain := map[string]bool{Waits: true, Outcomes: true, Burn: true, AgentsMap: true, Sessions: true}
 	return State{
-		Scrollbar: true,
-		Standard:  listOf(func(string) bool { return true }),
-		PlainSet:  listOf(func(id string) bool { return plain[id] }),
-		Controls:  controlsOf(func(string) bool { return false }),
+		Scrollbar:   true,
+		Standard:    listOf(func(string) bool { return true }),
+		PlainSet:    listOf(func(id string) bool { return plain[id] }),
+		Controls:    controlsOf(func(string) bool { return false }),
+		SectionsPct: defaultPct(DefaultSectionsPct),
+		PanesPct:    defaultPct(DefaultPanesPct),
 	}
 }
 
@@ -252,7 +211,7 @@ func (s State) Normalize() State {
 		})
 	}
 	ctl := controlsOf(func(id string) bool { return s.Controls[id] })
-	return State{Plain: s.Plain, Scrollbar: s.Scrollbar, Standard: pick(s.Standard, d.Standard), PlainSet: pick(s.PlainSet, d.PlainSet), Controls: ctl, HeightsStandard: cleanHeights(s.HeightsStandard), HeightsPlain: cleanHeights(s.HeightsPlain)}
+	return State{Plain: s.Plain, Scrollbar: s.Scrollbar, Standard: pick(s.Standard, d.Standard), PlainSet: pick(s.PlainSet, d.PlainSet), Controls: ctl, SectionsPct: cleanPct(s.SectionsPct, sectionKnown), PanesPct: cleanPct(s.PanesPct, paneKnown)}
 }
 
 // r8Fill completes an R8 list (seven sections) with its R8 defaults.
@@ -292,7 +251,8 @@ func migrateR8(plain bool, standard, plainSet map[string]bool) State {
 	std[Todo] = true
 	pl[Burn] = plainSet[Burn]
 	pl[Processes] = plainSet[Processes]
-	return State{Plain: plain, Scrollbar: true, Standard: std, PlainSet: pl, Controls: controlsOf(func(string) bool { return false })}
+	return State{Plain: plain, Scrollbar: true, Standard: std, PlainSet: pl, Controls: controlsOf(func(string) bool { return false }),
+		SectionsPct: defaultPct(DefaultSectionsPct), PanesPct: defaultPct(DefaultPanesPct)}
 }
 
 // Load reads the state from the view file at path. A missing or unparsable
@@ -305,15 +265,15 @@ func Load(path string) State {
 		return Default()
 	}
 	var f struct {
-		Plain           bool               `json:"plain_mode"`
-		Scrollbar       *bool              `json:"overall_scrollbar"`
-		Standard        map[string]bool    `json:"parts_standard"`
-		PlainSet        map[string]bool    `json:"parts_plain"`
-		R8Std           map[string]bool    `json:"sections_standard"`
-		R8Plain         map[string]bool    `json:"sections_plain"`
-		Controls        map[string]bool    `json:"controls"`
-		HeightsStandard map[string]float64 `json:"heights_standard"`
-		HeightsPlain    map[string]float64 `json:"heights_plain"`
+		Plain       bool                      `json:"plain_mode"`
+		Scrollbar   *bool                     `json:"overall_scrollbar"`
+		Standard    map[string]bool           `json:"parts_standard"`
+		PlainSet    map[string]bool           `json:"parts_plain"`
+		R8Std       map[string]bool           `json:"sections_standard"`
+		R8Plain     map[string]bool           `json:"sections_plain"`
+		Controls    map[string]bool           `json:"controls"`
+		SectionsPct map[string]map[string]int `json:"sections_pct"`
+		PanesPct    map[string]map[string]int `json:"panes_pct"`
 	}
 	if json.Unmarshal(b, &f) != nil {
 		return Default()
@@ -329,8 +289,14 @@ func Load(path string) State {
 		st.Scrollbar = *f.Scrollbar
 	}
 	st.Controls = f.Controls
-	st.HeightsStandard = f.HeightsStandard
-	st.HeightsPlain = f.HeightsPlain
+	// No key: the defaults. A key, even an empty one, is what the person saved.
+	st.SectionsPct, st.PanesPct = defaultPct(DefaultSectionsPct), defaultPct(DefaultPanesPct)
+	if f.SectionsPct != nil {
+		st.SectionsPct = f.SectionsPct
+	}
+	if f.PanesPct != nil {
+		st.PanesPct = f.PanesPct
+	}
 	return st.Normalize()
 }
 
@@ -348,6 +314,10 @@ func Save(path string, s State) error {
 	delete(rest, "sections")
 	delete(rest, "sections_standard")
 	delete(rest, "sections_plain")
+	// The saved drag heights of B7.1 are gone; an old file loses them here.
+	delete(rest, "heights_standard")
+	delete(rest, "heights_plain")
+	delete(rest, "heights")
 	var err error
 	if rest["plain_mode"], err = json.Marshal(s.Plain); err != nil {
 		return err
@@ -364,11 +334,7 @@ func Save(path string, s State) error {
 	if rest["controls"], err = json.Marshal(s.Controls); err != nil {
 		return err
 	}
-	for key, h := range map[string]map[string]float64{"heights_standard": s.HeightsStandard, "heights_plain": s.HeightsPlain} {
-		if len(h) == 0 {
-			delete(rest, key)
-			continue
-		}
+	for key, h := range map[string]map[string]map[string]int{"sections_pct": s.SectionsPct, "panes_pct": s.PanesPct} {
 		if rest[key], err = json.Marshal(h); err != nil {
 			return err
 		}

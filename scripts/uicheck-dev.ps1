@@ -17,7 +17,7 @@ if (-not (Test-Path $exe)) {
 }
 
 # Same order as devGroups in tools\uicheck\groups.go.
-$devGroups = @("fit", "charts", "station", "layout", "map", "waits", "shell")
+$devGroups = @("fit", "charts", "station", "layout", "pct", "map", "waits", "shell")
 $reverse = $args -contains "reverse"
 $targetChecks = @($args | Where-Object { $_ -ne "reverse" })
 if ($targetChecks.Count -eq 0) {

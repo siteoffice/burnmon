@@ -26,16 +26,24 @@ func TestFitPassNeverHides(t *testing.T) {
 	}
 }
 
+// 2026-11-15: every section and pane takes its typed percent; the page scrolls
+// only when the scrollbar is on and the sections add up to more than 100.
 func TestFitPassHasFloorsAndScroll(t *testing.T) {
 	for _, want := range []string{
-		"var FIT_CHART_MIN = 60, FIT_ROWS_MIN = 3, FIT_TABLE_MIN_ROWS = 2, FIT_CHART_GROW = 1.6;",
-		"window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], columns: [], items: [] };",
-		"body.fit-scroll #pageScroll",
-		"function fitAbsorb(items, amt)",
-		"classList.add('fit-scroll')",
+		"function pctPlan(shown, vals, restKey)",
+		"function pctCheck(mode, secs, panes, scrollbar)",
+		"function pctPanes(mode, sec, box, rec)",
+		"window.__bdevFit = { scroll: true, fitScroll: false, hidden: [], sections: {}, panes: {} };",
+		"body.scroll-on #pageScroll{",
+		"var pct = sp0.starved ? pctEqual(secs) : (sp0.over && !scroll) ? pctScaled(secs, sp0.pct, sp0.sum) : sp0.pct;",
 	} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %s", want)
+		}
+	}
+	for _, gone := range []string{"FIT_CHART_MIN", "function fitAbsorb(", "fit-scroll", "__bdevTodoLayout"} {
+		if strings.Contains(pageHTML, gone) {
+			t.Errorf("page still carries %s", gone)
 		}
 	}
 }
