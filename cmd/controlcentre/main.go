@@ -17,6 +17,7 @@ import (
 
 	"burnmon/internal/centre"
 	"burnmon/internal/controls"
+	"burnmon/internal/gitrefs"
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
 )
@@ -77,11 +78,24 @@ func main() {
 		}
 	}()
 
+	// The Git page: git status and gh run in the background, never on the
+	// window thread; worktrees match sessions by folder name in the snapshot.
+	status, statusWhy := centre.GitStatusRunner(exec.LookPath)
+	git := centre.NewGitScanner(centre.GitDeps{
+		Status: status, StatusWhy: statusWhy,
+		PRs:    centre.GhPRRunner(exec.LookPath),
+		Merged: gitrefs.NewChecker().Merged,
+		Sessions: func() map[string][]string {
+			return sessionsByFolder(snapshot.Load(snapPath, time.Now()))
+		},
+	})
+
 	bindAll(bindEnv{
-		w: w, root: root, dataDir: dataDir, settingsPath: settingsPath,
+		w: w, root: root, roots: newRootBox(root, *rootFlag != ""), dataDir: dataDir, settingsPath: settingsPath,
 		snapPath: snapPath, auditPath: auditPath, now: time.Now,
 		svc: svc, svcWhy: svcWhy,
 		settings: newSettingsBox(settings),
+		git:      git, pickFolder: newFolderPicker(w),
 	})
 	w.SetHtml(assemblePage(settings))
 	w.Run()

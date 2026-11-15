@@ -14,4 +14,10 @@ var ccBindingNames = []string{
 	"ccPreview",
 	"ccRun",
 	"ccAgents",
+	"ccRoot",
+	"ccRootCheck",
+	"ccRootSet",
+	"ccRootBrowse",
+	"ccGit",
+	"ccGitRepo",
 }

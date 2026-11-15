@@ -158,6 +158,25 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 .setrow{display:flex;flex:none;align-items:center;justify-content:space-between;gap:16px;min-height:52px;border-bottom:1px solid var(--line-soft)}
 .setrow .lb{display:flex;flex-direction:column;min-width:0;font-weight:600}
 .setrow .hp{color:var(--muted);font-size:12px;font-weight:400}
+.rootf{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:1 1 auto;min-width:0}
+.rootf input{flex:1 1 auto;min-width:0;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface2);color:var(--text)}
+.rootf input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.rootf input[readonly]{color:var(--muted)}
+.rootf button{display:flex;align-items:center;gap:5px;flex:none}
+.rootline{flex:none;font-size:12px;color:var(--muted);min-height:18px;padding:4px 0 6px;border-bottom:1px solid var(--line-soft)}
+.rootline.warn{color:var(--amber)}
+
+/* Git page: one dense row per repo, a unit line before each unit's first row */
+.g1{flex:1 1 0;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g2{flex:1 1 0;min-width:0;font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gn{flex:0 0 34px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden}
+.gab{flex:0 0 50px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden}
+.gl{flex:0 0 104px;font-family:var(--mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gn.warn,.gab.warn{color:var(--amber);font-weight:600}
+.rw.uh{min-height:22px;border-bottom:1px solid var(--line);cursor:default}
+.rw.uh:hover{background:none}
+.rw.uh span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.lead .lbtn{flex:none;display:flex;align-items:center;gap:5px;margin-right:12px;font-family:var(--font);font-size:12.5px;font-weight:400}
 
 /* comment popup, inside the app */
 .pop{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 72%,transparent);padding:16px}
@@ -217,14 +236,20 @@ var api = {
   comment: function(r){ return ccComment(r) },
   preview: function(r){ return ccPreview(r) },
   run: function(t){ return ccRun(t) },
-  agents: function(n){ return ccAgents(n) }
+  agents: function(n){ return ccAgents(n) },
+  root: function(){ return ccRoot() },
+  rootCheck: function(p){ return ccRootCheck(p) },
+  rootSet: function(p){ return ccRootSet(p) },
+  rootBrowse: function(p){ return ccRootBrowse(p) },
+  git: function(r){ return ccGit(r) },
+  gitRepo: function(id){ return ccGitRepo(id) }
 };
 (function(){
   var NS = 'http://www.w3.org/2000/svg';
   var THEMES = ['system','light','dark'];
   var THEME_UI = {system: ['sys', 'System'], light: ['sun', 'Light'], dark: ['moon', 'Dark']};
   // Every selector with text-overflow:ellipsis, plus the clipped lead and crumb.
-  var HOVER_SEL = '.ell,.lead,.crumb,.rw .tag,.rw .nm,.rw .fn,.rw .ro,.rw .rl,.c1 .chip,.c2,.c3,.c5,.it,.att span';
+  var HOVER_SEL = '.ell,.lead,.crumb,.rw .tag,.rw .nm,.rw .fn,.rw .ro,.rw .rl,.c1 .chip,.c2,.c3,.c5,.it,.att span,.g1,.g2,.gl';
   var ROW_H = 28;
   // Comment limits; internal\centre checks the same and stays the authority.
   var MAX_ATT = 5;
@@ -245,9 +270,13 @@ var api = {
   var IC = {map:'M4 10h6v4H4zM14 4h6v4h-6zM14 16h6v4h-6zM10 12h2M12 6v12M12 6h2M12 18h2',inbox:'M4 13l2-8h12l2 8v6H4zM4 13h5l1 2h4l1-2h5',cal:'M5 6h14v14H5zM5 10h14M9 4v4M15 4v4',
     agents:'M8 4h8v6H8zM4 14h16v6H4zM12 10v4',
     set:'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',sys:'M4 5h16v11H4zM9 20h6M12 16v4',sun:'M12 8a4 4 0 1 0 0 8a4 4 0 0 0 0-8zM12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5',
-    moon:'M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z',left:'M14 6l-6 6l6 6',right:'M10 6l6 6l-6 6'};
-  var PAGES = [['overview', 'Overview', 'map'], ['waiting', 'Waiting on you', 'inbox'], ['agents', 'Agents', 'agents'], ['planning', 'Planning', 'cal']];
-  var TITLES = {waiting: 'Waiting on you', agents: 'Agents', planning: 'Planning', settings: 'Settings'};
+    moon:'M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z',left:'M14 6l-6 6l6 6',right:'M10 6l6 6l-6 6',
+    git:'M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6a3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9',
+    refresh:'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',folder:'M3 6h6l2 2h10v11H3z'};
+  var PAGES = [['overview', 'Overview', 'map'], ['waiting', 'Waiting on you', 'inbox'], ['agents', 'Agents', 'agents'], ['git', 'Git', 'git'], ['planning', 'Planning', 'cal']];
+  var TITLES = {waiting: 'Waiting on you', agents: 'Agents', git: 'Git', planning: 'Planning', settings: 'Settings'};
+  // How often the Git page and the repo page ask again while a reading runs.
+  var GIT_POLL_MS = 700;
 
   var app = document.getElementById('app'), crumb = document.getElementById('crumb'), lead = document.getElementById('lead'),
     pane = document.getElementById('pane'), det = document.getElementById('det'), tgt = document.getElementById('tgt'),
@@ -258,7 +287,9 @@ var api = {
   // pend: the files picked for the open popup; popTarget: the target it was opened for.
   var pend = [], popTarget = null;
   var state = null;
-  var settings = {width: 80, menu: 'text', weeks: 2, theme: 'system'};
+  var settings = {width: 80, menu: 'text', weeks: 2, theme: 'system', git_prs: false};
+  // rootSaved: the line the Root row shows once after a Save, then the check line again.
+  var rootSaved = '';
   var view = {page: 'overview', arg: null};
   var target = {kind: '', unit_id: '', path: '', block: 0, label: ''};
   var resizeTimer = 0;
@@ -370,7 +401,7 @@ var api = {
   }
 
   function saveSetting(key, value) {
-    var s = {width: settings.width, menu: settings.menu, weeks: settings.weeks, theme: settings.theme};
+    var s = {width: settings.width, menu: settings.menu, weeks: settings.weeks, theme: settings.theme, git_prs: !!settings.git_prs};
     s[key] = value;
     return Promise.resolve(api.settingsSet(s)).then(function(saved) {
       applySettings(saved);
@@ -422,6 +453,10 @@ var api = {
     if (TITLES[view.page]) trail.push([TITLES[view.page]]);
     else if (view.page === 'overview' && sub.more) trail.push([sub.more]);
     else if (view.page === 'unit') trail.push([unitLabel(view.arg)]);
+    else if (view.page === 'gitrepo') {
+      trail.push(['Git', function() { go('git'); }]);
+      trail.push([String(view.arg)]);
+    }
     else if (view.page === 'file') {
       var p = String(view.arg), uid = fileUnit(p);
       trail.push([unitLabel(uid), function() { go('unit', uid); }]);
@@ -577,7 +612,7 @@ var api = {
     lead.textContent = '';
     pane.textContent = '';
     var pages = {overview: pageOverview, unit: pageUnit, file: pageFile, board: pageBoard, waiting: pageWaiting,
-      planning: pagePlanning, settings: pageSettings, agents: pageAgents};
+      planning: pagePlanning, settings: pageSettings, agents: pageAgents, git: pageGit, gitrepo: pageGitRepo};
     (pages[view.page] || pageOverview)(view.arg);
   }
 
@@ -1287,7 +1322,91 @@ var api = {
       function(v) { saveSetting('weeks', v); });
     row('Theme', 'Also at the top right of every page.', [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']], settings.theme,
       function(v) { saveSetting('theme', v); });
-    detail({k: 'Settings', t: 'Settings', d: 'Four settings, the same in every ZND UI. They are saved at once and applied at once.'});
+    row('GitHub pull requests', 'Show GitHub pull requests (runs gh, needs network).', [[false, 'Off'], [true, 'On']], !!settings.git_prs,
+      function(v) { saveSetting('git_prs', v); });
+    rootRow();
+    detail({k: 'Settings', t: 'Settings', d: 'Width, menu, horizon and theme are the same in every ZND UI. They and the pull request switch ' +
+      'are saved and applied at once. The root is checked first and saved with its own Save.'});
+  }
+
+  // rootRow: the Root field with Browse (the native folder picker) and Save. Typing or picking checks the
+  // folder and shows how many units it holds; Save is enabled only for a good folder that differs from the
+  // root now. Save writes controlcentre.json and every page reads the new root at once. With --root the
+  // field is read-only.
+  function rootRow() {
+    var seq = drawSeq, cur = '', n = 0, timer = 0;
+    var r = h('div', 'setrow'), lb = h('span', 'lb', 'Root');
+    lb.appendChild(h('span', 'hp', 'The folder every page reads.'));
+    r.appendChild(lb);
+    var f = h('div', 'rootf'), inp = h('input');
+    inp.type = 'text';
+    inp.spellcheck = false;
+    inp.setAttribute('aria-label', 'Root folder');
+    var browse = btn('', null, function() {
+      Promise.resolve(api.rootBrowse(inp.value)).then(function(b) {
+        if (seq !== drawSeq) return;
+        if (b.line) { say(b.line, true); return; }
+        if (!b.picked) return;
+        inp.value = b.path;
+        check();
+      }, function(e) { if (seq === drawSeq) say('The folder picker did not open: ' + (e && e.message ? e.message : String(e)), true); });
+    });
+    browse.appendChild(icon('folder'));
+    browse.appendChild(h('span', null, 'Browse'));
+    var save = btn('primary', 'Save', function() {
+      save.disabled = true;
+      Promise.resolve(api.rootSet(inp.value)).then(function(rv) {
+        rootSaved = 'Saved. Every page now reads ' + rv.root + '. ' + rv.check.line;
+        hist = [];
+        return loadState();
+      }, function(e) {
+        if (seq !== drawSeq) return;
+        say('Not saved: ' + (e && e.message ? e.message : String(e)), true);
+        save.disabled = false;
+      });
+    });
+    save.disabled = true;
+    f.appendChild(inp);
+    f.appendChild(browse);
+    f.appendChild(save);
+    r.appendChild(f);
+    pane.appendChild(r);
+    var line = h('p', 'rootline', 'Reading the root.');
+    pane.appendChild(line);
+    function say(text, warn) {
+      line.textContent = text;
+      line.className = 'rootline' + (warn ? ' warn' : '');
+    }
+    function show(c) {
+      say(c.line, !c.ok);
+      save.disabled = !c.ok || c.path === cur;
+    }
+    function check() {
+      var k = ++n;
+      Promise.resolve(api.rootCheck(inp.value)).then(function(c) {
+        if (k === n && seq === drawSeq) show(c);
+      });
+    }
+    inp.addEventListener('input', function() {
+      save.disabled = true;
+      clearTimeout(timer);
+      timer = setTimeout(check, 250);
+    });
+    inp.addEventListener('keydown', function(ev) { if (ev.key === 'Enter' && !save.disabled) save.click(); });
+    Promise.resolve(api.root()).then(function(rv) {
+      if (seq !== drawSeq) return;
+      cur = rv.root;
+      inp.value = rv.root;
+      if (rv.by_flag) {
+        inp.readOnly = true;
+        browse.hidden = true;
+        save.hidden = true;
+        say('Set by --root. Start the Control Centre without --root to change it here. ' + rv.check.line, false);
+        return;
+      }
+      if (rootSaved) { say(rootSaved, false); rootSaved = ''; return; }
+      show(rv.check);
+    }, function(e) { if (seq === drawSeq) say('Could not read the root: ' + (e && e.message ? e.message : String(e)), true); });
   }
 
   // drawAtts: the picked files, each with a remove button; a long name is cut with hover text.
@@ -1486,6 +1605,212 @@ var api = {
         : listed ? 'Stop works on background agents only.' : 'This agent is not in the agent list now.',
       act: canStop ? [['Stop', function() { decide('stop', r); }, 'primary']] : [],
       out: box});
+  }
+
+  // pageGit: every repo below the root, one dense row each, grouped by unit, in the Go side's order
+  // (needs attention first, then the newest commit). Overview only: nothing here changes a repo. The
+  // reading runs in the background; while it runs the page asks again every GIT_POLL_MS.
+  function pageGit(refresh) {
+    var seq = drawSeq;
+    rootDetail('Select a repo to see it. Double-click opens its worktrees, branches, tags, remotes and pull requests.');
+    lead.appendChild(h('span', 'ell', 'Reading the repos below the root.'));
+    function ask(again) {
+      Promise.resolve(api.git({rows: rowsFit(), refresh: !!again})).then(function(gv) {
+        if (seq !== drawSeq) return;
+        drawGit(gv);
+        if (gv.loading) setTimeout(function() { if (seq === drawSeq) ask(false); }, GIT_POLL_MS);
+      }, function(e) { if (seq === drawSeq) fail('Could not read the repos', e); });
+    }
+    ask(refresh === true);
+  }
+
+  function gitCell(cls, text, title) {
+    var c = h('span', cls, text);
+    if (title) {
+      c.title = title;
+      c.setAttribute('data-title', '1');
+    }
+    return c;
+  }
+
+  // gitAB: ahead and behind as "+1 -2", "none" without an upstream, "?" when git status did not run.
+  function gitAB(r) {
+    if (r.status_error) return '?';
+    if (!r.upstream) return 'none';
+    return '+' + r.ahead + ' -' + r.behind;
+  }
+
+  function drawGit(gv) {
+    lead.textContent = '';
+    pane.textContent = '';
+    var rf = btn('lbtn', null, function() {
+      drawSeq++;
+      lead.textContent = '';
+      pane.textContent = '';
+      pageGit(true);
+    });
+    rf.appendChild(icon('refresh'));
+    rf.appendChild(h('span', null, 'Refresh'));
+    rf.title = 'Read every repo again' + (gv.prs_on ? ', pull requests too' : '');
+    lead.appendChild(rf);
+    var att = 0, n = gv.repos.length;
+    gv.repos.forEach(function(r) { if (r.attention.length) att++; });
+    var text = n + (n === 1 ? ' repo' : ' repos') + (att ? (att === 1 ? ' needs attention.' : ' need attention.') : ', none needs attention.');
+    if (gv.loading) text = gv.read_at ? text + ' Reading again.' : 'Reading the repos below the root.';
+    [gv.line, gv.pr_line].forEach(function(x) { if (x) text += ' ' + x; });
+    if (att && !(gv.loading && !gv.read_at)) {
+      lead.appendChild(h('b', null, String(att)));
+      text = NBSP + 'of ' + text;
+    }
+    lead.appendChild(h('span', 'ell', text));
+    var hd = h('div', 'rw hd');
+    [['Repo', 'g1'], ['Branch', 'g2'], ['Dirty', 'gn', 'Changed and untracked files'], ['+/-', 'gab', 'Ahead and behind the upstream'],
+      ['Last commit', 'gl'], ['Stash', 'gn', 'Stash entries'], ['WT', 'gn', 'Linked worktrees'], ['PRs', 'gn', 'Open pull requests']].forEach(function(x) {
+      hd.appendChild(gitCell(x[1], x[0], x[2]));
+    });
+    pane.appendChild(hd);
+    if (!gv.repos.length) {
+      if (gv.read_at) pane.appendChild(h('p', 'muted', 'No git repo below the root, to 4 levels down.'));
+      return;
+    }
+    var cur = Math.min(sub.page, gv.pages.length - 1), span = gv.pages[cur], picked = null, last = null;
+    gv.repos.slice(span.from, span.to).forEach(function(r) {
+      if (r.unit !== last) {
+        var uh = h('div', 'rw uh');
+        uh.appendChild(h('span', 'ell', r.unit ? unitLabel(r.unit) : 'Outside any unit'));
+        pane.appendChild(uh);
+        last = r.unit;
+      }
+      var warn = r.attention.length > 0;
+      var pick = function() { rowSel(b); sub.sel = r.id; gitRowDetail(r); };
+      var b = btn('rw' + (warn ? ' warn' : ''), null, pick);
+      wireOpen(b, pick);
+      b.appendChild(gitCell('g1', r.name, r.id));
+      b.appendChild(h('span', 'g2', r.detached ? 'detached' : r.branch));
+      b.appendChild(gitCell('gn' + (r.dirty ? ' warn' : ''), r.status_error ? '?' : r.dirty ? String(r.dirty) : ''));
+      b.appendChild(h('span', 'gab' + (r.behind ? ' warn' : ''), gitAB(r)));
+      b.appendChild(gitCell('gl', r.last_sha ? r.last_sha + ' ' + r.last_age : '',
+        r.last_sha ? r.last_sha + ', ' + r.last_age + ' ago: ' + r.last_subject : 'No commit read'));
+      b.appendChild(h('span', 'gn', r.stashes ? String(r.stashes) : ''));
+      b.appendChild(h('span', 'gn', r.worktrees ? String(r.worktrees) : ''));
+      b.appendChild(h('span', 'gn', r.prs >= 0 ? String(r.prs) : ''));
+      pane.appendChild(b);
+      if (sub.sel === r.id) picked = b;
+    });
+    pager(gv.pages, cur, function(p) { sub.page = p; render(); });
+    if (picked) picked.click();
+  }
+
+  // gitRowDetail: one repo in the detail pane, with Open repo.
+  function gitRowDetail(r) {
+    var chips = r.attention.map(function(a) { return [a, 'warn']; });
+    if (!r.upstream && !r.status_error) chips.push(['no upstream', '']);
+    var list = ['Branch ' + (r.detached ? 'detached HEAD' : r.branch || 'not read') + (r.upstream ? ', upstream ' + r.upstream + ' ' + gitAB(r) : '')];
+    if (r.last_sha) list.push('Last commit ' + r.last_sha + ', ' + r.last_age + ' ago: ' + r.last_subject);
+    if (r.status_error) list.push('Dirty and ahead/behind unknown: ' + r.status_error);
+    list.push(r.stashes + (r.stashes === 1 ? ' stash entry, ' : ' stash entries, ') + r.worktrees + ' linked worktrees.');
+    list.push(r.prs >= 0 ? r.prs + ' open pull requests.' : r.github ? 'Pull requests: switch them on in Settings.' : 'No GitHub remote.');
+    var open = function() { go('gitrepo', r.id); };
+    detail({k: 'Repo / ' + (r.unit ? unitLabel(r.unit) : 'no unit'), t: r.name, chips: chips, list: list,
+      act: [['Open repo \u203A', openSel, 'primary']], open: open, src: srcPath(r.id)});
+  }
+
+  // pageGitRepo: one repo's worktrees (with the agent sessions that work in each, matched by folder
+  // name), local branches with merged or not, tags, remotes and pull requests. Each section shows what
+  // fits; the rest is one "+N more" line whose hover lists it.
+  function pageGitRepo(id) {
+    var seq = drawSeq;
+    lead.appendChild(h('span', 'ell', String(id) + ': reading the repo.'));
+    detail({k: 'Repo', t: String(id), src: srcPath(id)});
+    function ask() {
+      Promise.resolve(api.gitRepo(String(id))).then(function(v) {
+        if (seq !== drawSeq) return;
+        if (v.loading) { setTimeout(function() { if (seq === drawSeq) ask(); }, GIT_POLL_MS); return; }
+        if (!v.found || !v.detail) {
+          lead.textContent = '';
+          lead.appendChild(h('span', 'ell', 'Repo ' + id + ' is not in the last reading. Go back to the Git page.'));
+          return;
+        }
+        drawRepo(v.detail);
+      }, function(e) { if (seq === drawSeq) fail('Could not read the repo ' + id, e); });
+    }
+    ask();
+  }
+
+  // gitSection draws a section title and at most n rows; when the list is longer, the last row is
+  // "+N more" with the rest in its hover text.
+  function gitSection(col, title, list, n, row, label, empty) {
+    col.appendChild(h('span', 'eyebrow', title));
+    if (!list.length) { col.appendChild(h('div', 'rw muted', empty)); return; }
+    var fit = list.length > n ? Math.max(0, n - 1) : list.length;
+    list.slice(0, fit).forEach(function(x) { col.appendChild(row(x)); });
+    if (fit < list.length) {
+      var more = h('div', 'rw muted', '+' + (list.length - fit) + ' more');
+      more.title = list.slice(fit).map(label).join('; ');
+      more.setAttribute('data-title', '1');
+      col.appendChild(more);
+    }
+  }
+
+  function drawRepo(d) {
+    var r = d.repo;
+    lead.textContent = '';
+    lead.appendChild(h('span', 'ell', r.name + ', ' + (r.detached ? 'detached HEAD' : 'on ' + r.branch) + '. ' +
+      d.worktrees.length + (d.worktrees.length === 1 ? ' worktree, ' : ' worktrees, ') + d.branches.length + ' branches, ' +
+      d.tags.length + ' tags. Overview only: nothing here changes the repo.'));
+    gitRowDetail(r);
+    var cols = h('div', 'cols'), left = h('div', 'col'), right = h('div', 'col');
+    // rows per column: pane height less padding and the section titles (about 24 px each)
+    var lrows = Math.max(4, Math.floor((pane.clientHeight - 24 - 2 * 24) / ROW_H));
+    var rrows = Math.max(6, Math.floor((pane.clientHeight - 24 - 3 * 24) / ROW_H));
+    var wtN = Math.min(d.worktrees.length || 1, Math.max(2, Math.floor(lrows * 0.45)));
+    gitSection(left, 'Worktrees, sessions matched by folder name', d.worktrees, wtN, function(w) {
+      var pick = function() {
+        rowSel(b);
+        detail({k: w.main ? 'Main worktree' : 'Linked worktree', t: w.name,
+          chips: w.missing ? [['folder gone', 'warn']] : w.dirty ? [[w.dirty + ' dirty', 'warn']] : [],
+          list: ['Branch ' + (w.detached ? 'detached HEAD' : w.branch)].concat(
+            w.sessions.length ? ['Sessions here (by folder name): ' + w.sessions.join(', ')] : ['No agent session works here now.'],
+            w.status_error ? ['Dirty unknown: ' + w.status_error] : []),
+          src: w.path});
+      };
+      var b = btn('rw' + (w.dirty || w.missing ? ' warn' : ''), null, pick);
+      b.appendChild(gitCell('g1', w.name, w.path));
+      b.appendChild(h('span', 'g2', w.detached ? 'detached' : w.branch));
+      b.appendChild(h('span', 'gn' + (w.dirty ? ' warn' : ''), w.missing ? 'gone' : w.status_error ? '?' : w.dirty ? String(w.dirty) : ''));
+      b.appendChild(gitCell('g2', w.sessions.join(', '), w.sessions.length ? w.sessions.join(', ') : ''));
+      return b;
+    }, function(w) { return w.name; }, 'No worktree read.');
+    gitSection(left, 'Local branches', d.branches, Math.max(1, lrows - wtN), function(br) {
+      var c = h('div', 'rw');
+      c.appendChild(gitCell('g1', br.name + (br.current ? ' (current)' : ''), br.name));
+      c.appendChild(h('span', 'gl', br.merged));
+      return c;
+    }, function(br) { return br.name + ' ' + br.merged; }, 'No local branch.');
+    var prN = Math.max(2, Math.floor(rrows * 0.4)), tagN = Math.max(2, Math.floor((rrows - prN) / 2)), remN = Math.max(1, rrows - prN - tagN);
+    var prEmpty = d.pr_line || (r.prs < 0 ? (r.github ? 'Switch on GitHub pull requests in Settings to see them.' : 'No GitHub remote.') : 'No open pull request.');
+    gitSection(right, 'Pull requests', d.prs, prN, function(p) {
+      var c = h('div', 'rw' + (p.checks === 'fail' ? ' warn' : ''));
+      c.appendChild(h('span', 'gn', '#' + p.number));
+      c.appendChild(gitCell('g1', p.title, p.title));
+      c.appendChild(gitCell('g2', p.branch, p.branch));
+      c.appendChild(h('span', 'gl', [p.draft ? 'draft' : '', p.checks, (p.review || '').toLowerCase().replace(/_/g, ' ')].filter(Boolean).join(', ')));
+      return c;
+    }, function(p) { return '#' + p.number + ' ' + p.title; }, prEmpty);
+    gitSection(right, 'Tags, newest first', d.tags, tagN, function(t) {
+      var c = h('div', 'rw');
+      c.appendChild(gitCell('g1', t, t));
+      return c;
+    }, function(t) { return t; }, 'No tags.');
+    gitSection(right, 'Remotes', d.remotes, remN, function(m) {
+      var c = h('div', 'rw');
+      c.appendChild(h('span', 'gl', m.name));
+      c.appendChild(gitCell('g2', m.url, m.url));
+      return c;
+    }, function(m) { return m.name + ' ' + m.url; }, 'No remotes.');
+    cols.appendChild(left);
+    cols.appendChild(right);
+    pane.appendChild(cols);
   }
 
   function hoverTitle(e) {

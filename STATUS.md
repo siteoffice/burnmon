@@ -1,5 +1,21 @@
 # BurnMon, status
 
+Lane B of the big run (2026-11-15, branch `sprint/controlcentre-root-and-git`, not merged; check `git log main`
+live): the Control Centre gets a Root row on its Settings page (a folder field, Browse with the native folder
+picker, a check that shows the unit count, and Save that writes `root` to `controlcentre.json` and reloads every
+page without a restart; with `--root` the field is read-only) and a Git page under Agents. The Git page lists
+every repo below the root to 4 levels, grouped by unit, needs attention first (conflicts, dirty, behind,
+detached), then the newest commit; double-click opens worktrees with the agent sessions in them (matched by folder
+name, the snapshot never holds a cwd), branches merged or not, tags, remotes and pull requests. It reads refs,
+HEAD, worktrees, stash, tags and remotes from the `.git` files and runs only `git --no-optional-locks status
+--porcelain=v2 --branch` (5 s timeout, in the background); pull requests come from `gh pr list` only when the new
+`git_prs` setting is on, cached 5 minutes. Code: `internal\centre\git.go`, `internal\centre\gitscan.go`,
+`cmd\controlcentre\gitpage.go`. Measured on Windows in the worktree: `go vet` 0, `go test` 1379 pass, 0 fail,
+6 skip (main 1332, 0, 6), `.\build.ps1` 0, the window starts with `--root C:\ZND`, and the scanner read 23 repos
+below `C:\ZND` in 2.5 s. Not seen: the Git page and the folder picker in a window, and any macOS build with cgo
+(the PR's macos job is that check). No README change (lane C writes it). The paragraph below describes `main` on
+2026-11-13 and is still true.
+
 What is true now on `main` (2026-11-13, read `git log` and `git ls-remote` live): the Control Centre
 first look fixes are merged through siteoffice-git as PR #25, merge commit `252a4cf` (work commit
 `17c3b05`, byte-equal to the sprint commit `d8d8145` that Wilco made by hand after git_flow `save`

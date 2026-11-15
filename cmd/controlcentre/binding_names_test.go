@@ -11,8 +11,8 @@ import (
 )
 
 func TestCCBindingNamesMatchPage(t *testing.T) {
-	if len(ccBindingNames) != 9 {
-		t.Fatalf("ccBindingNames has %d names, want 9", len(ccBindingNames))
+	if len(ccBindingNames) != 15 {
+		t.Fatalf("ccBindingNames has %d names, want 15", len(ccBindingNames))
 	}
 	seen := map[string]bool{}
 	for _, n := range ccBindingNames {
