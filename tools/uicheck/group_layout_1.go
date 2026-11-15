@@ -417,7 +417,12 @@ func caseD29(hwnd uintptr, args []string) error {
 	if !p.AgentsSlot {
 		return d29Fail("agents map has no slot for R7")
 	}
-	if err := d29StripCheck(p); err != nil {
+	// The strip's room is a share of the window height, so on a window the
+	// screen could not hold it says nothing about the layout (d19's rule);
+	// the rest of d29 still runs.
+	if windowCapped {
+		fmt.Println("uicheck: d29 vendor strip: SKIPPED, this screen is too small for that window")
+	} else if err := d29StripCheck(p); err != nil {
 		return err
 	}
 	if _, err := screenshot(hwnd, "d29-standard"); err != nil {

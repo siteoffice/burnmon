@@ -377,24 +377,39 @@ func bringToFront(hwnd uintptr) {
 	time.Sleep(150 * time.Millisecond)
 }
 
-// screenCoords turns a DOM element's CSS-pixel center (as returned by
+// screenCoords turns a DOM element's CSS-pixel point (as returned by
 // getBoundingClientRect) into absolute screen pixel coordinates
-// SendInput/SetCursorPos expect. This host reports window.devicePixelRatio
-// as the OS scale factor (2 at 200%), but actually renders content at
-// System DPI awareness, not Per-Monitor: its CSS viewport is already
-// numerically 1:1 with physical pixels (confirmed empirically: an
-// element's rect.x routinely exceeds half the window's physical width,
-// impossible if CSS pixels were really half of physical ones here), so no
-// dpr multiplication belongs in this mapping, unlike a true
-// per-monitor-DPI-aware page.
+// SendInput/SetCursorPos expect. The CSS-to-physical ratio is measured, not
+// assumed: the client width in physical px over window.innerWidth. It was
+// 1:1 on the 100% external monitors, but on the laptop panel alone at 200%
+// the page renders at 2x, and adding CSS px straight to the physical origin
+// put every click at half the distance (d40, d43 and d44 missed their
+// targets on main too, 2026-11-15).
 func screenCoords(hwnd uintptr, cssX, cssY float64) (int32, int32, error) {
 	origin, err := clientOrigin(hwnd)
 	if err != nil {
 		return 0, 0, err
 	}
-	x := origin.X + int32(cssX)
-	y := origin.Y + int32(cssY)
+	var cr rect
+	if ret, _, err := procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr))); ret == 0 {
+		return 0, 0, fmt.Errorf("GetClientRect: %w", err)
+	}
+	var cssW float64
+	if err := evalInto(`window.innerWidth`, &cssW); err != nil {
+		return 0, 0, err
+	}
+	x, y := toPhysical(origin, cr.Right-cr.Left, cssW, cssX, cssY)
 	return x, y, nil
+}
+
+// toPhysical scales a CSS point by physW/cssW (1 when either is unknown) and
+// adds the client origin, rounding to the nearest pixel.
+func toPhysical(origin point, physW int32, cssW, cssX, cssY float64) (int32, int32) {
+	s := 1.0
+	if physW > 0 && cssW > 0 {
+		s = float64(physW) / cssW
+	}
+	return origin.X + int32(math.Round(cssX*s)), origin.Y + int32(math.Round(cssY*s))
 }
 
 const (

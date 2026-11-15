@@ -16,9 +16,12 @@ shell that ate the backslashes of a `...\.git\info\exclude` path; the scanner no
 as git does (fixture test with a worktree and a Windows gitdir line). controlcentre.exe has its own icon (the
 tree, option A of three in `04_assets\2026-11-15_controlcentre_icon_options`), `winres\cc-icon-*.png`, plus
 `winres\controlcentre.icns` for a future macOS bundle (none exists yet). Measured on Windows: `go vet` 0, `go
-test` 1401 pass, 0 fail, 6 skip, `.\build.ps1` 0, the exe shows the new icon. uicheck: fit, charts, station, pct,
-shell, d19 and d33 pass; d29, d43, d40 and d44 fail the same way with `main`'s page built in (real clicks do not
-land on this desktop, and d29's capped window clips the vendor strip), so d29's new gear asserts did not run live.
+test` 1401 pass, 0 fail, 6 skip, `.\build.ps1` 0, the exe shows the new icon, `.\scripts\uicheck.ps1 dev` 0 (all
+eight groups) on the laptop panel alone at 200%. Two uicheck fixes made that possible (Wilco's call to add them):
+`screenCoords` now measures the CSS-to-physical ratio (client width over `window.innerWidth`) instead of assuming
+1:1, which put every real click at half the distance at 200% and failed d40, d43 and d44 on `main` too; and d29
+skips only its vendor strip check on a window the screen could not hold, the rule d19 already used. Still open:
+d29's `StripShrunk` reads `window.__bdevFit`, which lane A's removal of the fit pass left without a writer.
 
 What is true on branch `sprint/burnmon-dev-layout-pct` (2026-11-15, lane A of the big run plan, not
 merged, not tagged): BurnMon Dev's section sizes are typed numbers in Settings, not dragged. The drag
