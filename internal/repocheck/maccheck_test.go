@@ -54,6 +54,13 @@ func TestMaccheckScriptShape(t *testing.T) {
 		"Second screen",
 		"OF25 banner",
 		"Control Centre window",
+		"command -v python3",
+		"sys.version_info >= (3, 9)",
+		"git describe --tags --always",
+		"Percent settings",
+		"Root picker",
+		"Git page",
+		"Groundwork",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("script lacks %q", want)
