@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -264,6 +265,10 @@ func repoDocs(t *testing.T, root string) map[string]string {
 // untracked notes there that are not part of the repo.
 var trackedDocNames = []string{
 	"README.md",
+	"cmd/burnmon/README.md",
+	"cmd/burnmon-dev/README.md",
+	"cmd/controlcentre/README.md",
+	"cmd/burnmon-cli/README.md",
 	"STATUS.md",
 	"SESSION_LOG.md",
 	"tools/burnmon-cloud/plugin/README.md",
@@ -315,15 +320,28 @@ func TestDocCheckPassesOnRepoDocs(t *testing.T) {
 	for name, doc := range docs {
 		report(t, Verify(name, doc, c, allowlist))
 	}
-	report(t, Reverse(docs["README.md"], c))
+	report(t, Reverse(readmeText(docs), c))
 	report(t, CheckAllowlist(docs, allowlist))
 }
 
-// reverseOf runs Reverse on the README and keeps one kind.
+// readmeText joins every README of the repo (the index and one per app, since
+// 2026-11-15): Reverse asks for what the code has, wherever the README names it.
+func readmeText(docs map[string]string) string {
+	var parts []string
+	for name, d := range docs {
+		if strings.HasSuffix(name, "README.md") && !strings.HasPrefix(name, "tools/") {
+			parts = append(parts, d)
+		}
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "\n\n")
+}
+
+// reverseOf runs Reverse on the READMEs and keeps one kind.
 func reverseOf(t *testing.T, kind string) []Finding {
 	root, c := realRoot(t)
 	var out []Finding
-	for _, f := range Reverse(repoDocs(t, root)["README.md"], c) {
+	for _, f := range Reverse(readmeText(repoDocs(t, root)), c) {
 		if f.Kind == kind {
 			out = append(out, f)
 		}
