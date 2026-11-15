@@ -1,0 +1,14 @@
+# Line endings (2026-11-16). Blobs are LF; a Windows checkout gets LF too, so a script
+# does not turn dirty or break on a Mac when autocrlf differs between clones.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+
+# Binaries, never converted
+*.exe binary
+*.syso binary
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.db binary
