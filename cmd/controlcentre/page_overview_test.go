@@ -100,7 +100,7 @@ func TestViewsKeepStateOrder(t *testing.T) {
 
 func TestUnitViewSwitch(t *testing.T) {
 	mustContain(t, "pageUnit", "'Structure'", "'Flows'", "'Sprints'", "u.file_pages", "u.flows.pages", "u.sprints.pages",
-		"pager(", "u.item", "u.children", "'Project'", "'Flow'", "'Sprint'", "'Stage'", "'Phase'", "'Waits'", "' warn'")
+		"pager(", "u.item", "u.children", "'Project'", "'Name'", "'Stage'", "'Phase'", "'Waits'", "' warn'")
 }
 
 func TestFileViewBlocks(t *testing.T) {

@@ -49,7 +49,7 @@ func TestSettingsSetKeepsRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := centre.Settings{Root: "kept-root", Width: 60, Menu: "text", Weeks: 4, Theme: "dark"}
+	want := centre.Settings{Root: "kept-root", Width: 60, Menu: "text", Weeks: 4, Theme: "dark", Panel: "normal"}
 	if saved != want {
 		t.Fatalf("saved %+v, want %+v", saved, want)
 	}

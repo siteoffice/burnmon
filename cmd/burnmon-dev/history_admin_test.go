@@ -83,16 +83,16 @@ func TestPageHasHistoryBlockOutsideSectionColumns(t *testing.T) {
 	if !strings.Contains(pageHTML, `id="histAdmin"`) {
 		t.Fatal(`page lacks id="histAdmin"`)
 	}
-	start := strings.Index(pageHTML, `id="secSettingsCols"`)
+	start := strings.Index(pageHTML, `id="secSizes"`)
 	if start < 0 {
-		t.Fatal("page lacks secSettingsCols")
+		t.Fatal("page lacks secSizes")
 	}
-	end := strings.Index(pageHTML[start:], "</div>")
+	end := strings.Index(pageHTML[start:], `id="secControls"`)
 	if end < 0 {
-		t.Fatal("secSettingsCols is not closed")
+		t.Fatal("secSizes is not followed by secControls")
 	}
 	if strings.Contains(pageHTML[start:start+end], "histAdmin") {
-		t.Fatal("histAdmin sits inside secSettingsCols")
+		t.Fatal("histAdmin sits inside secSizes")
 	}
 	for _, want := range []string{"hist_delete_older", "hist_delete_session", "hist_delete_all", "hist_export", "Number.isInteger", "bdevDeleteHistory", "bdevExportHistory"} {
 		if !strings.Contains(pageHTML, want) {

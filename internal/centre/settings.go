@@ -22,11 +22,24 @@ type Settings struct {
 	Weeks  int    `json:"weeks"`
 	Theme  string `json:"theme"`
 	GitPRs bool   `json:"git_prs"`
+	// Panel is the right panel's preset width: narrow, normal or wide.
+	// PanelPx is the width dragged at the panel edge, in px; it wins while
+	// set, 0 means the preset (choosing a preset or a double-click on the
+	// edge sets it back to 0).
+	Panel   string `json:"panel"`
+	PanelPx int    `json:"panel_px"`
 }
 
-// DefaultSettings is width 80, menu text, weeks 2, theme system, no root.
+// PanelMinPx and PanelMaxPx bound a dragged right panel width.
+const (
+	PanelMinPx = 220
+	PanelMaxPx = 640
+)
+
+// DefaultSettings is width 80, menu text, weeks 2, theme system, panel
+// normal, no root.
 func DefaultSettings() Settings {
-	return Settings{Width: 80, Menu: "text", Weeks: 2, Theme: "system"}
+	return Settings{Width: 80, Menu: "text", Weeks: 2, Theme: "system", Panel: "normal"}
 }
 
 // Normalized replaces every value outside its allowed set by its default.
@@ -44,6 +57,12 @@ func (s Settings) Normalized() Settings {
 	}
 	if s.Theme != "system" && s.Theme != "light" && s.Theme != "dark" {
 		s.Theme = d.Theme
+	}
+	if s.Panel != "narrow" && s.Panel != "normal" && s.Panel != "wide" {
+		s.Panel = d.Panel
+	}
+	if s.PanelPx < PanelMinPx || s.PanelPx > PanelMaxPx {
+		s.PanelPx = 0
 	}
 	return s
 }

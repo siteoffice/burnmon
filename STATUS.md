@@ -1,5 +1,25 @@
 # BurnMon, status
 
+What is true on branch `work/wilco-de-tree/first-look-fixes-15-nov` (2026-11-15, Wilco's first look fixes,
+not merged, not tagged; check `git log main` live): BurnMon Dev's gear shows one table for "Sections each mode
+shows" (name | Standard tick and percent | Plain tick and percent, header once): each section row is bold on a
+band with its own tick (all its parts; half-ticked when some are on) and percent, plus "panes N of 100"; panes and
+parts are indented below it; a hidden section or pane box is greyed with the hover text "hidden in this mode, not
+counted"; under the table one line per mode adds up only the counted sections. The Control Centre's right panel
+is 320 px by default (Approve, Send back and Open board measure 291 px on one line), with a Settings row "Right
+panel width" (narrow 256, normal 320, wide 400) and a draggable edge that saves `panel_px` to `controlcentre.json`;
+a double-click on the edge resets it. The unit Flows and Sprints tables share one column grid (Project | Name |
+Stage or Phase | Waits | State), Waits right-aligned. Git page: the rows "ZND10_holding" and
+"ZND50_projectssiteoffice" were real stray folders (`C:\ZND\10_holding\ZND10_holding`,
+`C:\ZND\50_projects\siteoffice\ZND50_projectssiteoffice`), each a `.git` holding only `info\exclude`, left by a
+shell that ate the backslashes of a `...\.git\info\exclude` path; the scanner now skips a git dir without HEAD,
+as git does (fixture test with a worktree and a Windows gitdir line). controlcentre.exe has its own icon (the
+tree, option A of three in `04_assets\2026-11-15_controlcentre_icon_options`), `winres\cc-icon-*.png`, plus
+`winres\controlcentre.icns` for a future macOS bundle (none exists yet). Measured on Windows: `go vet` 0, `go
+test` 1401 pass, 0 fail, 6 skip, `.\build.ps1` 0, the exe shows the new icon. uicheck: fit, charts, station, pct,
+shell, d19 and d33 pass; d29, d43, d40 and d44 fail the same way with `main`'s page built in (real clicks do not
+land on this desktop, and d29's capped window clips the vendor strip), so d29's new gear asserts did not run live.
+
 What is true on branch `sprint/burnmon-dev-layout-pct` (2026-11-15, lane A of the big run plan, not
 merged, not tagged): BurnMon Dev's section sizes are typed numbers in Settings, not dragged. The drag
 bars, the Reset heights button and the B7 fit pass are gone; an old `heights_*` key in

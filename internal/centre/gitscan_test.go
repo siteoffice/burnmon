@@ -85,6 +85,9 @@ func TestFindReposDepthAndSkips(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(rel)), 0o755); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(rel), "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	got := FindRepos(root)
 	if len(got) != 1 || got[0].ID != "a/b/c/d" {

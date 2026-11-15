@@ -3,6 +3,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -13,11 +14,19 @@ import (
 func TestOpenSelIsTheOneOpen(t *testing.T) {
 	mustContain(t, "detail", "openNow = o.open || null")
 	mustContain(t, "openSel", "if (openNow) openNow()")
-	if n := strings.Count(pageHTML, "'dblclick'"); n != 1 {
-		t.Fatalf("page.html has %d 'dblclick' listeners, want 1", n)
+	// The panel edge's double-click resets its width (panelEdge); it opens nothing.
+	opens := 0
+	for _, loc := range regexp.MustCompile(`'dblclick'`).FindAllStringIndex(pageHTML, -1) {
+		switch fn := enclosingFunc(loc[0]); fn {
+		case "panelEdge":
+		case "wireOpen":
+			opens++
+		default:
+			t.Errorf("'dblclick' lies in %q, want wireOpen (or panelEdge for the width reset)", fn)
+		}
 	}
-	if fn := enclosingFunc(strings.Index(pageHTML, "'dblclick'")); fn != "wireOpen" {
-		t.Errorf("'dblclick' lies in %q, want wireOpen", fn)
+	if opens != 1 {
+		t.Fatalf("wireOpen has %d 'dblclick' listeners, want 1", opens)
 	}
 	mustContain(t, "wireOpen", "'dblclick'", "ev.key === 'Enter'", "ev.key === ' '", "pick();")
 	if n := strings.Count(pageFunc(t, "wireOpen"), "openSel();"); n != 2 {

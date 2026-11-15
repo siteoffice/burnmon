@@ -181,7 +181,7 @@ func TestPctGearSaveAndBoxes(t *testing.T) {
 		"if(save) save.disabled = !!why;",
 		"if(line) line.textContent = why;",
 		"i.disabled = !shown;",
-		"if(panes.length < 2) return;",
+		"(multi ? box('panes', p.id, m, p.label) : '')",
 		"placeholder=\"auto\"",
 		"secSend({ pct: v.pct });",
 		"Type a whole number from 1 to 100, or leave the box empty",

@@ -8,9 +8,43 @@ import (
 )
 
 func TestDefaultSettings(t *testing.T) {
-	want := Settings{Root: "", Width: 80, Menu: "text", Weeks: 2, Theme: "system"}
+	want := Settings{Root: "", Width: 80, Menu: "text", Weeks: 2, Theme: "system", Panel: "normal"}
 	if got := DefaultSettings(); got != want {
 		t.Errorf("DefaultSettings = %+v", got)
+	}
+}
+
+// The right panel: a preset (narrow, normal, wide) and a dragged width in px
+// that wins while set; 0 means the preset. Out of range values fall back.
+func TestSettingsPanelNormalized(t *testing.T) {
+	cases := []struct {
+		in        Settings
+		panel     string
+		px        int
+	}{
+		{Settings{Panel: "wide", PanelPx: 0}, "wide", 0},
+		{Settings{Panel: "narrow", PanelPx: 300}, "narrow", 300},
+		{Settings{Panel: "huge", PanelPx: PanelMinPx - 1}, "normal", 0},
+		{Settings{Panel: "", PanelPx: PanelMaxPx + 1}, "normal", 0},
+		{Settings{Panel: "normal", PanelPx: PanelMaxPx}, "normal", PanelMaxPx},
+		{Settings{Panel: "normal", PanelPx: -5}, "normal", 0},
+	}
+	for _, c := range cases {
+		got := c.in.Normalized()
+		if got.Panel != c.panel || got.PanelPx != c.px {
+			t.Errorf("Normalized(%+v) = panel %q px %d, want %q %d", c.in, got.Panel, got.PanelPx, c.panel, c.px)
+		}
+	}
+	// A dragged width survives a save and a load.
+	dir := t.TempDir()
+	p := filepath.Join(dir, SettingsFile)
+	s := DefaultSettings()
+	s.PanelPx = 345
+	if err := SaveSettings(p, s); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := LoadSettings("", dir); got.PanelPx != 345 || got.Panel != "normal" {
+		t.Errorf("loaded %+v, want panel normal and panel_px 345", got)
 	}
 }
 
@@ -43,7 +77,7 @@ func TestSettingsBadValueReplaced(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, SettingsFile, `{"width":70,"menu":"x","weeks":3,"theme":"pink","root":"C:/r"}`)
 	s, _ := LoadSettings("", dir)
-	want := Settings{Root: "C:/r", Width: 80, Menu: "text", Weeks: 2, Theme: "system"}
+	want := Settings{Root: "C:/r", Width: 80, Menu: "text", Weeks: 2, Theme: "system", Panel: "normal"}
 	if s != want {
 		t.Errorf("got %+v, want %+v", s, want)
 	}
@@ -57,7 +91,7 @@ func TestSettingsBadValueReplaced(t *testing.T) {
 		t.Errorf("wrong type: %+v", s)
 	}
 	writeFile(t, dir, SettingsFile, "\xef\xbb\xbf"+`{"weeks":4,"theme":"dark","menu":"icons"}`)
-	want = Settings{Width: 80, Menu: "icons", Weeks: 4, Theme: "dark"}
+	want = Settings{Width: 80, Menu: "icons", Weeks: 4, Theme: "dark", Panel: "normal"}
 	if s, _ := LoadSettings("", dir); s != want {
 		t.Errorf("BOM file: %+v, want %+v", s, want)
 	}

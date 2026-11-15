@@ -295,14 +295,14 @@ const d29ReadJS = `(function(){
   var ps = document.getElementById('pageScroll'), host = document.getElementById('secHost');
   var strip = document.getElementById('vendorStripPanel'), tg = document.getElementById('plainToggle');
   var ticks = [];
-  Array.prototype.forEach.call(document.querySelectorAll('#secSettingsCols input[data-sw]'), function(i){
+  Array.prototype.forEach.call(document.querySelectorAll('#secSizeGrid input[data-sw]'), function(i){
     if(i.checked) ticks.push(i.getAttribute('data-mode') + ':' + i.getAttribute('data-sw'));
   });
   var seen = {};
   Array.prototype.forEach.call(document.querySelectorAll('[data-part]'), function(e){
     if(disp(e)) seen[e.getAttribute('data-part')] = true;
   });
-  var sb = document.getElementById('secScrollbar'), firstH = q('#secSettingsCols h4'), radio = q('input[name="secStationStart"]:checked');
+  var sb = document.getElementById('secScrollbar'), firstH = q('#secSizeGrid tr.setsecrow'), radio = q('input[name="secStationStart"]:checked');
   return {
     parts: Object.keys(seen),
     todoOn: !document.getElementById('todoPanel').classList.contains('sec-off'),
@@ -322,9 +322,9 @@ const d29ReadJS = `(function(){
     stripWhole: strip ? Array.prototype.filter.call(strip.querySelectorAll('tbody tr'), function(r){ return r.getBoundingClientRect().bottom <= strip.getBoundingClientRect().bottom + 1; }).length : 0,
     gearOpen: document.getElementById('secSettings').classList.contains('open'),
     ticks: ticks,
-    headings: Array.prototype.map.call(document.querySelectorAll('#secSettingsCols h4'), function(h){ return h.textContent; }),
-    labelRows: document.querySelectorAll('#secSettingsCols .setlbl').length,
-    checkboxes: document.querySelectorAll('#secSettingsCols input[data-sw]').length,
+    headings: Array.prototype.map.call(document.querySelectorAll('#secSizeGrid tr.setsecrow td.setlbl'), function(h){ return h.textContent; }),
+    labelRows: document.querySelectorAll('#secSizeGrid tr.setpartrow').length,
+    checkboxes: document.querySelectorAll('#secSizeGrid input[data-sw]').length,
     scrollFirst: !!sb && !!firstH && !!(sb.compareDocumentPosition(firstH) & Node.DOCUMENT_POSITION_FOLLOWING),
     scrollTick: !!sb && sb.checked,
     radio: radio ? radio.value : ''
@@ -568,8 +568,9 @@ func caseD29(hwnd uintptr, args []string) error {
 	if !p.GearOpen || strings.Join(p.Headings, ",") != wantHeads {
 		return d29Fail("gear: open %v, group headings %v", p.GearOpen, p.Headings)
 	}
-	if p.LabelRows != 15 || p.Checkboxes != 30 {
-		return d29Fail("gear: %d part rows and %d checkboxes, want 15 and 30", p.LabelRows, p.Checkboxes)
+	// One table (2026-11-15): 14 part rows, To Do's only tick sits on its section row.
+	if p.LabelRows != 14 || p.Checkboxes != 30 {
+		return d29Fail("gear: %d part rows and %d part checkboxes, want 14 and 30", p.LabelRows, p.Checkboxes)
 	}
 	if !p.ScrollFirst || !p.ScrollTick {
 		return d29Fail("gear: Overall scrollbar first %v, ticked %v", p.ScrollFirst, p.ScrollTick)
@@ -736,7 +737,7 @@ func d29Persist() error {
 		return d29Fail("scrollbar switch saved wrong: %+v", st)
 	}
 	// The gear's own checkbox saves through the same path, to its own mode.
-	if err := d29Eval(`(function(){ var i = document.querySelector('#secSettingsCols input[data-mode="plain"][data-sw="sessions"]'); i.checked = false; i.dispatchEvent(new Event('change', {bubbles: true})); })()`); err != nil {
+	if err := d29Eval(`(function(){ var i = document.querySelector('#secSizeGrid input[data-mode="plain"][data-sw="sessions"]'); i.checked = false; i.dispatchEvent(new Event('change', {bubbles: true})); })()`); err != nil {
 		return err
 	}
 	time.Sleep(400 * time.Millisecond)

@@ -522,17 +522,26 @@ body.plain #mapOverlay{font-size:13.5px}
   box-shadow:0 6px 24px var(--scrim)}
 #secSettings.open{display:flex}
 #secSettings{max-height:calc(100vh - 80px); overflow-y:auto}
-#secSettings .setgrid{display:grid; grid-template-columns:1fr auto auto; column-gap:18px; row-gap:4px; align-items:center}
-#secSettings .setgrid h4{grid-column:1 / -1; margin-top:6px}
-#secSettings .setgrid .sethead{color:var(--dim); font-size:11px; text-align:center}
-#secSettings .setgrid .setlbl{white-space:nowrap}
-#secSettings .setgrid input{justify-self:center}
 #secSettings .setstation{display:flex; gap:14px; align-items:center}
 #secSettings .setbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
-#secSizes .setgrid input{width:56px; background:var(--bg); color:inherit; border:1px solid var(--bd); padding:1px 4px; font:inherit}
-#secSizes .setgrid input:disabled{opacity:.4}
-#secSizes .setgrid .setpane{padding-left:14px}
-#secSizes .setgrid .setsec{font-weight:600}
+/* One table: name | Standard (tick + percent) | Plain (tick + percent). A section row is bold on a band, its panes and parts indented below it. */
+#secSizeGrid{border-collapse:collapse; width:100%}
+#secSizeGrid th{color:var(--dim); font-size:11px; font-weight:normal; text-align:left; padding:0 8px 4px}
+#secSizeGrid td{padding:2px 8px; white-space:nowrap; vertical-align:middle}
+#secSizeGrid tr.setsecrow td{font-weight:700; background:var(--panel2); border-top:1px solid var(--bd)}
+#secSizeGrid tr.setsecrow + tr td, #secSizeGrid tr.setsecrow:first-child td{border-top:none}
+#secSizeGrid .setlbl{overflow:hidden; text-overflow:ellipsis; max-width:300px}
+#secSizeGrid .lv1{padding-left:22px}
+#secSizeGrid .lv2{padding-left:38px; color:var(--dim)}
+#secSizeGrid .setcell{display:flex; gap:6px; align-items:center}
+#secSizeGrid .noswitch{display:inline-block; width:13px}
+#secSizeGrid .pctbox{display:inline-flex}
+#secSizeGrid .pctbox.hid{cursor:help}
+#secSizeGrid input[type=number]{width:52px; background:var(--bg); color:inherit; border:1px solid var(--bd); padding:1px 4px; font:inherit; font-weight:normal}
+#secSizeGrid input:disabled{opacity:.4; pointer-events:none}
+#secSizeGrid .pantot{color:var(--dim); font-weight:normal; font-size:11px}
+#secSizeGrid .pantot.over{color:var(--amber)}
+#secSizeTotals{display:flex; flex-direction:column; gap:2px; color:var(--dim)}
 #secSizes .setsave{display:flex; gap:10px; align-items:center; margin-top:4px}
 #secSizes .setbtn:disabled{opacity:.5; cursor:default}
 #secSettings h4{margin:0 0 2px; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase}
@@ -687,7 +696,12 @@ body.plain #mapOverlay{font-size:13.5px}
 <div id="secSettings" role="dialog" aria-label="Sections each mode shows">
   <h4>Sections each mode shows</h4>
   <label class="setrow"><input type="checkbox" id="secScrollbar"> Overall scrollbar</label>
-  <div class="setgrid" id="secSettingsCols"></div>
+  <div id="secSizes">
+    <div class="sechint">Tick what each mode shows. A section is a percent of the window height, a pane a percent of its section. An empty box shares what is left.</div>
+    <table id="secSizeGrid"></table>
+    <div id="secSizeTotals"></div>
+    <div class="setsave"><button id="secSizeSave" class="setbtn" type="button">Save</button><span class="sechint" id="secSizeWhy"></span></div>
+  </div>
   <div id="secControls">
     <h4>Controls</h4>
     <div class="sechint ctlwhy">Off until you tick them. Stop a session and Attach to a session need claude_path and agent_view in burnmon.json. <span data-ctl-needs="foreman">Approve a gate and Send a gate back need python on PATH and foreman_root.</span> Each press first shows the exact command; a second press on Confirm runs it within 5 seconds.</div>
@@ -701,12 +715,6 @@ body.plain #mapOverlay{font-size:13.5px}
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
-  </div>
-  <div id="secSizes">
-    <h4>Sizes</h4>
-    <div class="sechint">A section is a percent of the window height, a pane a percent of its section. An empty box shares what is left.</div>
-    <div class="setgrid" id="secSizeGrid"></div>
-    <div class="setsave"><button id="secSizeSave" class="setbtn" type="button">Save</button><span class="sechint" id="secSizeWhy"></span></div>
   </div>
   <div id="histAdmin">
     <h4>History</h4>
@@ -3334,6 +3342,28 @@ body.plain #mapOverlay{font-size:13.5px}
     }
     return '';
   }
+  // The gear's lines under and inside the table. Only counted keys (shown in
+  // the mode) add up; an empty box reads auto.
+  var PCT_SECTION_SHORT = { status:'Status', sessions_30min:'Sessions', processes_30min:'Processes', todo:'To Do' };
+  function pctHas(vals, k){ return !!vals && Object.prototype.hasOwnProperty.call(vals, k); }
+  function pctTotalLine(mode, secs){
+    var shown = pctShownSections(mode), sum = 0, terms = [];
+    shown.forEach(function(s){
+      if(pctHas(secs, s)){ sum += secs[s]; terms.push(PCT_SECTION_SHORT[s] + ' ' + secs[s]); }
+      else terms.push(PCT_SECTION_SHORT[s] + ' auto');
+    });
+    var hidden = PCT_SECTIONS.filter(function(s){ return shown.indexOf(s) < 0; }).map(function(s){ return PCT_SECTION_SHORT[s]; });
+    var line = (mode === 'plain' ? 'Plain: ' : 'Standard: ') + (terms.length ? terms.join(' + ') + ' = ' + sum : 'nothing shown');
+    return line + (hidden.length ? ' (' + hidden.join(', ') + ' hidden)' : '');
+  }
+  // 'panes 100 of 100' for a section with two panes or more, '' otherwise or when hidden.
+  function pctPaneTotal(mode, sec, panes){
+    if(PCT_PANES.filter(function(p){ return p.section === sec; }).length < 2) return { text:'', over:false };
+    var shown = pctShownPanes(mode, sec), sum = 0, auto = false;
+    if(!shown.length) return { text:'', over:false };
+    shown.forEach(function(k){ if(pctHas(panes, k)) sum += panes[k]; else auto = true; });
+    return { text:'panes ' + sum + (auto ? ' + auto' : '') + ' of 100', over:sum > 100 };
+  }
   function pctScaled(keys, pct, sum){
     var o = {};
     keys.forEach(function(k){ o[k] = pct[k] * 100 / sum; });
@@ -3998,30 +4028,9 @@ body.plain #mapOverlay{font-size:13.5px}
     t.setAttribute('aria-pressed', secState.plain ? 'true' : 'false');
   }
 
-  // The gear's list: one row per part, grouped, with a Standard and a Plain
-  // tick each. Built once from the payload's groups, then only the ticks, the
-  // scrollbar box and the radio are synced, so a poll never replaces a box
-  // under the pointer.
+  // The gear's switches live in the size table (pctRenderSizes); this syncs
+  // the scrollbar box, the radio and the toast box.
   function secRenderSettings(){
-    var box = document.getElementById('secSettingsCols');
-    if(!box) return;
-    if(!box.firstChild && secState.groups.length){
-      var html = '';
-      secState.groups.forEach(function(g, gi){
-        html += '<h4>' + esc(g.label) + '</h4>';
-        if(gi === 0) html += '<span></span><span class="sethead">Standard</span><span class="sethead">Plain</span>';
-        (g.parts || []).forEach(function(p){
-          html += '<span class="setlbl">' + esc(p.label) + '</span>' +
-            '<input type="checkbox" data-mode="standard" data-sw="' + p.id + '" aria-label="' + esc(p.label) + ', Standard">' +
-            '<input type="checkbox" data-mode="plain" data-sw="' + p.id + '" aria-label="' + esc(p.label) + ', Plain">';
-        });
-      });
-      box.innerHTML = html;
-    }
-    Array.prototype.forEach.call(box.querySelectorAll('input[data-sw]'), function(i){
-      var list = i.getAttribute('data-mode') === 'plain' ? secState.plainSet : secState.standard;
-      i.checked = !!list[i.getAttribute('data-sw')];
-    });
     var sb = document.getElementById('secScrollbar');
     if(sb) sb.checked = !!secState.scrollbar;
     Array.prototype.forEach.call(document.querySelectorAll('input[name="secStationStart"]'), function(r){
@@ -4179,6 +4188,13 @@ body.plain #mapOverlay{font-size:13.5px}
       .catch(function(e){ console.log('bdevSetSections:', e); });
   }
 
+  // A section's tick switches every part of it in that mode: one saved change
+  // per part that differs, in order (Go takes one part per change).
+  function secSendSection(mode, sec, on){
+    var g = secState.groups.filter(function(x){ return x.id === sec; })[0];
+    var ids = (g ? g.parts || [] : []).map(function(p){ return p.id; }).filter(function(id){ return pctOnIn(mode, id) !== on; });
+    return ids.reduce(function(p, id){ return p.then(function(){ return secSend({ mode: mode, section: id, on: on }); }); }, Promise.resolve());
+  }
   var secSettingsEl = document.getElementById('secSettings'), secGearEl = document.getElementById('secGear');
   function secSettingsOpen(open){
     if(open){
@@ -4200,6 +4216,7 @@ body.plain #mapOverlay{font-size:13.5px}
   secSettingsEl.addEventListener('change', function(e){
     var t = e.target;
     if(t.hasAttribute('data-sw')) secSend({ mode: t.getAttribute('data-mode'), section: t.getAttribute('data-sw'), on: t.checked });
+    else if(t.hasAttribute('data-sec-sw')) secSendSection(t.getAttribute('data-mode'), t.getAttribute('data-sec-sw'), t.checked);
     else if(t.hasAttribute('data-ctl-sw')) secSend({ control: t.getAttribute('data-ctl-sw'), on: t.checked });
     else if(t.id === 'secScrollbar') secSend({ scrollbar: t.checked });
     else if(t.id === 'secToast'){
@@ -4228,31 +4245,79 @@ body.plain #mapOverlay{font-size:13.5px}
       }
     }
   });
-  // The gear's size boxes: one per section and per pane (a section with one
-  // pane has no pane box), a Standard and a Plain box each. Built once; a poll
-  // fills them only while nobody has typed since the last Save. A hidden part's
-  // box is greyed. Save is off with the sentence of the first broken rule.
+  // The gear's one table (2026-11-15 first look): a row per section, bold on a
+  // band, with its tick and percent per mode and its pane total; below it, indented,
+  // a row per pane (percent) and per part (tick). A pane of one part is one row
+  // with both; a pane of several parts gets a percent row and a tick row per
+  // part; a section of one part keeps its only tick on the section row and has
+  // no pane box. Built once from the payload's groups; a poll then syncs the
+  // ticks and fills the boxes only while nobody has typed since the last Save.
+  // A hidden section or pane has its box greyed with the hover text
+  // PCT_HIDDEN_TIP. Save is off with the sentence of the first broken rule.
   var pctDirty = false;
+  var PCT_HIDDEN_TIP = 'hidden in this mode, not counted';
+  function pctBuildTable(grid){
+    var partLabel = {}, sectionParts = {};
+    secState.groups.forEach(function(g){
+      sectionParts[g.id] = (g.parts || []).map(function(p){ partLabel[p.id] = p.label; return p.id; });
+    });
+    var MODES = ['standard', 'plain'];
+    var modeName = function(m){ return m === 'plain' ? 'Plain' : 'Standard'; };
+    var box = function(kind, id, mode, label){
+      return '<span class="pctbox" data-pct-wrap="' + kind + ':' + id + ':' + mode + '"><input type="number" min="1" max="100" step="1" placeholder="auto" data-pct-kind="' + kind + '" data-pct-id="' + id +
+        '" data-mode="' + mode + '" aria-label="' + esc(label) + ', ' + modeName(mode) + ', percent"></span>';
+    };
+    var tick = function(attr, id, mode, label){
+      return '<input type="checkbox" ' + attr + '="' + id + '" data-mode="' + mode + '" aria-label="' + esc(label) + ', ' + modeName(mode) + '">';
+    };
+    var none = '<span class="noswitch"></span>';
+    var row = function(cls, lvl, label, cell){
+      return '<tr class="' + cls + '"><td class="setlbl ' + lvl + '" title="' + esc(label) + '">' + esc(label) + '</td>' +
+        MODES.map(function(m){ return '<td><span class="setcell">' + cell(m) + '</span></td>'; }).join('') + '</tr>';
+    };
+    var html = '<thead><tr><th></th><th>Standard</th><th>Plain</th></tr></thead><tbody>';
+    PCT_SECTIONS.forEach(function(sec){
+      var lbl = PCT_SECTION_LABEL[sec], parts = sectionParts[sec] || [];
+      var panes = PCT_PANES.filter(function(p){ return p.section === sec; });
+      var one = parts.length === 1;
+      html += row('setsecrow', '', lbl, function(m){
+        return (one ? tick('data-sw', parts[0], m, partLabel[parts[0]]) : tick('data-sec-sw', sec, m, lbl)) +
+          box('sections', sec, m, lbl) + '<span class="pantot" data-pantot="' + sec + '" data-mode="' + m + '"></span>';
+      });
+      if(one) return;
+      panes.forEach(function(p){
+        var multi = panes.length > 1;
+        if(p.parts.length === 1){
+          html += row('setpartrow', 'lv1', partLabel[p.parts[0]] || p.label, function(m){
+            return tick('data-sw', p.parts[0], m, partLabel[p.parts[0]] || p.label) + (multi ? box('panes', p.id, m, p.label) : '');
+          });
+          return;
+        }
+        if(multi) html += row('setpanerow', 'lv1', p.label, function(m){ return none + box('panes', p.id, m, p.label); });
+        p.parts.forEach(function(id){
+          html += row('setpartrow', multi ? 'lv2' : 'lv1', partLabel[id] || id, function(m){ return tick('data-sw', id, m, partLabel[id] || id); });
+        });
+      });
+    });
+    grid.innerHTML = html + '</tbody>';
+  }
   function pctRenderSizes(){
     var grid = document.getElementById('secSizeGrid');
     if(!grid) return;
     if(!grid.firstChild){
-      var html = '<span></span><span class="sethead">Standard</span><span class="sethead">Plain</span>';
-      var box = function(kind, id, mode, label){
-        return '<input type="number" min="1" max="100" step="1" placeholder="auto" data-pct-kind="' + kind + '" data-pct-id="' + id +
-          '" data-mode="' + mode + '" aria-label="' + esc(label) + ', ' + (mode === 'plain' ? 'Plain' : 'Standard') + ', percent">';
-      };
-      PCT_SECTIONS.forEach(function(sec){
-        var lbl = PCT_SECTION_LABEL[sec];
-        html += '<span class="setlbl setsec">' + esc(lbl) + '</span>' + box('sections', sec, 'standard', lbl) + box('sections', sec, 'plain', lbl);
-        var panes = PCT_PANES.filter(function(p){ return p.section === sec; });
-        if(panes.length < 2) return;
-        panes.forEach(function(p){
-          html += '<span class="setlbl setpane" title="' + esc(p.label) + '">' + esc(p.label) + '</span>' + box('panes', p.id, 'standard', p.label) + box('panes', p.id, 'plain', p.label);
-        });
-      });
-      grid.innerHTML = html;
+      if(!secState.groups.length) return;
+      pctBuildTable(grid);
     }
+    Array.prototype.forEach.call(grid.querySelectorAll('input[data-sw]'), function(i){
+      i.checked = pctOnIn(i.getAttribute('data-mode'), i.getAttribute('data-sw'));
+    });
+    Array.prototype.forEach.call(grid.querySelectorAll('input[data-sec-sw]'), function(i){
+      var g = secState.groups.filter(function(x){ return x.id === i.getAttribute('data-sec-sw'); })[0];
+      var ids = g ? (g.parts || []).map(function(p){ return p.id; }) : [];
+      var on = ids.filter(function(id){ return pctOnIn(i.getAttribute('data-mode'), id); }).length;
+      i.checked = ids.length > 0 && on === ids.length;
+      i.indeterminate = on > 0 && on < ids.length;
+    });
     Array.prototype.forEach.call(grid.querySelectorAll('input[data-pct-id]'), function(i){
       var kind = i.getAttribute('data-pct-kind'), id = i.getAttribute('data-pct-id'), mode = i.getAttribute('data-mode');
       if(!pctDirty){
@@ -4262,8 +4327,21 @@ body.plain #mapOverlay{font-size:13.5px}
       var shown = kind === 'sections' ? pctShownSections(mode).indexOf(id) >= 0
         : PCT_PANES.some(function(p){ return p.id === id && pctShownPanes(mode, p.section).indexOf(id) >= 0; });
       i.disabled = !shown;
+      // A disabled box gets no hover, so the tip sits on its wrapper.
+      i.parentNode.classList.toggle('hid', !shown);
+      if(shown) i.parentNode.removeAttribute('title'); else i.parentNode.title = PCT_HIDDEN_TIP;
     });
     pctValidateBoxes();
+  }
+  // The section row's pane totals and the one total line per mode under the table.
+  function pctRenderTotals(pct){
+    Array.prototype.forEach.call(document.querySelectorAll('#secSizeGrid [data-pantot]'), function(el){
+      var m = el.getAttribute('data-mode'), t = pctPaneTotal(m, el.getAttribute('data-pantot'), pct[m].panes);
+      el.textContent = t.text;
+      el.classList.toggle('over', t.over);
+    });
+    var tot = document.getElementById('secSizeTotals');
+    if(tot) tot.innerHTML = ['standard', 'plain'].map(function(m){ return '<div>' + esc(pctTotalLine(m, pct[m].sections)) + '</div>'; }).join('');
   }
   // The typed numbers per mode, or a sentence when a box is not a whole number from 1 to 100.
   function pctReadBoxes(){
@@ -4287,6 +4365,7 @@ body.plain #mapOverlay{font-size:13.5px}
     var save = document.getElementById('secSizeSave'), line = document.getElementById('secSizeWhy');
     if(save) save.disabled = !!why;
     if(line) line.textContent = why;
+    pctRenderTotals(r.pct);
     return { pct: r.pct, why: why };
   }
   document.getElementById('secSizeGrid').addEventListener('input', function(){ pctDirty = true; pctValidateBoxes(); });
