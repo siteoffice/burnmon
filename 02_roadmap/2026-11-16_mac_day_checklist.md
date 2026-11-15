@@ -10,9 +10,10 @@ status: ready; nothing here has run on a Mac yet
 
 ## TL;DR
 
-Eleven steps, each one copyable bash block that says where it runs. Steps 1 to 4 prepare the Mac
+Twelve steps, each one copyable bash block that says where it runs. Steps 1 to 4 prepare the Mac
 and run `scripts/maccheck.sh`. Steps 5 to 9 are the manual list, with a screenshot each. Step 10
-is signing, which defaults to unsigned. Step 11 brings the results home. Findings become beta.5.
+is signing, which defaults to unsigned. Step 11 checks the Codex 0.167 reader. Step 12 brings the
+results home. Findings become beta.5.
 
 Tags used: BurnMon `v0.4.0-beta.4` (tag object `1a64982`, commit `3d227fc`), Groundwork `v0.4.3`
 (commit `43eae89`). BurnMon `main` (`c175bfe`) differs from the tag only in `README.md` and
@@ -30,7 +31,9 @@ depend on the shell of the block before.
       app-specific password for `notarytool`, in your Apple Developer account? If either is
       missing, run unsigned (step 10). I could not check this from here. Default: unsigned.
 - [ ] You can sign in to Claude Code on the Mac (Claude account). Sign out before you hand the Mac
-      back (step 11).
+      back (step 12).
+- [ ] For step 11 you can sign in to the Codex CLI (OpenAI account). Without one, skip step 11 and
+      write "skipped, no OpenAI sign-in" in the report. Sign out of it too in step 12.
 
 ## 1. Install Go, Python 3.9+ and the Xcode command line tools
 
@@ -295,7 +298,55 @@ A line with "Developer ID Application" means signing is possible. The notarizati
 not scripted here and I have not run them. Treat OF26 as open unless you do both and record the
 result.
 
-## 11. Bring the results home and leave the Mac clean
+## 11. Codex 0.167 reader check (plan Research item 6)
+
+BurnMon's Codex reader was built against Codex 0.155.x rollouts. The plan says Codex is now at
+0.167. This step checks that BurnMon still reads a fresh transcript from the version you install.
+It needs an OpenAI sign-in.
+
+Codex rollouts sit in `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`, or under
+`$CODEX_HOME/sessions` when that is set. Each answered turn writes one `token_count` line. Install
+the Codex CLI from OpenAI's own install page, then:
+
+```bash
+# runs in: Terminal on the rented Mac (zsh). cwd: ~/work/groundwork (the block sets it).
+cd ~/work/groundwork
+codex --version
+codex
+```
+
+Write the exact version in the report (the plan says 0.167; any other number is a finding). Ask
+Codex two short questions in one session ("list the folders in this repo", then "how many files
+are in plugins"), then exit. Now compare the file with what BurnMon shows:
+
+```bash
+# runs in: Terminal on the rented Mac (zsh). cwd: ~/work/burnmon (the block sets it).
+cd ~/work/burnmon
+F="$(ls -t ~/.codex/sessions/*/*/*/rollout-*.jsonl | head -1)"
+echo "$F"
+grep -c '"type":"token_count"' "$F"
+grep -o '"type":"[a-z_]*"' "$F" | sort | uniq -c | sort -rn | head -12
+./maccheck-out/burnmon
+```
+
+- [ ] The `token_count` count is 2 or more (one per answered turn). If it is 0, the format changed:
+      keep the file out of the repo (it holds your prompts) and copy only the `uniq -c` list into
+      the report.
+- [ ] In BurnMon (Now, then Sessions) the Codex session is listed and its turn count equals the
+      `token_count` count. Fewer turns than lines is the collapse seen before alpha.8: record both
+      numbers.
+- [ ] Tokens are not zero and the model name is filled in. Record the model name.
+- [ ] Ask a third question while the Codex chat is still open: the new turn shows in BurnMon within
+      a few seconds (Codex holds the file open, BurnMon polls the tail).
+- [ ] Any BurnMon log line in `~/Library/Application Support/burnmon` that names Codex and an
+      error: copy that line only.
+- [ ] Screenshot of the Sessions page with the Codex row: `screencapture -w ~/Desktop/mac-codex.png`.
+
+I have not run this on any machine. The commands use only the folder and line type named in
+`internal\adapter\codex\codex.go`. The turn-count rule comes from the alpha.8 fix, not from a test
+I ran today.
+
+## 12. Bring the results home and leave the Mac clean
 
 ```bash
 # runs in: Terminal on the rented Mac (zsh). cwd: ~/work/burnmon (the block sets it).
@@ -320,7 +371,8 @@ claude /logout
 ls ~/.claude ~/work "$HOME/Library/Application Support/burnmon"
 ```
 
-Then delete `~/.claude`, `~/work` and `~/Library/Application Support/burnmon` yourself, once the
+Sign out of the Codex CLI with its own sign-out command as well. Then delete `~/.claude`,
+`~/.codex`, `~/work` and `~/Library/Application Support/burnmon` yourself, once the
 zip is on the laptop. I did not put the delete in a block on purpose: it ends the test data.
 
 ## Close-out
@@ -328,6 +380,5 @@ zip is on the laptop. I did not put the delete in a block on purpose: it ends th
 - DO: checklist, `scripts/maccheck.sh` update and its test, all measured on the laptop (see the
   PR). Nothing in this file has run on a Mac.
 - HAND (you): step 0 decisions (signing certificate, Claude sign-in), and the whole Mac day.
-- ASK deferred: Codex 0.167 reader check, listed in the plan's Research item 6 as "add to lane F".
-  It is not in the Lane F prompt, so it is not in this checklist. Say yes and it becomes step 12.
+- DO: the Codex 0.167 reader check is step 11 (plan Research item 6, added on Wilco's request).
 - DROP: nothing.
