@@ -382,7 +382,7 @@ and need `foreman_root`.
 
 ## BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-beta.3`) is a second, developer-facing window: what running
+`burnmon-dev.exe` (`v0.4.0-beta.4`) is a second, developer-facing window: what running
 AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
 grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
 performance problem and a token spike show up together. It reuses `burnmon.exe`'s own
@@ -863,7 +863,9 @@ collapsed Done group and a Windows toast for Blocked and Your turn. `v0.4.0-beta
 the release for the first test group: Waits on you drops the failed checks of closed sprints and
 shows only sessions without a Foreman folder, "Which app do I open?", the age of cloud data, the
 Burn Report (redacted by default), gate controls that follow Foreman's gate names, and a macOS
-notifier that waits for the native Mac window. In beta.1 the controls and the agent view were not yet proven against real
+notifier that waits for the native Mac window. `v0.4.0-beta.4`, 2026-11-15: the Control Centre
+(`controlcentre.exe`, slice 1, with its root set in Settings and a Git page) and BurnMon Dev's
+section sizes as typed percents, with Stop as its only control. In beta.1 the controls and the agent view were not yet proven against real
 sessions; B8 ran each control once, on a test agent and on throwaway Foreman flows, and saw
 the agent view list a real background agent. In beta.1 the agent view stayed empty when `claude` on `PATH` was a `.cmd` shim;
 since B8 BurnMon reads an npm `claude.cmd` shim for the `claude.exe` it names (see "Foreman
