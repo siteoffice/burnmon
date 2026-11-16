@@ -20,6 +20,7 @@ import (
 	"burnmon/internal/gitrefs"
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
+	"burnmon/internal/winbind"
 )
 
 const windowTitle = "Control Centre"
@@ -65,18 +66,8 @@ func main() {
 	}
 	defer w.Destroy()
 
-	// Dispatch heartbeat, same reason as cmd\burnmon-dev\main.go: a Win32
-	// modal loop (a window drag or resize) drops the thread message that
-	// wakes the UI thread for a queued Dispatch, so a binding result could
-	// wait until some later Dispatch. A no-op Dispatch every second caps
-	// that wait at a second.
-	go func() {
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-		for range t.C {
-			w.Dispatch(func() {})
-		}
-	}()
+	// Dispatch heartbeat: why it exists is in winbind.StartHeartbeat.
+	winbind.StartHeartbeat(w)
 
 	// The Git page: git status and gh run in the background, never on the
 	// window thread; worktrees match sessions by folder name in the snapshot.
