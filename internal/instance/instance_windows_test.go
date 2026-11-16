@@ -5,15 +5,20 @@ package instance
 import (
 	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+var nameSeq atomic.Int64
 
 // A second claim on the same mutex name in one process reports "already
 // running", the same signal a second app instance gets. A different name is
 // independent.
 func TestAlreadyRunningSecondClaim(t *testing.T) {
-	name := fmt.Sprintf(`Local\burnmon-instance-test-%d-%d`, os.Getpid(), time.Now().UnixNano())
+	// A mutex is held until the process ends, so a repeated run (-count=3) must
+	// not reuse a name; the clock alone ticks too slowly for that on Windows.
+	name := fmt.Sprintf(`Local\burnmon-instance-test-%d-%d-%d`, os.Getpid(), time.Now().UnixNano(), nameSeq.Add(1))
 	if AlreadyRunning(name) {
 		t.Fatal("first claim reported already running")
 	}
