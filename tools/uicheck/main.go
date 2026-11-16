@@ -64,7 +64,15 @@ func main() {
 	var hwnd uintptr
 	if !selfManaged[name] {
 		var err error
-		if isDevCheck(name) {
+		if isCentreCheck(name) {
+			// controlcentre.exe: its own window and dev eval port (9335). Each case
+			// sets its own window size.
+			currentEvalAddr = evalAddrCentre
+			hwnd, err = findCentreWindow()
+			if err != nil {
+				fatal("%v", err)
+			}
+		} else if isDevCheck(name) {
 			currentEvalAddr = evalAddrDev
 			hwnd, err = findBurnmonDevWindow()
 			if err != nil {

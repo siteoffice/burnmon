@@ -1906,6 +1906,7 @@ var api = {
       var bad = !r.published && r.lane.some(function(st) { return st.state === 'bad'; });
       var pick = function() { rowSel(b); sub.sel = r.id; gitRowDetail(r); };
       var b = btn('rw' + (r.published ? '' : ' warn'), null, pick);
+      b.setAttribute('data-repo', r.id);
       wireOpen(b, pick);
       var nm = gitCell('g1', r.name + (r.open_branches.length ? ' +' + r.open_branches.length : ''), r.id +
         (r.open_branches.length ? ', and ' + r.open_branches.map(function(o) { return o.name; }).join(', ') : ''));

@@ -55,6 +55,10 @@ var (
 
 const windowTitle = "BurnMon"
 
+// windowTitleCentre is controlcentre.exe's window title (cmd\controlcentre
+// main.go windowTitle).
+const windowTitleCentre = "Control Centre"
+
 // windowTitleDev is burnmon-dev.exe's own window title (cmd\burnmon-dev
 // app.go's windowTitle constant), distinct from "BurnMon" so FindWindowW's
 // exact-match lookup never confuses the two exes when both run at once
@@ -111,6 +115,20 @@ func findBurnmonDevWindow() (uintptr, error) {
 	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
 	if hwnd == 0 {
 		return 0, fmt.Errorf("no window titled %q found; is burnmon-dev.exe running?", windowTitleDev)
+	}
+	return hwnd, nil
+}
+
+// findCentreWindow is findBurnmonWindow for controlcentre.exe's own window
+// title.
+func findCentreWindow() (uintptr, error) {
+	title, err := windows.UTF16PtrFromString(windowTitleCentre)
+	if err != nil {
+		return 0, err
+	}
+	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
+	if hwnd == 0 {
+		return 0, fmt.Errorf("no window titled %q found; is controlcentre.exe running?", windowTitleCentre)
 	}
 	return hwnd, nil
 }
