@@ -198,24 +198,8 @@ func main() {
 		ctlSvc: ctlSvc, devCfg: devCfg, hooks: hooks,
 	})
 
-	// Dispatch heartbeat (alpha.7, found in the 90-minute after run on
-	// 2026-09-29): go-webview2's Dispatch queues its func and wakes the UI
-	// thread with one PostThreadMessage(WM_APP), which only w.Run's own
-	// GetMessage loop handles. A Win32 modal loop (a window drag or resize,
-	// a menu) pulls that thread message off the queue and drops it, so the
-	// queued func, here a bdevSnapshotNow resolve, waits until some later
-	// Dispatch gets through: 67s on 2026-09-29, and forever before alpha.7,
-	// when nothing else dispatched while the page waited on that one call.
-	// A no-op Dispatch every second means a lost wakeup costs at most a
-	// second once the modal loop has ended (inside it, the heartbeat's own
-	// WM_APP is dropped too), for every binding, not just the render tick.
-	go func() {
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-		for range t.C {
-			w.Dispatch(func() {})
-		}
-	}()
+	// Dispatch heartbeat (alpha.7): why it exists is in winbind.StartHeartbeat.
+	winbind.StartHeartbeat(w)
 
 	startUICheckServer(w, func() string { return assemblePage(devCfg.StationTheme, loadUITheme(setDir)) })
 
@@ -892,11 +876,7 @@ func openBrowser(rawURL string) {
 // periodic poll with no filter to correlate against, so the latest
 // resolved call simply overwrites whatever the page is showing.
 func bdevAsyncResolveJS(resolverName string, data any) (string, error) {
-	dataJSON, err := json.Marshal(data)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("window.%s && window.%s(%s)", resolverName, resolverName, dataJSON), nil
+	return winbind.AsyncResolveJS(resolverName, data)
 }
 
 // agentMapReply is one bdevAgentMapStart answer: the payload, or the error
@@ -921,13 +901,5 @@ func agentMapResolveJS(key string, p agentMapPayload, buildErr error) (string, e
 // click before the first resolves), so the resolver can tell which call a
 // result belongs to.
 func bdevAsyncResolveJSWithKey(resolverName, key string, data any) (string, error) {
-	keyJSON, err := json.Marshal(key)
-	if err != nil {
-		return "", err
-	}
-	dataJSON, err := json.Marshal(data)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("window.%s && window.%s(%s, %s)", resolverName, resolverName, keyJSON, dataJSON), nil
+	return winbind.AsyncResolveJS(resolverName, key, data)
 }

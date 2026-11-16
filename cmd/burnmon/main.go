@@ -519,13 +519,5 @@ func progressReporter(w winbind.Window) func(done, total int) {
 // literal "</script>" impossible in either json.Marshal call below, the same
 // property report.Render's own doc comment relies on.
 func asyncResolveJS(resolverName, key string, data any) (string, error) {
-	keyJSON, err := json.Marshal(key)
-	if err != nil {
-		return "", err
-	}
-	dataJSON, err := json.Marshal(data)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("window.%s && window.%s(%s, %s)", resolverName, resolverName, keyJSON, dataJSON), nil
+	return winbind.AsyncResolveJS(resolverName, key, data)
 }
