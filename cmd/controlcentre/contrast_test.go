@@ -121,7 +121,7 @@ func TestPageContrast(t *testing.T) {
 				t.Errorf("%s: --accent on --accent-fill over --%s is %.2f:1, want at least 4.5:1", theme, bg, r)
 			}
 		}
-		for _, fg := range []string{"text", "muted", "amber", "accent"} {
+		for _, fg := range []string{"text", "muted", "amber", "accent", "red"} {
 			for _, bg := range []string{"bg", "surface", "surface2"} {
 				r := contrast(t, tok(block, fg), tok(block, bg))
 				t.Logf("%s: --%s %s on --%s %s = %.2f:1", theme, fg, tok(block, fg), bg, tok(block, bg), r)

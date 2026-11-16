@@ -10,7 +10,7 @@
 :root{
   --bg:#E9EEF4; --surface:#FFFFFF; --surface2:#F1F5F9; --text:#16243A; --muted:#566579;
   --accent:#0B7457; --accent-fill:rgba(11,116,87,.10); --line:#CBD5E1; --line-soft:#DDE4EC;
-  --amber:#975E10; --amber-fill:rgba(151,94,16,.10); --desk:#D5DEE9;
+  --amber:#975E10; --amber-fill:rgba(151,94,16,.10); --desk:#D5DEE9; --red:#B42318;
   --font:system-ui,-apple-system,"Segoe UI",sans-serif;
   --display:system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
@@ -18,11 +18,11 @@
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --bg:#0A1422; --surface:#112038; --surface2:#0E1B30; --text:#EAF1F8; --muted:#8A9CB5;
   --accent:#3EDCB0; --accent-fill:rgba(62,220,176,.12); --line:#2A3C58; --line-soft:#1C2C46;
-  --amber:#F5B950; --amber-fill:rgba(245,185,80,.12); --desk:#060D18; color-scheme:dark } }
+  --amber:#F5B950; --amber-fill:rgba(245,185,80,.12); --desk:#060D18; --red:#FF8A7A; color-scheme:dark } }
 :root[data-theme="dark"]{
   --bg:#0A1422; --surface:#112038; --surface2:#0E1B30; --text:#EAF1F8; --muted:#8A9CB5;
   --accent:#3EDCB0; --accent-fill:rgba(62,220,176,.12); --line:#2A3C58; --line-soft:#1C2C46;
-  --amber:#F5B950; --amber-fill:rgba(245,185,80,.12); --desk:#060D18; color-scheme:dark }
+  --amber:#F5B950; --amber-fill:rgba(245,185,80,.12); --desk:#060D18; --red:#FF8A7A; color-scheme:dark }
 
 [hidden]{display:none!important}
 html,body{height:100%;margin:0;overflow:hidden}
@@ -184,6 +184,46 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 .rw.uh{min-height:22px;border-bottom:1px solid var(--line);cursor:default}
 .rw.uh:hover{background:none}
 .rw.uh span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.loadbar{flex:none;position:relative;height:3px;margin-bottom:6px;overflow:hidden;border-radius:2px;background:var(--line-soft)}
+.loadbar i{position:absolute;top:0;bottom:0;left:0;width:30%;background:var(--accent);animation:loadmove 1.1s ease-in-out infinite}
+@keyframes loadmove{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+@media (prefers-reduced-motion: reduce){.loadbar i{animation:none;width:100%;opacity:.5}}
+.glane{flex:0 0 150px;min-width:0}
+.glane.sm{flex:0 0 96px}
+.gst{flex:1.3 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)}
+.gst.open{color:var(--amber);font-weight:600}
+.gst.bad{color:var(--red);font-weight:600}
+.lane{display:flex;align-items:center;min-width:0}
+.lane .cn{flex:1 1 0;min-width:3px;height:2px;background:var(--line)}
+.lane .cn.d{background:var(--accent)}
+.dot{flex:none;width:12px;height:12px;border-radius:50%;box-sizing:border-box;border:2px solid var(--line);background:var(--surface)}
+.lane.sm .dot{width:10px;height:10px}
+.dot.done{background:var(--accent);border-color:var(--accent)}
+.dot.active{border:4px solid var(--accent);box-shadow:0 0 0 3px var(--accent-fill)}
+.lane.sm .dot.active{border-width:3px;box-shadow:0 0 0 2px var(--accent-fill)}
+.dot.warn{background:var(--amber);border-color:var(--amber)}
+.dot.bad{background:var(--red);border-color:var(--red)}
+.dot.off{border-style:dashed}
+.lstrip{flex:none;display:flex;min-width:0;margin-bottom:8px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.lbig{flex:0 0 26%;min-width:0;box-sizing:border-box;padding:6px 12px;border-right:1px solid var(--line-soft)}
+.lbig b{display:block;font-size:16px;line-height:1.2;color:var(--amber);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbig b.ok{color:var(--accent)}
+.lbig span{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lstrip button.lst{flex:1 1 0;min-width:0;box-sizing:border-box;border:0;border-right:1px solid var(--line-soft);border-radius:0;background:none;padding:6px 10px;text-align:left;color:var(--text)}
+.lstrip button.lst:last-child{border-right:0}
+.lstrip button.lst:hover{background:var(--surface2)}
+.lstrip button.lst[aria-pressed="true"]{background:var(--accent-fill);color:var(--accent)}
+.lst b{display:block;font-family:var(--mono);font-size:15px;line-height:1.2}
+.lst.zero b{color:var(--muted)}
+.lst span{display:block;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vlane{display:flex;flex-direction:column}
+.vlane .vs{display:flex;align-items:center;gap:8px;min-height:22px}
+.vlane .vn{flex:0 0 66px;font-size:12px;color:var(--muted)}
+.vlane .vs.cur .vn{color:var(--text);font-weight:600}
+.vlane .vt{flex:1 1 0;min-width:0;font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.det .next{padding:6px 8px;border-radius:6px;background:var(--amber-fill);color:var(--amber);font-weight:600}
+.det .mini{display:flex;align-items:center;gap:8px;min-height:24px;border-bottom:1px solid var(--line-soft)}
+.det .mini .n{flex:1 1 0;min-width:0;font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lead .lbtn{flex:none;display:flex;align-items:center;gap:5px;margin-right:12px;font-family:var(--font);font-size:12.5px;font-weight:400}
 
 /* comment popup, inside the app */
@@ -260,8 +300,12 @@ var api = {
   var THEMES = ['system','light','dark'];
   var THEME_UI = {system: ['sys', 'System'], light: ['sun', 'Light'], dark: ['moon', 'Dark']};
   // Every selector with text-overflow:ellipsis, plus the clipped lead and crumb.
-  var HOVER_SEL = '.ell,.lead,.crumb,.rw .tag,.rw .nm,.rw .fn,.rw .ro,.rw .rl,.c1 .chip,.c2,.c3,.c5,.it,.att span,.g1,.g2,.gl';
+  var HOVER_SEL = '.ell,.lead,.crumb,.rw .tag,.rw .nm,.rw .fn,.rw .ro,.rw .rl,.c1 .chip,.c2,.c3,.c5,.it,.att span,.g1,.g2,.gl,.gst,.lbig b,.lbig span,.lst span,.vlane .vt,.det .mini .n';
   var ROW_H = 28;
+  // The lane of the Git page: the five stages of the Fleet's Git tab plus Released, in order.
+  var LANE_STAGES = ['Changes', 'Saved', 'Shared', 'Review', 'Merged', 'Released'];
+  // The stage the Git page is filtered to, '' for every repo.
+  var gitStage = '';
   // Comment limits; internal\centre checks the same and stays the authority.
   var MAX_ATT = 5;
   var MAX_ATT_BYTES = 10 * 1024 * 1024;
@@ -537,6 +581,23 @@ var api = {
       det.appendChild(c);
     }
     if (o.d) det.appendChild(h('p', null, o.d));
+    if (o.next) det.appendChild(h('p', 'next', o.next));
+    if (o.lane && o.lane.length) det.appendChild(laneList(o.lane));
+    if (o.others) {
+      det.appendChild(h('span', 'eyebrow', 'Other branches and worktrees not merged'));
+      if (!o.others.length) det.appendChild(h('p', 'muted', 'None.'));
+      o.others.forEach(function(x) {
+        var m = h('div', 'mini');
+        var n = h('span', 'n', x.name);
+        n.title = x.name + ' (' + x.kind + ')';
+        n.setAttribute('data-title', '1');
+        m.appendChild(n);
+        var l = laneEl(x.lane, true);
+        l.title = x.note;
+        m.appendChild(l);
+        det.appendChild(m);
+      });
+    }
     if (o.list && o.list.length) {
       var ul = h('ul');
       o.list.forEach(function(x) { ul.appendChild(h('li', null, x)); });
@@ -1696,21 +1757,37 @@ var api = {
       out: box});
   }
 
-  // pageGit: every repo below the root, one dense row each, grouped by unit, in the Go side's order
-  // (needs attention first, then the newest commit). Overview only: nothing here changes a repo. The
-  // reading runs in the background; while it runs the page asks again every GIT_POLL_MS.
+  // pageGit: every repo below the root, one dense row each with its lane (Changes to Released), grouped
+  // by unit, in the Go side's order (open repos first by the stage they stop at, published last). Overview
+  // only: nothing here changes a repo. The reading runs in the background; while it runs the page asks
+  // again every GIT_POLL_MS.
   function pageGit(refresh) {
     var seq = drawSeq;
     rootDetail('Select a repo to see it. Double-click opens its worktrees, branches, tags, remotes and pull requests.');
     lead.appendChild(h('span', 'ell', 'Reading the repos below the root.'));
+    pane.appendChild(loadBar());
     function ask(again) {
-      Promise.resolve(api.git({rows: rowsFit(), refresh: !!again})).then(function(gv) {
+      Promise.resolve(api.git({rows: gitRows(), refresh: !!again, stage: gitStage})).then(function(gv) {
         if (seq !== drawSeq) return;
         drawGit(gv);
         if (gv.loading) setTimeout(function() { if (seq === drawSeq) ask(false); }, GIT_POLL_MS);
       }, function(e) { if (seq === drawSeq) fail('Could not read the repos', e); });
     }
     ask(refresh === true);
+  }
+
+  // loadBar: an indeterminate bar for a reading that runs in the background.
+  function loadBar() {
+    var b = h('div', 'loadbar');
+    b.setAttribute('role', 'progressbar');
+    b.setAttribute('aria-label', 'Reading the repos');
+    b.appendChild(h('i'));
+    return b;
+  }
+
+  // gitRows: rows the Git page fits under its strip.
+  function gitRows() {
+    return Math.max(1, rowsFit() - 3);
   }
 
   function gitCell(cls, text, title) {
@@ -1729,6 +1806,62 @@ var api = {
     return '+' + r.ahead + ' -' + r.behind;
   }
 
+  // laneEl: the six stages as one line of dots. A dot is done (filled), here now (ring), waiting (amber),
+  // blocked (red), not reached (empty) or not read (dashed); its hover text names the stage and its note.
+  function laneEl(lane, small) {
+    var el = h('span', 'lane' + (small ? ' sm' : ''));
+    (lane || []).forEach(function(st, i) {
+      var d = h('span', 'dot ' + (st.state === 'todo' ? '' : st.state));
+      d.title = LANE_STAGES[i] + ': ' + (st.note || st.state);
+      d.setAttribute('data-title', '1');
+      el.appendChild(d);
+      if (i < lane.length - 1) el.appendChild(h('span', 'cn' + (st.state === 'done' && lane[i + 1].state === 'done' ? ' d' : '')));
+    });
+    return el;
+  }
+
+  // laneList: the lane of one repo, a row per stage with its note, the first stage that is not done marked.
+  function laneList(lane) {
+    var box = h('div', 'vlane'), cur = -1;
+    lane.forEach(function(st, i) { if (cur < 0 && st.state !== 'done' && !(st.stage === 'Review' && st.state === 'off')) cur = i; });
+    lane.forEach(function(st, i) {
+      var row = h('div', 'vs' + (i === cur ? ' cur' : ''));
+      row.appendChild(h('span', 'dot ' + (st.state === 'todo' ? '' : st.state)));
+      row.appendChild(h('span', 'vn', st.stage));
+      row.appendChild(gitCell('vt', st.note || st.state, st.note || st.state));
+      box.appendChild(row);
+    });
+    return box;
+  }
+
+  // gitStrip: how many repos are open, and one count per stage they stop at. A click on a stage filters
+  // the rows to the repos that stop there; a second click clears the filter.
+  var LANE_WORDS = {Changes: 'files not saved', Saved: 'commits not shared', Shared: 'not online, or behind',
+    Review: 'review not done', Merged: 'not merged', Released: 'not released'};
+  function gitStrip(sm) {
+    var strip = h('div', 'lstrip');
+    var big = h('div', 'lbig');
+    big.appendChild(h('b', sm.open ? '' : 'ok', sm.open ? sm.open + ' of ' + sm.total + ' repos open' : 'All ' + sm.total + ' repos published'));
+    big.appendChild(h('span', null, sm.published + ' published: clean, merged, the newest tag at the head'));
+    big.title = 'A repo is published when every stage is done, here and on every other branch and worktree.';
+    big.setAttribute('data-title', '1');
+    strip.appendChild(big);
+    LANE_STAGES.forEach(function(name) {
+      var n = (sm.stages && sm.stages[name]) || 0;
+      var b = btn('lst' + (n ? '' : ' zero'), null, function() {
+        gitStage = gitStage === name ? '' : name;
+        sub.page = 0;
+        render();
+      });
+      b.setAttribute('aria-pressed', gitStage === name ? 'true' : 'false');
+      b.title = name + ': ' + LANE_WORDS[name] + (gitStage === name ? '. Click to show every repo.' : '. Click to show only these repos.');
+      b.appendChild(h('b', null, String(n)));
+      b.appendChild(h('span', null, name + ': ' + LANE_WORDS[name]));
+      strip.appendChild(b);
+    });
+    return strip;
+  }
+
   function drawGit(gv) {
     lead.textContent = '';
     pane.textContent = '';
@@ -1742,24 +1875,24 @@ var api = {
     rf.appendChild(h('span', null, 'Refresh'));
     rf.title = 'Read every repo again' + (gv.prs_on ? ', pull requests too' : '');
     lead.appendChild(rf);
-    var att = 0, n = gv.repos.length;
-    gv.repos.forEach(function(r) { if (r.attention.length) att++; });
-    var text = n + (n === 1 ? ' repo' : ' repos') + (att ? (att === 1 ? ' needs attention.' : ' need attention.') : ', none needs attention.');
+    var sm = gv.summary, n = gv.repos.length;
+    var text = sm.total + (sm.total === 1 ? ' repo' : ' repos') + (sm.open ? ' open.' : ', all published.');
     if (gv.loading) text = gv.read_at ? text + ' Reading again.' : 'Reading the repos below the root.';
     [gv.line, gv.pr_line].forEach(function(x) { if (x) text += ' ' + x; });
-    if (att && !(gv.loading && !gv.read_at)) {
-      lead.appendChild(h('b', null, String(att)));
+    if (sm.open && !(gv.loading && !gv.read_at)) {
+      lead.appendChild(h('b', null, String(sm.open)));
       text = NBSP + 'of ' + text;
     }
     lead.appendChild(h('span', 'ell', text));
+    if (gv.loading) pane.appendChild(loadBar());
+    if (gv.read_at) pane.appendChild(gitStrip(sm));
     var hd = h('div', 'rw hd');
-    [['Repo', 'g1'], ['Branch', 'g2'], ['Dirty', 'gn', 'Changed and untracked files'], ['+/-', 'gab', 'Ahead and behind the upstream'],
-      ['Last commit', 'gl'], ['Stash', 'gn', 'Stash entries'], ['WT', 'gn', 'Linked worktrees'], ['PRs', 'gn', 'Open pull requests']].forEach(function(x) {
+    [['Repo', 'g1'], ['Branch', 'g2'], ['Changes to Released', 'glane'], ['Stops at', 'gst'], ['Last', 'gl']].forEach(function(x) {
       hd.appendChild(gitCell(x[1], x[0], x[2]));
     });
     pane.appendChild(hd);
-    if (!gv.repos.length) {
-      if (gv.read_at) pane.appendChild(h('p', 'muted', 'No git repo below the root, to 4 levels down.'));
+    if (!n) {
+      if (gv.read_at) pane.appendChild(h('p', 'muted', gitStage ? 'No repo stops at ' + gitStage + '.' : 'No git repo below the root, to 4 levels down.'));
       return;
     }
     var cur = Math.min(sub.page, gv.pages.length - 1), span = gv.pages[cur], picked = null, last = null;
@@ -1770,19 +1903,21 @@ var api = {
         pane.appendChild(uh);
         last = r.unit;
       }
-      var warn = r.attention.length > 0;
+      var bad = !r.published && r.lane.some(function(st) { return st.state === 'bad'; });
       var pick = function() { rowSel(b); sub.sel = r.id; gitRowDetail(r); };
-      var b = btn('rw' + (warn ? ' warn' : ''), null, pick);
+      var b = btn('rw' + (r.published ? '' : ' warn'), null, pick);
       wireOpen(b, pick);
-      b.appendChild(gitCell('g1', r.name, r.id));
+      var nm = gitCell('g1', r.name + (r.open_branches.length ? ' +' + r.open_branches.length : ''), r.id +
+        (r.open_branches.length ? ', and ' + r.open_branches.map(function(o) { return o.name; }).join(', ') : ''));
+      b.appendChild(nm);
       b.appendChild(h('span', 'g2', r.detached ? 'detached' : r.branch));
-      b.appendChild(gitCell('gn' + (r.dirty ? ' warn' : ''), r.status_error ? '?' : r.dirty ? String(r.dirty) : ''));
-      b.appendChild(h('span', 'gab' + (r.behind ? ' warn' : ''), gitAB(r)));
+      var ln = h('span', 'glane');
+      ln.appendChild(laneEl(r.lane));
+      b.appendChild(ln);
+      var stop = r.published ? 'Published' : r.stops_at + (r.stops_note ? ': ' + r.stops_note : '');
+      b.appendChild(gitCell('gst ' + (r.published ? '' : bad ? 'bad' : 'open'), stop, stop));
       b.appendChild(gitCell('gl', r.last_sha ? r.last_sha + ' ' + r.last_age : '',
         r.last_sha ? r.last_sha + ', ' + r.last_age + ' ago: ' + r.last_subject : 'No commit read'));
-      b.appendChild(h('span', 'gn', r.stashes ? String(r.stashes) : ''));
-      b.appendChild(h('span', 'gn', r.worktrees ? String(r.worktrees) : ''));
-      b.appendChild(h('span', 'gn', r.prs >= 0 ? String(r.prs) : ''));
       pane.appendChild(b);
       if (sub.sel === r.id) picked = b;
     });
@@ -1790,18 +1925,20 @@ var api = {
     if (picked) picked.click();
   }
 
-  // gitRowDetail: one repo in the detail pane, with Open repo.
+  // gitRowDetail: one repo in the detail pane: its lane with the notes, what to do next, the other open
+  // branches and worktrees, and Open repo.
   function gitRowDetail(r) {
     var chips = r.attention.map(function(a) { return [a, 'warn']; });
     if (!r.upstream && !r.status_error) chips.push(['no upstream', '']);
     var list = ['Branch ' + (r.detached ? 'detached HEAD' : r.branch || 'not read') + (r.upstream ? ', upstream ' + r.upstream + ' ' + gitAB(r) : '')];
+    if (!r.status_error) list.push(r.dirty + (r.dirty === 1 ? ' changed file' : ' changed files') + ', ahead and behind ' + gitAB(r) + '.');
     if (r.last_sha) list.push('Last commit ' + r.last_sha + ', ' + r.last_age + ' ago: ' + r.last_subject);
     if (r.status_error) list.push('Dirty and ahead/behind unknown: ' + r.status_error);
     list.push(r.stashes + (r.stashes === 1 ? ' stash entry, ' : ' stash entries, ') + r.worktrees + ' linked worktrees.');
     list.push(r.prs >= 0 ? r.prs + ' open pull requests.' : r.github ? 'Pull requests: switch them on in Settings.' : 'No GitHub remote.');
     var open = function() { go('gitrepo', r.id); };
-    detail({k: 'Repo / ' + (r.unit ? unitLabel(r.unit) : 'no unit'), t: r.name, chips: chips, list: list,
-      act: [['Open repo \u203A', openSel, 'primary']], open: open, src: srcPath(r.id)});
+    detail({k: 'Repo / ' + (r.unit ? unitLabel(r.unit) : 'no unit'), t: r.name, chips: chips, next: r.next, lane: r.lane,
+      others: r.open_branches, list: list, act: [['Open repo \u203A', openSel, 'primary']], open: open, src: srcPath(r.id)});
   }
 
   // pageGitRepo: one repo's worktrees (with the agent sessions that work in each, matched by folder
@@ -1810,6 +1947,7 @@ var api = {
   function pageGitRepo(id) {
     var seq = drawSeq;
     lead.appendChild(h('span', 'ell', String(id) + ': reading the repo.'));
+    pane.appendChild(loadBar());
     detail({k: 'Repo', t: String(id), src: srcPath(id)});
     function ask() {
       Promise.resolve(api.gitRepo(String(id))).then(function(v) {
@@ -1843,6 +1981,7 @@ var api = {
 
   function drawRepo(d) {
     var r = d.repo;
+    pane.textContent = '';
     lead.textContent = '';
     lead.appendChild(h('span', 'ell', r.name + ', ' + (r.detached ? 'detached HEAD' : 'on ' + r.branch) + '. ' +
       d.worktrees.length + (d.worktrees.length === 1 ? ' worktree, ' : ' worktrees, ') + d.branches.length + ' branches, ' +
@@ -1866,6 +2005,9 @@ var api = {
       var b = btn('rw' + (w.dirty || w.missing ? ' warn' : ''), null, pick);
       b.appendChild(gitCell('g1', w.name, w.path));
       b.appendChild(h('span', 'g2', w.detached ? 'detached' : w.branch));
+      var wl = h('span', 'glane sm');
+      wl.appendChild(laneEl(w.lane, true));
+      b.appendChild(wl);
       b.appendChild(h('span', 'gn' + (w.dirty ? ' warn' : ''), w.missing ? 'gone' : w.status_error ? '?' : w.dirty ? String(w.dirty) : ''));
       b.appendChild(gitCell('g2', w.sessions.join(', '), w.sessions.length ? w.sessions.join(', ') : ''));
       return b;
@@ -1873,6 +2015,9 @@ var api = {
     gitSection(left, 'Local branches', d.branches, Math.max(1, lrows - wtN), function(br) {
       var c = h('div', 'rw');
       c.appendChild(gitCell('g1', br.name + (br.current ? ' (current)' : ''), br.name));
+      var bl = h('span', 'glane sm');
+      bl.appendChild(laneEl(br.lane, true));
+      c.appendChild(bl);
       c.appendChild(h('span', 'gl', br.merged));
       return c;
     }, function(br) { return br.name + ' ' + br.merged; }, 'No local branch.');

@@ -137,7 +137,9 @@ func TestScanFixtureRealGit(t *testing.T) {
 	for _, r := range v.Repos {
 		order = append(order, r.ID)
 	}
-	want := []string{"detached", "noupstream", "projects/behind", "projects/dirty", "projects/ahead", "projects/normal", "projects/twowt"}
+	// Within a unit the lane orders the repos: Changes (dirty, then twowt
+	// through its dirty worktree), Saved (ahead), Shared (behind), published last.
+	want := []string{"detached", "noupstream", "projects/dirty", "projects/twowt", "projects/ahead", "projects/behind", "projects/normal"}
 	if !reflect.DeepEqual(order, want) {
 		t.Errorf("order = %v, want %v", order, want)
 	}
@@ -173,6 +175,12 @@ func TestScanFixtureRealGit(t *testing.T) {
 		t.Errorf("wt-b = %+v", b)
 	}
 	wantBr := []GitBranch{{Name: "main", Current: true, Merged: "trunk"}, {Name: "wt-a", Merged: "not merged"}, {Name: "wt-b", Merged: "not merged"}}
+	for i := range d.Branches {
+		if len(d.Branches[i].Lane) != len(LaneStages) {
+			t.Errorf("branch %s has %d lane stages", d.Branches[i].Name, len(d.Branches[i].Lane))
+		}
+		d.Branches[i].Lane = nil
+	}
 	if !reflect.DeepEqual(d.Branches, wantBr) {
 		t.Errorf("branches = %+v, want %+v", d.Branches, wantBr)
 	}
@@ -418,5 +426,185 @@ func TestScannerRootChangeAndRescan(t *testing.T) {
 	s.Wait()
 	if d := s.Detail(a, "r1"); d.Found {
 		t.Error("Detail of another root must not be found")
+	}
+}
+
+// laneRepo builds, with real git, a bare upstream and a clone of it under one
+// temp root, and returns a runner for git in the clone and the clone's id.
+func laneRepo(t *testing.T) (root string, git func(args ...string), write func(name, body string)) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not on PATH")
+	}
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := filepath.Join(base, "empty.gitconfig")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+empty, "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_AUTHOR_NAME=Fixture", "GIT_AUTHOR_EMAIL=fixture@example.invalid",
+			"GIT_COMMITTER_NAME=Fixture", "GIT_COMMITTER_EMAIL=fixture@example.invalid",
+			"GIT_AUTHOR_DATE=2026-11-01T10:00:00Z", "GIT_COMMITTER_DATE=2026-11-01T10:00:00Z")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	root = filepath.Join(base, "root")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	up := filepath.Join(base, "up.git")
+	run(base, "init", "-q", "--bare", "-b", "main", up)
+	run(root, "clone", "-q", up, "work")
+	work := filepath.Join(root, "work")
+	git = func(args ...string) { t.Helper(); run(work, args...) }
+	write = func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(work, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root, git, write
+}
+
+func laneOf(t *testing.T, root string) GitRepo {
+	t.Helper()
+	s := NewGitScanner(realDeps(newTestClock()))
+	return repoByID(t, readView(s, root, false, false), "work")
+}
+
+func laneStates(r GitRepo) string {
+	out := []string{}
+	for _, s := range r.Lane {
+		out = append(out, s.State)
+	}
+	return strings.Join(out, ",")
+}
+
+// TestLaneFixturePublishedAndReleased: clean on main with an annotated tag at
+// the head is published; one pushed commit after the tag reads Released
+// "1 since v1.0.0"; the pull request switch is off, so Review is skipped.
+func TestLaneFixturePublishedAndReleased(t *testing.T) {
+	root, git, write := laneRepo(t)
+	write("a.txt", "one\n")
+	git("add", "a.txt")
+	git("commit", "-q", "-m", "first")
+	git("tag", "-a", "v1.0.0", "-m", "release")
+	git("push", "-q", "--follow-tags", "origin", "main")
+	r := laneOf(t, root)
+	if !r.Published || r.StopsAt != "" || r.Next != "Nothing open." {
+		t.Errorf("tag at head: published=%v stops=%q next=%q lane=%s", r.Published, r.StopsAt, r.Next, laneStates(r))
+	}
+	if got := r.Lane[5]; got.State != "done" || got.Note != "v1.0.0" {
+		t.Errorf("Released = %+v, want done v1.0.0", got)
+	}
+	write("b.txt", "two\n")
+	git("add", "b.txt")
+	git("commit", "-q", "-m", "second")
+	git("push", "-q", "origin", "main")
+	r = laneOf(t, root)
+	if r.Published || r.StopsAt != "Released" || r.StopsNote != "1 since v1.0.0" {
+		t.Errorf("one commit after the tag: published=%v stops=%q %q lane=%s", r.Published, r.StopsAt, r.StopsNote, laneStates(r))
+	}
+}
+
+// TestLaneFixtureFeatureBranch: a local branch with one commit and no upstream
+// stops at Saved; main, left behind unreleased, is listed as open beside it.
+func TestLaneFixtureFeatureBranch(t *testing.T) {
+	root, git, write := laneRepo(t)
+	write("a.txt", "one\n")
+	git("add", "a.txt")
+	git("commit", "-q", "-m", "first")
+	git("tag", "v1.0.0")
+	write("b.txt", "two\n")
+	git("add", "b.txt")
+	git("commit", "-q", "-m", "second")
+	git("push", "-q", "origin", "main")
+	git("switch", "-q", "-c", "feat")
+	write("c.txt", "three\n")
+	git("add", "c.txt")
+	git("commit", "-q", "-m", "feature work")
+	r := laneOf(t, root)
+	if r.Published || r.StopsAt != "Saved" || r.StopsNote != "1 to share" {
+		t.Errorf("feature: published=%v stops=%q %q lane=%s", r.Published, r.StopsAt, r.StopsNote, laneStates(r))
+	}
+	if got := laneStates(r); got != "done,active,todo,off,todo,todo" {
+		t.Errorf("feature lane = %s", got)
+	}
+	if len(r.OpenBranches) != 1 || r.OpenBranches[0].Name != "main" || r.OpenBranches[0].Kind != "branch" {
+		t.Fatalf("open branches = %+v", r.OpenBranches)
+	}
+	if o := r.OpenBranches[0]; o.Lane[5].State != "warn" || o.Lane[5].Note != "1 since v1.0.0" {
+		t.Errorf("main lane Released = %+v", o.Lane[5])
+	}
+}
+
+// TestLaneFixtureMergedBranchIsPublished: a branch merged into origin/main
+// and checked out reads Merged done through the refs alone.
+func TestLaneFixtureMergedBranchIsPublished(t *testing.T) {
+	root, git, write := laneRepo(t)
+	write("a.txt", "one\n")
+	git("add", "a.txt")
+	git("commit", "-q", "-m", "first")
+	git("push", "-q", "origin", "main")
+	git("switch", "-q", "-c", "feat")
+	write("b.txt", "two\n")
+	git("add", "b.txt")
+	git("commit", "-q", "-m", "feature work")
+	git("push", "-q", "-u", "origin", "feat")
+	git("switch", "-q", "main")
+	git("merge", "-q", "--no-ff", "-m", "merge feat", "feat")
+	git("push", "-q", "origin", "main")
+	git("switch", "-q", "feat")
+	r := laneOf(t, root)
+	if got := laneStates(r); got != "done,done,done,off,done,done" {
+		t.Errorf("merged feat lane = %s", got)
+	}
+	if !r.Published {
+		t.Errorf("published = false, stops %q %q, open %+v", r.StopsAt, r.StopsNote, r.OpenBranches)
+	}
+}
+
+// TestViewStageFilter: a stage filter keeps only the open repos that stop at
+// that stage, pages the filtered rows, and leaves the summary (the strip) on
+// all repos; the strip counts equal the rows each filter shows.
+func TestViewStageFilter(t *testing.T) {
+	root := gitFixtures(t)
+	s := NewGitScanner(realDeps(newTestClock()))
+	all := readView(s, root, false, false)
+	if all.Summary.Total != len(all.Repos) || all.Summary.Open+all.Summary.Published != all.Summary.Total {
+		t.Fatalf("summary = %+v for %d repos", all.Summary, len(all.Repos))
+	}
+	if all.Summary.Open == 0 || all.Summary.Published == 0 {
+		t.Fatalf("the fixture should have open and published repos: %+v", all.Summary)
+	}
+	sum := 0
+	for _, stage := range LaneStages {
+		v := s.ViewStage(root, false, false, 40, stage)
+		if len(v.Repos) != all.Summary.Stages[stage] {
+			t.Errorf("filter %s shows %d rows, the strip says %d", stage, len(v.Repos), all.Summary.Stages[stage])
+		}
+		for _, r := range v.Repos {
+			if r.Published || r.StopsAt != stage {
+				t.Errorf("filter %s shows %s, which stops at %q (published %v)", stage, r.ID, r.StopsAt, r.Published)
+			}
+		}
+		if v.Summary.Total != all.Summary.Total {
+			t.Errorf("filter %s changed the summary: %+v", stage, v.Summary)
+		}
+		sum += len(v.Repos)
+	}
+	if sum != all.Summary.Open {
+		t.Errorf("the stage counts add up to %d, open is %d", sum, all.Summary.Open)
+	}
+	if v := s.ViewStage(root, false, false, 40, "nonsense"); len(v.Repos) != 0 {
+		t.Errorf("an unknown stage shows %d rows", len(v.Repos))
 	}
 }
