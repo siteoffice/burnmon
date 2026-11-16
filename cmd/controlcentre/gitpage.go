@@ -119,8 +119,9 @@ func rootBrowse(e bindEnv, start string) BrowseResult {
 
 // GitRequest is what the page sends with ccGit.
 type GitRequest struct {
-	Rows    int  `json:"rows"`
-	Refresh bool `json:"refresh"`
+	Rows    int    `json:"rows"`
+	Refresh bool   `json:"refresh"`
+	Stage   string `json:"stage"` // show only the repos that stop at this lane stage, "" for all
 }
 
 // gitView is the ccGit handler. The reading runs in the background; the
@@ -129,7 +130,7 @@ func gitView(e bindEnv, req GitRequest) centre.GitView {
 	if e.git == nil {
 		return centre.GitView{Root: e.rootNow(), Line: "The Git page is not available in this build.", Repos: []centre.GitRepo{}, Pages: []centre.Span{}}
 	}
-	return e.git.View(e.rootNow(), e.settings.get().GitPRs, req.Refresh, req.Rows)
+	return e.git.ViewStage(e.rootNow(), e.settings.get().GitPRs, req.Refresh, req.Rows, req.Stage)
 }
 
 // gitRepo is the ccGitRepo handler.

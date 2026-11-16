@@ -162,7 +162,7 @@ func TestGitViewFollowsSwitchAndRoot(t *testing.T) {
 			mu.Lock()
 			ghRuns++
 			mu.Unlock()
-			return []centre.GitPR{{Number: 1}}, nil
+			return []centre.GitPR{{Number: 1, State: "OPEN"}}, nil
 		},
 		Now: func() time.Time { return rigT0 },
 	})
@@ -254,21 +254,50 @@ func TestPageGitInMenuUnderAgents(t *testing.T) {
 	mustContain(t, "crumbs", "view.page === 'gitrepo'", "go('git')")
 }
 
-// TestPageGitRows: one dense row per repo with the eight columns, a unit
-// line before each unit's rows, attention rows marked, double-click opens.
+// TestPageGitRows: one dense row per repo (Repo, Branch, the lane, Stops at,
+// Last), a unit line before each unit's rows, double-click opens; the dirty
+// and ahead/behind cells moved into the detail pane.
 func TestPageGitRows(t *testing.T) {
-	mustContain(t, "drawGit", "['Repo', 'g1']", "['Branch', 'g2']", "['Dirty', 'gn'", "['+/-', 'gab'",
-		"['Last commit', 'gl']", "['Stash', 'gn'", "['WT', 'gn'", "['PRs', 'gn'",
-		"'rw uh'", "'Outside any unit'", "r.attention.length > 0", "wireOpen(b, pick)", "gv.pages", "pager(",
-		"r.last_subject", "picked.click()")
-	mustContain(t, "gitRowDetail", "go('gitrepo', r.id)", "openSel", "open:")
+	mustContain(t, "drawGit", "['Repo', 'g1']", "['Branch', 'g2']", "['Changes to Released', 'glane']", "['Stops at', 'gst']",
+		"['Last', 'gl']", "'rw uh'", "'Outside any unit'", "laneEl(r.lane", "r.stops_at", "r.published", "wireOpen(b, pick)",
+		"gv.pages", "pager(", "r.last_subject", "picked.click()")
+	body := pageFunc(t, "drawGit")
+	for _, gone := range []string{"['Dirty'", "['+/-'", "['Stash'", "['WT'", "['PRs'"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("drawGit still has the column %s", gone)
+		}
+	}
+	mustContain(t, "gitRowDetail", "go('gitrepo', r.id)", "openSel", "open:", "lane: r.lane", "next: r.next", "others: r.open_branches", "gitAB(r)", "r.dirty")
 	mustContain(t, "gitAB", "'none'", "'?'")
+}
+
+// TestPageGitStrip: the strip on top shows how many repos are open, one count
+// per stage; a click on a stage filters the rows, a second click clears it.
+func TestPageGitStrip(t *testing.T) {
+	mustContain(t, "drawGit", "gv.summary", "gitStrip(")
+	mustContain(t, "gitStrip", "sm.open", "sm.total", "sm.published", "sm.stages", "LANE_STAGES", "gitStage === ", "aria-pressed", "sub.page = 0", "render()")
+	mustContain(t, "pageGit", "stage: gitStage")
+	if !strings.Contains(pageHTML, "var LANE_STAGES = ['Changes', 'Saved', 'Shared', 'Review', 'Merged', 'Released'];") {
+		t.Error("page.html has no LANE_STAGES with the six stage names in order")
+	}
+}
+
+// TestPageGitLaneDots: a state is not carried by colour alone: done is filled,
+// here-now a ring with a halo, todo empty, off dashed.
+func TestPageGitLaneDots(t *testing.T) {
+	for state, want := range map[string]string{".dot.done": "background:var(--accent)", ".dot.active": "box-shadow", ".dot.off": "border-style:dashed",
+		".dot.warn": "background:var(--amber)", ".dot.bad": "background:var(--red)"} {
+		if !strings.Contains(compact(ruleFor(t, state)), want) {
+			t.Errorf("%s has no %s", state, want)
+		}
+	}
+	mustContain(t, "laneEl", "'dot ' +", "LANE_STAGES", "title")
 }
 
 // TestPageGitAsksAgainWhileLoading: the page never waits on git; it asks
 // again while the Go side reads, and stops when the page changes.
 func TestPageGitAsksAgainWhileLoading(t *testing.T) {
-	mustContain(t, "pageGit", "api.git({rows: rowsFit(), refresh: !!again})", "gv.loading", "setTimeout", "seq === drawSeq", "GIT_POLL_MS")
+	mustContain(t, "pageGit", "api.git({rows: gitRows(), refresh: !!again, stage: gitStage})", "gv.loading", "setTimeout", "seq === drawSeq", "GIT_POLL_MS")
 	mustContain(t, "pageGitRepo", "api.gitRepo(", "v.loading", "setTimeout", "seq === drawSeq")
 	mustContain(t, "drawGit", "'Refresh'", "pageGit(true)", "drawSeq++", "gv.line", "gv.pr_line")
 }
@@ -276,7 +305,7 @@ func TestPageGitAsksAgainWhileLoading(t *testing.T) {
 // TestPageGitRepoSections: worktrees with sessions, branches, PRs, tags and
 // remotes; each section keeps its size and puts the rest behind "+N more".
 func TestPageGitRepoSections(t *testing.T) {
-	mustContain(t, "drawRepo", "'Worktrees, sessions matched by folder name'", "'Local branches'", "'Pull requests'",
+	mustContain(t, "drawRepo", "laneEl(w.lane", "laneEl(br.lane", "'Worktrees, sessions matched by folder name'", "'Local branches'", "'Pull requests'",
 		"'Tags, newest first'", "'Remotes'", "w.sessions", "br.merged", "d.pr_line", "'Switch on GitHub pull requests in Settings to see them.'")
 	mustContain(t, "gitSection", "'+' + (list.length - fit) + ' more'", "more.title", "data-title")
 }
@@ -310,4 +339,42 @@ func TestPageGitHoverCells(t *testing.T) {
 		}
 	}
 	mustContain(t, "gitCell", "c.title = title", "data-title")
+}
+
+// TestPageGitNoHorizontalScroll: the pane clips, every flexible cell and the
+// strip can shrink (min-width:0), and the fixed cells of a row (lane 150, last
+// 104, four 8 px gaps) leave room at 1600 px wide: 80 percent of 1600, less the
+// 176 px menu, the 320 px panel and the 28 px pane padding, is 756 px.
+func TestPageGitNoHorizontalScroll(t *testing.T) {
+	if !strings.Contains(compact(ruleFor(t, ".pane")), "overflow:hidden") {
+		t.Error(".pane does not clip, so a wide row would scroll")
+	}
+	for _, sel := range []string{".g1", ".g2", ".gst", ".glane", ".lstrip", ".lbig", ".lstrip button.lst", ".lane"} {
+		if !strings.Contains(compact(ruleFor(t, sel)), "min-width:0") {
+			t.Errorf("%s cannot shrink (no min-width:0)", sel)
+		}
+	}
+	for _, width := range []float64{1600, 2560} {
+		room := width*0.8 - 176 - 320 - 28
+		if fixed := 150.0 + 104 + 4*8; room-fixed < 300 {
+			t.Errorf("at %.0f px a row has %.0f px for the flexible cells, want at least 300", width, room-fixed)
+		}
+	}
+}
+
+// TestPageGitLoadingBar: while a reading runs (first read, a re-read, the repo
+// page) the pane shows an indeterminate bar; it moves only without
+// prefers-reduced-motion and is gone once the rows are drawn.
+func TestPageGitLoadingBar(t *testing.T) {
+	mustContain(t, "loadBar", "'loadbar'", "'progressbar'", "aria-label")
+	mustContain(t, "pageGit", "loadBar()")
+	mustContain(t, "drawGit", "gv.loading", "loadBar()")
+	mustContain(t, "pageGitRepo", "loadBar()")
+	mustContain(t, "drawRepo", "pane.textContent = ''")
+	if !strings.Contains(compact(ruleFor(t, ".loadbar i")), "animation:") {
+		t.Error(".loadbar i does not animate")
+	}
+	if !strings.Contains(pageHTML, "prefers-reduced-motion") {
+		t.Error("the loading bar does not respect prefers-reduced-motion")
+	}
 }

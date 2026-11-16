@@ -30,14 +30,15 @@ type GitDeps struct {
 
 // GitView is what the Git page draws.
 type GitView struct {
-	Root    string    `json:"root"`
-	Loading bool      `json:"loading"` // a reading runs; the page asks again
-	ReadAt  string    `json:"read_at"` // RFC3339 UTC of the rows shown, "" before the first
-	Line    string    `json:"line"`    // git missing, else ""
-	PRsOn   bool      `json:"prs_on"`
-	PRLine  string    `json:"pr_line"` // gh missing, signed out or failing, else ""
-	Repos   []GitRepo `json:"repos"`
-	Pages   []Span    `json:"pages"`
+	Root    string      `json:"root"`
+	Loading bool        `json:"loading"` // a reading runs; the page asks again
+	ReadAt  string      `json:"read_at"` // RFC3339 UTC of the rows shown, "" before the first
+	Line    string      `json:"line"`    // git missing, else ""
+	PRsOn   bool        `json:"prs_on"`
+	PRLine  string      `json:"pr_line"` // gh missing, signed out or failing, else ""
+	Repos   []GitRepo   `json:"repos"`
+	Pages   []Span      `json:"pages"`
+	Summary LaneSummary `json:"summary"` // open repos per lane stage
 }
 
 // GitDetailView is what the repo page draws.
@@ -53,7 +54,9 @@ type repoScan struct {
 	gitDir    string
 	worktrees []GitWorktree
 	remotes   []GitRemote
-	prs       []GitPR
+	prs       []GitPR                // open pull requests only
+	prsAll    []GitPR                // every state, for the Review and Merged stages
+	lanes     map[string][]LaneStage // lane per local branch name
 }
 
 type prEntry struct {
@@ -80,6 +83,10 @@ type GitScanner struct {
 	prCache    map[string]prEntry
 	details    map[string]*GitDetail
 	detailBusy map[string]bool
+
+	laneMu    sync.Mutex
+	laneCache map[string]laneCounts
+	relCache  map[string]releaseInfo
 }
 
 // NewGitScanner returns a scanner with no reading yet.
@@ -87,7 +94,8 @@ func NewGitScanner(deps GitDeps) *GitScanner {
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
-	return &GitScanner{deps: deps, prCache: map[string]prEntry{}, details: map[string]*GitDetail{}, detailBusy: map[string]bool{}}
+	return &GitScanner{deps: deps, prCache: map[string]prEntry{}, details: map[string]*GitDetail{}, detailBusy: map[string]bool{},
+		laneCache: map[string]laneCounts{}, relCache: map[string]releaseInfo{}}
 }
 
 // Wait blocks until every reading started so far has finished.
@@ -98,6 +106,12 @@ func (s *GitScanner) Wait() { s.wg.Wait() }
 // set (which also drops the PR cache) or when the last is over
 // GitRescanAfter old.
 func (s *GitScanner) View(root string, prsOn, refresh bool, rows int) GitView {
+	return s.ViewStage(root, prsOn, refresh, rows, "")
+}
+
+// ViewStage is View for the rows that stop at one lane stage ("" for every
+// repo). The pages hold the filtered rows; Summary always counts all repos.
+func (s *GitScanner) ViewStage(root string, prsOn, refresh bool, rows int, stage string) GitView {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if root != s.root || prsOn != s.prsOn {
@@ -114,7 +128,7 @@ func (s *GitScanner) View(root string, prsOn, refresh bool, rows int) GitView {
 		s.start()
 	}
 	v := GitView{Root: root, Loading: s.running, Line: s.deps.StatusWhy, PRsOn: prsOn, PRLine: s.prLine,
-		Repos: []GitRepo{}, Pages: []Span{}}
+		Repos: []GitRepo{}, Pages: []Span{}, Summary: LaneSummaryOf(nil)}
 	if s.deps.Status != nil {
 		v.Line = ""
 	}
@@ -122,6 +136,16 @@ func (s *GitScanner) View(root string, prsOn, refresh bool, rows int) GitView {
 		v.ReadAt = s.readAt.UTC().Format(time.RFC3339)
 		for _, r := range s.repos {
 			v.Repos = append(v.Repos, r.repo)
+		}
+		v.Summary = LaneSummaryOf(v.Repos)
+		if stage != "" {
+			kept := []GitRepo{}
+			for _, r := range v.Repos {
+				if !r.Published && r.StopsAt == stage {
+					kept = append(kept, r)
+				}
+			}
+			v.Repos = kept
 		}
 		v.Pages = GitPages(v.Repos, rows)
 	}
@@ -182,6 +206,7 @@ func (s *GitScanner) scan(root string, prsOn bool) ([]repoScan, string) {
 		repos[i] = out[i].repo
 	}
 	SortRepos(repos)
+	SortReposByLane(repos)
 	byID := map[string]repoScan{}
 	for _, r := range out {
 		byID[r.repo.ID] = r
@@ -196,10 +221,12 @@ func (s *GitScanner) scan(root string, prsOn bool) ([]repoScan, string) {
 // scanRepo reads one repo; the error is a pull request error only.
 func (s *GitScanner) scanRepo(root string, d RepoDir, units []Unit, prsOn bool) (repoScan, error) {
 	name := filepath.Base(d.Abs)
-	rs := repoScan{abs: d.Abs, repo: GitRepo{ID: d.ID, Name: name, Unit: OwningUnit(d.ID, units), PRs: -1, Attention: []string{}}}
+	rs := repoScan{abs: d.Abs, repo: GitRepo{ID: d.ID, Name: name, Unit: OwningUnit(d.ID, units), PRs: -1, Attention: []string{},
+		Lane: []LaneStage{}, OpenBranches: []OpenBranch{}}}
 	rf, err := ReadRepoFiles(d.Abs)
 	if err != nil {
 		rs.repo.StatusError = "the .git files did not read: " + err.Error()
+		rs.repo.StopsAt, rs.repo.StopsNote = "Changes", "not read"
 		return rs, nil
 	}
 	now := s.deps.Now()
@@ -235,6 +262,10 @@ func (s *GitScanner) scanRepo(root string, d RepoDir, units []Unit, prsOn bool) 
 			}
 			st := ParseStatus(out)
 			w.Dirty = st.Dirty
+			w.statusRead, w.conflicts, w.upstream = true, st.Conflicts, st.Upstream
+			if st.HasAB {
+				w.ahead, w.behind = st.Ahead, st.Behind
+			}
 			if w.Main {
 				r.Upstream, r.Dirty, r.Conflicts = st.Upstream, st.Dirty, st.Conflicts
 				if st.HasAB {
@@ -252,11 +283,18 @@ func (s *GitScanner) scanRepo(root string, d RepoDir, units []Unit, prsOn bool) 
 	r.Attention = AttentionOf(*r)
 	var prErr error
 	if prsOn && r.GitHub != "" && s.deps.PRs != nil {
-		rs.prs, prErr = s.prs(r.GitHub, now)
+		rs.prsAll, prErr = s.prs(r.GitHub, now)
 		if prErr == nil {
+			rs.prs = []GitPR{}
+			for _, p := range rs.prsAll {
+				if p.State == "OPEN" {
+					rs.prs = append(rs.prs, p)
+				}
+			}
 			r.PRs = len(rs.prs)
 		}
 	}
+	s.computeLanes(&rs, prsOn && prErr == nil && r.GitHub != "")
 	return rs, prErr
 }
 
@@ -339,6 +377,7 @@ func (s *GitScanner) buildDetail(rs repoScan, prLine string) *GitDetail {
 					b.Merged = "not merged"
 				}
 			}
+			b.Lane = rs.lanes[name]
 			d.Branches = append(d.Branches, b)
 		}
 		sort.Slice(d.Branches, func(i, j int) bool {

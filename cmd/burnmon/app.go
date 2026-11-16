@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	version        = "0.4.0-beta.4"
+	version        = "0.4.0-beta.5"
 	minInterval    = 5 * time.Minute
 	minWSLInterval = 15 * time.Minute
 )

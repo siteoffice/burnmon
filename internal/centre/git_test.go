@@ -57,7 +57,7 @@ func TestGitStatusIsTheOneCommand(t *testing.T) {
 	if PRCacheTTL != 5*time.Minute {
 		t.Errorf("PRCacheTTL = %v, want 5m", PRCacheTTL)
 	}
-	wantGh := "pr list --json number,title,headRefName,state,isDraft,reviewDecision,statusCheckRollup,updatedAt"
+	wantGh := "pr list --state all --limit 100 --json number,title,headRefName,state,isDraft,reviewDecision,statusCheckRollup,updatedAt"
 	if got := strings.Join(GhArgs, " "); got != wantGh {
 		t.Errorf("GhArgs = %q", got)
 	}
