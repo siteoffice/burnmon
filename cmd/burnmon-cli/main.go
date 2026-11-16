@@ -39,7 +39,7 @@ import (
 	"burnmon/internal/waits"
 )
 
-const version = "0.4.0-beta.5"
+const version = "0.4.0-beta.6"
 
 type multiFlag []string
 
