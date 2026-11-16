@@ -1,7 +1,6 @@
 package centre
 
 import (
-	"bufio"
 	"errors"
 	"io/fs"
 	"os"
@@ -186,30 +185,11 @@ func hasHead(gd string) bool {
 // worktreeGitDir is the per-worktree git dir of dir: dir\.git when it is a
 // folder, else the gitdir line of the .git file. "" when unreadable.
 func worktreeGitDir(dir string) string {
-	dot := filepath.Join(dir, ".git")
-	fi, err := os.Lstat(dot)
+	gd, err := gitrefs.WorktreeGitDir(dir)
 	if err != nil {
 		return ""
 	}
-	if fi.IsDir() {
-		return dot
-	}
-	data, err := os.ReadFile(dot)
-	if err != nil {
-		return ""
-	}
-	line := strings.TrimSpace(string(data))
-	if !strings.HasPrefix(line, "gitdir:") {
-		return ""
-	}
-	gd := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
-	if gd == "" {
-		return ""
-	}
-	if !filepath.IsAbs(gd) {
-		gd = filepath.Join(dir, gd)
-	}
-	return filepath.Clean(gd)
+	return gd
 }
 
 // readHead reads HEAD in a per-worktree git dir: the branch name, or
@@ -324,35 +304,11 @@ func linkedWorktrees(gd string) []GitWorktree {
 // file order.
 func readRemotes(p string) []GitRemote {
 	out := []GitRemote{}
-	f, err := os.Open(p)
-	if err != nil {
-		return out
-	}
-	defer f.Close()
-	cur := -1
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "[") {
-			cur = -1
-			if m := remoteHead.FindStringSubmatch(line); m != nil {
-				out = append(out, GitRemote{Name: m[1]})
-				cur = len(out) - 1
-			}
-			continue
-		}
-		if cur < 0 {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if ok && strings.EqualFold(strings.TrimSpace(k), "url") && out[cur].URL == "" {
-			out[cur].URL = strings.TrimSpace(v)
-		}
+	for _, r := range gitrefs.Remotes(p) {
+		out = append(out, GitRemote{Name: r.Name, URL: r.URL})
 	}
 	return out
 }
-
-var remoteHead = regexp.MustCompile(`^\[remote\s+"([^"]+)"\]$`)
 
 var githubURL = regexp.MustCompile(`^(?:https://(?:[^@/]+@)?github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
 
