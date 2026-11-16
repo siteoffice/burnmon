@@ -55,13 +55,7 @@ var appDataDir = func() string {
 // appDataDirFrom picks the data folder: localAppData when set, else the
 // per-user config dir (the folder the stores use on macOS), else the temp dir.
 func appDataDirFrom(localAppData string, userConfigDir func() (string, error)) string {
-	if localAppData != "" {
-		return filepath.Join(localAppData, "burnmon")
-	}
-	if dir, err := userConfigDir(); err == nil && dir != "" {
-		return filepath.Join(dir, "burnmon")
-	}
-	return filepath.Join(os.TempDir(), "burnmon")
+	return store.DataDirFrom(localAppData, userConfigDir)
 }
 
 // settingsDirEnv names the folder for this app's own per-user settings. uicheck
@@ -426,21 +420,7 @@ func loadConfig(dataDir string) (pricing.Config, string) {
 // tier), so a test can use a temp folder. The string is the file loaded, ""
 // when none.
 func loadConfigAt(exeDir, dataDir string) (pricing.Config, string) {
-	var path string
-	if exeDir != "" {
-		if cand := filepath.Join(exeDir, "burnmon.json"); fileExists(cand) {
-			path = cand
-		} else if cand := filepath.Join(exeDir, "claudecost.json"); fileExists(cand) {
-			path = cand
-		}
-	}
-	if path == "" {
-		if cand := filepath.Join(dataDir, "burnmon.json"); fileExists(cand) {
-			path = cand
-		} else if cand := filepath.Join(dataDir, "claudecost.json"); fileExists(cand) {
-			path = cand
-		}
-	}
+	path := pricing.FindConfig(exeDir, dataDir)
 	cfg, err := pricing.Load(path)
 	if err != nil {
 		log.Println("config error:", err)

@@ -23,13 +23,7 @@ import (
 // claudecost.json, next to the exe ("" skips that tier), then the same two in
 // dataDir. No file gives the defaults.
 func loadBurnmonConfig(exeDir, dataDir string) pricing.Config {
-	var path string
-	if exeDir != "" {
-		path = firstFile(filepath.Join(exeDir, "burnmon.json"), filepath.Join(exeDir, "claudecost.json"))
-	}
-	if path == "" {
-		path = firstFile(filepath.Join(dataDir, "burnmon.json"), filepath.Join(dataDir, "claudecost.json"))
-	}
+	path := pricing.FindConfigFunc(exeDir, dataDir, isFile)
 	cfg, err := pricing.Load(path)
 	if err != nil {
 		log.Println("config error:", err)
@@ -37,13 +31,9 @@ func loadBurnmonConfig(exeDir, dataDir string) pricing.Config {
 	return cfg
 }
 
-func firstFile(paths ...string) string {
-	for _, p := range paths {
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
-			return p
-		}
-	}
-	return ""
+func isFile(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
 }
 
 // newDecisionEnv is the controls Env BurnMon Dev builds in

@@ -102,21 +102,11 @@ func main() {
 	// when both exist.
 	cfgFile := *cfgPath
 	if cfgFile == "" {
+		exeDir := ""
 		if exe, err := os.Executable(); err == nil {
-			exeDir := filepath.Dir(exe)
-			if cand := filepath.Join(exeDir, "burnmon.json"); fileExists(cand) {
-				cfgFile = cand
-			} else if cand := filepath.Join(exeDir, "claudecost.json"); fileExists(cand) {
-				cfgFile = cand
-			}
+			exeDir = filepath.Dir(exe)
 		}
-	}
-	if cfgFile == "" {
-		if cand := filepath.Join(dataDir, "burnmon.json"); fileExists(cand) {
-			cfgFile = cand
-		} else if cand := filepath.Join(dataDir, "claudecost.json"); fileExists(cand) {
-			cfgFile = cand
-		}
+		cfgFile = pricing.FindConfig(exeDir, dataDir)
 	}
 	cfg, err := pricing.Load(cfgFile)
 	if err != nil {

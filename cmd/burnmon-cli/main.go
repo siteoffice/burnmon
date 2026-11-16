@@ -1106,32 +1106,17 @@ func run() int {
 	return 0
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 // loadConfig prefers burnmon.json, exe-adjacent then cwd, falling back to
 // claudecost.json (the pre-rename config name, v0.1.2 and earlier) in the
 // same two locations so an existing portable folder keeps working.
 func loadConfig(explicit string, quiet bool) (pricing.Config, error) {
 	path := explicit
 	if path == "" {
+		exeDir := ""
 		if exe, err := os.Executable(); err == nil {
-			exeDir := filepath.Dir(exe)
-			if cand := filepath.Join(exeDir, "burnmon.json"); fileExists(cand) {
-				path = cand
-			} else if cand := filepath.Join(exeDir, "claudecost.json"); fileExists(cand) {
-				path = cand
-			}
+			exeDir = filepath.Dir(exe)
 		}
-	}
-	if path == "" {
-		if fileExists("burnmon.json") {
-			path = "burnmon.json"
-		} else if fileExists("claudecost.json") {
-			path = "claudecost.json"
-		}
+		path = pricing.FindConfig(exeDir, "")
 	}
 	cfg, err := pricing.Load(path)
 	if err == nil && path != "" && !quiet {
