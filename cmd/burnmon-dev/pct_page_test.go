@@ -146,7 +146,8 @@ func TestPctPageDefaultsAndPixels(t *testing.T) {
 		t.Fatalf("node: %v\n%s", err, b)
 	}
 	var got struct {
-		S, P, A, B map[string]int
+		S, P map[string]map[string]int
+		A, B map[string]int
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(string(b))), &got); err != nil {
 		t.Fatalf("bad node output %q: %v", b, err)
@@ -215,7 +216,8 @@ func TestPctSideBySideRowIsTheLarger(t *testing.T) {
 	if strings.Contains(body, "draw.status += give") {
 		t.Error("Status still takes what the row frees")
 	}
-	out := gearNode(t, sections.Default(), "console.log(pctRowPct({sessions_30min:40, processes_30min:30}));"+
+	// To Do is hidden at install; show it in Standard so the total line counts it.
+	out := gearNode(t, sections.Default().With("standard", sections.Todo, true), "console.log(pctRowPct({sessions_30min:40, processes_30min:30}));"+
 		" console.log(pctTotalLine('standard', {status:20, sessions_30min:40, processes_30min:30, todo:10}, true));"+
 		" console.log(pctTotalLine('standard', {status:20, sessions_30min:40, processes_30min:30, todo:10}, false));")
 	lines := strings.Split(strings.ReplaceAll(out, "\r\n", "\n"), "\n")

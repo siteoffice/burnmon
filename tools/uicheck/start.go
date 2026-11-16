@@ -37,24 +37,29 @@ var devPartIDs = []string{
 	"todo",
 }
 
-// startClearSizes puts the default section and pane sizes back in both modes
-// (sections.DefaultSectionsPct and DefaultPanesPct, what a fresh settings
-// folder has). They pass every rule in any part state, so it can go first.
+// startClearSizes puts the section and pane sizes the checks were written
+// against back in both modes: the shared 160-percent set that was the install
+// default until 2026-11-15, not today's per-mode install defaults
+// (sections.DefaultSectionsPct and DefaultPanesPct). They pass every rule in any
+// part state with the scrollbar on, so it can go first.
 const startClearSizes = `{pct:{standard:{sections:{status:30,sessions_30min:60,processes_30min:60,todo:10},panes:{status_row1:50,sessions:50,burn_30min:40,vendor_strip:20,activity_heatmap:20,turn_ticker:20,system:50,process_groups:30,processes:20}},plain:{sections:{status:30,sessions_30min:60,processes_30min:60,todo:10},panes:{status_row1:50,sessions:50,burn_30min:40,vendor_strip:20,activity_heatmap:20,turn_ticker:20,system:50,process_groups:30,processes:20}}}}`
 
 // devControlIDs mirrors sections.ControlIDs.
 var devControlIDs = []string{"stop", "attach", "approve", "send_back", "close_sprint"}
 
-// appDefaultPlain is the Plain list a fresh settings folder gives
-// (sections.Default, internal\sections\sections.go:170).
+// appDefaultPlain is the Plain list the checks were written against: the five
+// old panels, not today's install Plain list (sections.Default).
 var appDefaultPlain = map[string]bool{"waits": true, "outcomes": true, "burn": true, "agents_map": true, "sessions": true}
 
-// appStart is what a fresh settings folder gives, which is what every run
-// starts with since scripts\uicheck-dev.ps1 makes one per launch:
-// sections.Default (internal\sections\sections.go:169) is Standard, scrollbar
-// on, every Standard part on, the five Plain parts, every control off and the
-// default sizes; loadUITheme (cmd\burnmon-dev\viewstate.go:29) is dark. The
-// size is the primary viewport (1152x2048, check_d2.go:16); groups override it.
+// appStart is the layout every run starts with: applyStart switches the app,
+// which starts from a fresh settings folder (scripts\uicheck-dev.ps1 makes one
+// per launch) with the install defaults of sections.Default, into it before
+// each case. It is the layout the checks were written against: Standard,
+// scrollbar on, every Standard part on, the five old Plain parts, every control
+// off and the sizes of startClearSizes; loadUITheme (cmd\burnmon-dev\viewstate.go)
+// is dark. A check that needs a part the install defaults hide gets it from
+// here, so none of them depends on the install layout. The size is the primary
+// viewport (1152x2048, check_d2.go:16); groups override it.
 func appStart() startState {
 	s := startState{Width: 1152, Height: 2048, Scrollbar: true, Theme: "dark",
 		Standard: map[string]bool{}, PlainSet: map[string]bool{}}

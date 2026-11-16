@@ -171,6 +171,25 @@ var d29Parts = []string{
 
 var d29PlainDefault = map[string]bool{"waits": true, "outcomes": true, "burn": true, "agents_map": true, "sessions": true}
 
+// frozenSectionsPct and frozenPanesPct are the sizes the page drew for a
+// payload without sections_pct and panes_pct until 2026-11-16: the old shared
+// install defaults (sections add up to 160, for the scrollbar on). The checks
+// were written against them, so the frozen payload carries them explicitly;
+// the page's own fallback is now the per-mode install layout, which the Go and
+// page tests pin. A check that types its own numbers overrides these keys.
+var (
+	frozenSectionsPct = map[string]map[string]int{
+		"standard": {"status": 30, "sessions_30min": 60, "processes_30min": 60, "todo": 10},
+		"plain":    {"status": 30, "sessions_30min": 60, "processes_30min": 60, "todo": 10},
+	}
+	frozenPanesPct = map[string]map[string]int{
+		"standard": {"status_row1": 50, "sessions": 50, "burn_30min": 40, "vendor_strip": 20, "activity_heatmap": 20, "turn_ticker": 20,
+			"system": 50, "process_groups": 30, "processes": 20},
+		"plain": {"status_row1": 50, "sessions": 50, "burn_30min": 40, "vendor_strip": 20, "activity_heatmap": 20, "turn_ticker": 20,
+			"system": 50, "process_groups": 30, "processes": 20},
+	}
+)
+
 type d29Opts struct {
 	Plain, Scrollbar bool
 	StandardOff      map[string]bool
@@ -232,6 +251,7 @@ func d29Payload(o d29Opts) string {
 		"parts": current, "parts_standard": standard, "parts_plain": plainSet,
 		"groups": groups, "station_theme": theme, "reading": reading,
 		"writer": map[string]any{"state": ""}, "snapshot_line": line,
+		"sections_pct": frozenSectionsPct, "panes_pct": frozenPanesPct,
 	})
 	return string(b)
 }

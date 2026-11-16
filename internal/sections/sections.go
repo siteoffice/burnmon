@@ -122,13 +122,21 @@ func listOf(on func(id string) bool) map[string]bool {
 	return m
 }
 
-// Default is Standard with every part on and the scrollbar on. Plain shows the
-// five R8 panels that Plain showed (Waits, Outcomes, Burn, Agents map, Sessions).
+// Default is what a fresh install starts with (Wilco, 2026-11-16): Standard
+// mode, the Overall scrollbar off, one part list per mode, every control off and
+// the sizes of DefaultSectionsPct and DefaultPanesPct. Standard shows Waits on
+// you, Agents map, Sessions, the Sessions last 30 min parts (Burn, Vendor strip,
+// Activity, Heatmap, Turn ticker) and System and Process groups. Plain shows
+// Waits on you, Agents map, Sessions, Burn last 30 min, Vendor strip and System.
 func Default() State {
-	plain := map[string]bool{Waits: true, Outcomes: true, Burn: true, AgentsMap: true, Sessions: true}
+	standard := map[string]bool{Waits: true, AgentsMap: true, Sessions: true,
+		Burn30: true, VendorStrip: true, Activity: true, Heatmap: true, TurnTicker: true,
+		System: true, ProcessGroups: true}
+	plain := map[string]bool{Waits: true, AgentsMap: true, Sessions: true,
+		Burn30: true, VendorStrip: true, System: true}
 	return State{
-		Scrollbar:   true,
-		Standard:    listOf(func(string) bool { return true }),
+		Scrollbar:   false,
+		Standard:    listOf(func(id string) bool { return standard[id] }),
 		PlainSet:    listOf(func(id string) bool { return plain[id] }),
 		Controls:    controlsOf(func(string) bool { return false }),
 		SectionsPct: defaultPct(DefaultSectionsPct),

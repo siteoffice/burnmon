@@ -140,12 +140,14 @@ func TestPanesCoverEveryPartOnce(t *testing.T) {
 // Rule 2e: a section is shown while one of its parts is on.
 func TestShownSectionsFollowParts(t *testing.T) {
 	s := Default()
-	if got := s.ShownSections(ModeStandard); !reflect.DeepEqual(got, []string{"status", "sessions_30min", "processes_30min", "todo"}) {
+	if got := s.ShownSections(ModeStandard); !reflect.DeepEqual(got, []string{"status", "sessions_30min", "processes_30min"}) {
 		t.Fatalf("standard = %v", got)
 	}
-	if got := s.ShownSections(ModePlain); !reflect.DeepEqual(got, []string{"status"}) {
+	if got := s.ShownSections(ModePlain); !reflect.DeepEqual(got, []string{"status", "sessions_30min", "processes_30min"}) {
 		t.Fatalf("plain = %v", got)
 	}
+	// Processes is off at install: tick it, then the section stays shown with System and Process groups off.
+	s = s.With(ModeStandard, Processes, true)
 	for _, id := range []string{System, ProcessGroups} {
 		s = s.With(ModeStandard, id, false)
 	}
@@ -160,7 +162,8 @@ func TestShownSectionsFollowParts(t *testing.T) {
 
 func TestCheckPctSectionsOverHundredNeedsScrollbar(t *testing.T) {
 	secs := map[string]int{"status": 40, "sessions_30min": 40, "processes_30min": 20, "todo": 12}
-	on := Default().WithScrollbar(true)
+	// To Do is hidden at install; tick it so all four sections count (112).
+	on := Default().With(ModeStandard, Todo, true).WithScrollbar(true)
 	if err := on.CheckPct(ModeStandard, secs, nil); err != nil {
 		t.Fatalf("scrollbar on: %v", err)
 	}
@@ -183,8 +186,9 @@ func TestCheckPctPanesOverHundredRefused(t *testing.T) {
 }
 
 func TestCheckPctHiddenNumbersIgnored(t *testing.T) {
-	// Plain shows only Status: Sessions 90 is hidden there and does not count.
-	if err := Default().WithScrollbar(false).CheckPct(ModePlain, map[string]int{"status": 50, "sessions_30min": 90}, nil); err != nil {
+	// Plain with both Sessions last 30 min parts off: Sessions 90 is hidden there and does not count.
+	plainNoSessions := Default().With(ModePlain, Burn30, false).With(ModePlain, VendorStrip, false).WithScrollbar(false)
+	if err := plainNoSessions.CheckPct(ModePlain, map[string]int{"status": 50, "sessions_30min": 90}, nil); err != nil {
 		t.Fatalf("got %v", err)
 	}
 	// A hidden pane's number does not count either.
@@ -195,11 +199,13 @@ func TestCheckPctHiddenNumbersIgnored(t *testing.T) {
 }
 
 func TestCheckPctStarvedEmptyBox(t *testing.T) {
-	err := Default().CheckPct(ModeStandard, map[string]int{"status": 50, "sessions_30min": 30, "processes_30min": 20}, nil)
+	// To Do and Processes are hidden at install; tick them so they count.
+	shown := Default().With(ModeStandard, Todo, true).With(ModeStandard, Processes, true)
+	err := shown.CheckPct(ModeStandard, map[string]int{"status": 50, "sessions_30min": 30, "processes_30min": 20}, nil)
 	if err == nil || err.Error() != "Sections add up to 100 percent and Microsoft To Do has no number; give it a number or lower another" {
 		t.Fatalf("got %v", err)
 	}
-	err = Default().CheckPct(ModeStandard, nil, map[string]int{"system": 70, "process_groups": 30})
+	err = shown.CheckPct(ModeStandard, nil, map[string]int{"system": 70, "process_groups": 30})
 	if err == nil || err.Error() != "Panes in Processes last 30 min add up to 100 percent and Processes has no number; give it a number or lower another" {
 		t.Fatalf("got %v", err)
 	}
@@ -235,7 +241,7 @@ func TestPctRoundTripPerMode(t *testing.T) {
 		t.Fatalf("loaded %+v / %+v", st.SectionsPct, st.PanesPct)
 	}
 	// Plain was not touched: it keeps the defaults.
-	if !reflect.DeepEqual(st.SectionsPctOf(ModePlain), DefaultSectionsPct) || !reflect.DeepEqual(st.PanesPctOf(ModePlain), DefaultPanesPct) {
+	if !reflect.DeepEqual(st.SectionsPctOf(ModePlain), DefaultSectionsPct[ModePlain]) || !reflect.DeepEqual(st.PanesPctOf(ModePlain), DefaultPanesPct[ModePlain]) {
 		t.Fatalf("plain lost its defaults: %+v / %+v", st.SectionsPct, st.PanesPct)
 	}
 	m := readRaw(t, p)
@@ -270,41 +276,38 @@ func TestPctNormalizeDropsBadInput(t *testing.T) {
 	}
 }
 
-// Prefilled numbers (Wilco, 2026-11-15): a fresh install and a file without
-// the keys start with the defaults; they pass every rule in every mode with
-// the default scrollbar on, and add up to more than 100 so the page scrolls.
+// Prefilled numbers (Wilco, 2026-11-16, one set per mode; the table itself is
+// pinned in install_defaults_test.go): a fresh install and a file without the
+// keys start with the defaults of their mode, and they pass every rule in
+// every mode with the default scrollbar off.
 func TestDefaultsPrefilledAndValid(t *testing.T) {
-	if got := Default().SectionsPctOf(ModeStandard); !reflect.DeepEqual(got, DefaultSectionsPct) {
-		t.Fatalf("Default standard = %v", got)
-	}
-	if got := Load(filepath.Join(t.TempDir(), "missing.json")).PanesPctOf(ModePlain); !reflect.DeepEqual(got, DefaultPanesPct) {
-		t.Fatalf("missing file plain panes = %v", got)
+	for _, mode := range []string{ModeStandard, ModePlain} {
+		if got := Default().SectionsPctOf(mode); !reflect.DeepEqual(got, DefaultSectionsPct[mode]) {
+			t.Fatalf("Default %s sections = %v", mode, got)
+		}
+		if got := Load(filepath.Join(t.TempDir(), "missing.json")).PanesPctOf(mode); !reflect.DeepEqual(got, DefaultPanesPct[mode]) {
+			t.Fatalf("missing file %s panes = %v", mode, got)
+		}
 	}
 	p := filepath.Join(t.TempDir(), "view.json")
 	if err := writeRaw(p, `{"plain_mode": false}`); err != nil {
 		t.Fatal(err)
 	}
-	if got := Load(p).SectionsPctOf(ModePlain); !reflect.DeepEqual(got, DefaultSectionsPct) {
-		t.Fatalf("file without keys = %v", got)
-	}
-	sum := 0
-	for _, v := range DefaultSectionsPct {
-		sum += v
-	}
-	if sum != 160 {
-		t.Fatalf("default sections add up to %d, want 160", sum)
-	}
-	if !Default().Scrollbar {
-		t.Fatal("the default has the scrollbar off; the defaults need it on")
-	}
 	for _, mode := range []string{ModeStandard, ModePlain} {
-		if err := Default().CheckPct(mode, DefaultSectionsPct, DefaultPanesPct); err != nil {
+		if got := Load(p).SectionsPctOf(mode); !reflect.DeepEqual(got, DefaultSectionsPct[mode]) {
+			t.Fatalf("file without keys, %s = %v", mode, got)
+		}
+		if err := Default().CheckPct(mode, DefaultSectionsPct[mode], DefaultPanesPct[mode]); err != nil {
 			t.Fatalf("%s: %v", mode, err)
 		}
 	}
-	// Standard shows every section, so with the scrollbar off the sum is refused.
-	if err := Default().WithScrollbar(false).CheckPct(ModeStandard, DefaultSectionsPct, DefaultPanesPct); err == nil {
-		t.Fatal("160 accepted with the scrollbar off")
+	if Default().Scrollbar {
+		t.Fatal("the default has the scrollbar on; the defaults need it off")
+	}
+	// Ticking a hidden section adds its number: Standard then adds up to 110,
+	// which is refused with the scrollbar off.
+	if err := Default().With(ModeStandard, Todo, true).CheckPct(ModeStandard, DefaultSectionsPct[ModeStandard], DefaultPanesPct[ModeStandard]); err == nil {
+		t.Fatal("110 accepted with the scrollbar off")
 	}
 }
 
@@ -317,7 +320,12 @@ func TestOldHeightsKeysIgnoredAndDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := Load(p)
-	want := State{Plain: true, Scrollbar: false, Standard: map[string]bool{"waits": false},
+	// A file without a parts_plain list keeps what the R8 migration gave Plain
+	// (the five old panels), not the install default.
+	oldPlain := listOf(func(id string) bool {
+		return id == Waits || id == Outcomes || id == Burn || id == AgentsMap || id == Sessions
+	})
+	want := State{Plain: true, Scrollbar: false, Standard: map[string]bool{"waits": false}, PlainSet: oldPlain,
 		SectionsPct: defaultPct(DefaultSectionsPct), PanesPct: defaultPct(DefaultPanesPct)}.Normalize()
 	if !reflect.DeepEqual(st, want) {
 		t.Fatalf("loaded %+v, want %+v", st, want)

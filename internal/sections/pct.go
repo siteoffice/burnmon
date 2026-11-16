@@ -71,22 +71,34 @@ func paneLabel(id string) string {
 }
 
 // DefaultSectionsPct and DefaultPanesPct are the numbers a fresh install
-// starts with in both modes, close to the B7 look (Wilco, 2026-11-15): the
-// sections add up to 160, so with the default Overall scrollbar on the page
-// scrolls as it did, and every chart has room at 1280x860. With the scrollbar
-// off they are refused until lowered, and the page draws them scaled to fit.
-// They show in the gear's boxes; a box the person clears shares what is left.
-// The page carries the same numbers (page.html PCT_DEFAULT_*), a test keeps them equal.
-var DefaultSectionsPct = map[string]int{"status": 30, "sessions_30min": 60, "processes_30min": 60, "todo": 10}
-
-var DefaultPanesPct = map[string]int{
-	"status_row1": 50, "sessions": 50,
-	"burn_30min": 40, "vendor_strip": 20, "activity_heatmap": 20, "turn_ticker": 20,
-	"system": 50, "process_groups": 30, "processes": 20,
+// starts with, one set per mode (Wilco, 2026-11-16), next to the part
+// switches of Default. With the Overall scrollbar off, the shown sections of
+// each mode add up to 100 (15 + 40 + 45) and the shown panes of each shown
+// section add up to 100. A part that is hidden at install keeps its number,
+// so it has a size when it is ticked. They show in the gear's boxes; a box the
+// person clears shares what is left. The page carries the same numbers
+// (page.html PCT_DEFAULT_*), a test keeps them equal.
+var DefaultSectionsPct = map[string]map[string]int{
+	ModeStandard: {"status": 15, "sessions_30min": 40, "processes_30min": 45, "todo": 10},
+	ModePlain:    {"status": 15, "sessions_30min": 40, "processes_30min": 45, "todo": 10},
 }
 
-func defaultPct(d map[string]int) map[string]map[string]int {
-	return map[string]map[string]int{ModeStandard: copyInts(d), ModePlain: copyInts(d)}
+var DefaultPanesPct = map[string]map[string]int{
+	ModeStandard: {
+		"status_row1": 60, "sessions": 40,
+		"burn_30min": 40, "vendor_strip": 20, "activity_heatmap": 20, "turn_ticker": 20,
+		"system": 50, "process_groups": 50, "processes": 20,
+	},
+	ModePlain: {
+		"status_row1": 60, "sessions": 40,
+		"burn_30min": 50, "vendor_strip": 50, "activity_heatmap": 20, "turn_ticker": 20,
+		"system": 100, "process_groups": 50, "processes": 20,
+	},
+}
+
+// defaultPct copies a per-mode default table, so a caller never edits it.
+func defaultPct(d map[string]map[string]int) map[string]map[string]int {
+	return map[string]map[string]int{ModeStandard: copyInts(d[ModeStandard]), ModePlain: copyInts(d[ModePlain])}
 }
 
 // cleanPct keeps the known keys with a value from 1 to 100 in both modes; the

@@ -65,33 +65,34 @@ func TestDefaults(t *testing.T) {
 	if d.Plain || d.Mode() != "standard" {
 		t.Fatalf("default mode %q, want standard", d.Mode())
 	}
-	if !d.Scrollbar {
-		t.Error("default scrollbar is off")
+	if d.Scrollbar {
+		t.Error("default scrollbar is on, want off (2026-11-16)")
 	}
-	onlyOn(t, "standard", d.Standard, wantIDs...)
-	onlyOn(t, "plain", d.PlainSet, "waits", "outcomes", "burn", "agents_map", "sessions")
+	// The full table is pinned in install_defaults_test.go.
+	onlyOn(t, "standard", d.Standard, "waits", "agents_map", "sessions", "burn_30min", "vendor_strip", "activity", "heatmap", "turn_ticker", "system", "process_groups")
+	onlyOn(t, "plain", d.PlainSet, "waits", "agents_map", "sessions", "burn_30min", "vendor_strip", "system")
 }
 
 func TestOnFollowsTheMode(t *testing.T) {
 	d := Default()
-	if !d.On("git") {
-		t.Error("standard: git should be on")
+	if !d.On("turn_ticker") {
+		t.Error("standard: turn_ticker should be on")
 	}
 	p := d.WithPlain(true)
-	if p.Mode() != "plain" || p.On("git") {
-		t.Errorf("plain: mode %q, git on %v", p.Mode(), p.On("git"))
+	if p.Mode() != "plain" || p.On("turn_ticker") {
+		t.Errorf("plain: mode %q, turn_ticker on %v", p.Mode(), p.On("turn_ticker"))
 	}
-	if !p.On("burn") {
-		t.Error("plain: burn should be on")
+	if !p.On("burn_30min") {
+		t.Error("plain: burn_30min should be on")
 	}
 }
 
 func TestWithChangesOnlyThatMode(t *testing.T) {
-	d := Default().With("plain", "turn_ticker", true).With("standard", "burn", false)
-	if !d.OnIn("plain", "turn_ticker") || d.OnIn("standard", "burn") {
+	d := Default().With("plain", "activity", true).With("standard", "vendor_strip", false)
+	if !d.OnIn("plain", "activity") || d.OnIn("standard", "vendor_strip") {
 		t.Fatalf("switches not set: %+v", d)
 	}
-	if !d.OnIn("standard", "turn_ticker") || !d.OnIn("plain", "burn") {
+	if !d.OnIn("standard", "activity") || !d.OnIn("plain", "vendor_strip") {
 		t.Fatalf("a switch leaked into the other mode: %+v", d)
 	}
 }
@@ -127,7 +128,7 @@ func TestNormalizeFillsAndDrops(t *testing.T) {
 	if !got.OnIn("standard", "burn_30min") {
 		t.Error("a standard part missing from a saved file must default to on")
 	}
-	if got.OnIn("plain", "git") || !got.OnIn("plain", "burn") {
+	if got.OnIn("plain", "git") || !got.OnIn("plain", "burn_30min") || got.OnIn("plain", "burn") {
 		t.Error("plain list missing from a saved file must default to the Plain set")
 	}
 	if _, ok := got.Standard["nonsense"]; ok {
@@ -222,11 +223,23 @@ func TestR8FileMigratesEverySwitch(t *testing.T) {
 	}
 }
 
-func TestR8DefaultsMigrateToNewDefaults(t *testing.T) {
+// An R8 file keeps what it showed: the R8 defaults migrate to every part on in
+// Standard and the five old panels in Plain, not to the 2026-11-16 install
+// layout (a saved file wins, nothing is migrated to it).
+func TestR8DefaultsMigrateToTheOldLayout(t *testing.T) {
 	std := map[string]bool{"waits": true, "outcomes": true, "burn": true, "agents_map": true, "sessions": true, "processes": true, "git": true}
 	pl := map[string]bool{"waits": true, "outcomes": true, "burn": true, "agents_map": true, "sessions": true, "processes": false, "git": false}
-	if got := migrateR8(false, std, pl); !reflect.DeepEqual(got, Default()) {
-		t.Errorf("migrateR8 of the R8 defaults = %+v, want %+v", got, Default())
+	five := map[string]bool{Waits: true, Outcomes: true, Burn: true, AgentsMap: true, Sessions: true}
+	want := State{
+		Scrollbar:   true,
+		Standard:    listOf(func(string) bool { return true }),
+		PlainSet:    listOf(func(id string) bool { return five[id] }),
+		Controls:    controlsOf(func(string) bool { return false }),
+		SectionsPct: defaultPct(DefaultSectionsPct),
+		PanesPct:    defaultPct(DefaultPanesPct),
+	}
+	if got := migrateR8(false, std, pl); !reflect.DeepEqual(got, want) {
+		t.Errorf("migrateR8 of the R8 defaults = %+v, want %+v", got, want)
 	}
 }
 
@@ -236,8 +249,10 @@ func TestR8FileWithOneListMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := Load(path)
-	if !reflect.DeepEqual(got.PlainSet, Default().PlainSet) {
-		t.Errorf("plain = %v, want the new Plain default", got.PlainSet)
+	// No R8 Plain list: it takes the R8 Plain defaults (the five old panels).
+	five := map[string]bool{Waits: true, Outcomes: true, Burn: true, AgentsMap: true, Sessions: true}
+	if !reflect.DeepEqual(got.PlainSet, listOf(func(id string) bool { return five[id] })) {
+		t.Errorf("plain = %v, want the R8 Plain defaults", got.PlainSet)
 	}
 	off := map[string]bool{"burn": true, "burn_30min": true, "vendor_strip": true, "activity": true, "heatmap": true, "turn_ticker": true}
 	for _, id := range IDs {
@@ -274,7 +289,7 @@ func TestOldR8FirstCutKeepsModeOnly(t *testing.T) {
 
 func TestNewKeysWinOverR8Keys(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "view.json")
-	body := `{"parts_standard": {"git": false}, "sections_standard": {"git": true, "burn": false}}`
+	body := `{"parts_standard": {"git": false}, "sections_standard": {"git": true, "agents_map": false}}`
 	if err := writeRaw(path, body); err != nil {
 		t.Fatal(err)
 	}
@@ -282,8 +297,8 @@ func TestNewKeysWinOverR8Keys(t *testing.T) {
 	if got.OnIn("standard", "git") {
 		t.Error("new parts_standard git=false lost to the R8 key")
 	}
-	if !got.OnIn("standard", "burn") {
-		t.Error("R8 burn=false was applied although parts_standard exists")
+	if !got.OnIn("standard", "agents_map") {
+		t.Error("R8 agents_map=false was applied although parts_standard exists")
 	}
 	if err := Save(path, got); err != nil {
 		t.Fatal(err)
