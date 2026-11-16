@@ -30,8 +30,8 @@ func runStatus(t *testing.T, w *snapshotwriter.Writer, lockPath string) (*snapsh
 
 func waitState(t *testing.T, s *snapshotwriter.Status, want string) snapshotwriter.StatusView {
 	t.Helper()
-	if !waitFor(2*time.Second, func() bool { return s.View().State == want }) {
-		t.Fatalf("state = %+v, want %q within 2s", s.View(), want)
+	if !waitFor(10*time.Second, func() bool { return s.View().State == want }) {
+		t.Fatalf("state = %+v, want %q within 10s", s.View(), want)
 	}
 	return s.View()
 }

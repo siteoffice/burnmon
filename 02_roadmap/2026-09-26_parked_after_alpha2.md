@@ -28,6 +28,6 @@ as v0.4.0-alpha.3, later, no date (`roadmap.md` item 9). Never use em dashes any
 7. **Watcher buffer overflow.** `internal\watch\watch_windows.go` logs a kernel buffer overflow
    and waits for the 15-minute full rescan. Trigger an immediate rescan of that root instead.
 8. **History whole-table load.** WS3 hypothesis 3: `AllEvents()` costs about 3 s on 55k rows,
-   periodic only. Listed in STATUS.md "Known gaps".
+   periodic only. Listed in "Known gaps" in `03_logs\status_history.md`.
 9. **Plan-limits panel.** Parked earlier, no brief yet (idea source
    github.com/Javis603/token-monitor, MIT).

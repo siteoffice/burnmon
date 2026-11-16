@@ -24,7 +24,7 @@ Rows moved out of `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md` on 2026-11-
    `2026-09-23_v0.2.1_hang_patch.md`. **DONE 2026-09-23, tagged `v0.2.1`.** Not Responding
    and the CPU pin are fixed (bmLive stayed under 50ms throughout every measured run);
    peak WorkingSet dropped from ~1.4-1.7 GB to ~900 MB, short of the 400 MB Done-when
-   target and left open in `STATUS.md`'s Known gaps for v0.3 or a follow-up patch.
+   target and left open in "Known gaps" in `03_logs\status_history.md` for v0.3 or a follow-up patch.
 5. v0.2.2 patch: Now page fixes from Wilco's live review (three screenshots, 2026-09-23
    around 12:00). Turn drawer could not be closed (root cause: bmTurn ran synchronously on
    the WebView2 UI thread, same mechanism as the v0.2.1 hang, now async plus an Esc handler);
@@ -73,6 +73,3 @@ Rows moved out of `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md` on 2026-11-
     `C:\ZND\10_holding\05_docs\superpowers\specs\`. **DONE:** all merged into `main` and pushed
     (shared snapshot and keep_history, section groups, Waits on you and Outcomes, first controls,
     docs pass, map and waits, layout fill, list floors, uicheck hygiene, snapshot status line).
-12. v0.4.0-beta.1 (2026-10-30). **DONE:** tag `v0.4.0-beta.1` on `775e0b5`, pushed; all three exes
-    report `0.4.0-beta.1`; `TestOneVersionClock` keeps them in step. Leftover: prune the merged
-    sprint worktrees and branches (Wilco's git step, with the B8 close-out).

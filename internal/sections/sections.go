@@ -9,12 +9,8 @@ package sections
 
 import (
 	"encoding/json"
-	"errors"
-	"io/fs"
-
 	"os"
 	"path/filepath"
-	"time"
 
 	"burnmon/internal/fsutil"
 )
@@ -265,7 +261,7 @@ func migrateR8(plain bool, standard, plainSet map[string]bool) State {
 // from the first R8 cut keeps its mode and takes the defaults for both lists,
 // since its single list belonged to no mode.
 func Load(path string) State {
-	b, err := readRetry(path)
+	b, err := fsutil.ReadFileRetry(path)
 	if err != nil {
 		return Default()
 	}
@@ -354,18 +350,3 @@ func Save(path string, s State) error {
 	return fsutil.WriteFileAtomic(path, b, 0o644)
 }
 
-// readRetry reads path, trying again briefly when the read fails for a reason
-// other than a missing file. On Windows a read that meets the instant of
-// Save's rename fails with an access error; Load must not take that for a
-// file that cannot be read and fall back to the defaults.
-func readRetry(path string) ([]byte, error) {
-	var b []byte
-	var err error
-	for i := 0; i < 20; i++ {
-		if b, err = os.ReadFile(path); err == nil || errors.Is(err, fs.ErrNotExist) {
-			return b, err
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return b, err
-}
