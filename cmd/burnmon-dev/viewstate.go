@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"burnmon/internal/fsutil"
 )
 
 type viewState struct {
@@ -55,5 +57,5 @@ func saveUITheme(dataDir, theme string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(viewStatePath(dataDir), b, 0o644)
+	return fsutil.WriteFileAtomic(viewStatePath(dataDir), b, 0o644)
 }

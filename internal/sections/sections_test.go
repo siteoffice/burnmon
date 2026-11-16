@@ -304,3 +304,40 @@ func TestLoadBadFileIsDefault(t *testing.T) {
 		}
 	}
 }
+
+// A reader looping on Load while a writer loops on Save never sees the
+// defaults: Save must replace the file in one step, not empty it first.
+func TestSaveNeverShowsDefaultsToAConcurrentLoad(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "view.json")
+	want := Default().WithPlain(true).WithControl("stop", true).WithScrollbar(true)
+	if want.Plain == Default().Plain && want.Scrollbar == Default().Scrollbar {
+		t.Fatal("test state must differ from the defaults")
+	}
+	if err := Save(p, want); err != nil {
+		t.Fatal(err)
+	}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				// A refused rename (the reader has the file open) leaves the
+				// old file in place; only what Load sees is under test.
+				_ = Save(p, want)
+			}
+		}
+	}()
+	for i := 0; i < 3000; i++ {
+		if got := Load(p); got.Plain != want.Plain || got.Scrollbar != want.Scrollbar {
+			close(stop)
+			<-done
+			t.Fatalf("Load %d returned the defaults while Save was running", i)
+		}
+	}
+	close(stop)
+	<-done
+}

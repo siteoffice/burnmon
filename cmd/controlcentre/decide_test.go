@@ -351,8 +351,8 @@ func TestOtherReasonsPassThrough(t *testing.T) {
 		"switched off in the gear",
 		"needs claude.exe: set claude_path in burnmon.json",
 		"cannot tell whether BurnMon Dev is elevated: controls are off",
-		controlsElevatedReason + " ",
-		"x " + controlsElevatedReason,
+		controls.WhyElevated + " ",
+		"x " + controls.WhyElevated,
 	} {
 		if got := rewriteReason(s); got != s {
 			t.Errorf("rewriteReason(%q) = %q", s, got)

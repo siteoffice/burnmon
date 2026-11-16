@@ -5,8 +5,8 @@ claudecost, forked 2026-09-22. Owner and approver: Wilco de Tree. Language: Engl
 
 It reads the session trails of Claude Code, Cowork, Codex, Copilot CLI, Copilot in VS Code
 and Hermes from local disk, keeps them in SQLite, and shows tokens and cost per vendor,
-session, project and client. Portable Windows exe, no account, no network, no ports. Three
-binaries: `burnmon.exe`, `burnmon-cli.exe`, `burnmon-dev.exe`.
+session, project and client. Portable Windows exe, no account, no network, no ports on Windows. Four
+binaries: `burnmon.exe`, `burnmon-cli.exe`, `burnmon-dev.exe`, `controlcentre.exe`.
 
 Root tree instructions: `C:\ZND\AGENTS.md`. Read it too.
 
@@ -16,7 +16,7 @@ Never state status, version, deadlines or priorities from memory. Read the sourc
 
 | Question | Source |
 |---|---|
-| What is true now | `C:\ZND\50_projects\burnmon\STATUS.md` (top of file; older sections can lag, say so) |
+| What is true now | `C:\ZND\50_projects\burnmon\STATUS.md` (top block only; older sections are in `C:\ZND\50_projects\burnmon\03_logs\status_history.md`, they can lag, say so) |
 | Priority order | `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md` |
 | Hard dates | `C:\ZND\50_projects\burnmon\DEADLINES.md` |
 | Last sessions | `C:\ZND\50_projects\burnmon\SESSION_LOG.md` |
@@ -42,6 +42,8 @@ the hub should absorb, write one hub agent update brief into `04_assets`
 - Verify with `go vet ./...`, `go test ./... -count=1` and `.\build.ps1`. UI changes also
   with `.\scripts\uicheck.ps1`.
 - Say what you measured and what you only inferred.
+- A comment says what the code does and why. Who found it and when goes in the commit message.
+  Apply this to a file when the file is touched.
 - Never claim a commit, push or tag from a brief. Check it live with `git rev-parse` and
   `git ls-remote --tags origin`.
 - No undocumented vendor endpoints, ever.

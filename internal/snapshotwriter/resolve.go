@@ -5,15 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 )
-
-// ResolveClaude finds the claude binary on PATH and checks it can be started
-// directly (see ResolveClaudeFor).
-func ResolveClaude() (string, error) { return ResolveClaudeFor(exec.LookPath, runtime.GOOS) }
 
 // ResolveClaudeFor resolves "claude" with look and accepts it only when it can
 // be started without a shell in between. On Windows that means a .exe, or the
@@ -103,14 +98,9 @@ func cutPrefixFold(s, prefix string) (string, bool) {
 	return s[len(prefix):], true
 }
 
-// EnableAgentView turns the agent_view poller on when claude resolves to a
+// EnableAgentViewFor turns the agent_view poller on when claude resolves to a
 // directly startable binary; otherwise it starts no poller and keeps the
-// reason for the agent_view source.
-func (gr *GraphReaders) EnableAgentView(look func(string) (string, error)) {
-	gr.EnableAgentViewFor(look, runtime.GOOS)
-}
-
-// EnableAgentViewFor is EnableAgentView with the OS named, for tests.
+// reason for the agent_view source. The OS is named so tests can pick one.
 func (gr *GraphReaders) EnableAgentViewFor(look func(string) (string, error), goos string) {
 	p, err := ResolveClaudeFor(look, goos)
 	if err != nil {
@@ -141,7 +131,7 @@ func ResolveClaudeConfigured(configured string, look func(string) (string, error
 	return configured, nil
 }
 
-// EnableAgentViewWith is EnableAgentView with the configured claude_path
+// EnableAgentViewWith is EnableAgentViewFor with the configured claude_path
 // taken into account (see ResolveClaudeConfigured).
 func (gr *GraphReaders) EnableAgentViewWith(configured string, look func(string) (string, error)) {
 	p, err := ResolveClaudeConfigured(configured, look, runtime.GOOS)

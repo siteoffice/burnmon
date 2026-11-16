@@ -4,14 +4,12 @@ package main
 
 import (
 	"log"
-	"os"
-	"os/exec"
 
+	"burnmon/internal/ingest"
 	"burnmon/internal/pricing"
 	"burnmon/internal/snapshot"
 	"burnmon/internal/snapshotwriter"
 	"burnmon/internal/store"
-	"burnmon/internal/sysmon"
 )
 
 // cfgSnapshot copies the pricing config under the app's lock.
@@ -21,32 +19,11 @@ func (a *app) cfgSnapshot() pricing.Config {
 	return a.cfg
 }
 
-// newSnapshotWriter wires the shared snapshot writer to this app: its pricing
-// config, a process sampler of its own (used from the writer goroutine only,
-// as sysmon requires; a.procSampler belongs to startSampling's goroutine)
-// and, when the home folder resolves, the relation graph's own sources.
+// newSnapshotWriter wires the shared snapshot writer (internal\ingest) to this
+// app: its pricing config and the config file it loaded. The writer's process
+// sampler is its own: a.procSampler belongs to startSampling's goroutine.
 func (a *app) newSnapshotWriter(st *store.Store, path string) *snapshotwriter.Writer {
-	cfg := a.cfgSnapshot()
-	ps := sysmon.NewProcessSampler()
-	copilotVSC := cfg.CopilotVSCodeOtelFile != ""
-	w := &snapshotwriter.Writer{
-		Store:  st,
-		Path:   path,
-		Tick:   snapshotwriter.Tick,
-		Config: a.cfgSnapshot,
-		Procs:  func() ([]sysmon.ProcessGroupSample, error) { return ps.Tick(copilotVSC) },
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		w.Graph = snapshotwriter.NewGraphReaders(home, cfg.ForemanRoot)
-		w.Graph.Rows = ps.Procs
-		w.Graph.ConfigPath = a.loadedCfg
-		if cfg.AgentView {
-			w.Graph.EnableAgentViewWith(cfg.ClaudePath, exec.LookPath)
-		}
-	} else {
-		log.Println("snapshot: no home folder, relation graph sources off:", err)
-	}
-	return w
+	return ingest.NewSnapshotWriter(st, path, a.cfgSnapshot, a.loadedCfg)
 }
 
 // startSnapshotWriter keeps %USERPROFILE%\.burnmon\snapshot.json fresh every

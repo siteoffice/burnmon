@@ -10,15 +10,9 @@ package main
 import (
 	"log"
 	"os/exec"
-	"runtime"
-	"time"
 
 	"burnmon/internal/controls"
-	"burnmon/internal/gitrefs"
-	"burnmon/internal/graph"
 	"burnmon/internal/pricing"
-	"burnmon/internal/snapshot"
-	"burnmon/internal/snapshotwriter"
 )
 
 // newControlService resolves claude, python and the audit path once, with the
@@ -31,26 +25,8 @@ func newControlService(cfg pricing.Config, dataDir, snapPath, storePath string) 
 // A binary that does not resolve leaves its path empty, which makes the
 // controls that need it unavailable with a reason.
 func newControlServiceWith(cfg pricing.Config, dataDir, snapPath, storePath string, look func(string) (string, error)) *controls.Service {
-	env := controls.Env{
-		AgentViewOn: cfg.AgentView,
-		ForemanRoot: cfg.ForemanRoot,
-		ReadForeman: graph.ReadForeman,
-		Snapshot:    func() snapshot.Reading { return snapshot.Load(snapPath, time.Now()) },
-		Switches:    func() map[string]bool { return loadSections(dataDir).Controls },
-		Self:        controls.CurrentSelf,
-		Elevated:    controls.Elevated,
-		Runner:      controls.ExecRunner{},
-		AuditPath:   controls.AuditPath(storePath),
-		Merged:      gitrefs.NewChecker().MergedOrGone,
-	}
-	if p, err := snapshotwriter.ResolveClaudeConfigured(cfg.ClaudePath, look, runtime.GOOS); err == nil {
-		env.ClaudePath = p
-		env.AgentView = snapshotwriter.ClaudeAgentView(p)
-	}
-	if p, err := controls.ResolvePython(look, runtime.GOOS); err == nil {
-		env.PythonPath = p
-	}
-	return controls.NewService(env)
+	switches := func() map[string]bool { return loadSections(dataDir).Controls }
+	return controls.NewService(controls.NewEnv(cfg, snapPath, controls.AuditPath(storePath), switches, look))
 }
 
 // bdevControlPreview is the first press: it returns the exact command and a

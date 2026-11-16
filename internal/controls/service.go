@@ -95,11 +95,13 @@ type Availability struct {
 	Foreman bool `json:"foreman"`
 }
 
+// WhyElevated is the refusal text when the process runs as administrator.
+const WhyElevated = "BurnMon Dev runs as administrator: controls are off"
+
 const (
-	whyElevated = "BurnMon Dev runs as administrator: controls are off"
-	whyOff      = "switched off in the gear"
-	whyClaude   = "needs claude.exe: set claude_path in burnmon.json"
-	whyPython   = "needs python.exe on PATH"
+	whyOff    = "switched off in the gear"
+	whyClaude = "needs claude.exe: set claude_path in burnmon.json"
+	whyPython = "needs python.exe on PATH"
 
 	runStopTimeout  = 20 * time.Second
 	runGateTimeout  = 30 * time.Second
@@ -120,7 +122,7 @@ func (s *Service) assess() (Availability, Self) {
 	case s.Env.Elevated == nil:
 		global = "cannot tell whether BurnMon Dev is elevated: controls are off"
 	case s.Env.Elevated():
-		global = whyElevated
+		global = WhyElevated
 	case s.Env.Self == nil:
 		global = "cannot check BurnMon Dev's own process tree: controls are off"
 	case s.Env.Runner == nil:

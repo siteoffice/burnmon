@@ -16,11 +16,9 @@ import (
 	"time"
 
 	"burnmon/internal/adapter/codex"
-	"burnmon/internal/adapter/copilotcli"
-	"burnmon/internal/adapter/copilotvsc"
-	"burnmon/internal/adapter/hermes"
 	"burnmon/internal/dataset"
 	"burnmon/internal/history"
+	"burnmon/internal/ingest"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
 	"burnmon/internal/snapshotwriter"
@@ -55,13 +53,7 @@ var appDataDir = func() string {
 // appDataDirFrom picks the data folder: localAppData when set, else the
 // per-user config dir (the folder the stores use on macOS), else the temp dir.
 func appDataDirFrom(localAppData string, userConfigDir func() (string, error)) string {
-	if localAppData != "" {
-		return filepath.Join(localAppData, "burnmon")
-	}
-	if dir, err := userConfigDir(); err == nil && dir != "" {
-		return filepath.Join(dir, "burnmon")
-	}
-	return filepath.Join(os.TempDir(), "burnmon")
+	return store.DataDirFrom(localAppData, userConfigDir)
 }
 
 // settingsDirEnv names the folder for this app's own per-user settings. uicheck
@@ -310,105 +302,15 @@ func (a *app) startLiveWatch(nativeClaudeRoots, nativeCodexRoots []string) {
 	a.liveWatcher = wt
 }
 
-// startHermesPoll, startCopilotCLIPoll and startCopilotVSCPoll: the same
-// 5-second poll cmd\burnmon\app.go runs, ported verbatim (a SQLite WAL file
-// or an OTel file does not fit watch.Watcher's fsnotify-plus-offset design,
-// see that file's own doc comments). Each is a no-op when the adapter has
-// nothing to poll (no install found, or no copilot_vscode_otel_file
-// configured).
-func startHermesPoll(a *app, st *store.Store) {
-	dbPath := hermes.DefaultDBPath()
-	if dbPath == "" {
-		return
-	}
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			events, err := hermes.PollOnce(dbPath)
-			if err != nil {
-				log.Println("hermes poll:", err)
-				continue
-			}
-			if len(events) == 0 {
-				continue
-			}
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			for i := range events {
-				events[i].Owner = cfg.OwnerFor(events[i].Project)
-			}
-			if err := st.UpsertEvents(events); err != nil {
-				log.Println("hermes poll: upsert:", err)
-			}
-		}
-	}()
-}
+// startHermesPoll, startCopilotCLIPoll and startCopilotVSCPoll start the
+// 5-second adapter polls in internal\ingest, which both apps share. Each is a
+// no-op when the adapter has nothing to poll (no install found, or no
+// copilot_vscode_otel_file configured).
+func startHermesPoll(a *app, st *store.Store) { ingest.StartHermesPoll(st, a.cfgSnapshot) }
 
-func startCopilotCLIPoll(a *app, st *store.Store) {
-	dbPath := copilotcli.DefaultDBPath()
-	if dbPath == "" {
-		return
-	}
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			events, err := copilotcli.PollOnce(dbPath)
-			if err != nil {
-				log.Println("copilot cli poll:", err)
-				continue
-			}
-			if len(events) == 0 {
-				continue
-			}
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			for i := range events {
-				events[i].Owner = cfg.OwnerFor(events[i].Project)
-			}
-			if err := st.UpsertEvents(events); err != nil {
-				log.Println("copilot cli poll: upsert:", err)
-			}
-		}
-	}()
-}
+func startCopilotCLIPoll(a *app, st *store.Store) { ingest.StartCopilotCLIPoll(st, a.cfgSnapshot) }
 
-func startCopilotVSCPoll(a *app, st *store.Store) {
-	a.mu.Lock()
-	path := a.cfg.CopilotVSCodeOtelFile
-	a.mu.Unlock()
-	if path == "" {
-		return
-	}
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		var tail copilotvsc.Tail // WS2 follow-up item 5: new lines only, not the whole file
-		for range ticker.C {
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			events, err := tail.Poll(cfg.CopilotVSCodeOtelFile)
-			if err != nil {
-				log.Println("copilot vscode poll:", err)
-				continue
-			}
-			if len(events) == 0 {
-				continue
-			}
-			for i := range events {
-				events[i].Owner = cfg.OwnerFor(events[i].Project)
-				events[i].Client = cfg.ClientFor(events[i].Project)
-			}
-			if err := st.UpsertEvents(events); err != nil {
-				log.Println("copilot vscode poll: upsert:", err)
-			}
-		}
-	}()
-}
+func startCopilotVSCPoll(a *app, st *store.Store) { ingest.StartCopilotVSCPoll(st, a.cfgSnapshot) }
 
 // loadConfig mirrors cmd\burnmon's own two-tier lookup (exe-adjacent
 // burnmon.json/claudecost.json first, then dataDir), so burnmon-dev.exe
@@ -426,21 +328,7 @@ func loadConfig(dataDir string) (pricing.Config, string) {
 // tier), so a test can use a temp folder. The string is the file loaded, ""
 // when none.
 func loadConfigAt(exeDir, dataDir string) (pricing.Config, string) {
-	var path string
-	if exeDir != "" {
-		if cand := filepath.Join(exeDir, "burnmon.json"); fileExists(cand) {
-			path = cand
-		} else if cand := filepath.Join(exeDir, "claudecost.json"); fileExists(cand) {
-			path = cand
-		}
-	}
-	if path == "" {
-		if cand := filepath.Join(dataDir, "burnmon.json"); fileExists(cand) {
-			path = cand
-		} else if cand := filepath.Join(dataDir, "claudecost.json"); fileExists(cand) {
-			path = cand
-		}
-	}
+	path := pricing.FindConfig(exeDir, dataDir)
 	cfg, err := pricing.Load(path)
 	if err != nil {
 		log.Println("config error:", err)

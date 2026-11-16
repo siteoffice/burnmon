@@ -1,2 +1,3 @@
-// Package instance provides the single-instance lock for macOS (flock on a file).
+// Package instance provides the single-instance lock: flock on a file for
+// macOS, a named mutex plus raise-the-window for Windows.
 package instance

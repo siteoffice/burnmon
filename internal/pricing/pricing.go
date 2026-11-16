@@ -550,15 +550,6 @@ func (c *Config) Label(fam string) string {
 	return c.price(fam).Label
 }
 
-// CallCostUSD is the full API list price of one call: every token, cache included.
-func (c *Config) CallCostUSD(fam string, fresh, cacheW, cacheR, out int64) float64 {
-	p := c.price(fam)
-	return (float64(fresh)*p.In +
-		float64(cacheW)*p.In*c.CacheWriteMult +
-		float64(cacheR)*p.In*c.CacheReadMult +
-		float64(out)*p.Out) / 1e6
-}
-
 // CallCostSubUSD is the share of the subscription this call accounts for.
 // Output-driven, because that is how Anthropic's consumption meter behaves:
 // cache traffic is not charged.

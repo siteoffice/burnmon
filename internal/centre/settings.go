@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"burnmon/internal/store"
 )
 
 // SettingsFile is the Control Centre settings file name.
@@ -120,13 +122,7 @@ func isFile(p string) bool {
 // cmd/burnmon-dev: localAppData when set, else the per-user config dir,
 // else the temp dir, each with "burnmon" added.
 func AppDataDir(localAppData string, userConfigDir func() (string, error)) string {
-	if localAppData != "" {
-		return filepath.Join(localAppData, "burnmon")
-	}
-	if dir, err := userConfigDir(); err == nil && dir != "" {
-		return filepath.Join(dir, "burnmon")
-	}
-	return filepath.Join(os.TempDir(), "burnmon")
+	return store.DataDirFrom(localAppData, userConfigDir)
 }
 
 // ResolveRoot is flagRoot, else settingRoot, else cwd. A relative root is

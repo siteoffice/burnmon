@@ -43,19 +43,17 @@ var maxCacheEntries = 1024
 // loose files nor packed-refs. Every other error is a read problem.
 var ErrRefNotFound = errors.New("gitrefs: ref not found")
 
-// GitDir resolves a repo or worktree folder to its common git dir. It follows
-// a .git file ("gitdir: <path>") and the commondir file of a linked worktree.
-func GitDir(repo string) (string, error) {
-	dot := filepath.Join(repo, ".git")
+// WorktreeGitDir resolves a repo or worktree folder to its own git dir: the
+// .git folder, or the gitdir line of a .git file, made absolute and cleaned.
+// It does not follow commondir; GitDir does.
+func WorktreeGitDir(dir string) (string, error) {
+	dot := filepath.Join(dir, ".git")
 	fi, err := os.Lstat(dot)
 	if err != nil {
 		return "", err
 	}
 	if fi.IsDir() {
 		return dot, nil
-	}
-	if !fi.Mode().IsRegular() {
-		return "", errors.New("gitrefs: .git is not a file or folder")
 	}
 	data, err := os.ReadFile(dot)
 	if err != nil {
@@ -70,9 +68,29 @@ func GitDir(repo string) (string, error) {
 		return "", errors.New("gitrefs: empty gitdir")
 	}
 	if !filepath.IsAbs(gd) {
-		gd = filepath.Join(repo, gd)
+		gd = filepath.Join(dir, gd)
 	}
-	gd = filepath.Clean(gd)
+	return filepath.Clean(gd), nil
+}
+
+// GitDir resolves a repo or worktree folder to its common git dir. It follows
+// a .git file ("gitdir: <path>") and the commondir file of a linked worktree.
+func GitDir(repo string) (string, error) {
+	dot := filepath.Join(repo, ".git")
+	fi, err := os.Lstat(dot)
+	if err != nil {
+		return "", err
+	}
+	if fi.IsDir() {
+		return dot, nil
+	}
+	if !fi.Mode().IsRegular() {
+		return "", errors.New("gitrefs: .git is not a file or folder")
+	}
+	gd, err := WorktreeGitDir(repo)
+	if err != nil {
+		return "", err
+	}
 	if cd, err := os.ReadFile(filepath.Join(gd, "commondir")); err == nil {
 		c := strings.TrimSpace(string(cd))
 		if c == "" {

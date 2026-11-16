@@ -3,41 +3,24 @@
 package main
 
 import (
-	"errors"
-	"unsafe"
-
 	"golang.org/x/sys/windows"
+
+	"burnmon/internal/instance"
 )
 
 // ---------------------------------------------------------------------------
-// Single instance, same recipe as cmd\burnmon\main.go's own alreadyRunning/
-// bringExistingToFront, a distinct mutex and window title so the two apps
-// never mistake each other for a second instance of themselves.
+// Single instance, the shared recipe in internal\instance with this app's own
+// mutex and window title, so BurnMon and BurnMon Dev never mistake each other
+// for a second instance of themselves.
 // ---------------------------------------------------------------------------
 
+// user32 and procSetForegroundWindow stay here because front_windows.go and
+// windowstate.go use them.
 var (
 	user32                  = windows.NewLazySystemDLL("user32.dll")
-	procFindWindowW         = user32.NewProc("FindWindowW")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 )
 
-func alreadyRunning() bool {
-	name, err := windows.UTF16PtrFromString(mutexName)
-	if err != nil {
-		return false
-	}
-	_, err = windows.CreateMutex(nil, false, name)
-	return errors.Is(err, windows.ERROR_ALREADY_EXISTS)
-}
+func alreadyRunning() bool { return instance.AlreadyRunning(mutexName) }
 
-func bringExistingToFront() {
-	title, err := windows.UTF16PtrFromString(windowTitle)
-	if err != nil {
-		return
-	}
-	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
-	if hwnd == 0 {
-		return
-	}
-	procSetForegroundWindow.Call(hwnd)
-}
+func bringExistingToFront() { instance.BringToFront(windowTitle) }

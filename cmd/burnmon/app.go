@@ -21,10 +21,8 @@ import (
 	"time"
 
 	"burnmon/internal/adapter/codex"
-	"burnmon/internal/adapter/copilotcli"
-	"burnmon/internal/adapter/copilotvsc"
-	"burnmon/internal/adapter/hermes"
 	"burnmon/internal/dataset"
+	"burnmon/internal/ingest"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
 	"burnmon/internal/scan"
@@ -202,122 +200,15 @@ func diffRootsCaseInsensitive(all, remove []string) []string {
 	return out
 }
 
-// startHermesPoll starts A1's 5-second Hermes poll, a no-op if no Hermes
-// install is found (DefaultDBPath returns ""). No fsnotify watch, unlike
-// startLiveWatch's Claude/Codex trails: a SQLite WAL file's own writes do
-// not fit watch.Watcher's file-offset, .jsonl-only design (see
-// internal/adapter/hermes's package doc). Hermes needs no cursor either:
-// PollOnce returns every session's current running totals on every call,
-// and UpsertEvents' own "largest output wins" upsert (RequestID fixed to
-// the session id) already skips a no-op write when a session has not grown.
-func startHermesPoll(a *app, st *store.Store) {
-	dbPath := hermes.DefaultDBPath()
-	if dbPath == "" {
-		return
-	}
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			events, err := hermes.PollOnce(dbPath)
-			if err != nil {
-				log.Println("hermes poll:", err)
-				continue
-			}
-			if len(events) == 0 {
-				continue
-			}
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			for i := range events {
-				events[i].Owner = cfg.OwnerFor(events[i].Project)
-			}
-			if err := st.UpsertEvents(events); err != nil {
-				log.Println("hermes poll: upsert:", err)
-			}
-		}
-	}()
-}
+// startHermesPoll, startCopilotCLIPoll and startCopilotVSCPoll start the
+// 5-second adapter polls in internal\ingest, which both apps share. Each is a
+// no-op when the adapter has nothing to poll (no install found, or no
+// copilot_vscode_otel_file configured).
+func startHermesPoll(a *app, st *store.Store) { ingest.StartHermesPoll(st, a.cfgSnapshot) }
 
-// startCopilotCLIPoll starts A2's 5-second Copilot CLI poll, a no-op if no
-// Copilot CLI install is found (DefaultDBPath returns ""). Same shape as
-// startHermesPoll for the same reason: session-store.db is a SQLite WAL
-// file, not a .jsonl trail, so it does not fit watch.Watcher's
-// fsnotify-plus-offset design; PollOnce needs no cursor either, since it
-// always returns every session's current latest-row totals and the store's
-// own upsert skips a no-op write when a session has not grown.
-func startCopilotCLIPoll(a *app, st *store.Store) {
-	dbPath := copilotcli.DefaultDBPath()
-	if dbPath == "" {
-		return
-	}
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			events, err := copilotcli.PollOnce(dbPath)
-			if err != nil {
-				log.Println("copilot cli poll:", err)
-				continue
-			}
-			if len(events) == 0 {
-				continue
-			}
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			for i := range events {
-				events[i].Owner = cfg.OwnerFor(events[i].Project)
-			}
-			if err := st.UpsertEvents(events); err != nil {
-				log.Println("copilot cli poll: upsert:", err)
-			}
-		}
-	}()
-}
+func startCopilotCLIPoll(a *app, st *store.Store) { ingest.StartCopilotCLIPoll(st, a.cfgSnapshot) }
 
-// startCopilotVSCPoll starts A4's 5-second Copilot-in-VS-Code poll, a no-op
-// when burnmon.json carries no copilot_vscode_otel_file (the two VS Code
-// settings in the README are not set up, or the config just doesn't name
-// where they write to). Same shape as startHermesPoll/startCopilotCLIPoll,
-// except that copilotvsc.Tail reads only the lines appended since the last
-// tick (WS2 follow-up, 2026-09-29, item 5; it used to re-read the whole,
-// ever-growing file every call) and the store's upsert (largest output per
-// RequestID) makes the one full read after a start a no-op for stored rows.
-func startCopilotVSCPoll(a *app, st *store.Store) {
-	a.mu.Lock()
-	path := a.cfg.CopilotVSCodeOtelFile
-	a.mu.Unlock()
-	if path == "" {
-		return
-	}
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		var tail copilotvsc.Tail // WS2 follow-up item 5: new lines only, not the whole file
-		for range ticker.C {
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			events, err := tail.Poll(cfg.CopilotVSCodeOtelFile)
-			if err != nil {
-				log.Println("copilot vscode poll:", err)
-				continue
-			}
-			if len(events) == 0 {
-				continue
-			}
-			for i := range events {
-				events[i].Owner = cfg.OwnerFor(events[i].Project)
-				events[i].Client = cfg.ClientFor(events[i].Project)
-			}
-			if err := st.UpsertEvents(events); err != nil {
-				log.Println("copilot vscode poll: upsert:", err)
-			}
-		}
-	}()
-}
+func startCopilotVSCPoll(a *app, st *store.Store) { ingest.StartCopilotVSCPoll(st, a.cfgSnapshot) }
 
 var errRebuildBusy = errors.New("a collection is already running")
 

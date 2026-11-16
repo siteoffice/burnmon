@@ -30,7 +30,6 @@ var (
 	procGetDC               = user32.NewProc("GetDC")
 	procReleaseDC           = user32.NewProc("ReleaseDC")
 	procGetWindowTextW      = user32.NewProc("GetWindowTextW")
-	procIsWindow            = user32.NewProc("IsWindow")
 	procSetProcessDPIAware  = user32.NewProc("SetProcessDPIAware")
 	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
 	procAttachThreadInput   = user32.NewProc("AttachThreadInput")
@@ -114,11 +113,6 @@ func findBurnmonDevWindow() (uintptr, error) {
 		return 0, fmt.Errorf("no window titled %q found; is burnmon-dev.exe running?", windowTitleDev)
 	}
 	return hwnd, nil
-}
-
-func isWindow(hwnd uintptr) bool {
-	ret, _, _ := procIsWindow.Call(hwnd)
-	return ret != 0
 }
 
 var procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
@@ -523,37 +517,6 @@ func dragPath(x1, y1, x2, y2 int32, steps int) [][2]int32 {
 		}
 	}
 	return pts
-}
-
-// dragAt presses the real left button at (x1,y1), moves the real cursor to
-// (x2,y2) in 12 steps with SetCursorPos, and releases. The button-up is sent
-// even when a move fails, so a failed drag never leaves the button held.
-func dragAt(x1, y1, x2, y2 int32) error {
-	pts := dragPath(x1, y1, x2, y2, 12)
-	ret, _, err := procSetCursorPos.Call(uintptr(pts[0][0]), uintptr(pts[0][1]))
-	if ret == 0 {
-		return fmt.Errorf("SetCursorPos: %w", err)
-	}
-	time.Sleep(50 * time.Millisecond)
-	if err := sendInputs([]input{mouseInputRecord(mouseeventfLeftDown)}); err != nil {
-		return err
-	}
-	var moveErr error
-	for _, p := range pts[1:] {
-		time.Sleep(20 * time.Millisecond)
-		r, _, e := procSetCursorPos.Call(uintptr(p[0]), uintptr(p[1]))
-		if r == 0 {
-			moveErr = fmt.Errorf("SetCursorPos: %w", e)
-			break
-		}
-	}
-	// Hold on the last point so the page has handled every move before the release.
-	time.Sleep(150 * time.Millisecond)
-	upErr := sendInputs([]input{mouseInputRecord(mouseeventfLeftUp)})
-	if moveErr != nil {
-		return moveErr
-	}
-	return upErr
 }
 
 // VK_ESCAPE and VK_F11 (d7's fullscreen toggle, UI review patch section 10).

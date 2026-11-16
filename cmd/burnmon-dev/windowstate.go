@@ -20,6 +20,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"burnmon/internal/fsutil"
 )
 
 var (
@@ -300,7 +302,7 @@ func saveWindowState(dataDir string, st windowState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(windowStatePath(dataDir), b, 0o644)
+	return fsutil.WriteFileAtomic(windowStatePath(dataDir), b, 0o644)
 }
 
 func currentWindowState(hwnd uintptr) (windowState, bool) {
