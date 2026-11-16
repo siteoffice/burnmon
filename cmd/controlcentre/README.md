@@ -82,22 +82,41 @@ reloads at once, no restart.
 
 An overview of every git repo below the root, in the side menu after Agents. It changes nothing.
 
-- Repos are grouped by unit like the other pages. Those that need attention come first (dirty,
-  behind, conflicts, detached HEAD), then the rest by last commit date.
-- One dense row per repo: name, branch, dirty count, ahead and behind its upstream, last commit
-  (short sha and age; the subject on hover), stash count, worktree count, open pull requests.
+- Repos are grouped by unit like the other pages. Inside a unit the open repos come first, by the
+  earliest stage they stop at, then the published ones.
+- One dense row per repo: name (with "+N" for other open branches and worktrees), branch, the lane
+  (six dots, Changes to Released), where it stops, last commit (short sha and age; the subject on
+  hover). Dirty count, ahead and behind, stashes, worktrees and pull requests are in the detail pane.
+- The strip on top says how many repos are open and counts them per stage. A click on a stage shows
+  only the repos that stop there; a second click clears it. While a reading runs, a bar moves above
+  the rows (it holds still when the system asks for reduced motion).
+- **The lane** is the line of the Fleet's Git tab plus one stage: Changes, Saved, Shared, Review,
+  Merged, Released. A dot is done (filled), here now (ring), waiting (amber), blocked (red), not
+  reached (empty) or not read (dashed). "Stops at" is the first stage that is not done; a Review that
+  is off (pull requests off, or no GitHub remote) is skipped. Released is done without version tags,
+  or when the newest version tag is the head of the default branch (`main`, else `master`); else it
+  says "N since vX", counted on the first-parent line.
+- **Published** means every stage is done for the checkout and for every other local branch and
+  worktree that is not merged or has unsaved files. The default branch counts as open beside a
+  checkout on another branch while it is not released.
+- Limit: with the pull request switch off, a squash-merged branch reads as not merged until it is
+  deleted, because no local ref shows the squash. With the switch on, the pull request state
+  corrects it. A branch not checked out has no upstream beyond `origin/<name>`.
 - A double-click opens the repo: its worktrees (path, branch, dirty, and which agent session works
   there, matched on the folder name in BurnMon Dev's snapshot), local branches with merged or
   not merged, tags, remotes and pull requests.
 - Refs, HEAD, worktrees, stashes, tags and remotes come from the `.git` files (`internal\gitrefs`).
   Dirty state and ahead and behind come from one command, run read only with a 5 second limit per
   repo and per linked worktree: `git --no-optional-locks status --porcelain=v2 --branch`. It writes
-  no `index.lock`. Nothing else runs and nothing writes inside `.git`.
+  no `index.lock`. Nothing else runs and nothing writes inside `.git`. The lane's reads (is a tip in
+  `origin/main`, commits a branch has that `main` lacks, the newest tag and the commits since it)
+  also come from the `.git` files, with a 20000 commit and 3 second limit; a read that hits a limit
+  shows "?", never a guess.
 - The scanner skips a git folder without a HEAD, as git does. Two stray folders on the owner's laptop
   showed as rows until this was fixed: a shell had eaten the backslashes of a path and made a `.git`
   that held only `info\exclude`.
 - Pull requests are off by default. The switch "Show GitHub pull requests (runs gh, needs network)"
-  in Settings runs `gh pr list --json` per repo with a GitHub remote, cached for 5 minutes, with a
+  in Settings runs `gh pr list --state all --limit 100 --json` per repo with a GitHub remote, cached for 5 minutes, with a
   refresh button on the page. If `gh` is missing or not signed in, the page says so in one line.
 
 ## 5. Settings

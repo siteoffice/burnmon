@@ -27,8 +27,10 @@ var GitStatusArgs = []string{"--no-optional-locks", "status", "--porcelain=v2", 
 // GitStatusTimeout is the most one git status may take.
 const GitStatusTimeout = 5 * time.Second
 
-// GhArgs is the gh command for one repo, before "-R owner/name".
-var GhArgs = []string{"pr", "list", "--json", "number,title,headRefName,state,isDraft,reviewDecision,statusCheckRollup,updatedAt"}
+// GhArgs is the gh command for one repo, before "-R owner/name". It lists
+// every state, so the Review and Merged stages can see a merged pull request;
+// the page counts and shows the open ones only.
+var GhArgs = []string{"pr", "list", "--state", "all", "--limit", "100", "--json", "number,title,headRefName,state,isDraft,reviewDecision,statusCheckRollup,updatedAt"}
 
 // Attention reasons, in the order the row shows them.
 const (
@@ -60,26 +62,51 @@ type GitRepo struct {
 	GitHub      string   `json:"github"`    // owner/name of a GitHub remote, "" for none
 	PRs         int      `json:"prs"`       // open pull requests, -1 when not read
 	Attention   []string `json:"attention"`
+	// The lane of the checkout, see lane.go.
+	Lane         []LaneStage  `json:"lane"`
+	StopsAt      string       `json:"stops_at"`   // first stage that is not done, "" when published
+	StopsNote    string       `json:"stops_note"` // its note
+	Published    bool         `json:"published"`  // every stage done, here and on every other branch and worktree
+	Next         string       `json:"next"`       // one line: what to do next
+	OpenBranches []OpenBranch `json:"open_branches"`
+}
+
+// OpenBranch is a branch or worktree besides the checkout that is not merged
+// or has unsaved files.
+type OpenBranch struct {
+	Name string      `json:"name"`
+	Kind string      `json:"kind"` // "branch" or "worktree"
+	Lane []LaneStage `json:"lane"`
+	Note string      `json:"note"` // where it stops
 }
 
 // GitWorktree is one worktree of a repo, the main one first.
 type GitWorktree struct {
-	Path        string   `json:"path"` // absolute
-	Name        string   `json:"name"` // folder name
-	Main        bool     `json:"main"`
-	Branch      string   `json:"branch"`
-	Detached    bool     `json:"detached"`
-	Missing     bool     `json:"missing"` // registered, but the folder is gone
-	Dirty       int      `json:"dirty"`
-	StatusError string   `json:"status_error"`
-	Sessions    []string `json:"sessions"` // agent sessions whose folder name matches
+	Path        string      `json:"path"` // absolute
+	Name        string      `json:"name"` // folder name
+	Main        bool        `json:"main"`
+	Branch      string      `json:"branch"`
+	Detached    bool        `json:"detached"`
+	Missing     bool        `json:"missing"` // registered, but the folder is gone
+	Dirty       int         `json:"dirty"`
+	StatusError string      `json:"status_error"`
+	Sessions    []string    `json:"sessions"` // agent sessions whose folder name matches
+	Lane        []LaneStage `json:"lane"`
+
+	// What the status of this worktree said, for its lane.
+	statusRead bool
+	conflicts  int
+	upstream   string
+	ahead      int
+	behind     int
 }
 
 // GitBranch is a local branch; Merged is "trunk", "merged", "not merged" or "unknown".
 type GitBranch struct {
-	Name    string `json:"name"`
-	Current bool   `json:"current"`
-	Merged  string `json:"merged"`
+	Name    string      `json:"name"`
+	Current bool        `json:"current"`
+	Merged  string      `json:"merged"`
+	Lane    []LaneStage `json:"lane"`
 }
 
 type GitRemote struct {
