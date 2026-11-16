@@ -27,3 +27,4 @@ tools/burnmon-cloud/dist/
 _log/
 04_assets/
 controlcentre.exe
+*.exe~
