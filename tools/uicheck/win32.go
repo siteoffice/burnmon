@@ -116,11 +116,6 @@ func findBurnmonDevWindow() (uintptr, error) {
 	return hwnd, nil
 }
 
-func isWindow(hwnd uintptr) bool {
-	ret, _, _ := procIsWindow.Call(hwnd)
-	return ret != 0
-}
-
 var procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 
 // isRealBurnmonWindow rules out a Windows "ghost window": when a GUI app is

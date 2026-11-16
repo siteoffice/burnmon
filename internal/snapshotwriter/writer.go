@@ -55,7 +55,7 @@ type GraphReaders struct {
 	// copied into the off and refused agent view statuses.
 	ConfigPath string
 
-	agentViewRefused error // why EnableAgentView started no poller
+	agentViewRefused error // why EnableAgentViewFor started no poller
 
 	poll  agentPoll
 	mcp   *graph.MCPConfig

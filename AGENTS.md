@@ -5,8 +5,8 @@ claudecost, forked 2026-09-22. Owner and approver: Wilco de Tree. Language: Engl
 
 It reads the session trails of Claude Code, Cowork, Codex, Copilot CLI, Copilot in VS Code
 and Hermes from local disk, keeps them in SQLite, and shows tokens and cost per vendor,
-session, project and client. Portable Windows exe, no account, no network, no ports. Three
-binaries: `burnmon.exe`, `burnmon-cli.exe`, `burnmon-dev.exe`.
+session, project and client. Portable Windows exe, no account, no network, no ports on Windows. Four
+binaries: `burnmon.exe`, `burnmon-cli.exe`, `burnmon-dev.exe`, `controlcentre.exe`.
 
 Root tree instructions: `C:\ZND\AGENTS.md`. Read it too.
 

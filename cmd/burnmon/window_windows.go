@@ -107,7 +107,7 @@ func openInBrowser(path string) {
 
 func showWebView2MissingMessage() {
 	text, _ := windows.UTF16PtrFromString(
-		"Claude Cost could not open its window because the WebView2 runtime is missing.\n" +
+		"BurnMon could not open its window because the WebView2 runtime is missing.\n" +
 			"The dashboard was opened in your default browser instead. Installing the\n" +
 			"WebView2 runtime (part of Microsoft Edge) will let the app window open normally.")
 	caption, _ := windows.UTF16PtrFromString(windowTitle)

@@ -29,10 +29,6 @@ var homeCloudDropDir = func() string {
 	return filepath.Join(home, ".burnmon", "cloud")
 }
 
-// CloudDropDir is the exe-adjacent drop folder for Cowork (Cloud) extracts,
-// "" when the exe path cannot be resolved.
-func CloudDropDir() string { return cloudDropDir() }
-
 // CloudDropDirs lists every drop folder: the exe-adjacent one (plugins built
 // for one computer) and ~/.burnmon/cloud (the universal plugin), each once.
 func CloudDropDirs() []string {

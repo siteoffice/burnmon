@@ -22,7 +22,7 @@ const (
 
 // ClaudeAgentView returns a runner for "<claudePath> agents --json": hidden
 // window, stdout only. A non-zero exit is an error that carries the first 200
-// bytes of stderr. claudePath must come from ResolveClaude, which accepts only a
+// bytes of stderr. claudePath must come from ResolveClaudeFor, which accepts only a
 // directly startable binary (a .exe on Windows), so no cmd.exe sits between
 // the timeout and claude. It never goes through cmd /c, WMI or CIM.
 func ClaudeAgentView(claudePath string) func(ctx context.Context) ([]byte, error) {
@@ -154,7 +154,7 @@ func (gr *GraphReaders) agentSessions() []snapshot.AgentSession {
 }
 
 // agentViewStatus is this writer's agent view state for the snapshot: on when
-// a poller runs, refused with the reason EnableAgentView kept, else off. Nil
+// a poller runs, refused with the reason EnableAgentViewFor kept, else off. Nil
 // without graph sources, so the field is left out.
 func (gr *GraphReaders) agentViewStatus() *snapshot.AgentViewStatus {
 	switch {
