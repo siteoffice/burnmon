@@ -147,6 +147,12 @@ The window has its own icon: the tree. A `controlcentre.icns` exists for a futur
 ## 6. Limits and known issues
 
 - Not run on a Mac. `controlcentre` builds there in CI and in `scripts\maccheck.sh`, and nothing more.
+- The one exception to "no port": a dev-only eval channel on `127.0.0.1:9335` that opens only when
+  `CONTROLCENTRE_UICHECK` is set. Release builds and this README never set it. It exists for
+  `.\scripts\uicheck.ps1 centre`, which runs the `gitpage` group (loading bar, strip against rows,
+  stage filter, lane dots, detail pane, no sideways scroll at 1280, 1600 and 2560 px) in the real
+  window on a fixture of five git repos in a temp folder. A size the screen cannot hold is skipped,
+  not passed.
 - Decisions need BurnMon Dev running, with its snapshot fresh.
 - The snapshot holds only the last folder name of a session's working folder. So the Git page matches
   a worktree to a session by folder name alone. Two worktrees with the same folder name can show

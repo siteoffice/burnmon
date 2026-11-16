@@ -69,6 +69,9 @@ func main() {
 	// Dispatch heartbeat: why it exists is in winbind.StartHeartbeat.
 	winbind.StartHeartbeat(w)
 
+	// Dev-only eval channel for tools\uicheck: off unless CONTROLCENTRE_UICHECK is set.
+	startUICheckServer(w)
+
 	// The Git page: git status and gh run in the background, never on the
 	// window thread; worktrees match sessions by folder name in the snapshot.
 	status, statusWhy := centre.GitStatusRunner(exec.LookPath)
