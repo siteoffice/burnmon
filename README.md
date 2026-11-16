@@ -5,7 +5,7 @@ transcripts your tools already write on this machine, so it needs no API key, no
 
 BurnMon is the successor of [claudecost](https://github.com/siteoffice/claudecost), renamed and extended
 from v0.2 onward. Repo: [siteoffice/burnmon](https://github.com/siteoffice/burnmon). Current release:
-`v0.4.0-beta.4`.
+`v0.4.0-beta.6`.
 
 ## Which app do I open?
 
