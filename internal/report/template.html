@@ -362,6 +362,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 <section id="tools" class="hidden">
   <h2>Tools and connectors</h2>
   <p class="lede">Which connectors, plugins and skills your sessions actually call, over the whole window. Tool traffic is not charged separately; this is here to show what is earning its place in the context and what is dead weight.</p>
+  <p class="small" id="tools_builtin" style="display:none;margin:-8px 0 14px"></p>
   <div class="chartbox" style="margin-bottom:18px;height:320px"><canvas id="ch_tools"></canvas></div>
   <div class="scroll"><table id="t_tools"><thead><tr>
     <th class="nosort">Connector, plugin or skill</th><th>Calls</th><th>Sessions</th><th class="nosort">Share of calls</th>
@@ -945,9 +946,20 @@ function renderTools(){
       t.sessions += bt[g].sessions||0;
     });
   });
-  var groups = Object.keys(totals).sort(function(a,b){ return totals[b].calls - totals[a].calls; });
+  // Claude's own tools ("(built in)", scan.ToolGroup) are not listed or drawn:
+  // they would dwarf every connector. Their number stays in one line under the
+  // intro, and the share of calls is counted over the rows that are shown.
+  var own = totals['(built in)'];
+  var groups = Object.keys(totals).filter(function(g){ return g !== '(built in)'; })
+    .sort(function(a,b){ return totals[b].calls - totals[a].calls; });
   var totalCalls = 0;
   groups.forEach(function(g){ totalCalls += totals[g].calls; });
+  var ownLine = document.getElementById('tools_builtin');
+  if(ownLine){
+    var ownCalls = own ? own.calls : 0;
+    ownLine.textContent = ownCalls > 0 ? "Claude's own tools: " + n(ownCalls) + ' calls in ' + n(own.sessions) + ' sessions, not listed.' : '';
+    ownLine.style.display = ownCalls > 0 ? '' : 'none';
+  }
 
   var tb = document.querySelector('#t_tools tbody');
   var canvas = document.getElementById('ch_tools');
