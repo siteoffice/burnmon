@@ -126,6 +126,20 @@ func TestBuildIdleSprint(t *testing.T) {
 	}
 }
 
+// A sprint in phase done is finished work, not a wait: it stays out of Idle.
+// A sprint that is merged and waits to close (closeout) is not phase done and stays.
+func TestBuildIdleHidesDoneSprint(t *testing.T) {
+	nodes := []graph.Node{
+		{ID: "sprint:fin", Kind: graph.KindSprint, Label: "fin", Attrs: map[string]string{"phase": "done", "status": "done"}, AgeSeconds: 99},
+		{ID: "sprint:cap", Kind: graph.KindSprint, Label: "cap", Attrs: map[string]string{"phase": "done", "status": "capped"}, AgeSeconds: 99},
+		{ID: "sprint:close", Kind: graph.KindSprint, Label: "close", Attrs: map[string]string{"phase": "report", "status": "waiting-on-you", "closeout": "true"}, AgeSeconds: 99},
+	}
+	v := Build(nodes, nil)
+	if len(v.Idle) != 1 || v.Idle[0].Label != "close" || !v.Idle[0].CloseOut {
+		t.Fatalf("idle = %+v", v.Idle)
+	}
+}
+
 // A flow whose gate waits on you: the flow's group says so.
 func TestBuildGateWaitsOnYou(t *testing.T) {
 	nodes := []graph.Node{
