@@ -3911,7 +3911,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
   // token Go gave. Go checks the target again, refuses a second press under
   // 400 ms and lets the token live 5 s; the page mirrors both so a double
   // click sends at most one run.
-  var CTL_WORD = { stop:['stop','Stop'], attach:['attach','Open'], approve:['approve','Approve'], send_back:['send back','Send back'], close_sprint:['Close sprint','Close this job'] };
+  var CTL_WORD = { stop:['stop','Stop'] };
   // BurnMon Dev keeps one control, Stop (decision 2026-11-11; second look
   // 2026-11-15). Attach, Approve, Send back and Close sprint are switched and
   // pressed in the Control Centre; their switches stay in burnmon-dev-view.json.
@@ -3938,16 +3938,13 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     }
     return null;
   }
-  // A chip shows only when its switch is on AND Go says it is ready. A gate
-  // control shows only where Go's verdict table has an entry for that gate.
-  function ctlChips(kind, target, gate){
+  // A chip shows only when its switch is on AND Go says it is ready. Only a
+  // background session (ctlAgentFor) has chips, so target is an agent id.
+  function ctlChips(target){
     var html = '';
     CTL_ORDER.forEach(function(c){
       if(!(ctlState.on[c] && ctlState.ready[c])) return;
-      var applies = kind === 'closeout' ? (c === 'close_sprint' && !!ctlState.foreman) : kind === 'agent' ? (c === 'stop' || c === 'attach') :
-        ((c === 'approve' || c === 'send_back') && !!ctlState.verdicts[c] && Object.prototype.hasOwnProperty.call(ctlState.verdicts[c], gate));
-      if(!applies) return;
-      html += '<button type="button" class="ctl" data-ctl="' + esc(c) + '" data-target="' + esc(target) + '">' + esc(ctlWord(c)) + '</button>';
+      html +='<button type="button" class="ctl" data-ctl="' + esc(c) + '" data-target="' + esc(target) + '">' + esc(ctlWord(c)) + '</button>';
     });
     return html;
   }
@@ -4115,11 +4112,8 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     }
     var chips = '', lines = '';
     if(!outcome){
-      var tg = null, gid = '';
-      if(it.kind === 'gate'){ tg = it.id; gid = String(it.id).slice(String(it.id).lastIndexOf(':') + 1); chips = ctlChips('gate', tg, gid); }
-      else if(closeable){ tg = it.id; chips = ctlChips('closeout', tg, ''); }
-      else { var ag = ctlAgentFor(it.id); if(ag){ tg = ag.id; chips = ctlChips('agent', tg, ''); } }
-      if(tg !== null) lines = ctlLines(tg);
+      var ag = ctlAgentFor(it.id);
+      if(ag){ chips = ctlChips(ag.id); lines = ctlLines(ag.id); }
     }
     var html = '<div class="secrow secitem' + (it.kind === 'branch_gone' ? ' secgrey' : '') + '" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '" title="' + esc(full) + '">' +
       '<span class="secitemtxt"><span class="dim">' + esc(txt) + '</span> <b>' + esc(it.title) + '</b>' +
@@ -4234,7 +4228,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     if(!all.length) return '<div>' + esc(secState.plain ? 'No sessions are running.' : 'No running sessions.') + '</div>';
     function sessCtl(x){
       var ag = ctlAgentFor('session:' + x.vendor + ':' + x.id);
-      return ag ? { chips: ctlChips('agent', ag.id, ''), lines: ctlLines(ag.id) } : { chips: '', lines: '' };
+      return ag ? { chips: ctlChips(ag.id), lines: ctlLines(ag.id) } : { chips: '', lines: '' };
     }
     var withCtl = all.some(function(x){ var cc = sessCtl(x); return !!(cc.chips || cc.lines); });
     function row(x, sub){
@@ -4922,9 +4916,8 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
       if(!rows.length) return;
       html += '<tr class="grp"><td colspan="5">' + esc(g[0]) + '</td></tr>';
       rows.forEach(function(i){
-        var chip = (i.close_out && i.kind === 'sprint') ? ctlChips('closeout', i.id, '') : '';
         html += '<tr><td>' + esc(i.label) + '</td><td>' + esc(i.project || '') + '</td><td>' + esc(i.kind) + '</td><td>' + esc(secDur(i.age_seconds)) + '</td><td>' +
-          [link(i.spec_path, 'spec'), link(i.result_path, 'result')].filter(Boolean).join(' ') + (chip ? ' ' + chip : '') + '</td></tr>';
+          [link(i.spec_path, 'spec'), link(i.result_path, 'result')].filter(Boolean).join(' ') + '</td></tr>';
       });
     });
     return html + '</tbody></table>';

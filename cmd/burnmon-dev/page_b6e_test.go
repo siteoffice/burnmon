@@ -34,17 +34,13 @@ func TestPageCloseChipOnlyWhenForemanWouldAccept(t *testing.T) {
 			t.Errorf("secItemRow lacks %q", want)
 		}
 	}
-	// The chip call for close_out sits behind the report and parked-lines test.
-	i := strings.Index(row, "it.kind === 'close_out'")
-	if i < 0 {
+	// The close_out row keeps its reason note; the Close chip itself moved to the
+	// Control Centre (2026-11-15), so no closeout chip call is left here.
+	if !strings.Contains(row, "it.kind === 'close_out'") {
 		t.Fatal("secItemRow has no close_out branch")
 	}
-	branch := row[i:]
-	if j := strings.Index(branch, "else {"); j > 0 {
-		branch = branch[:j]
-	}
-	if !strings.Contains(branch, "closeable") || !strings.Contains(branch, "ctlChips('closeout'") {
-		t.Errorf("the close_out chip is not gated on closeable: %q", branch)
+	if strings.Contains(row, "ctlChips('closeout'") {
+		t.Error("secItemRow still draws a closeout chip")
 	}
 	if !strings.Contains(row, "var closeable = ") || !strings.Contains(row, "!!it.report_path") || !strings.Contains(row, "it.close_ok === true") || !strings.Contains(row, "!(it.parked_lines > 0)") {
 		t.Error("closeable is not 'a report exists, no parked lines and Foreman's gate would accept (close_ok)'")

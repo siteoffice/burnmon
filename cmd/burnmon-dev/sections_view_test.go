@@ -308,7 +308,7 @@ func TestPageNamesStoppedOutcomeStatus(t *testing.T) {
 
 func TestPageHasControls(t *testing.T) {
 	for _, want := range []string{"bdevControlPreview", "bdevControlRun", "function ctlChips(", "function ctlLines(",
-		"agent_sessions", `class="ctlcmd"`, "again within 5 s", "again within 5 seconds", "'Send back'",
+		"agent_sessions", `class="ctlcmd"`, "again within 5 s", "again within 5 seconds",
 		"Stop a session", "data-ctl-sw", "claude_path", "agent_view", `class="ctl ctlgo"`, ">Confirm<"} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %q", want)
@@ -374,7 +374,7 @@ func TestPageEscapesControlText(t *testing.T) {
 
 func TestPageControlsOffUnlessOnAndReady(t *testing.T) {
 	chips := pageFuncBody(t, "ctlChips")
-	for _, want := range []string{"ctlState.on[c] && ctlState.ready[c]", "ctlState.verdicts[c]", "hasOwnProperty", "'background'"} {
+	for _, want := range []string{"ctlState.on[c] && ctlState.ready[c]", "hasOwnProperty", "'background'"} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %q", want)
 		}
@@ -406,13 +406,14 @@ func TestPageConfirmIsSeparateDebouncedAndExpires(t *testing.T) {
 }
 
 func TestPageControlWordsAndGear(t *testing.T) {
-	for _, want := range []string{"stop:['stop','Stop']", "attach:['attach','Open']", "approve:['approve','Approve']",
-		"send_back:['send back','Send back']", `id="secControls"`, "secControlsSync(", "{ control: t.getAttribute('data-ctl-sw'), on: t.checked }"} {
+	for _, want := range []string{"var CTL_WORD = { stop:['stop','Stop'] };", `id="secControls"`, "secControlsSync(", "{ control: t.getAttribute('data-ctl-sw'), on: t.checked }"} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %q", want)
 		}
 	}
-	for _, bad := range []string{"data-ctl-sw=\"reply\"", "ctlState.verdicts.send_back.G3"} {
+	// Stop is the only control of this page (2026-11-15): no word for the others.
+	for _, bad := range []string{"data-ctl-sw=\"reply\"", "ctlState.verdicts.send_back.G3",
+		"attach:['attach'", "approve:['approve'", "send_back:['send back'", "close_sprint:['Close sprint'"} {
 		if strings.Contains(pageHTML, bad) {
 			t.Errorf("page has %q", bad)
 		}
@@ -473,18 +474,16 @@ func TestPageWaitsTiers(t *testing.T) {
 	}
 }
 
-func TestPageCloseChipOnlyOnCloseOut(t *testing.T) {
-	for _, want := range []string{`close_sprint:['Close sprint','Close this job']`, `kind === 'closeout'`, `c === 'close_sprint'`} {
-		if !strings.Contains(pageHTML, want) {
-			t.Errorf("page lacks %q", want)
+// The Close sprint chip moved to the Control Centre (2026-11-15): this page
+// draws chips for background sessions only, with no closeout or gate branch.
+func TestPageHasNoCloseChip(t *testing.T) {
+	for _, bad := range []string{`kind === 'closeout'`, `c === 'close_sprint'`, "ctlChips('closeout'", "ctlChips('gate'"} {
+		if strings.Contains(pageHTML, bad) {
+			t.Errorf("page still has %q", bad)
 		}
 	}
-	body := pageFuncBody(t, "ctlChips")
-	if !strings.Contains(body, "closeout") || !strings.Contains(body, "ctlState.foreman") {
-		t.Error("ctlChips has no closeout branch gated on ctlState.foreman")
-	}
-	if !strings.Contains(pageHTML, "'Close sprint'") {
-		t.Error("page lacks the Close sprint word")
+	if body := pageFuncBody(t, "ctlChips"); strings.Contains(body, "closeout") || strings.Contains(body, "verdicts") {
+		t.Error("ctlChips still has a closeout or gate branch")
 	}
 }
 
@@ -492,7 +491,7 @@ func TestPageCloseChipOnlyOnCloseOut(t *testing.T) {
 // Foreman controls moved to the Control Centre); the payload's foreman flag is
 // still read for the Done tier wording.
 func TestPageHidesForemanPartsWithoutForemanRoot(t *testing.T) {
-	for _, want := range []string{`ctlState.foreman`, `foreman:!!cp.foreman`} {
+	for _, want := range []string{`foreman:!!cp.foreman`} {
 		if !strings.Contains(pageHTML, want) {
 			t.Errorf("page lacks %q", want)
 		}
