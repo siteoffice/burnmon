@@ -44,6 +44,5 @@ func looksBlankWhite(image.Image) bool                { return false }
 func screenCoords(uintptr, float64, float64) (int32, int32, error) {
 	return 0, 0, errNotOnThisOS
 }
-func clickAt(int32, int32) error              { return errNotOnThisOS }
-func dragAt(int32, int32, int32, int32) error { return errNotOnThisOS }
-func pressKey(uint16) error                   { return errNotOnThisOS }
+func clickAt(int32, int32) error { return errNotOnThisOS }
+func pressKey(uint16) error      { return errNotOnThisOS }
