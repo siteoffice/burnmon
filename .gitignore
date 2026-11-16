@@ -26,3 +26,4 @@ tools/burnmon-cloud/dist/
 # Private working files: receipts and briefs stay local (2026-10-26)
 _log/
 04_assets/
+controlcentre.exe
