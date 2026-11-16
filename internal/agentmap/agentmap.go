@@ -280,6 +280,10 @@ func BuildFor(nodes []graph.Node, edges []graph.Edge, noForeman bool) View {
 		if (n.Kind != graph.KindSprint && n.Kind != graph.KindFlow) || m.groupFor[id] {
 			continue
 		}
+		// A sprint in phase done is finished work, not a wait (done or capped).
+		if n.Kind == graph.KindSprint && n.Attrs["phase"] == "done" {
+			continue
+		}
 		v.Idle = append(v.Idle, Idle{ID: id, Kind: n.Kind, Label: n.Label, Status: n.Attrs["status"], Phase: n.Attrs["phase"],
 			Gate: m.gateOf[id], WaitsOnYou: m.waiters[id], AgeSeconds: n.AgeSeconds,
 			Project: n.Attrs["project"], SpecPath: n.Attrs["spec_path"], ResultPath: n.Attrs["result_path"], CloseOut: n.Attrs["closeout"] == "true"})
