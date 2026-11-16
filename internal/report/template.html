@@ -717,11 +717,6 @@ function monthLabel(k){
   var p = k.split('-'), names = MONTH_NAMES.en;
   return names[parseInt(p[1],10)-1] + ' ' + p[0];
 }
-function topOf(obj, field){
-  var best = null, keys = Object.keys(obj||{});
-  keys.forEach(function(k){ if(best===null || obj[k][field] > obj[best][field]) best = k; });
-  return best;
-}
 
 // ---------- stamp ----------
 function renderStamp(){
@@ -1575,11 +1570,11 @@ function sessionChartLabel(s){
 // template's own warm token (--warn); Codex is green, Copilot blue, Hermes
 // violet, none of which had an existing token to reuse. Ruling (N2,
 // SESSION_LOG.md): 'codex-desktop' and 'copilot-vscode' are defined here
-// for when those surfaces ship (Codex Desktop already scoped, Copilot in
-// VS Code is v0.3, STATUS.md's Known gaps); today's adapters only ever set
-// agent 'codex' or 'copilot-cli', so those lighter shades are unreachable
-// until an adapter sets one of those two agent values, not dead code left
-// over from a rewrite.
+// for when those surfaces ship. Copilot in VS Code has shipped (adapter
+// internal\adapter\copilotvsc sets agent 'copilot-vscode'); no adapter sets
+// 'codex-desktop' yet (Codex Desktop is scoped, not built), so that one
+// lighter shade stays unreachable until one does, not dead code left over
+// from a rewrite.
 var VENDOR_COLOR_FAMILIES = {
   dark: {
     'claude-code': '#E8A16B', 'cowork': '#F2C29B', 'cowork-cloud': '#F8DCC2',

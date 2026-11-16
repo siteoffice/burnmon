@@ -258,7 +258,6 @@
     return {scale: u, spots: spots};
   }
   function plantTiles(id){ return PLANTS.filter(function(pl){ return roomAt[pl[2] * GX + pl[1]] === ROOM_IDS.indexOf(id); }).map(function(pl){ return [pl[1] - ROOMS[id].x0, pl[2] - ROOMS[id].y0]; }); }
-  function roomXY(id, lx, ly){ return [ROOMS[id].x0 + lx, ROOMS[id].y0 + ly]; }
   var AIRLOCK_DOOR = [ROOMS.airlock.x0 + 3.5, 0.9];
   // One rover (space) or wheel loader (site), patrolling the corridors.
   // Plan table hologram opacity (idle, someone planning), iso cone and cards and the plan view line.
@@ -1235,10 +1234,6 @@
       P(c, X - 4 + (dir === 'right' ? 1 : 0), Y - 16, dir === 'left' || dir === 'right' ? 6 : 8, 1, hat);
       if(seated){ P(c, X - 3, Y - 2, 2, 3, '#2f3a52'); P(c, X + 1, Y - 2, 2, 3, '#2f3a52'); }
       c.globalAlpha = 1;
-    }
-    function pxLine(c, x0, y0, x1, y1, col){
-      var n = Math.max(1, Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)))), i;
-      for(i = 0; i <= n; i++) P(c, x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, 1, 1, col);
     }
     // Site core in the plan view: the tower crane's jib seen from above,
     // lifted 8 px for the 3/4 look with its shadow on the floor, turned by spin.

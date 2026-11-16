@@ -51,10 +51,13 @@ func TestMapIdleTable(t *testing.T) {
 		}
 		last = i
 	}
-	for _, want := range []string{"Name", "Project", "Kind", "Waited", "Links", "secfile", "ctlChips('closeout'", "age_seconds", "esc("} {
+	for _, want := range []string{"Name", "Project", "Kind", "Waited", "Links", "secfile", "age_seconds", "esc("} {
 		if !strings.Contains(body, want) {
 			t.Errorf("mapIdleTableHTML lacks %q", want)
 		}
+	}
+	if strings.Contains(body, "ctlChips(") {
+		t.Error("mapIdleTableHTML draws a control chip; Close sprint lives in the Control Centre")
 	}
 	if !strings.Contains(body, "b.age_seconds - a.age_seconds") {
 		t.Error("the idle table does not sort longest waited first")
