@@ -55,6 +55,9 @@ type gitpageWidth struct {
 	DocScrollW  float64  `json:"docScrollW"`
 	InnerW      float64  `json:"innerW"`
 	Cut         []string `json:"cut"`
+	// CutNotes are the "Stops at" texts that are cut with an ellipsis. Hover
+	// shows them in full, so they are printed, not failed.
+	CutNotes []string `json:"cutNotes"`
 }
 
 type gitpageWant struct {
@@ -104,7 +107,9 @@ const gitpageWidthJS = `(function(){
   });
   var s = p.querySelector('.lstrip');
   if (s) { var sr = s.getBoundingClientRect(); [].forEach.call(s.children, function(c){ var cr = c.getBoundingClientRect(); if (cr.right > sr.right + 1) cut.push('strip cell ends ' + Math.round(cr.right - sr.right) + ' px past the strip'); }); }
-  return {paneScrollW: p.scrollWidth, paneClientW: p.clientWidth, docScrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, cut: cut};
+  var notes = [];
+  [].forEach.call(p.querySelectorAll('.rw .gst'), function(e){ if (e.scrollWidth > e.clientWidth + 1) notes.push(e.textContent); });
+  return {paneScrollW: p.scrollWidth, paneClientW: p.clientWidth, docScrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, cut: cut, cutNotes: notes};
 })()`
 
 const gitpageDetailJS = `(function(){
@@ -473,6 +478,7 @@ func caseGitpageWidth(hwnd uintptr, args []string) error {
 		if _, err := screenshot(hwnd, "gitpage-"+tag); err != nil {
 			return err
 		}
+		fmt.Printf("uicheck: gitpage/width: %s: %d Stops at note(s) cut, hover shows them: %v\n", tag, len(w.CutNotes), w.CutNotes)
 		for _, b := range gitpageWidthProblems(w) {
 			fails = append(fails, tag+": "+b)
 		}
