@@ -13,7 +13,6 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"os"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -206,7 +205,7 @@ func windowStatePath(dataDir string) string {
 // 2026-09-25) - a saved rect larger than or partly outside the current work
 // area would otherwise still restore off-screen or oversized.
 func loadWindowState(dataDir string) (windowState, bool) {
-	b, err := os.ReadFile(windowStatePath(dataDir))
+	b, err := fsutil.ReadFileRetry(windowStatePath(dataDir))
 	if err != nil {
 		return windowState{}, false
 	}

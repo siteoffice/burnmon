@@ -11,7 +11,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 
@@ -29,7 +28,7 @@ func viewStatePath(dataDir string) string {
 // loadUITheme returns "light" or "dark". A missing, unparsable or unknown
 // value means dark, the default look.
 func loadUITheme(dataDir string) string {
-	b, err := os.ReadFile(viewStatePath(dataDir))
+	b, err := fsutil.ReadFileRetry(viewStatePath(dataDir))
 	if err != nil {
 		return "dark"
 	}
@@ -47,7 +46,7 @@ func saveUITheme(dataDir, theme string) error {
 	}
 	// The file also holds the sections choice (sections_view.go); keep it.
 	rest := map[string]json.RawMessage{}
-	if b, err := os.ReadFile(viewStatePath(dataDir)); err == nil {
+	if b, err := fsutil.ReadFileRetry(viewStatePath(dataDir)); err == nil {
 		if json.Unmarshal(b, &rest) != nil || rest == nil {
 			rest = map[string]json.RawMessage{}
 		}

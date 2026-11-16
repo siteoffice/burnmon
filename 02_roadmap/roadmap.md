@@ -37,6 +37,9 @@ Priority order lives here and only here.
        Park exception (Wilco, 2026-10-12). Code done 2026-10-12, uncommitted: `scan.IsTranscriptPath`,
        `Store.PurgeAuditSessions`, run on every Collect.
        Proof: same file as row d.
+12. v0.4.0-beta.1 (2026-10-30). **DONE:** tag `v0.4.0-beta.1` on `775e0b5`, pushed; all three exes
+    report `0.4.0-beta.1`; `TestOneVersionClock` keeps them in step. Leftover: prune the merged
+    sprint worktrees and branches (Wilco's git step, with the B8 close-out).
 13. B8, the agent half: agent view behind the npm shim, a new gate on the page in under 2 s, Waits
     on you titles and a collapsed Done group, every control once for real (Attended), a toast for
     Blocked and Your turn. Spec: `2026-10-30_b8_agent_half_spec.md` (Foreman copy

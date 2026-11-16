@@ -225,9 +225,17 @@ func TestAnalyze_UnderFiveMillisecondsPerSession(t *testing.T) {
 	}
 	cfg := testConfig()
 
-	start := time.Now()
-	findings := Analyze(events, cfg)
-	elapsed := time.Since(start)
+	// The fastest of five runs: a busy machine slows some runs, not all, while a
+	// real slowdown of Analyze slows every run.
+	var findings []Finding
+	elapsed := time.Duration(1<<63 - 1)
+	for run := 0; run < 5; run++ {
+		start := time.Now()
+		findings = Analyze(events, cfg)
+		if d := time.Since(start); d < elapsed {
+			elapsed = d
+		}
+	}
 
 	if elapsed > 5*time.Millisecond {
 		t.Fatalf("Analyze took %s for %d events, want under 5ms", elapsed, len(events))
