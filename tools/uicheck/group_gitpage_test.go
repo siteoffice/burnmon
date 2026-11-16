@@ -130,3 +130,16 @@ func TestCentreChecksAreRouted(t *testing.T) {
 		}
 	}
 }
+
+// The strip says its words in full at the size the case runs: a label that is
+// cut shows up in Cut, and that is a problem (hover is for long notes, not
+// for the headline and the stage names).
+func TestGitpageCutProblems(t *testing.T) {
+	if p := gitpageCutProblems(gitpageRead{}); len(p) != 0 {
+		t.Fatalf("a read without cut text has problems: %v", p)
+	}
+	p := gitpageCutProblems(gitpageRead{Cut: []string{".lbig b \"4 of 5 repos open\" is cut"}})
+	if len(p) != 1 || !strings.Contains(p[0], "cut") {
+		t.Errorf("a cut headline was not reported: %v", p)
+	}
+}

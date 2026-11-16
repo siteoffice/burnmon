@@ -40,6 +40,13 @@ type gitpageRead struct {
 	Strip   []gitpageStrip `json:"strip"`
 	Big     string         `json:"big"`
 	Loading bool           `json:"loading"`
+	Cut     []string       `json:"cut"` // strip text that does not fit its cell
+}
+
+// gitpageCutProblems: the strip's headline, its second line and its stage
+// names are drawn in full. Hover is for long notes, not for these.
+func gitpageCutProblems(r gitpageRead) []string {
+	return append([]string(nil), r.Cut...)
 }
 
 type gitpageWidth struct {
@@ -79,7 +86,11 @@ const gitpageReadJS = `(function(){
     return {n: parseInt(b.querySelector('b').textContent, 10), pressed: b.getAttribute('aria-pressed') === 'true', label: b.querySelector('span').textContent};
   });
   var big = document.querySelector('#pane .lbig b');
-  return {rows: rows, strip: strip, big: big ? big.textContent : '', loading: !!document.querySelector('#pane .loadbar')};
+  var cut = [];
+  [].forEach.call(document.querySelectorAll('#pane .lstrip .lbig b, #pane .lstrip .lbig span, #pane .lstrip button.lst span'), function(e){
+    if (e.scrollWidth > e.clientWidth + 1) cut.push(e.tagName.toLowerCase() + ' "' + e.textContent + '" is cut: ' + e.scrollWidth + ' px of text in ' + e.clientWidth + ' px');
+  });
+  return {rows: rows, strip: strip, big: big ? big.textContent : '', loading: !!document.querySelector('#pane .loadbar'), cut: cut};
 })()`
 
 const gitpageWidthJS = `(function(){
@@ -356,7 +367,7 @@ func caseGitpageStrip(hwnd uintptr, args []string) error {
 	if _, err := screenshot(hwnd, "gitpage-strip"); err != nil {
 		return err
 	}
-	if bad := gitpageStripProblems(r, len(gitpageWantLanes)); len(bad) > 0 {
+	if bad := append(gitpageStripProblems(r, len(gitpageWantLanes)), gitpageCutProblems(r)...); len(bad) > 0 {
 		return failed("strip", bad)
 	}
 	stage := `#pane .lstrip button.lst[title^="Saved:"]`
