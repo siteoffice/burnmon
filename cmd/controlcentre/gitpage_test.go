@@ -341,6 +341,22 @@ func TestPageGitHoverCells(t *testing.T) {
 	mustContain(t, "gitCell", "c.title = title", "data-title")
 }
 
+// TestPageGitStopsAtColumnIsWidest: "Stops at" is the cell a person reads to
+// know what is open ("Changes: 1 file", "Shared: 1 new online"), so it takes
+// the most of the room that is left; the repo and branch names, which are
+// cut and shown in full on hover, take less.
+func TestPageGitStopsAtColumnIsWidest(t *testing.T) {
+	// compact drops the spaces: "flex:2.2 1 0" reads "flex:2.210".
+	if !strings.Contains(compact(ruleFor(t, ".gst")), "flex:2.210") {
+		t.Errorf(".gst is not flex:2.2 1 0: %s", compact(ruleFor(t, ".gst")))
+	}
+	for _, sel := range []string{".g1", ".g2"} {
+		if !strings.Contains(compact(ruleFor(t, sel)), "flex:.810") {
+			t.Errorf("%s is not flex:.8 1 0: %s", sel, compact(ruleFor(t, sel)))
+		}
+	}
+}
+
 // TestPageGitNoHorizontalScroll: the pane clips, every flexible cell and the
 // strip can shrink (min-width:0), and the fixed cells of a row (lane 150, last
 // 104, four 8 px gaps) leave room at 1600 px wide: 80 percent of 1600, less the
