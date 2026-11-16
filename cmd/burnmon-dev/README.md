@@ -283,9 +283,13 @@ earlier seven-section layout is migrated in memory and written in the new shape 
 ### Sections, Plain mode and the Overall scrollbar
 
 The window is 15 switchable parts in four groups. The gear dialog has one list of part switches per mode.
-Standard shows every part by default. Plain shows five (Waits on you, Outcomes, Burn, Agents map, Sessions) and
-uses plain words. Plain mode makes no model call. The Overall scrollbar switch (`overall_scrollbar`, default on)
-lets the page scroll instead of dropping parts that do not fit; a note counts the sections a small window hides.
+A fresh install starts in Standard with these parts on. Standard: Waits on you, Agents map, Sessions, Burn last
+30 min, Vendor strip, Activity, Heatmap, Turn ticker, System and Process groups. Plain: Waits on you, Agents
+map, Sessions, Burn last 30 min, Vendor strip and System, in plain words. Outcomes, Burn, Git, Processes and To Do
+are off in both modes, and so is every control (Stop included). Plain mode makes no model call. The Overall
+scrollbar switch (`overall_scrollbar`) is off by default; switched on, it lets the page scroll instead of
+dropping parts that do not fit, and a note counts the sections a small window hides. A saved
+`burnmon-dev-view.json` always wins over these defaults.
 
 | id | label | group |
 |---|---|---|
@@ -328,10 +332,13 @@ that count.
 - An empty box means "share the rest equally", so a fresh install works with no numbers.
 - Go validates the same rules as the page (`internal\sections\pct.go`). Values are stored per mode as
   `sections_pct` and `panes_pct`.
-- A fresh install starts with sections Status 30, `sessions_30min` 60, `processes_30min` 60, To Do 10. That is
-  160, so with the scrollbar on the page scrolls as before. Panes: `status_row1` 50, `sessions` 50,
-  `burn_30min` 40, `vendor_strip` 20, `activity_heatmap` 20, `turn_ticker` 20, `system` 50, `process_groups` 30,
-  `processes` 20.
+- A fresh install starts with these numbers, one set per mode. A part that is hidden at install keeps its
+  number, so it has a size when you tick it. Sections, both modes: Status 15, `sessions_30min` 40,
+  `processes_30min` 45, To Do 10 (hidden). The shown sections add up to 100, and so do the shown panes of each
+  section. Panes, Standard: `status_row1` 60, `sessions` 40, `burn_30min` 40, `vendor_strip` 20,
+  `activity_heatmap` 20, `turn_ticker` 20, `system` 50, `process_groups` 50, `processes` 20 (hidden). Panes,
+  Plain: `status_row1` 60, `sessions` 40, `burn_30min` 50, `vendor_strip` 50, `activity_heatmap` 20 (hidden),
+  `turn_ticker` 20 (hidden), `system` 100, `process_groups` 50 (hidden), `processes` 20 (hidden).
 - From 1600 px wide, Sessions and Processes sit side by side on one row. The row takes the sum of their two
   percents, and Status and To Do keep theirs. The total line then says "wide layout: Sessions and Processes share
   one row of 70".

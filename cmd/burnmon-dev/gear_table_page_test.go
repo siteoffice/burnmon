@@ -144,7 +144,8 @@ func TestGearHiddenTipAndTotalLines(t *testing.T) {
 			t.Errorf("page lacks %q", want)
 		}
 	}
-	s := sections.Default().With("plain", sections.Todo, false)
+	// To Do is hidden at install in both modes; show it in Standard, the way the table lists it.
+	s := sections.Default().With("plain", sections.Todo, false).With("standard", sections.Todo, true)
 	for _, p := range []string{sections.Waits, sections.Outcomes, sections.Burn, sections.Git, sections.AgentsMap, sections.Sessions,
 		sections.Burn30, sections.System} {
 		s = s.With("plain", p, true)

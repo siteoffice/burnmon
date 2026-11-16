@@ -46,14 +46,14 @@ func TestSectionsPayloadFromFrozenExample(t *testing.T) {
 	if p.Mode != "standard" || p.Plain {
 		t.Errorf("first run mode %q, want standard", p.Mode)
 	}
-	if len(p.Parts) != 15 || !p.Parts["git"] {
-		t.Errorf("current list %v: standard shows every part", p.Parts)
+	if len(p.Parts) != 15 || p.Parts["git"] || !p.Parts["waits"] || !p.Parts["agents_map"] {
+		t.Errorf("current list %v: standard shows the install layout (git off, waits and agents_map on)", p.Parts)
 	}
 	if len(p.Groups) != 4 {
 		t.Errorf("%d groups, want 4", len(p.Groups))
 	}
-	if !p.Scrollbar {
-		t.Error("the overall scrollbar is on by default")
+	if p.Scrollbar {
+		t.Error("the overall scrollbar is off by default (2026-11-16)")
 	}
 	if p.Reading.Status != snapshot.StatusOK || p.Reading.AgeSeconds != 7 {
 		t.Errorf("reading %+v", p.Reading)
@@ -100,11 +100,11 @@ func TestSetSectionsFromPage(t *testing.T) {
 	if err := applySectionsChange(dir, sectionsChange{Mode: "plain", Section: "turn_ticker", On: &on}); err != nil {
 		t.Fatal(err)
 	}
-	if err := applySectionsChange(dir, sectionsChange{Mode: "standard", Section: "burn", On: &off}); err != nil {
+	if err := applySectionsChange(dir, sectionsChange{Mode: "standard", Section: "vendor_strip", On: &off}); err != nil {
 		t.Fatal(err)
 	}
 	got := loadSections(dir)
-	if !got.OnIn("plain", "turn_ticker") || got.OnIn("standard", "burn") || !got.OnIn("standard", "turn_ticker") || !got.OnIn("plain", "burn") {
+	if !got.OnIn("plain", "turn_ticker") || got.OnIn("standard", "vendor_strip") || !got.OnIn("standard", "turn_ticker") || !got.OnIn("plain", "vendor_strip") {
 		t.Errorf("per-mode switches wrong: %+v", got)
 	}
 	if got.Mode() != "plain" {
@@ -115,7 +115,7 @@ func TestSetSectionsFromPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	sb := loadSections(dir)
-	if sb.Scrollbar || sb.Mode() != "plain" || !sb.OnIn("plain", "turn_ticker") || sb.OnIn("standard", "burn") {
+	if sb.Scrollbar || sb.Mode() != "plain" || !sb.OnIn("plain", "turn_ticker") || sb.OnIn("standard", "vendor_strip") {
 		t.Errorf("scrollbar off changed more than the flag: %+v", sb)
 	}
 	if err := applySectionsChange(dir, sectionsChange{Scrollbar: &on}); err != nil {
@@ -527,11 +527,14 @@ func TestSetSectionsPctFromPage(t *testing.T) {
 		"standard": {Sections: map[string]int{"status": 30, "sessions_30min": 50, "processes_30min": 20}, Panes: map[string]int{"burn_30min": 40}},
 		"plain":    {Sections: map[string]int{"status": 100}},
 	}
-	// Standard shows To Do too; its empty box would be starved at 100, so hide it first.
-	if err := applySectionsChange(dir, sectionsChange{Mode: "standard", Section: "todo", On: new(bool)}); err != nil {
-		t.Fatal(err)
+	// Plain shows Sessions and Processes parts at install; its one section number
+	// below is Status 100, so hide those parts first (the empty boxes would be starved).
+	for _, part := range []string{"burn_30min", "vendor_strip", "system"} {
+		if err := applySectionsChange(dir, sectionsChange{Mode: "plain", Section: part, On: new(bool)}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	// The default has the scrollbar on, which allows over 100; start with it off.
+	// The default has the scrollbar off, as this test needs it; the switch is explicit all the same.
 	if err := applySectionsChange(dir, sectionsChange{Scrollbar: new(bool)}); err != nil {
 		t.Fatal(err)
 	}

@@ -3304,13 +3304,18 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     { id:'processes', label:'Processes', section:'processes_30min', parts:['processes'] },
     { id:'todo', label:'To Do', section:'todo', parts:['todo'] }
   ];
-  // The numbers a fresh install starts with in both modes (DefaultSectionsPct and
+  // The numbers a fresh install starts with, one set per mode (DefaultSectionsPct and
   // DefaultPanesPct in pct.go, a test keeps them equal). A payload without the
   // keys (uicheck's frozen ones) draws these, as Go's Load does for a file without them.
-  var PCT_DEFAULT_SECTIONS = { status:30, sessions_30min:60, processes_30min:60, todo:10 };
-  var PCT_DEFAULT_PANES = { status_row1:50, sessions:50, burn_30min:40, vendor_strip:20, activity_heatmap:20, turn_ticker:20,
-    system:50, process_groups:30, processes:20 };
-  function pctDefaults(d){ return { standard: Object.assign({}, d), plain: Object.assign({}, d) }; }
+  var PCT_DEFAULT_SECTIONS = {
+    standard: { status:15, sessions_30min:40, processes_30min:45, todo:10 },
+    plain: { status:15, sessions_30min:40, processes_30min:45, todo:10 } };
+  var PCT_DEFAULT_PANES = {
+    standard: { status_row1:60, sessions:40, burn_30min:40, vendor_strip:20, activity_heatmap:20, turn_ticker:20,
+      system:50, process_groups:50, processes:20 },
+    plain: { status_row1:60, sessions:40, burn_30min:50, vendor_strip:50, activity_heatmap:20, turn_ticker:20,
+      system:100, process_groups:50, processes:20 } };
+  function pctDefaults(d){ return { standard: Object.assign({}, d.standard), plain: Object.assign({}, d.plain) }; }
   // Whole pixels per key that add up to the room: each key ends at the rounded running sum.
   function pctPixels(keys, pct, room){
     var out = {}, cum = 0, prev = 0, total = Math.floor(room);
@@ -3827,7 +3832,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:true, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
+  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
   var secReading = { status:'missing', age_seconds:0 };
   // secLine is Go's sentence about the snapshot. The window opens before the
   // first payload, so it starts as the starting line; null means the last
