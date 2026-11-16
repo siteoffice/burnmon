@@ -378,3 +378,51 @@ func TestPageGitLoadingBar(t *testing.T) {
 		t.Error("the loading bar does not respect prefers-reduced-motion")
 	}
 }
+
+// TestPageGitRowsCarryTheirRepo: each row names its repo (data-repo), so
+// tools\uicheck can click and read a row by name.
+func TestPageGitRowsCarryTheirRepo(t *testing.T) {
+	mustContain(t, "drawGit", "setAttribute('data-repo', r.id)")
+}
+
+// TestUICheckServerIsDevOnly: the Control Centre opens no port for a user.
+// The dev eval channel for tools\uicheck starts only with its own environment
+// variable, on its own port beside 9333 and 9334, and main starts it.
+func TestUICheckServerIsDevOnly(t *testing.T) {
+	src, err := os.ReadFile("uicheck_devserver.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := codeLines(string(src))
+	for _, want := range []string{`"CONTROLCENTRE_UICHECK"`, `"127.0.0.1:9335"`, `"ccUICheckResult"`, "winbind.StartUICheckServer"} {
+		if !strings.Contains(code, want) {
+			t.Errorf("uicheck_devserver.go does not contain %s", want)
+		}
+	}
+	for _, other := range []string{"9333", "9334"} {
+		if strings.Contains(code, other) {
+			t.Errorf("uicheck_devserver.go uses port %s, which belongs to another exe", other)
+		}
+	}
+	main, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(main), "startUICheckServer(w)") {
+		t.Error("main.go does not start the dev eval server")
+	}
+	if strings.Contains(codeLines(string(main)), "CONTROLCENTRE_UICHECK") {
+		t.Error("main.go reads the variable itself; only winbind.StartUICheckServer may")
+	}
+}
+
+// codeLines is src without its // comment lines.
+func codeLines(src string) string {
+	var out []string
+	for _, l := range strings.Split(src, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "//") {
+			out = append(out, l)
+		}
+	}
+	return strings.Join(out, "\n")
+}

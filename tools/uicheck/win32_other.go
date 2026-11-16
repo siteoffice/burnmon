@@ -31,6 +31,7 @@ var procGetForegroundWindow noProc
 
 func findBurnmonWindow() (uintptr, error)    { return 0, nil }
 func findBurnmonDevWindow() (uintptr, error) { return 0, nil }
+func findCentreWindow() (uintptr, error)     { return 0, nil }
 func findBurnmonWindowFast() uintptr         { return 0 }
 func isRealBurnmonWindow(uintptr) bool       { return false }
 func windowTitleText(uintptr) string         { return "" }

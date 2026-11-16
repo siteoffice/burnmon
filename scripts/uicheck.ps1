@@ -10,6 +10,8 @@
 #   .\scripts\uicheck.ps1 reverse         # as no args, d groups and their cases backwards
 #   .\scripts\uicheck.ps1 w0 w1           # runs only the named checks
 #   .\scripts\uicheck.ps1 layout d0       # a d group, an old d name or group/case
+#   .\scripts\uicheck.ps1 centre         # the Control Centre gitpage group only
+#   .\scripts\uicheck.ps1 gitpage/strip  # one Control Centre case
 #
 # A d check (one of the seven groups in tools\uicheck\groups.go, a
 # group/case such as layout/d34, or an old name such as d34) targets
@@ -26,13 +28,21 @@ Set-Location $PSScriptRoot\..
 # Same order as devGroups in tools\uicheck\groups.go. Matched by name, not by
 # prefix: "waits" starts with "w".
 $devGroups = @("fit", "charts", "station", "layout", "pct", "panes", "map", "waits", "shell")
+# The Control Centre group (controlcentre.exe, port 9335): tools\uicheck\group_gitpage.go.
+$centreGroups = @("gitpage")
+function Test-CentreCheck([string]$name) {
+    return ($centreGroups -contains $name) -or ($name -match '^gitpage/')
+}
 function Test-DevCheck([string]$name) {
+    if (Test-CentreCheck $name) { return $false }
     return ($devGroups -contains $name) -or ($name -match '^[a-z]+/') -or ($name -match '^d\d+$')
 }
 
 $reverse = $args -contains "reverse"
 $devOnly = $args -contains "dev"
-$targetChecks = @($args | Where-Object { $_ -ne "reverse" -and $_ -ne "dev" })
+$centreOnly = $args -contains "centre"
+$targetChecks = @($args | Where-Object { $_ -ne "reverse" -and $_ -ne "dev" -and $_ -ne "centre" })
+if ($centreOnly -and $targetChecks.Count -eq 0) { $targetChecks = @($centreGroups) }
 $devPass = @()
 if ($reverse) { $devPass = @("reverse") }
 
@@ -47,16 +57,25 @@ if ($targetChecks.Count -eq 0) {
     $wExit = $LASTEXITCODE
     & "$PSScriptRoot\uicheck-dev.ps1" @devGroups @devPass
     $dExit = $LASTEXITCODE
-    Write-Host "uicheck: burnmon.exe checks exit $wExit, burnmon-dev.exe groups exit $dExit"
+    & "$PSScriptRoot\uicheck-centre.ps1" @centreGroups
+    $cExit = $LASTEXITCODE
+    Write-Host "uicheck: burnmon.exe checks exit $wExit, burnmon-dev.exe groups exit $dExit, controlcentre.exe groups exit $cExit"
     if ($wExit -ne 0) { exit $wExit }
-    exit $dExit
+    if ($dExit -ne 0) { exit $dExit }
+    exit $cExit
 }
 
+$centreChecks = @($targetChecks | Where-Object { Test-CentreCheck $_ })
 $devChecks = @($targetChecks | Where-Object { Test-DevCheck $_ })
-$otherChecks = @($targetChecks | Where-Object { -not (Test-DevCheck $_) })
-if ($devChecks.Count -gt 0 -and $otherChecks.Count -gt 0) {
-    Write-Host "uicheck: cannot mix a burnmon-dev.exe check ($($devChecks -join ', ')) with a burnmon.exe check ($($otherChecks -join ', ')) in one call; run them separately."
+$otherChecks = @($targetChecks | Where-Object { -not (Test-DevCheck $_) -and -not (Test-CentreCheck $_) })
+$kinds = @(@($centreChecks.Count, $devChecks.Count, $otherChecks.Count) | Where-Object { $_ -gt 0 }).Count
+if ($kinds -gt 1) {
+    Write-Host "uicheck: cannot mix checks of different exes in one call (controlcentre.exe: $($centreChecks -join ', '); burnmon-dev.exe: $($devChecks -join ', '); burnmon.exe: $($otherChecks -join ', ')); run them separately."
     exit 1
+}
+if ($centreChecks.Count -gt 0) {
+    & "$PSScriptRoot\uicheck-centre.ps1" @targetChecks
+    exit $LASTEXITCODE
 }
 if ($devChecks.Count -gt 0) {
     & "$PSScriptRoot\uicheck-dev.ps1" @targetChecks @devPass
