@@ -55,8 +55,8 @@ type Row struct {
 	WaitExact string `json:"wait_exact"` // timefmt.Exact, for the hover text
 }
 
-// State is everything the lamp page needs for one frame. Line is filled by
-// the lines of the next turn; here it stays empty.
+// State is everything the lamp page needs for one frame. Line is the
+// sentence of Glim from lines.go, empty when lamp_lines is off.
 type State struct {
 	Mood           string       `json:"mood"`
 	Headline       string       `json:"headline"`
@@ -95,6 +95,7 @@ func Compute(in Input) State {
 	if snap == nil || snap.IsStale(in.Now) {
 		st.Mood = MoodOff
 		st.Headline = "BurnMon is not running"
+		st.Line = Line(st, in.Settings, in.Now)
 		return st
 	}
 	st.BurnRate = snap.Burn.TokensPerMinute
@@ -160,6 +161,7 @@ func Compute(in Input) State {
 		st.Mood = MoodAsleep
 	}
 	st.Headline = headline(st)
+	st.Line = Line(st, in.Settings, in.Now)
 	return st
 }
 
