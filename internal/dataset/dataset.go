@@ -21,6 +21,7 @@ import (
 	"burnmon/internal/adapter/claude"
 	"burnmon/internal/adapter/codex"
 	"burnmon/internal/agg"
+	"burnmon/internal/cloudpull"
 	"burnmon/internal/pricing"
 	"burnmon/internal/scan"
 	"burnmon/internal/store"
@@ -661,6 +662,15 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 		return Payload{}, fmt.Errorf("dataset: purge audit sessions: %w", err)
 	} else if nEvents > 0 || nCalls > 0 || nCursors > 0 {
 		log.Printf("audit purge: removed %d event(s), %d tool call(s), %d cursor(s) read from audit.jsonl", nEvents, nCalls, nCursors)
+	}
+
+	// 2026-11-17: Cowork (Cloud) pull transcripts read as Claude Code before
+	// the parser knew the pull folder go, so they are read again under their
+	// cloud session id. Every Collect, a no-op once the store is clean.
+	if nEvents, nCalls, nCursors, err := c.Store.PurgePullCopies(cloudpull.ProjectDir()); err != nil {
+		return Payload{}, fmt.Errorf("dataset: purge pull copies: %w", err)
+	} else if nEvents > 0 || nCalls > 0 || nCursors > 0 {
+		log.Printf("cloud pull purge: removed %d event(s), %d tool call(s), %d cursor(s) stored as Claude Code", nEvents, nCalls, nCursors)
 	}
 
 	sourceListStart := time.Now()

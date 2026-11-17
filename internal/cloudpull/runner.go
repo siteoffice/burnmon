@@ -278,20 +278,14 @@ func NewRunner() (*Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	pull := filepath.Join(home, ".burnmon", "cloud-pull")
-	cfg := os.Getenv("CLAUDE_CONFIG_DIR")
-	if cfg == "" {
-		cfg = filepath.Join(home, ".claude")
+	if home() == "" {
+		return nil, errors.New("cloudpull: no home folder")
 	}
 	return &Runner{
 		Exe:        exe,
-		PullDir:    pull,
-		ProjectDir: filepath.Join(cfg, "projects", ProjectDirName(pull)),
-		StatePath:  filepath.Join(home, ".burnmon", "cloud-pull-state.json"),
+		PullDir:    PullDir(),
+		ProjectDir: ProjectDir(),
+		StatePath:  StatePath(),
 		Run:        execRun,
 		Now:        time.Now,
 		Roots:      DesktopDataRoots,
