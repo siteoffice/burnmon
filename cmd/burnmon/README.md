@@ -9,7 +9,8 @@ Parent index: `README.md`. Companions: `cmd\burnmon-dev\README.md`, `cmd\control
 ## 1. What it is
 
 BurnMon shows tokens and cost per day, vendor, session, project and client, from local files. It needs
-no API key, no admin rights, no network call and no telemetry. Everything stays on this device.
+no API key, no admin rights, no network call and no telemetry. Everything stays on this device. BurnMon itself makes no network call. With Read Cowork (Cloud) sessions
+on, it starts your own Claude Code CLI, which goes online as you.
 
 On Windows there is also no server and no open port. On macOS and Linux, `burnmon` runs one web server
 that only this computer can reach (127.0.0.1); see "macOS and Linux" in section 3.
@@ -232,6 +233,24 @@ Both apps write the same export file as `burnmon-cli export`, from Settings. You
 owner. The command line forms, and `burnmon-cli merge`, are in `cmd\burnmon-cli\README.md`. No paths, session ids,
 prompts or project names ever leave in the file.
 
+### Cowork (Cloud) sessions
+
+Cowork sessions that run in Anthropic's cloud write no transcript to your disk. BurnMon can copy them with your own
+Claude Code CLI, for free, when you turn on Read Cowork (Cloud) sessions: in Settings in `burnmon.exe`, or in the gear
+in `burnmon-dev.exe`. It is off by default, and without it the Cowork (Cloud) row says not measured.
+
+- What it does: it starts your Claude Code CLI to copy your cloud sessions to this computer, one at a time, at most one
+  every 30 seconds. A session with a turn in the last 30 minutes is copied again every 2 minutes and goes before any
+  session not copied yet; one with a turn in the last day every 30 minutes, an older one once a day, and one more than
+  31 days old no more. So a quiet session that gets a new turn shows it within 30 minutes, or within a day when it had
+  been quiet for more than a day. Each copy runs
+  `claude --teleport <id> -p "/rename burnmon-pull" --model haiku --output-format json` and must report 0 turns and 0
+  cost; anything else switches the copying off and says why on screen.
+- What it needs: Claude Code installed and signed in to the same account as the Claude app.
+- What it reads: cloud sessions you start in the Claude app on this computer, inside or outside a Project. Sessions
+  started from your phone, the browser or another computer are not read, and neither is subagent usage inside a cloud
+  session. With it on, a working pull shows plain numbers; a failing one shows not measured with the reason.
+
 ### Cowork in the cloud
 
 New Cowork sessions can run in Anthropic's cloud instead of on your computer. Since 6 October 2026 that is the only
@@ -321,6 +340,9 @@ including `owners` (empty by default). Three keys are the ones a tester is likel
 wants background agents and the agent map), `foreman_root` (Foreman users only) and `claude_path` (only when BurnMon
 cannot start `claude`). Their meaning is in `cmd\burnmon-dev\README.md`, section 5.
 
+`cloud_pull` (default `false`) is the switch Read Cowork (Cloud) sessions, saved by either app's settings and read by
+both every 30 seconds (see Cowork (Cloud) sessions above).
+
 If no `burnmon.json` is found, both binaries still read a `claudecost.json` in the same two locations: the pre-rename
 config name, kept working for anyone who has not renamed their file yet. `burnmon.json` always wins when both are
 present. Rename to `burnmon.json` when convenient; there is no reason to keep using the old name once you have.
@@ -351,15 +373,17 @@ exists on Windows; it is a no-op everywhere else.
 
 ### What BurnMon never does
 
-No server on Windows, no network call to the internet of any kind, no telemetry, no account. On macOS and Linux there is
+No server on Windows, no network call to the internet of any kind, no telemetry, no account. BurnMon itself makes no network call. With Read Cowork (Cloud) sessions
+on, it starts your own Claude Code CLI, which goes online as you. On macOS and Linux there is
 one local web server on 127.0.0.1 for the dashboard, protected by a secret that changes every start. The optional cloud
 plugin runs inside Claude's own cloud session, not in BurnMon, and the Claude app copies its file to your disk. BurnMon
 reads only your own transcript folders, never aggregates or compares across people, and refuses no one because there is
 nothing to refuse: other people's usage is simply not on your disk. Costs shown for Claude are allocated shares of a flat
 monthly invoice, not money owed by anyone.
 
-Two optional features start programs on this computer, and only after you switch them on: the agent view poller
-(`agent_view`) and the controls. The poller runs only `claude agents --json` (`internal\snapshotwriter\agentview.go`).
+Three optional features start programs on this computer, and only after you switch them on: the agent view poller
+(`agent_view`), the controls, and the cloud pull (`cloud_pull`), which runs `claude auth status` and the copy command in
+Cowork (Cloud) sessions above. The poller runs only `claude agents --json` (`internal\snapshotwriter\agentview.go`).
 `stop` and `attach` run `claude stop <id>` and `claude attach <id>`; `approve` and `send_back` run `python` on a script
 that calls Foreman's own gate command. All of them use documented commands, no undocumented endpoint.
 

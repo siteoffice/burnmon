@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"burnmon/internal/cloudpull"
 	"burnmon/internal/scan"
 	"burnmon/internal/schema"
 )
@@ -202,6 +203,14 @@ func contentByteLen(content any) int64 {
 func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall, int64, error) {
 	if scan.IsCloudDropPath(path) {
 		return parseCloudDrop(path)
+	}
+	// A Cowork (Cloud) session copied to this computer by the cloud pull.
+	// Until the runner has recorded which cloud session the file copies, it
+	// is skipped and read again later: a row stored under the local pull id
+	// would count the same requests twice.
+	cloudID, isPull, mapped := cloudpull.MapPullFile(path)
+	if isPull && !mapped {
+		return nil, nil, from, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -456,6 +465,19 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 	for _, r := range lateResults {
 		r.Vendor, r.SessionID = "anthropic", sessionID
 		toolCalls = append(toolCalls, r)
+	}
+
+	// A pull transcript is the cloud session itself: its cwd is the cloud
+	// container's or the pull folder, its entrypoint the CLI's, neither of
+	// which is a local project.
+	if mapped {
+		for i := range events {
+			events[i].Agent, events[i].Surface = "cowork-cloud", "cloud"
+			events[i].SessionID, events[i].ParentID, events[i].Project = cloudID, "", ""
+		}
+		for i := range toolCalls {
+			toolCalls[i].Agent, toolCalls[i].SessionID = "cowork-cloud", cloudID
+		}
 	}
 
 	return events, toolCalls, offset, nil

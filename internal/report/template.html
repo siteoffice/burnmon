@@ -2072,12 +2072,12 @@ function openVendorStripCell(agent, period){
 // click handler, unchanged) but no longer looks like one; #t_vendorstrip
 // td a's own CSS rule strips the colour/underline, title carries the
 // "Open in History" hover tooltip natively rather than a custom widget.
-function vsCell(tok_, agent, period, note, until){
+function vsCell(tok_, agent, period, note, cloudTip){
   // note is the Go side's mark for a Cowork (Cloud) cell: 'not_measured'
   // prints the words instead of a 0 that would mean "unknown", 'partial'
   // keeps the number and adds a +; both say how far the data goes.
   var text = note === 'not_measured' ? 'not measured' : tok(tok_) + (note === 'partial' ? '+' : '');
-  var tip = note ? 'measured until '+until+', later cloud sessions are not measured' : 'Open in History';
+  var tip = note ? cloudTip : 'Open in History';
   return '<td><a href="'+vsHistoryHash(agent, period)+'" title="'+esc(tip)+'" onclick="openVendorStripCell(\''
     +String(agent).replace(/'/g,"\\'")+'\',\''+period+'\');return false;">'+text+'</a></td>';
 }
@@ -2094,17 +2094,17 @@ function renderVendorStrip(payload){
     tb.innerHTML = '';
   } else {
     empty.classList.add('hidden');
-    var until = payload.cloud_measured_until || '';
+    var cloudTip = payload.cloud_tip || '';
     var body = rows.map(function(r){
       return '<tr><td>'+esc(r.agent_label||r.agent||'')+'</td>'
-        + vsCell(r.today, r.agent, 'day', r.today_note, until) + vsCell(r.week, r.agent, 'week', r.week_note, until)
-        + vsCell(r.month, r.agent, 'month', r.month_note, until)
+        + vsCell(r.today, r.agent, 'day', r.today_note, cloudTip) + vsCell(r.week, r.agent, 'week', r.week_note, cloudTip)
+        + vsCell(r.month, r.agent, 'month', r.month_note, cloudTip)
         + '</tr>';
     }).join('');
     var total = payload.total || {};
     body += '<tr class="total"><td>'+esc(total.agent_label||'Total')+'</td>'
-      + vsCell(total.today, '', 'day', total.today_note, until) + vsCell(total.week, '', 'week', total.week_note, until)
-      + vsCell(total.month, '', 'month', total.month_note, until)
+      + vsCell(total.today, '', 'day', total.today_note, cloudTip) + vsCell(total.week, '', 'week', total.week_note, cloudTip)
+      + vsCell(total.month, '', 'month', total.month_note, cloudTip)
       + '</tr>';
     tb.innerHTML = body;
   }

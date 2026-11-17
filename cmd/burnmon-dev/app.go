@@ -106,6 +106,9 @@ type app struct {
 	// loadedCfg is the config file loadConfig loaded at start ("" for none),
 	// recorded in the snapshot's agent view status.
 	loadedCfg string
+	// cloudCfgPath is the burnmon.json the cloud_pull switch is saved to and
+	// read from: loadedCfg, else burnmon.json in the data folder.
+	cloudCfgPath string
 
 	sys         *sysmon.Store
 	sampler     *sysmon.Sampler
@@ -656,6 +659,23 @@ func (a *app) startRetentionPrune(retentionDays int) {
 // whole cadence; the status loop is registered (and so runs its own first
 // synchronous pass) before the task loop, so that first task refresh
 // already sees a populated todoStatusCache rather than the zero value.
+// refreshVendorStrip rebuilds the vendor strip cache now. The slow refresher
+// calls it every minute; the cloud pull switch calls it at once, so the
+// Cowork (Cloud) marker follows the switch without waiting for that minute.
+func (a *app) refreshVendorStrip(st *store.Store) {
+	a.mu.Lock()
+	cfg := a.cfg
+	a.mu.Unlock()
+	payload, err := vendorstrip.Build(st, &cfg, time.Now())
+	if err != nil {
+		log.Println("vendor strip:", err)
+		return
+	}
+	a.slowMu.Lock()
+	a.vendorStripCache = payload
+	a.slowMu.Unlock()
+}
+
 func (a *app) startSlowRefreshers(st *store.Store, devCfg devConfig) {
 	loop := func(interval time.Duration, fn func()) {
 		fn()
@@ -668,19 +688,7 @@ func (a *app) startSlowRefreshers(st *store.Store, devCfg devConfig) {
 		}()
 	}
 
-	loop(60*time.Second, func() {
-		a.mu.Lock()
-		cfg := a.cfg
-		a.mu.Unlock()
-		payload, err := vendorstrip.Build(st, &cfg, time.Now())
-		if err != nil {
-			log.Println("slow refresh: vendor strip:", err)
-			return
-		}
-		a.slowMu.Lock()
-		a.vendorStripCache = payload
-		a.slowMu.Unlock()
-	})
+	loop(60*time.Second, func() { a.refreshVendorStrip(st) })
 
 	loop(60*time.Second, func() {
 		a.mu.Lock()

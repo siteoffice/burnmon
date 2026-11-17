@@ -529,9 +529,10 @@ body.plain #mapOverlay{font-size:13.5px}
 .plaintoggle.on{background:var(--amber); border-color:var(--amber); color:var(--bg)}
 .gearbtn{background:none; border:none; color:var(--blu); font:15px/1 var(--mono); cursor:pointer; padding:2px 4px}
 .gearbtn:hover, .gearbtn.on{color:var(--amber)}
-#secSettings{position:fixed; right:14px; top:60px; z-index:1700; background:var(--panel); border:1px solid var(--bd);
-  border-top:2px solid var(--amber); padding:10px 14px; display:none; flex-direction:column; gap:8px; font-size:12px;
-  box-shadow:0 6px 24px var(--scrim)}
+/* The gear pane floats over the page: a stronger edge and a deep shadow make it read as a layer above the panels. */
+#secSettings{position:fixed; right:14px; top:60px; z-index:1700; background:var(--panel); border:1px solid var(--bd2);
+  border-top:3px solid var(--amber); border-radius:4px; padding:10px 14px; display:none; flex-direction:column; gap:8px; font-size:12px;
+  box-shadow:0 2px 6px var(--scrim), 0 16px 48px var(--scrim)}
 #secSettings.open{display:flex}
 #secSettings{max-height:calc(100vh - 80px); overflow-y:auto}
 #secSettings .setstation{display:flex; gap:14px; align-items:center}
@@ -731,6 +732,11 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     <div class="ctlsw"><label><input type="checkbox" data-ctl-sw="stop"> Stop a session</label><div class="dim ctlwhy" data-ctl-why="stop"></div></div>
   </div>
   <label class="setrow"><input type="checkbox" id="secToast"> Show a notification when something waits on you</label>
+  <div class="setrow setcloud"><label><input type="checkbox" id="secCloudPull"> Read Cowork (Cloud) sessions</label>
+    <div class="sechint">Starts your Claude Code CLI to copy your cloud sessions to this computer.</div>
+    <div class="sechint">Needs Claude Code installed and signed in to the same account.</div>
+    <div class="sechint">Reads cloud sessions you start in the Claude app on this computer. Sessions started from your phone, the browser or another computer are not read, and neither is subagent usage inside a cloud session.</div>
+  </div>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
@@ -1582,8 +1588,8 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
   // vendorCell sets one strip cell. note is the Go side's mark for a Cowork
   // (Cloud) cell: 'not_measured' prints the words instead of a 0 that would
   // mean "unknown", 'partial' keeps the number and adds a +. Both carry the
-  // "measured until" tooltip; an unmarked cell is the plain tween it was.
-  function vendorCell(el, val, note, until){
+  // payload's cloud_tip as tooltip; an unmarked cell is the plain tween it was.
+  function vendorCell(el, val, note, cloudTip){
     if(note === 'not_measured'){
       if(el._animRAF) cancelAnimationFrame(el._animRAF);
       el._animVal = null;
@@ -1593,7 +1599,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     } else {
       animateNumber(el, val, TWEEN_MS, fmtTokens);
     }
-    if(note){ el.title = 'measured until ' + until + ', later cloud sessions are not measured'; }
+    if(note){ el.title = cloudTip; }
     else { el.removeAttribute('title'); }
   }
 
@@ -1601,14 +1607,14 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     var tbody = document.getElementById('vendorStrip');
     if(!tbody) return;
     var rows = (payload && payload.rows) || [];
-    var until = (payload && payload.cloud_measured_until) || '';
+    var cloudTip = (payload && payload.cloud_tip) || '';
     var seen = {};
     rows.forEach(function(r){
       seen[r.agent] = true;
       var rec = ensureVendorRow(tbody, r.agent, r.agent_label);
-      vendorCell(rec.today, r.today, r.today_note, until);
-      vendorCell(rec.week, r.week, r.week_note, until);
-      vendorCell(rec.month, r.month, r.month_note, until);
+      vendorCell(rec.today, r.today, r.today_note, cloudTip);
+      vendorCell(rec.week, r.week, r.week_note, cloudTip);
+      vendorCell(rec.month, r.month, r.month_note, cloudTip);
     });
     Object.keys(vendorRowEls).forEach(function(agent){
       if(seen[agent]) return;
@@ -1621,9 +1627,9 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     var total = ensureTotalRow(tbody);
     tbody.insertBefore(total.tr, tbody.firstChild);
     var tot = (payload && payload.total) || {};
-    vendorCell(total.today, tot.today || 0, tot.today_note, until);
-    vendorCell(total.week, tot.week || 0, tot.week_note, until);
-    vendorCell(total.month, tot.month || 0, tot.month_note, until);
+    vendorCell(total.today, tot.today || 0, tot.today_note, cloudTip);
+    vendorCell(total.week, tot.week || 0, tot.week_note, cloudTip);
+    vendorCell(total.month, tot.month || 0, tot.month_note, cloudTip);
   }
 
   // renderHeadline, section 4: the one exception to the shared 600ms tween
@@ -4311,6 +4317,8 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     });
     var tg = document.getElementById('secToast');
     if(tg) tg.checked = !!secState.toast;
+    var cp = document.getElementById('secCloudPull');
+    if(cp) cp.checked = !!secState.cloudPull;
     pctRenderSizes();
   }
   // A poll or a tick must never move a list the user scrolled. The scroll
@@ -4422,7 +4430,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
   function secApplyPayload(p){
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space',
-      toast:p.toast_enabled !== false, sectionsPct:p.sections_pct || pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:p.panes_pct || pctDefaults(PCT_DEFAULT_PANES) };
+      toast:p.toast_enabled !== false, cloudPull:!!p.cloud_pull, sectionsPct:p.sections_pct || pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:p.panes_pct || pctDefaults(PCT_DEFAULT_PANES) };
     if(p.panes && p.panes.length) PCT_PANES = p.panes;
     secReading = p.reading || { status:'missing', age_seconds:0 };
     secLine = p.snapshot_line || null;
@@ -4499,6 +4507,18 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
             console.log('bdevSetToast:', e);
             // Not saved: put the box back on the last value the payload gave and re-poll.
             t.checked = !!secState.toast;
+            secLastJSON = 'x';
+            return secPoll();
+          });
+      }
+    }
+    else if(t.id === 'secCloudPull'){
+      // Saved to the shared burnmon.json; either app's pull starts or stops within 30 seconds.
+      if(typeof window.bdevSetCloudPull === 'function'){
+        Promise.resolve(window.bdevSetCloudPull(t.checked)).then(function(){ secLastJSON = 'x'; return secPoll(); })
+          .catch(function(e){
+            console.log('bdevSetCloudPull:', e);
+            t.checked = !!secState.cloudPull;
             secLastJSON = 'x';
             return secPoll();
           });

@@ -212,7 +212,38 @@ WHERE excluded.output > events.output
 	}
 	defer unfold.Close()
 
+	// A pulled Cowork (Cloud) row is the one copy of its request: it replaces
+	// a teleport copy stored as Claude Code and an old cloud-plugin drop row,
+	// and a later copy of either is skipped.
+	dropCopies, err := tx.Prepare(`DELETE FROM events WHERE vendor = ? AND request_id = ? AND session_id <> ?`)
+	if err != nil {
+		return err
+	}
+	defer dropCopies.Close()
+	hasPulled, err := tx.Prepare(`SELECT 1 FROM events WHERE vendor = ? AND request_id = ?
+	AND agent = 'cowork-cloud' AND session_id LIKE 'session\_%' ESCAPE '\' AND session_id <> ? LIMIT 1`)
+	if err != nil {
+		return err
+	}
+	defer hasPulled.Close()
+
 	for _, e := range events {
+		if e.Vendor == "anthropic" && e.RequestID != "" {
+			if isPulledRow(e) {
+				if _, err := dropCopies.Exec(e.Vendor, e.RequestID, e.SessionID); err != nil {
+					return fmt.Errorf("store: drop copies of %s/%s: %w", e.Vendor, e.RequestID, err)
+				}
+			} else {
+				var one int
+				switch err := hasPulled.QueryRow(e.Vendor, e.RequestID, e.SessionID).Scan(&one); err {
+				case nil:
+					continue
+				case sql.ErrNoRows:
+				default:
+					return fmt.Errorf("store: look up pulled %s/%s: %w", e.Vendor, e.RequestID, err)
+				}
+			}
+		}
 		if e.Agent == "cowork-cloud" && e.ParentID != "" {
 			if _, err := unfold.Exec(e.Vendor, e.ParentID, e.RequestID); err != nil {
 				return fmt.Errorf("store: unfold %s/%s: %w", e.Vendor, e.RequestID, err)
@@ -1410,6 +1441,81 @@ func (s *Store) PurgeAuditSessions() (events, toolCalls, cursors int, err error)
 	}
 	n, _ = res.RowsAffected()
 	cursors = int(n)
+	if err := tx.Commit(); err != nil {
+		return 0, 0, 0, err
+	}
+	return events, toolCalls, cursors, nil
+}
+
+// isPulledRow: a row read from a cloud pull transcript. The claude parser
+// keys those on the cloud session id, which starts with "session_"; old
+// cloud-plugin drop rows use the container's own id or "agent-<id>".
+func isPulledRow(e schema.Event) bool {
+	return e.Agent == "cowork-cloud" && strings.HasPrefix(e.SessionID, "session_")
+}
+
+// PurgePullCopies removes what a cloud pull transcript left in the store as
+// anything but Cowork (Cloud): the events and tool calls of every session
+// whose cursor path lies inside projectDir (the pull folder's Claude project
+// folder) and is not cowork-cloud, and those cursors, so the files are read
+// again under the cloud session id. Pull files were stored as Claude Code
+// before the parser knew them (2026-11-17). Run on every Collect; a no-op
+// once the store is clean.
+func (s *Store) PurgePullCopies(projectDir string) (events, toolCalls, cursors int, err error) {
+	if projectDir == "" {
+		return 0, 0, 0, nil
+	}
+	prefix := strings.ToLower(strings.ReplaceAll(filepath.Clean(projectDir), `\`, `/`)) + "/"
+	rows, err := s.db.Query(`SELECT path FROM cursors`)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("store: list cursor paths: %w", err)
+	}
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			rows.Close()
+			return 0, 0, 0, fmt.Errorf("store: scan cursor path: %w", err)
+		}
+		if strings.HasPrefix(strings.ToLower(strings.ReplaceAll(p, `\`, `/`)), prefix) {
+			paths = append(paths, p)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, 0, 0, fmt.Errorf("store: list cursor paths: %w", err)
+	}
+	rows.Close()
+	if len(paths) == 0 {
+		return 0, 0, 0, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer tx.Rollback()
+	for _, p := range paths {
+		sid := sessionIDFromPath(p)
+		res, err := tx.Exec(`DELETE FROM events WHERE vendor = 'anthropic' AND session_id = ? AND agent <> 'cowork-cloud'`, sid)
+		if err != nil {
+			return 0, 0, 0, fmt.Errorf("store: purge pull events for %s: %w", p, err)
+		}
+		ne, _ := res.RowsAffected()
+		res, err = tx.Exec(`DELETE FROM tool_calls WHERE vendor = 'anthropic' AND session_id = ? AND agent <> 'cowork-cloud'`, sid)
+		if err != nil {
+			return 0, 0, 0, fmt.Errorf("store: purge pull tool calls for %s: %w", p, err)
+		}
+		nt, _ := res.RowsAffected()
+		if ne+nt == 0 {
+			continue
+		}
+		if _, err := tx.Exec(`DELETE FROM cursors WHERE path = ?`, p); err != nil {
+			return 0, 0, 0, fmt.Errorf("store: purge pull cursor %s: %w", p, err)
+		}
+		events += int(ne)
+		toolCalls += int(nt)
+		cursors++
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, 0, 0, err
 	}

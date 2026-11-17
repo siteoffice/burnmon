@@ -25,6 +25,7 @@ var All = []Migration{
 	{6, "session_id-only index on events (v0.2.1 hang patch)", migration6},
 	{7, "client column on events (v0.3 K1 client map)", migration7},
 	{8, "graph_nodes and graph_edges tables (R6 relation graph)", migration8},
+	{9, "request_id index on events (Cowork cloud pull, one row per request)", migration9},
 }
 
 // migration1 records the v0.1 schema as version 1 without changing it: the
@@ -190,5 +191,14 @@ CREATE TABLE IF NOT EXISTS graph_edges (
 );
 CREATE INDEX IF NOT EXISTS idx_graph_edges_last_seen ON graph_edges (last_seen);
 `)
+	return err
+}
+
+// migration9 adds a (vendor, request_id) index: a pulled Cowork (Cloud) row
+// is the one copy of its request, so every Anthropic upsert looks up other
+// rows with the same request id, which the primary key (vendor, session_id,
+// request_id) cannot serve.
+func migration9(tx *sql.Tx) error {
+	_, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_events_request ON events (vendor, request_id);`)
 	return err
 }

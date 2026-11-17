@@ -2,6 +2,8 @@
 
 BurnMon is a vendor-agnostic token and cost monitor for your own AI coding sessions. It reads the
 transcripts your tools already write on this machine, so it needs no API key, no network and no account.
+BurnMon itself makes no network call. With Read Cowork (Cloud) sessions on, it starts your own Claude Code CLI,
+which goes online as you (`cmd\burnmon\README.md`, section Cowork (Cloud) sessions).
 
 BurnMon is the successor of [claudecost](https://github.com/siteoffice/claudecost), renamed and extended
 from v0.2 onward. Repo: [siteoffice/burnmon](https://github.com/siteoffice/burnmon). Current release:

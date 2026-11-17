@@ -32,8 +32,10 @@ machine, wherever it runs. The Claude desktop app shows only its own sessions, u
 recent. It cannot see sessions started in a terminal or in VS Code, or other coding tools.
 
 What it does not need: `burnmon.exe` (both write the same snapshot file; see section 4), Foreman (only
-for Foreman items), an account or a network. Its two optional programs, the agent view poller and Stop,
-start only after you switch them on.
+for Foreman items), an account or a network. Its three optional programs, the agent view poller, Stop and the
+cloud pull, start only after you switch them on. BurnMon itself makes no network call. With Read Cowork (Cloud)
+sessions on (the gear, saved as `cloud_pull` in `burnmon.json`), it starts your own Claude Code CLI, which goes online
+as you; the switch and what it reads are in `cmd\burnmon\README.md`, section Cowork (Cloud) sessions.
 
 ## 3. Install
 

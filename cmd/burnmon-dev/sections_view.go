@@ -35,6 +35,9 @@ type sectionsPayload struct {
 	StationTheme string `json:"station_theme"`
 	// ToastEnabled is the saved toast_enabled for the gear's notification switch.
 	ToastEnabled bool             `json:"toast_enabled"`
+	// CloudPull is the saved cloud_pull for the gear's "Read Cowork (Cloud)
+	// sessions" switch, read from burnmon.json by the bdevSections binding.
+	CloudPull bool `json:"cloud_pull"`
 	Reading      snapshot.Reading `json:"reading"`
 	// AgentMap is the live map for the Agents map section, nil unless the
 	// snapshot is current. History is a separate call (agentmap_view.go).
