@@ -229,6 +229,7 @@ func main() {
 		startCopilotCLIPoll(a, st)
 		startCopilotVSCPoll(a, st)
 		a.startSnapshotWriter(st)
+		a.startCloudPull()
 
 		if _, err := a.rebuild(true, progressReporter(w)); err != nil {
 			log.Println("initial collection failed:", err)

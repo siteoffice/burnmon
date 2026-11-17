@@ -8,8 +8,8 @@ import (
 )
 
 func TestDevBindingNamesCoverPage(t *testing.T) {
-	if len(devBindingNames) != 24 {
-		t.Fatalf("devBindingNames has %d names, want 24", len(devBindingNames))
+	if len(devBindingNames) != 25 {
+		t.Fatalf("devBindingNames has %d names, want 25", len(devBindingNames))
 	}
 	listed := map[string]bool{}
 	for _, n := range devBindingNames {

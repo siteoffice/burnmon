@@ -47,6 +47,7 @@ type Entry struct {
 	LastUsage time.Time `json:"last_usage,omitempty"` // newest usage row; zero when it has none
 	LastError string    `json:"last_error,omitempty"`
 	FailedAt  time.Time `json:"failed_at,omitempty"`
+	Gone      bool      `json:"gone,omitempty"` // the CLI said "Session not found": never pulled again
 }
 
 // State is the runner's state file. Step 4 maps pull files to cloud ids with it.
@@ -198,9 +199,10 @@ func LastUsage(path string) (time.Time, error) {
 	return last.UTC(), sc.Err()
 }
 
-// Due returns the cloud ids to pull now, most urgent first: never pulled
-// (newest first in list order), then Hot, Warm and Cold, each oldest pull
-// first. A failed id waits retryAfter. Archive sessions are never pulled again.
+// Due returns the cloud ids to pull now, most urgent first: Hot (so an active
+// session never waits behind the first run), then never pulled (newest first
+// in list order), then Warm and Cold, each oldest pull first. A failed id
+// waits retryAfter. Gone and Archive sessions are never pulled again.
 func Due(now time.Time, list []string, st *State) []string {
 	type item struct {
 		id     string
@@ -211,11 +213,14 @@ func Due(now time.Time, list []string, st *State) []string {
 	var items []item
 	for i, id := range list {
 		e := st.Sessions[id]
+		if e != nil && e.Gone {
+			continue
+		}
 		if e != nil && !e.FailedAt.IsZero() && now.Sub(e.FailedAt) < retryAfter {
 			continue
 		}
 		if e == nil || e.Path == "" {
-			items = append(items, item{id: id, tier: 0, pos: -i})
+			items = append(items, item{id: id, tier: 1, pos: -i})
 			continue
 		}
 		since := now.Sub(e.PulledAt)
@@ -228,7 +233,7 @@ func Due(now time.Time, list []string, st *State) []string {
 			}
 		case age <= hotWindow:
 			if since >= hotEvery {
-				items = append(items, item{id, 1, e.PulledAt, i})
+				items = append(items, item{id, 0, e.PulledAt, i})
 			}
 		case age <= warmWindow:
 			if since >= warmEvery {
@@ -245,7 +250,7 @@ func Due(now time.Time, list []string, st *State) []string {
 		if x.tier != y.tier {
 			return x.tier < y.tier
 		}
-		if x.tier == 0 {
+		if x.tier == 1 {
 			return x.pos < y.pos
 		}
 		return x.pulled.Before(y.pulled)
@@ -269,6 +274,9 @@ type Runner struct {
 	Run        RunFunc
 	Now        func() time.Time
 	Roots      func() []string // desktop data folders; DesktopDataRoots by default
+
+	org   string // signed-in org, refreshed every orgEvery
+	orgAt time.Time
 }
 
 // NewRunner builds a Runner for this computer: the CLI on PATH, the pull folder
@@ -300,7 +308,20 @@ func execRun(ctx context.Context, exe, dir string, args ...string) ([]byte, erro
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Dir = dir
 	hideWindow(cmd)
-	return cmd.Output()
+	out, err := cmd.Output()
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+		// The CLI explains a failure on stderr ("Session not found: ...").
+		err = fmt.Errorf("%w: %s", err, firstLine(ee.Stderr))
+	}
+	return out, err
+}
+
+// sessionGone reports whether a failed pull means the cloud session no longer
+// exists (measured 2026-11-17: exit 1, "Session not found: <id>" on stderr).
+func sessionGone(out []byte, runErr error) bool {
+	const msg = "Session not found"
+	return strings.Contains(string(out), msg) || (runErr != nil && strings.Contains(runErr.Error(), msg))
 }
 
 // PullOne pulls one cloud session, checks the cost guard, records the state
@@ -336,6 +357,10 @@ func (r *Runner) PullOne(ctx context.Context, cloudID string) error {
 		e = &Entry{}
 		st.Sessions[cloudID] = e
 	}
+	if perr != nil && sessionGone(out, runErr) {
+		e.Gone, e.LastError, e.FailedAt = true, "session not found", now
+		return st.Save(r.StatePath)
+	}
 	if perr != nil {
 		e.LastError, e.FailedAt = perr.Error(), now
 		st.LastError = perr.Error()
@@ -352,6 +377,14 @@ func (r *Runner) PullOne(ctx context.Context, cloudID string) error {
 	*e = Entry{SessionID: res.SessionID, Path: newPath, PulledAt: now, LastUsage: last}
 	st.LastError = ""
 	if err := st.Save(r.StatePath); err != nil {
+		return err
+	}
+	// The file watcher saw the transcript while the CLI wrote it, before this
+	// mapping existed, and the parser skipped it then. Moving its modified
+	// time now gives the watcher a second event, and the file is read as the
+	// cloud session (measured 2026-11-17: without it a pull stayed unread
+	// until the next app start).
+	if err := os.Chtimes(newPath, now, now); err != nil {
 		return err
 	}
 	if old.SessionID != "" && old.SessionID != res.SessionID {
@@ -398,45 +431,15 @@ func (r *Runner) Tick(ctx context.Context, list []string) (string, error) {
 // Errors that do not stop the loop are recorded in the state file and passed
 // to onErr.
 func (r *Runner) Loop(ctx context.Context, onErr func(error)) error {
-	roots := r.Roots
-	if roots == nil {
-		roots = DesktopDataRoots
-	}
-	var org string
-	var orgAt time.Time
-	report := func(err error) {
-		if st, lerr := LoadState(r.StatePath); lerr == nil {
-			st.LastError = err.Error()
-			st.Save(r.StatePath)
-		}
-		if onErr != nil {
-			onErr(err)
-		}
-	}
 	t := time.NewTicker(tickEvery)
 	defer t.Stop()
 	for {
-		now := r.Now()
-		if org == "" || now.Sub(orgAt) >= orgEvery {
-			out, _ := r.Run(ctx, r.Exe, r.PullDir, "auth", "status")
-			o, err := ParseAuthOrg(out)
-			if err != nil {
-				report(err)
-			} else {
-				org, orgAt = o, now
-			}
+		err := r.Step(ctx)
+		if errors.Is(err, ErrCost) || errors.Is(err, ErrDisabled) {
+			return err
 		}
-		if org != "" {
-			list, err := SessionList(roots(), org)
-			if err == nil {
-				_, err = r.Tick(ctx, list)
-			}
-			if errors.Is(err, ErrCost) || errors.Is(err, ErrDisabled) {
-				return err
-			}
-			if err != nil {
-				report(err)
-			}
+		if err != nil && onErr != nil {
+			onErr(err)
 		}
 		select {
 		case <-ctx.Done():
@@ -444,4 +447,81 @@ func (r *Runner) Loop(ctx context.Context, onErr func(error)) error {
 		case <-t.C:
 		}
 	}
+}
+
+// Step is one pass of the loop: refresh the signed-in org when due, read the
+// session list, and run at most one pull. An error other than ErrCost and
+// ErrDisabled is recorded in the state file, where the screen reads it.
+func (r *Runner) Step(ctx context.Context) error {
+	roots := r.Roots
+	if roots == nil {
+		roots = DesktopDataRoots
+	}
+	now := r.Now()
+	if r.org == "" || now.Sub(r.orgAt) >= orgEvery {
+		out, _ := r.Run(ctx, r.Exe, r.PullDir, "auth", "status")
+		o, err := ParseAuthOrg(out)
+		if err != nil {
+			recordError(r.StatePath, err)
+			return err
+		}
+		r.org, r.orgAt = o, now
+	}
+	list, err := SessionList(roots(), r.org)
+	if err == nil {
+		_, err = r.Tick(ctx, list)
+	}
+	if err != nil && !errors.Is(err, ErrCost) && !errors.Is(err, ErrDisabled) {
+		recordError(r.StatePath, err)
+	}
+	return err
+}
+
+// recordError stores a runner-wide error for the screen.
+func recordError(statePath string, err error) {
+	if st, lerr := LoadState(statePath); lerr == nil {
+		st.LastError = err.Error()
+		st.Save(statePath)
+	}
+}
+
+// Status is what the screen shows about the pull: OK when the last pass was
+// good, otherwise the reason it is not measured.
+type Status struct {
+	OK     bool
+	Reason string
+}
+
+// ReadStatus reads the state file for the screen.
+func ReadStatus(statePath string) Status {
+	st, err := LoadState(statePath)
+	if err != nil {
+		return Status{Reason: err.Error()}
+	}
+	if st.Disabled != "" {
+		return Status{Reason: "pulling stopped because a pull cost tokens (" + st.Disabled + "); switch it off and on to start again"}
+	}
+	if st.LastError != "" {
+		return Status{Reason: strings.TrimPrefix(st.LastError, "cloudpull: ")}
+	}
+	for _, e := range st.Sessions {
+		if e != nil && e.Path != "" {
+			return Status{OK: true}
+		}
+	}
+	return Status{Reason: "no cloud session copied yet"}
+}
+
+// ClearDisabled lifts a cost-guard stop and a runner-wide error, for when the
+// switch goes off: switching on again starts clean.
+func ClearDisabled(statePath string) error {
+	st, err := LoadState(statePath)
+	if err != nil {
+		return err
+	}
+	if st.Disabled == "" && st.LastError == "" {
+		return nil
+	}
+	st.Disabled, st.LastError = "", ""
+	return st.Save(statePath)
 }

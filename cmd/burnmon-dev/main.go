@@ -31,6 +31,7 @@ import (
 	"burnmon/internal/history"
 	"burnmon/internal/historyadmin"
 	"burnmon/internal/live"
+	"burnmon/internal/pricing"
 	"burnmon/internal/scan"
 	"burnmon/internal/snapshot"
 	"burnmon/internal/store"
@@ -149,6 +150,14 @@ func main() {
 		st: st, cfg: cfg, loadedCfg: cfgFile, initialCollectDone: make(chan struct{}), started: progStart,
 	}
 	a.cache.Store = st
+	a.cloudCfgPath = cfgFile
+	if a.cloudCfgPath == "" {
+		a.cloudCfgPath = filepath.Join(dataDir, "burnmon.json")
+	}
+	// A uicheck run is a test window: it never starts the CLI.
+	if !uicheckActive() {
+		a.startCloudPull()
+	}
 	a.perf.startPerfLog()
 	a.startSampling()
 	a.startSnapshotWriter(st)
@@ -301,11 +310,32 @@ func bindDev(e devBindEnv) {
 	}); err != nil {
 		log.Println("could not bind bdevSetToast:", err)
 	}
+
+	// bdevSetCloudPull saves the switch "Read Cowork (Cloud) sessions"
+	// (cloud_pull in the shared burnmon.json). The supervisor of either app
+	// sees it within 30 seconds.
+	if err := w.Bind("bdevSetCloudPull", func(on bool) error {
+		err := pricing.WriteConfigKey(a.cloudCfgPath, "cloud_pull", on)
+		if err != nil {
+			log.Println("bdevSetCloudPull:", err)
+			return err
+		}
+		a.mu.Lock()
+		a.cfg.CloudPull = on
+		a.mu.Unlock()
+		// The strip's marker follows the switch now, not at the next minute.
+		go a.refreshVendorStrip(st)
+		return nil
+	}); err != nil {
+		log.Println("could not bind bdevSetCloudPull:", err)
+	}
 	// bdevSections (B2): the part switches per mode, the overall scrollbar flag, and the
 	// newest snapshot reading. bdevSetSections saves one change from the page
 	// (Plain Mode, the scrollbar flag, or one part switch). Both read and write files only.
 	if err := w.Bind("bdevSections", func() sectionsPayload {
-		return sectionsPayloadWith(setDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
+		p := sectionsPayloadWith(setDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
+		p.CloudPull = pricing.ReadCloudPull(a.cloudCfgPath)
+		return p
 	}); err != nil {
 		log.Println("could not bind bdevSections:", err)
 	}

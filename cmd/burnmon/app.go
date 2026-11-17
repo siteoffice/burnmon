@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"burnmon/internal/adapter/codex"
+	"burnmon/internal/cloudpull"
 	"burnmon/internal/dataset"
 	"burnmon/internal/ingest"
 	"burnmon/internal/pricing"
@@ -335,6 +336,7 @@ type settingsPayload struct {
 	OutputCostFactor          float64 `json:"outputCostFactor"`
 	CalibratedOn              string  `json:"calibratedOn"`
 	Window                    string  `json:"window"`
+	CloudPull                 bool    `json:"cloudPull"`
 }
 
 // applySettings writes p to burnmon.json (preserving any other keys
@@ -362,44 +364,37 @@ func (a *app) applySettings(p settingsPayload) error {
 		Window:                    p.Window,
 		YourSeat:                  p.YourSeat,
 	}
-	if err := writeConfigKey(a.cfgPath, "subscription", sub); err != nil {
+	if err := pricing.WriteConfigKey(a.cfgPath, "subscription", sub); err != nil {
+		return err
+	}
+	if err := pricing.WriteConfigKey(a.cfgPath, "cloud_pull", p.CloudPull); err != nil {
 		return err
 	}
 
 	a.cfg.Subscription = sub
+	a.cfg.CloudPull = p.CloudPull
 	if p.YourSeat == "Standard" || p.YourSeat == "Premium" {
 		a.seat = p.YourSeat
 	}
 	return nil
 }
 
-// writeConfigKey merges value into the named key of the JSON file at path,
-// leaving any other keys (an unusual Prices override, wsl_scan,
-// extra_sources) exactly as they were. A missing or unreadable existing file
-// is treated as empty, not an error: this is very likely the first time
-// anyone has saved from the window. Written via a .tmp file plus
-// os.Rename, so a crash mid-write never corrupts the real file. Used by the
-// settings dialog (ccSaveSettings, "subscription").
-func writeConfigKey(path, key string, value interface{}) error {
-	raw := map[string]json.RawMessage{}
-	if b, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(b, &raw)
+// cloudPullBlockHTML is the switch "Read Cowork (Cloud) sessions" in the
+// settings overlay, saved with the rest by Save (cloud_pull in burnmon.json).
+func (a *app) cloudPullBlockHTML() string {
+	checked := ""
+	if a.cfg.CloudPull {
+		checked = " checked"
 	}
-	valBytes, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return err
+	var lines strings.Builder
+	for _, l := range cloudpull.SwitchLines {
+		lines.WriteString(`<p style="margin:4px 0 0 26px;color:#9fb4bd;font-size:12px">` + escapeAttr(l) + `</p>`)
 	}
-	raw[key] = valBytes
-
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, out, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return `
+  <div style="margin-top:16px;border-top:1px solid var(--pine-40);padding-top:12px">
+   <label style="flex-direction:row;align-items:center;gap:8px;font-size:13px;color:#fff"><input id="cc_s_cloudPull" type="checkbox"` + checked + `> ` + cloudpull.SwitchLabel + `</label>
+   ` + lines.String() + `
+  </div>`
 }
 
 // escapeAttr is a minimal HTML attribute escape for the couple of text
@@ -649,7 +644,7 @@ func (a *app) settingsModalHTML() string {
     <label>Window<input id="cc_s_window" type="text" value="` + escapeAttr(sub.Window) + `"></label>
    </div>
   </details>
-` + a.historyBlockHTML() + `
+` + a.cloudPullBlockHTML() + a.historyBlockHTML() + `
   <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
    <button id="cc_s_cancel" style="padding:6px 14px;border:1px solid var(--pine-40);border-radius:6px;background:transparent;color:#fff;font:13px 'Inter','Segoe UI',sans-serif;cursor:pointer">Cancel</button>
    <button id="cc_s_save" style="padding:6px 14px;border:1px solid #FFDD32;border-radius:6px;background:transparent;color:#FFDD32;font:13px 'Inter','Segoe UI',sans-serif;cursor:pointer">Save and reload</button>
@@ -692,7 +687,8 @@ func (a *app) settingsModalHTML() string {
       companyConsumptionUSD: num('cc_s_companyUSD'),
       outputCostFactor: num('cc_s_factor'),
       calibratedOn: document.getElementById('cc_s_calibratedOn').value,
-      window: document.getElementById('cc_s_window').value
+      window: document.getElementById('cc_s_window').value,
+      cloudPull: document.getElementById('cc_s_cloudPull').checked
     };
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving…';

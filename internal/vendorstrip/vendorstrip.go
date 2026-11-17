@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"burnmon/internal/cloudpull"
 	"burnmon/internal/pricing"
 	"burnmon/internal/scan"
 	"burnmon/internal/store"
@@ -56,6 +57,17 @@ var cloudLastMeasured = func() (time.Time, bool) {
 	return scan.CloudLastMeasured(scan.CloudDropDirs())
 }
 
+// cloudPullStatus reads the cloud pull runner's state. A var so tests can fix it.
+var cloudPullStatus = func() cloudpull.Status { return cloudpull.ReadStatus(cloudpull.StatePath()) }
+
+// The values of Payload.CloudPull: the Settings switch "Read Cowork (Cloud)
+// sessions" and, when it is on, whether the last pull pass was good.
+const (
+	CloudPullOff    = "off"
+	CloudPullOK     = "ok"
+	CloudPullFailed = "failed"
+)
+
 // cloudNote classifies one period of the Cowork (Cloud) row against the last
 // measured time: a period that starts after it was not measured, a period that
 // holds it is partial.
@@ -83,6 +95,14 @@ type Payload struct {
 	// (Cloud) drop row, for the tooltip on a marked cell. Empty when there is
 	// no drop row, and then no cell carries a note.
 	CloudMeasuredUntil string `json:"cloud_measured_until,omitempty"`
+	// CloudPull is CloudPullOff, CloudPullOK or CloudPullFailed; CloudReason
+	// says why when it failed. The page builds the marker's tooltip from them.
+	CloudPull   string `json:"cloud_pull"`
+	CloudReason string `json:"cloud_reason,omitempty"`
+	// CloudTip is the tooltip of a marked Cowork (Cloud) cell, built here so
+	// burnmon.exe and BurnMon Dev show the same words. Empty when no cell is
+	// marked.
+	CloudTip string `json:"cloud_tip,omitempty"`
 	// CopilotCreditsLeft is refreshed on the same 1-minute cadence as the
 	// rest of this payload (rather than bmLive's 2-second poll, or a fourth
 	// backend call the business-mode card would otherwise need): an
@@ -131,6 +151,17 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 
 	last, haveLast := cloudLastMeasured()
 
+	// With the cloud pull on, the old drop rows no longer decide the marker:
+	// a good pull means plain numbers, a failing one means not measured.
+	pull, reason := CloudPullOff, ""
+	if cfg != nil && cfg.CloudPull {
+		if s := cloudPullStatus(); s.OK {
+			pull = CloudPullOK
+		} else {
+			pull, reason = CloudPullFailed, s.Reason
+		}
+	}
+
 	rows := make([]Row, 0, len(totals))
 	var total Row
 	for _, t := range totals {
@@ -139,7 +170,10 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 			label = t.Agent
 		}
 		r := Row{Agent: t.Agent, AgentLabel: label, Today: t.Today, Week: t.Week, Month: t.Month}
-		if haveLast && t.Agent == "cowork-cloud" {
+		if pull == CloudPullFailed && t.Agent == "cowork-cloud" {
+			r.TodayNote, r.WeekNote, r.MonthNote = NoteNotMeasured, NoteNotMeasured, NoteNotMeasured
+		}
+		if pull == CloudPullOff && haveLast && t.Agent == "cowork-cloud" {
 			r.TodayNote = cloudNote(dayStart(now), last)
 			r.WeekNote = cloudNote(weekStart(now), last)
 			r.MonthNote = cloudNote(monthStart(now), last)
@@ -166,9 +200,18 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 		GeneratedAt: now.UTC().Format(time.RFC3339),
 		Rows:        rows,
 		Total:       total,
+		CloudPull:   pull,
+		CloudReason: reason,
 	}
 	if haveLast {
 		p.CloudMeasuredUntil = last.In(time.Local).Format("2006-01-02 15:04")
+	}
+	switch {
+	case pull == CloudPullFailed:
+		p.CloudTip = "Cowork (Cloud) not measured: " + reason
+	case pull == CloudPullOff && haveLast:
+		p.CloudTip = "measured until " + p.CloudMeasuredUntil + ", later cloud sessions are not measured. Turn on " +
+			cloudpull.SwitchLabel + " in Settings to read them."
 	}
 	if cl, ok := creditsLeftForMonth(st, cfg, now); ok {
 		p.CopilotCreditsLeft = &cl

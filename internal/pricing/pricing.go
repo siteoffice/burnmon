@@ -258,6 +258,12 @@ type Config struct {
 	// on PATH names; BurnMon reads the shim, never starts it. Set it when
 	// neither resolves.
 	ClaudePath string `json:"claude_path,omitempty"`
+
+	// CloudPull is opt-in (default false), the Settings switch "Read Cowork
+	// (Cloud) sessions": when true, BurnMon starts the user's Claude Code CLI
+	// to copy their cloud sessions to this computer (internal\cloudpull). Both
+	// apps re-read it from the file every 30 seconds.
+	CloudPull bool `json:"cloud_pull,omitempty"`
 }
 
 // DefaultClaudeCodeCacheTTLMinutes is the compiled-in cache-lifetime

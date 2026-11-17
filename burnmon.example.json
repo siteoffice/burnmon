@@ -44,6 +44,8 @@
   "foreman_root": "",
   "_comment_agent_view": "agent_view (default false) runs `claude agents --json` every 30 seconds, at most 10 seconds a run, with a hidden window. It is needed for background agents in Waits on you, the agent map, and stop and attach. A change shows after restarting the app that writes the snapshot.",
   "agent_view": false,
+  "_comment_cloud_pull": "cloud_pull (default false) is the switch Read Cowork (Cloud) sessions: BurnMon starts your Claude Code CLI to copy the cloud sessions you start in the Claude app on this computer, for free. Both apps read it every 30 seconds.",
+  "cloud_pull": false,
   "_comment_claude_path": "claude_path is the claude to run for agent_view. Empty (the default) means the first claude on PATH. An npm claude.cmd shim is read as text and the claude.exe it names is started; .ps1 and .bat are refused. A change shows after restarting the app that writes the snapshot.",
   "claude_path": ""
 }

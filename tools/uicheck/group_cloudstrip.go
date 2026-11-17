@@ -17,8 +17,9 @@ func caseD49(hwnd uintptr, args []string) error {
 	const script = `(function(){
   var nowMs = Date.now();
   var until = '2026-11-12 17:43';
+  var tip = 'measured until ' + until + ', later cloud sessions are not measured. Turn on Read Cowork (Cloud) sessions in Settings to read them.';
   var snap = { now: nowMs, hist_gap_ms: 25000, sysmon_history: [], process_groups_now: [], process_groups_history: [],
-    vendor_strip: { generated_at: new Date(nowMs).toISOString(), cloud_measured_until: until, rows: [
+    vendor_strip: { generated_at: new Date(nowMs).toISOString(), cloud_measured_until: until, cloud_pull: 'off', cloud_tip: tip, rows: [
       { agent: 'claude-code', agent_label: 'Claude Code', today: 1200000, week: 2400000, month: 9000000 },
       { agent: 'cowork-cloud', agent_label: 'Cowork (Cloud)', today: 0, week: 0, month: 779500000,
         today_note: 'not_measured', week_note: 'not_measured', month_note: 'partial' }],
@@ -61,7 +62,7 @@ func caseD49(hwnd uintptr, args []string) error {
 	if _, err := screenshot(hwnd, "d49-cloud-strip"); err != nil {
 		return err
 	}
-	tip := "measured until 2026-11-12 17:43, later cloud sessions are not measured"
+	tip := "measured until 2026-11-12 17:43, later cloud sessions are not measured. Turn on Read Cowork (Cloud) sessions in Settings to read them."
 	var errs []string
 	want := func(row string, i int, text, title string) {
 		cells, ok := out[row]

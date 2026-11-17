@@ -12,6 +12,7 @@ var devBindingNames = []string{
 	"bdevSetUITheme",
 	"bdevSetStationTheme",
 	"bdevSetToast",
+	"bdevSetCloudPull",
 	"bdevSections",
 	"bdevSnapshotStamp",
 	"bdevSetSections",

@@ -172,7 +172,9 @@ func TestDueOrder(t *testing.T) {
 	}}
 	list := []string{"session_C", "session_N1", "session_W1", "session_W2", "session_H", "session_N2"}
 	got := Due(t0, list, st)
-	want := []string{"session_N2", "session_N1", "session_H", "session_W2", "session_W1", "session_C"}
+	// Hot first (Wilco, 2026-11-17): an active session never waits behind
+	// the first run's never-pulled ones.
+	want := []string{"session_H", "session_N2", "session_N1", "session_W2", "session_W1", "session_C"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Due = %v, want %v", got, want)
 	}
@@ -244,6 +246,11 @@ func TestPullOneAndCleanup(t *testing.T) {
 	}
 	if exists(first) || exists(filepath.Join(r.ProjectDir, "local-1")) {
 		t.Error("old pull file or folder not deleted")
+	}
+	// The transcript's modified time is moved to the pull time after the state
+	// is saved, so the file watcher reads it again, now mapped.
+	if fi, err := os.Stat(filepath.Join(r.ProjectDir, "local-2.jsonl")); err != nil || !fi.ModTime().Equal(t0) {
+		t.Errorf("new pull file mtime = %v, %v; want %v", fi.ModTime(), err, t0)
 	}
 	st, _ := LoadState(r.StatePath)
 	e := st.Sessions["session_A"]
