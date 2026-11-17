@@ -53,21 +53,6 @@ func CloudDropDirs() []string {
 	return out
 }
 
-// EnsureCloudDropDir creates every drop folder that is missing, so the live
-// watcher can watch them from startup, the user can connect ~/.burnmon to
-// cloud sessions, and the plugin's copy has a folder to land in. The apps
-// call it once at startup; a failure only means drop files are picked up by
-// the next full scan instead of live.
-func EnsureCloudDropDir() error {
-	var first error
-	for _, d := range CloudDropDirs() {
-		if err := os.MkdirAll(d, 0o755); err != nil && first == nil {
-			first = err
-		}
-	}
-	return first
-}
-
 // CloudLastMeasured returns the newest row time over every .jsonl in the given
 // drop folders: the last moment BurnMon measured any Cowork (Cloud) usage. The
 // vendor strip uses it to show "not measured" instead of 0 after the plugin

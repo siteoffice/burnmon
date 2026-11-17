@@ -32,7 +32,7 @@ func TestIsCloudDropPath(t *testing.T) {
 }
 
 // TestDefaultSourcesIncludesCloudDropDir: the exe-adjacent .burnmon\cloud
-// folder joins the Claude sources when it exists, so the full scan, the
+// folder joins the Claude sources when it exists (it is never created), so the full scan, the
 // adapter roots and the live watcher all pick up drop files with no extra
 // wiring in cmd.
 func TestDefaultSourcesIncludesCloudDropDir(t *testing.T) {
@@ -53,11 +53,13 @@ func TestDefaultSourcesIncludesCloudDropDir(t *testing.T) {
 	if has(DefaultSourcesWithOptions(false)) {
 		t.Fatal("drop dir listed before it exists")
 	}
-	if err := EnsureCloudDropDir(); err != nil {
-		t.Fatal(err)
+	// Looking for sources never creates the folder: the plugin is retired, so
+	// BurnMon only reads a folder that already exists (2026-11-17).
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("listing sources created %s (err %v)", dir, err)
 	}
-	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-		t.Fatalf("EnsureCloudDropDir did not create %s", dir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
 	}
 	if !has(DefaultSourcesWithOptions(false)) {
 		t.Fatal("drop dir missing from DefaultSourcesWithOptions after it exists")
@@ -75,11 +77,11 @@ func TestDefaultSourcesIncludesCloudDropDir(t *testing.T) {
 	}
 }
 
-// TestHomeCloudDropDir: the universal BurnMon cloud plugin copies to
+// TestHomeCloudDropDir: the retired BurnMon cloud plugin copied to
 // ~/.burnmon/cloud, the same path on every computer (the copy tool expands
-// "~", measured 2026-10-13). That folder is a second drop folder: created at
-// startup so a user can connect it to cloud sessions, then listed as a source
-// next to the exe-adjacent one. One folder serving both roles is listed once.
+// "~", measured 2026-10-13). That folder is a second drop folder: listed as a
+// source next to the exe-adjacent one when it exists. One folder serving both
+// roles is listed once.
 func TestHomeCloudDropDir(t *testing.T) {
 	root := t.TempDir()
 	exeDir := filepath.Join(root, "app", ".burnmon", "cloud")
@@ -92,12 +94,12 @@ func TestHomeCloudDropDir(t *testing.T) {
 	if got := CloudDropDirs(); len(got) != 2 || got[0] != exeDir || got[1] != homeDir {
 		t.Fatalf("CloudDropDirs = %v, want [%s %s]", got, exeDir, homeDir)
 	}
-	if err := EnsureCloudDropDir(); err != nil {
-		t.Fatal(err)
-	}
 	for _, d := range []string{exeDir, homeDir} {
-		if fi, err := os.Stat(d); err != nil || !fi.IsDir() {
-			t.Fatalf("EnsureCloudDropDir did not create %s", d)
+		if _, err := os.Stat(d); !os.IsNotExist(err) {
+			t.Fatalf("listing the drop folders created %s (err %v)", d, err)
+		}
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
 		}
 	}
 	count := func(d string) int {

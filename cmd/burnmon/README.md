@@ -253,65 +253,14 @@ in `burnmon-dev.exe`. It is off by default, and without it the Cowork (Cloud) ro
 
 ### Cowork in the cloud
 
-New Cowork sessions can run in Anthropic's cloud instead of on your computer. Since 6 October 2026 that is the only
-option for new tasks on Pro and Max, and on Team it is on by default. A cloud session writes no transcript to your
-disk, so BurnMon cannot see it, and your Cowork number comes out too low without any warning. On one Team account on
-2026-10-12, two new sessions in a row ran in the cloud even with "Only on this computer" switched on.
+The `burnmon-cloud` plugin is retired (2026-11-17). Cloud containers no longer hold a transcript for the plugin to read:
+its last delivery was on 2026-11-12. Use Read Cowork (Cloud) sessions above, which copies the same sessions through your
+own Claude Code CLI for free.
 
-**Status: still under investigation.** The plugin below works, but only for a cloud session that has the folder
-`~\.burnmon` connected. Claude does not connect that folder by itself, so today every cloud session needs that step by
-hand (or once per Cowork project), and a session without it is simply not counted, with no warning. That is not
-workable for most people. As of 2026-10-13 we found no local, offline token monitor that counts cloud sessions without
-such a step: the tools that do count them send the numbers through an online service, or need an organization admin to
-set up Cowork's OpenTelemetry export. If you know a better way, please share it: open an issue at
-https://github.com/siteoffice/burnmon/issues.
-
-A partial fix is an optional Claude plugin, `burnmon-cloud`, in `tools\burnmon-cloud`. Inside each cloud session it
-reads that session's own transcript at the end of each turn, when a subagent finishes, and at most every 20 seconds
-while Claude works with tools. It keeps only the usage numbers: time, session and request ids, model and token counts.
-No prompts, no answers, no tool input, no paths. The Claude desktop app then copies that file into `~\.burnmon\cloud`
-in your home folder (on Windows `C:\Users\<you>\.burnmon\cloud`), and BurnMon shows it as its own row, Cowork (Cloud).
-The copy is a plugin hook, so it costs no model tokens. BurnMon itself still makes no network call. The copy goes
-through the Claude app, into a folder you connected to the session.
-
-Set it up once:
-
-1. Start BurnMon once. It creates `~\.burnmon\cloud`.
-2. Install the plugin "BurnMon cloud" from the ZND Skills Public marketplace (GitHub `zero-nonsense-dev/znd-skills-public`).
-   Updates arrive through the marketplace. Without the marketplace, build it yourself (`tools\burnmon-cloud\build.ps1`,
-   no arguments) and add `dist\burnmon-cloud-<version>.plugin` under Customize > Plugins > Add.
-3. Connect the folder `~\.burnmon` to the cloud sessions you want counted. In a Cowork project, add it once to the
-   project's folders.
-
-The plugin also copies `diag.log` into the same folder: one line per hook run, with the time, the hook name and a row
-count, and no content. BurnMon ignores it. It is there to find out where a delivery delay comes from. BurnMon still
-reads `.burnmon\cloud` next to `burnmon.exe` too, for a plugin built for one computer (`build.ps1 -Target <that
-folder>\latest.jsonl`).
-
-A cloud subagent's requests are stored as their own session, `agent-<id>`, with the main session as its parent, and
-the copy folded under the parent is removed so its tokens count once. The rows are built in
-`internal\adapter\claude\cloud.go`, the folded copy is removed in `UpsertEvents` in `internal\store\store.go`, and the
-tests are in `cloud_subagent_test.go`.
-
-What it does not cover:
-
-- A session without `~\.burnmon` connected is not counted. Neither is a session started on the web or on your phone:
-  those cannot reach your computer.
-- The numbers are a lower bound. The transcript misses some side calls. Measured on one session at seven turn
-  boundaries: 0 to 7 percent of the main model's tokens (mostly cache reads), and every small Haiku call, which cost
-  under 1 percent of that session.
-- Cloud data arrives late, and BurnMon Dev says how late. That includes the work of a subagent (an agent Claude starts
-  for research or parallel tasks), which arrives when the subagent finishes. The plugin writes within about 20 seconds;
-  the copy to your laptop took about 3 minutes in one measurement on 2026-11-02. BurnMon Dev shows `cloud data N min old`
-  next to every Cowork (Cloud) session, or `cloud data under a minute old`. Older versions deliver it with your next
-  message, or about 4 minutes after the turn when the session goes idle. BurnMon shows each request at the minute it was
-  actually spent, so the chart fills in afterwards.
-- The usage file has no tool calls, so BurnMon Dev's Station cannot tell a cloud session that works from one that waits
-  for you. It shows the session as Thinking until 3 minutes after its newest request, then as Waiting on you.
-- Two cloud sessions running at the same time copy to the same file and overwrite each other there. BurnMon still keeps
-  the rows of both: it adds rows and never removes them.
-- The plugin reads Claude's transcript format, which Anthropic documents as internal and liable to change between
-  versions. If BurnMon stops showing Cowork (Cloud) after a Claude update, that is the first place to look.
+BurnMon no longer creates `~\.burnmon\cloud`, and no longer asks you to install the plugin. If that folder exists from
+before, BurnMon still reads it, so the cloud usage it delivered from 2026-10-12 to 2026-11-12 stays in your totals, and
+the Cowork (Cloud) row says "measured until" that date while the pull is off. The plugin source is kept in
+`_archive\burnmon-cloud`.
 
 ### WSL
 
@@ -365,7 +314,7 @@ Default transcript roots, by OS:
 | Codex | `%USERPROFILE%\.codex\sessions` (or `$CODEX_HOME`) | `~/.codex/sessions` | `~/.codex/sessions` |
 | Hermes | `%HERMES_HOME%\state.db`, else `%LOCALAPPDATA%\Hermes\state.db` | `$HERMES_HOME/state.db`, else `~/.hermes/state.db` | `$HERMES_HOME/state.db`, else `~/.hermes/state.db` |
 | GitHub Copilot CLI | `%COPILOT_HOME%\session-store.db`, else `~/.copilot/session-store.db` | `~/.copilot/session-store.db` | `~/.copilot/session-store.db` |
-| Cowork in the cloud | `~\.burnmon\cloud` and `.burnmon\cloud` next to `burnmon.exe` (both created at start, filled by the `burnmon-cloud` plugin) | same | same |
+| Cowork in the cloud | `~\.burnmon\cloud` and `.burnmon\cloud` next to `burnmon.exe`, read only if they exist (no longer created; the `burnmon-cloud` plugin is retired) | same | same |
 | GitHub Copilot in VS Code | wherever `github.copilot.chat.otel.outfile` points, matched by `copilot_vscode_otel_file` | same (no default: the setting has none on any OS, you always choose the path) | same |
 
 WSL distro detection (the registry-based scan for Claude Code and Codex transcripts inside a WSL distribution) only

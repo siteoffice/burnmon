@@ -134,11 +134,6 @@ func main() {
 		openInBrowser(bridge.url())
 	}
 
-	// Cowork (Cloud): the exe-adjacent .burnmon/cloud drop folder, created
-	// before the roots are resolved so the live watcher watches it.
-	if err := scan.EnsureCloudDropDir(); err != nil {
-		log.Println("cloud drop folder:", err)
-	}
 	nativeClaudeRoots := scan.DefaultSourcesWithOptions(false)
 	nativeCodexRoots := codex.NativeSources()
 	a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)

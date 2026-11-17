@@ -815,12 +815,6 @@ func startBackgroundIngest(a *app, st *store.Store, w winbind.Window) {
 	startCopilotVSCPoll(a, st)
 
 	pushLoadingStep(w, "Starting watchers", 30)
-	// Cowork (Cloud): make sure the exe-adjacent .burnmon\cloud drop folder
-	// exists before the roots are resolved, so the live watcher watches it
-	// from the start (02_roadmap\2026-10-12_cowork_cloud_bucket_spec.md).
-	if err := scan.EnsureCloudDropDir(); err != nil {
-		log.Println("cloud drop folder:", err)
-	}
 	nativeClaudeRoots := scan.DefaultSourcesWithOptions(false)
 	nativeCodexRoots := codex.NativeSources()
 	a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
