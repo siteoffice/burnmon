@@ -122,12 +122,15 @@ func TestReadmeWhichAppSectionAndCloudWording(t *testing.T) {
 			}
 		}
 	}
-	const approved = "The plugin writes within about 20 seconds; the copy to your laptop took about 3 minutes in one measurement on 2026-11-02."
-	if !strings.Contains(appFlat, approved) {
-		t.Errorf("cmd\\burnmon\\README.md lacks %q", approved)
+	// The burnmon-cloud plugin is retired (2026-11-17): the README says so and
+	// no longer sends the reader to install or connect it.
+	if !strings.Contains(appFlat, "The `burnmon-cloud` plugin is retired (2026-11-17).") {
+		t.Error("cmd\\burnmon\\README.md does not say the burnmon-cloud plugin is retired")
 	}
-	if !strings.Contains(appFlat, "cloud data N min old") {
-		t.Error("cmd\\burnmon\\README.md does not name the label `cloud data N min old`")
+	for _, gone := range []string{"Set it up once:", "Install the plugin \"BurnMon cloud\"", "Start BurnMon once. It creates"} {
+		if strings.Contains(appFlat, gone) {
+			t.Errorf("cmd\\burnmon\\README.md still tells the reader to %q", gone)
+		}
 	}
 	if !strings.Contains(app, "\n### macOS and Linux\n") {
 		t.Error("macOS heading is gone")
