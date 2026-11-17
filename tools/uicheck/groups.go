@@ -50,7 +50,7 @@ var devGroups = []devGroup{
 	// The typed section and pane sizes (2026-11-15), each variant sets its own size.
 	{"pct", []devCase{{"d47", caseD47}}, sizedStart(1280, 900)},
 	// Wilco's second look (2026-11-15): panes stay in their boxes at 1600 and 2560 wide.
-	{"panes", []devCase{{"d48", caseD48}}, sizedStart(1600, 900)},
+	{"panes", []devCase{{"d48", caseD48}, {"d51", caseD51}}, sizedStart(1600, 900)},
 	{"map", []devCase{
 		{"d30", caseD30}, {"d31", caseD31}, {"d35", caseD35}, {"d38", caseD38},
 		{"d40", caseD40},
