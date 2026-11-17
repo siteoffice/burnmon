@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"burnmon/internal/pricing"
+	"burnmon/internal/scan"
 	"burnmon/internal/store"
 )
 
@@ -33,6 +34,36 @@ type Row struct {
 	Today      int64  `json:"today"`
 	Week       int64  `json:"week"`
 	Month      int64  `json:"month"`
+	// TodayNote, WeekNote and MonthNote mark a Cowork (Cloud) cell whose number
+	// cannot be trusted: NoteNotMeasured (the period starts after the last
+	// measured cloud row, so 0 means unknown) or NotePartial (the period holds
+	// the last measured row, later cloud sessions are missing). The Total row
+	// carries NotePartial where the cloud cell does. Empty on every other cell.
+	TodayNote string `json:"today_note,omitempty"`
+	WeekNote  string `json:"week_note,omitempty"`
+	MonthNote string `json:"month_note,omitempty"`
+}
+
+// The values of Row's note fields.
+const (
+	NoteNotMeasured = "not_measured"
+	NotePartial     = "partial"
+)
+
+// cloudLastMeasured returns the newest Cowork (Cloud) drop row time. A var so
+// tests can fix it without drop folders.
+var cloudLastMeasured = func() (time.Time, bool) {
+	return scan.CloudLastMeasured(scan.CloudDropDirs())
+}
+
+// cloudNote classifies one period of the Cowork (Cloud) row against the last
+// measured time: a period that starts after it was not measured, a period that
+// holds it is partial.
+func cloudNote(periodStart, last time.Time) string {
+	if periodStart.After(last) {
+		return NoteNotMeasured
+	}
+	return NotePartial
 }
 
 // CreditsLeft is C3/K3's account-wide "credits left" figure, present only
@@ -48,6 +79,10 @@ type Payload struct {
 	GeneratedAt string `json:"generated_at"`
 	Rows        []Row  `json:"rows"`
 	Total       Row    `json:"total"`
+	// CloudMeasuredUntil is the local date and time of the newest Cowork
+	// (Cloud) drop row, for the tooltip on a marked cell. Empty when there is
+	// no drop row, and then no cell carries a note.
+	CloudMeasuredUntil string `json:"cloud_measured_until,omitempty"`
 	// CopilotCreditsLeft is refreshed on the same 1-minute cadence as the
 	// rest of this payload (rather than bmLive's 2-second poll, or a fourth
 	// backend call the business-mode card would otherwise need): an
@@ -94,6 +129,8 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 		return Payload{}, err
 	}
 
+	last, haveLast := cloudLastMeasured()
+
 	rows := make([]Row, 0, len(totals))
 	var total Row
 	for _, t := range totals {
@@ -101,7 +138,22 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 		if label == "" {
 			label = t.Agent
 		}
-		rows = append(rows, Row{Agent: t.Agent, AgentLabel: label, Today: t.Today, Week: t.Week, Month: t.Month})
+		r := Row{Agent: t.Agent, AgentLabel: label, Today: t.Today, Week: t.Week, Month: t.Month}
+		if haveLast && t.Agent == "cowork-cloud" {
+			r.TodayNote = cloudNote(dayStart(now), last)
+			r.WeekNote = cloudNote(weekStart(now), last)
+			r.MonthNote = cloudNote(monthStart(now), last)
+			if r.TodayNote == NotePartial {
+				total.TodayNote = NotePartial
+			}
+			if r.WeekNote == NotePartial {
+				total.WeekNote = NotePartial
+			}
+			if r.MonthNote == NotePartial {
+				total.MonthNote = NotePartial
+			}
+		}
+		rows = append(rows, r)
 		total.Today += t.Today
 		total.Week += t.Week
 		total.Month += t.Month
@@ -114,6 +166,9 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 		GeneratedAt: now.UTC().Format(time.RFC3339),
 		Rows:        rows,
 		Total:       total,
+	}
+	if haveLast {
+		p.CloudMeasuredUntil = last.In(time.Local).Format("2006-01-02 15:04")
 	}
 	if cl, ok := creditsLeftForMonth(st, cfg, now); ok {
 		p.CopilotCreditsLeft = &cl

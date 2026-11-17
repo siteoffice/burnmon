@@ -1579,17 +1579,36 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     return totalRowEls;
   }
 
+  // vendorCell sets one strip cell. note is the Go side's mark for a Cowork
+  // (Cloud) cell: 'not_measured' prints the words instead of a 0 that would
+  // mean "unknown", 'partial' keeps the number and adds a +. Both carry the
+  // "measured until" tooltip; an unmarked cell is the plain tween it was.
+  function vendorCell(el, val, note, until){
+    if(note === 'not_measured'){
+      if(el._animRAF) cancelAnimationFrame(el._animRAF);
+      el._animVal = null;
+      el.textContent = 'not measured';
+    } else if(note === 'partial'){
+      animateNumber(el, val, TWEEN_MS, function(n){ return fmtTokens(n) + '+'; });
+    } else {
+      animateNumber(el, val, TWEEN_MS, fmtTokens);
+    }
+    if(note){ el.title = 'measured until ' + until + ', later cloud sessions are not measured'; }
+    else { el.removeAttribute('title'); }
+  }
+
   function renderVendorStrip(payload){
     var tbody = document.getElementById('vendorStrip');
     if(!tbody) return;
     var rows = (payload && payload.rows) || [];
+    var until = (payload && payload.cloud_measured_until) || '';
     var seen = {};
     rows.forEach(function(r){
       seen[r.agent] = true;
       var rec = ensureVendorRow(tbody, r.agent, r.agent_label);
-      animateNumber(rec.today, r.today, TWEEN_MS, fmtTokens);
-      animateNumber(rec.week, r.week, TWEEN_MS, fmtTokens);
-      animateNumber(rec.month, r.month, TWEEN_MS, fmtTokens);
+      vendorCell(rec.today, r.today, r.today_note, until);
+      vendorCell(rec.week, r.week, r.week_note, until);
+      vendorCell(rec.month, r.month, r.month_note, until);
     });
     Object.keys(vendorRowEls).forEach(function(agent){
       if(seen[agent]) return;
@@ -1601,9 +1620,10 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     // sync with the same tween the per-vendor rows use.
     var total = ensureTotalRow(tbody);
     tbody.insertBefore(total.tr, tbody.firstChild);
-    animateNumber(total.today, (payload && payload.total && payload.total.today) || 0, TWEEN_MS, fmtTokens);
-    animateNumber(total.week, (payload && payload.total && payload.total.week) || 0, TWEEN_MS, fmtTokens);
-    animateNumber(total.month, (payload && payload.total && payload.total.month) || 0, TWEEN_MS, fmtTokens);
+    var tot = (payload && payload.total) || {};
+    vendorCell(total.today, tot.today || 0, tot.today_note, until);
+    vendorCell(total.week, tot.week || 0, tot.week_note, until);
+    vendorCell(total.month, tot.month || 0, tot.month_note, until);
   }
 
   // renderHeadline, section 4: the one exception to the shared 600ms tween

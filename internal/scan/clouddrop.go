@@ -1,9 +1,12 @@
 package scan
 
 import (
+	"bufio"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // cloudDropDir returns the folder the BurnMon cloud plugin delivers its
@@ -63,6 +66,51 @@ func EnsureCloudDropDir() error {
 		}
 	}
 	return first
+}
+
+// CloudLastMeasured returns the newest row time over every .jsonl in the given
+// drop folders: the last moment BurnMon measured any Cowork (Cloud) usage. The
+// vendor strip uses it to show "not measured" instead of 0 after the plugin
+// stops delivering. false when no folder holds a row with a valid time. Only
+// rows from the BurnMon cloud plugin count, as in the adapter's drop reader.
+func CloudLastMeasured(dirs []string) (time.Time, bool) {
+	var newest time.Time
+	for _, d := range dirs {
+		files, err := filepath.Glob(filepath.Join(d, "*.jsonl"))
+		if err != nil {
+			continue
+		}
+		for _, p := range files {
+			if t, ok := newestRowTime(p); ok && t.After(newest) {
+				newest = t
+			}
+		}
+	}
+	return newest, !newest.IsZero()
+}
+
+func newestRowTime(path string) (time.Time, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return time.Time{}, false
+	}
+	defer f.Close()
+	var newest time.Time
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	for sc.Scan() {
+		var r struct {
+			Source string `json:"source"`
+			TS     string `json:"ts"`
+		}
+		if json.Unmarshal(sc.Bytes(), &r) != nil || !strings.HasPrefix(r.Source, "burnmon-cloud") {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339Nano, r.TS); err == nil && t.After(newest) {
+			newest = t.UTC()
+		}
+	}
+	return newest, !newest.IsZero()
 }
 
 // IsCloudDropPath reports whether path is a Cowork (Cloud) drop file: a
