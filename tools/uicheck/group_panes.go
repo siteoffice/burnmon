@@ -238,3 +238,131 @@ func caseD48(hwnd uintptr, args []string) error {
 	}
 	return nil
 }
+
+// panes/d51: the Activity month labels (2026-11-17). Standard, every part on,
+// the frozen example plus 120 days of activity through fake mode, the default
+// sizes. Per size it proves at least one month name is inside the visible box
+// of #activityPanel (the panel rect cut by every clipping ancestor), and prints
+// the boxes it measured: the panel, .heatmapwrap, the grid and the month line.
+// d48 cannot see this bug: it flags text that is cut by an edge, and a month
+// line that lies wholly below the edge is not cut, it is gone.
+
+const d51ReadJS = `(function(){
+  var panel = document.getElementById('activityPanel'), row = document.getElementById('heatMonthsRow');
+  var grid = document.getElementById('heatmapGrid'), wrap = grid ? grid.parentElement : null;
+  if(!panel || !row) return { labels: 0, visible: 0, visibleBottom: 0, monthsBottom: 0, wrapH: 0, gridH: 0, panelH: 0, win: window.innerWidth };
+  var pr = panel.getBoundingClientRect();
+  var clips = function(e){ return getComputedStyle(e).overflowY !== 'visible'; };
+  var labels = 0, visible = 0;
+  Array.prototype.forEach.call(row.children, function(el){
+    if(!(el.textContent || '').trim()) return;
+    labels++;
+    var r = el.getBoundingClientRect(), edge = pr.bottom, a;
+    for(a = el.parentElement; a; a = a.parentElement){
+      if(clips(a)) edge = Math.min(edge, a.getBoundingClientRect().bottom);
+      if(a === panel) break;
+    }
+    if(r.height > 0 && r.top >= pr.top && r.bottom <= edge + 1 && r.left < pr.right) visible++;
+  });
+  var vb = pr.bottom, b;
+  for(b = row.parentElement; b; b = b.parentElement){
+    if(clips(b)) vb = Math.min(vb, b.getBoundingClientRect().bottom);
+    if(b === panel) break;
+  }
+  return { labels: labels, visible: visible, monthsCut: row.classList.contains('pct-cut'), visibleBottom: Math.round(vb), monthsBottom: Math.round(row.getBoundingClientRect().bottom),
+    wrapH: wrap ? Math.round(wrap.clientHeight) : 0, gridH: grid ? Math.round(grid.scrollHeight) : 0, panelH: Math.round(pr.height), win: window.innerWidth };
+})()`
+
+type d51Read struct {
+	Labels        int     `json:"labels"`
+	Visible       int     `json:"visible"`
+	MonthsCut     bool    `json:"monthsCut"`
+	VisibleBottom float64 `json:"visibleBottom"`
+	MonthsBottom  float64 `json:"monthsBottom"`
+	WrapH         float64 `json:"wrapH"`
+	GridH         float64 `json:"gridH"`
+	PanelH        float64 `json:"panelH"`
+	Win           float64 `json:"win"`
+}
+
+// d51Check returns the problems in one read; pure, so it can be tested.
+func d51Check(r d51Read) []string {
+	if r.Labels == 0 {
+		return []string{"no month label has text (the Activity grid did not render)"}
+	}
+	if r.Visible == 0 {
+		why := ""
+		if r.MonthsCut {
+			why = ", the month line is hidden by the fit pass (class pct-cut)"
+		}
+		return []string{fmt.Sprintf("no month label is inside the visible panel: month line ends %.0f px, visible panel bottom %.0f px (wrap %.0f px tall, grid %.0f px)%s",
+			r.MonthsBottom, r.VisibleBottom, r.WrapH, r.GridH, why)}
+	}
+	return nil
+}
+
+func caseD51(hwnd uintptr, args []string) error {
+	snap, err := d34Snapshot(false)
+	if err != nil {
+		return err
+	}
+	var fails []string
+	ran := 0
+	// 1280x900 and 1500x900 fit a laptop at 200 percent scale, where the larger
+	// sizes are skipped (a skipped size is not a pass).
+	// 1500x650 is the shortest window that leaves the panel any room for a grid:
+	// the panel is 44 px at 600 and below, with 2 px of room, where nothing fits.
+	sizes := [][2]int32{{1500, 650}, {1280, 900}, {1500, 900}, {1600, 900}, {1920, 1080}, {2560, 1440}}
+	// UICHECK_D51_SIZE=1500x900,1500x700 checks those sizes instead (Wilco's window).
+	if v := os.Getenv("UICHECK_D51_SIZE"); v != "" {
+		sizes = nil
+		for _, one := range strings.Split(v, ",") {
+			var w, h int32
+			if n, _ := fmt.Sscanf(one, "%dx%d", &w, &h); n == 2 {
+				sizes = append(sizes, [2]int32{w, h})
+			}
+		}
+	}
+	for _, sz := range sizes {
+		tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
+		if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
+			return err
+		}
+		if windowCapped {
+			fmt.Printf("uicheck: d51: SKIPPED %s, this screen is too small\n", tag)
+			continue
+		}
+		ran++
+		time.Sleep(500 * time.Millisecond)
+		payload, err := d41Payload(d29Opts{Status: "ok", Snap: snap, Scrollbar: true}, nil)
+		if err != nil {
+			return err
+		}
+		if _, err := d34Apply(payload, snap); err != nil {
+			return err
+		}
+		if _, err := evalRaw(d48RichJS); err != nil {
+			return fmt.Errorf("d51 %s: paint: %w", tag, err)
+		}
+		time.Sleep(1800 * time.Millisecond)
+		var r d51Read
+		if err := evalInto(d51ReadJS, &r); err != nil {
+			return fmt.Errorf("d51 %s: read: %w", tag, err)
+		}
+		fmt.Printf("uicheck: d51: %s: %d month labels, %d visible; panel %.0f px, wrap %.0f px, grid %.0f px, month line ends %.0f px, visible bottom %.0f px\n",
+			tag, r.Labels, r.Visible, r.PanelH, r.WrapH, r.GridH, r.MonthsBottom, r.VisibleBottom)
+		if _, err := screenshot(hwnd, "d51-"+tag); err != nil {
+			return err
+		}
+		for _, b := range d51Check(r) {
+			fails = append(fails, tag+": "+b)
+		}
+	}
+	if len(fails) > 0 {
+		return fmt.Errorf("d51: %d problem(s):\n%s", len(fails), strings.Join(fails, "\n"))
+	}
+	if ran == 0 {
+		fmt.Println("uicheck: d51: no size fit this screen, nothing checked")
+	}
+	return nil
+}

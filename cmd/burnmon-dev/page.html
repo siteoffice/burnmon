@@ -3661,7 +3661,10 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     pctWholeWatch();
   }
   // A chart scales to its box: the Activity grid (fixed 9 px cells, seven
-  // rows and the month line) shrinks as a whole when its box is shorter.
+  // rows and the month line) shrinks as a whole when its box is shorter. The
+  // floor is 0.1, not 0.3: at 0.3 a box under about 26 px of room kept a grid
+  // taller than the box, and the panel cut the month line off the bottom
+  // (uicheck panes/d51, measured 2026-11-17 at 1500x650: 13 px of room).
   var PCT_CHARTS = ['#heatmapGrid'];
   function pctFitCharts(){
     PCT_CHARTS.forEach(function(s){
@@ -3671,7 +3674,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
       var c = getComputedStyle(wrap), room = wrap.clientHeight - fitPx(c.paddingTop) - fitPx(c.paddingBottom);
       var need = g.scrollHeight, scale = need > 0 ? Math.min(1, room / need) : 1;
       g.style.transformOrigin = 'top left';
-      g.style.transform = scale < 0.999 ? 'scale(' + Math.max(0.3, scale).toFixed(3) + ')' : '';
+      g.style.transform = scale < 0.999 ? 'scale(' + Math.max(0.1, scale).toFixed(3) + ')' : '';
     });
   }
   // A list that scrolls in its own box shows whole rows: at its top, its
