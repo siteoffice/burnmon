@@ -97,15 +97,13 @@ func runLampWindow(o lampOpts) int {
 	if !o.demo {
 		set = readLampSettings(setDir)
 	}
-	// The clear backdrop: the WebView2 default background is fully transparent
-	// (the runtime reads this variable when it makes the controller) and the
-	// host window gets DWM glass below. Built, not seen. The card backdrop sets
-	// neither and the page draws a panel.
-	glass := false
-	if k, v, ok := lampBackdropEnv(set.Backdrop); ok {
-		_ = os.Setenv(k, v)
-		glass = true
-	}
+	// The window always starts clear: the WebView2 default background is fully
+	// transparent (the runtime reads this variable when it makes the controller)
+	// and the host window gets DWM glass below. Built, not seen. lamp_backdrop
+	// card is the page's own panel, so a change needs no restart.
+	k, v := lampStartBackdrop()
+	_ = os.Setenv(k, v)
+	glass := true
 	startW, startH := lampWindowSize(set)
 
 	prev, _, _ := procGetForegroundWindow.Call()
@@ -479,24 +477,20 @@ func (p *lampPlacer) drag(done func()) {
 	procGetWindowRectLmp.Call(p.hwnd, uintptr(unsafe.Pointer(&rc)))
 	offX, offY := px-int(rc.Left), py-int(rc.Top)
 	for lampButtonDown() {
-		if x, y, ok := lampCursor(); ok {
+		if cx, cy, ok := lampCursor(); ok {
+			x, y := lampDragPos(cx, cy, offX, offY)
 			procSetWindowPosWS.Call(p.hwnd, lampTopmost,
-				uintptr(uint32(int32(x-offX))), uintptr(uint32(int32(y-offY))), 0, 0,
+				uintptr(uint32(int32(x))), uintptr(uint32(int32(y))), 0, 0,
 				uintptr(lampSwpNoActivate|lampSwpNoSize))
 		}
 		time.Sleep(16 * time.Millisecond)
 	}
 	if x, y, ok := lampCursor(); ok {
-		mons := lampMonitors()
-		name, pos := lampSnap(mons, x, y, int(rc.Right-rc.Left))
-		if m, ok := lampPrimary(mons); ok && m.Name == name {
-			name = ""
-		}
-		if err := saveDevConfigKey(p.setDir, "lamp_monitor", name); err != nil {
-			log.Println("lamp: could not save lamp_monitor:", err)
-		}
-		if err := saveDevConfigKey(p.setDir, "lamp_position", pos); err != nil {
-			log.Println("lamp: could not save lamp_position:", err)
+		_, _, err := lampDrop(lampMonitors(), x, y, int(rc.Right-rc.Left), func(key string, v any) error {
+			return saveDevConfigKey(p.setDir, key, v)
+		})
+		if err != nil {
+			log.Println("lamp: could not save the drop:", err)
 		}
 	}
 	p.mu.Lock()

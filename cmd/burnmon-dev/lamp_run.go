@@ -237,6 +237,34 @@ func lampBackdropEnv(backdrop string) (key, value string, ok bool) {
 
 const lampBackdropVar = "WEBVIEW2_DEFAULT_BACKGROUND_COLOR"
 
+// lampStartBackdrop is the background the Windows lamp window always starts
+// with: fully transparent. The WebView2 background is fixed when the window is
+// made, so the lamp starts clear whatever lamp_backdrop says and the page draws
+// the card panel itself. A change of lamp_backdrop then needs no restart.
+func lampStartBackdrop() (key, value string) {
+	return lampBackdropVar, "00000000"
+}
+
+// lampDragPos is where the window goes while the button is down: the pointer
+// minus the offset the pointer had inside the window when the drag began.
+func lampDragPos(px, py, offX, offY int) (x, y int) {
+	return px - offX, py - offY
+}
+
+// lampDrop is the drop of a dragged lamp at the pointer (px, py): it snaps to a
+// monitor and a place, and saves lamp_monitor (the primary monitor as the empty
+// name, so the lamp follows it) and lamp_position through save. Both keys are
+// tried even when the first save fails; every failure comes back.
+func lampDrop(mons []lampMonitor, px, py, w int, save func(key string, v any) error) (name, pos string, err error) {
+	name, pos = lampSnap(mons, px, py, w)
+	if m, ok := lampPrimary(mons); ok && m.Name == name {
+		name = ""
+	}
+	e1 := save("lamp_monitor", name)
+	e2 := save("lamp_position", pos)
+	return name, pos, errors.Join(e1, e2)
+}
+
 // lampWithoutEnv is base without the entries for key. It does not change base.
 func lampWithoutEnv(base []string, key string) []string {
 	out := make([]string, 0, len(base))

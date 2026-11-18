@@ -749,6 +749,79 @@ func TestLampSnap(t *testing.T) {
 	}
 }
 
+// While the button is down the window keeps the offset the pointer had inside it.
+func TestLampDragPos(t *testing.T) {
+	if x, y := lampDragPos(1000, 400, 120, 15); x != 880 || y != 385 {
+		t.Errorf("lampDragPos = %d,%d want 880,385", x, y)
+	}
+	if x, y := lampDragPos(-50, -20, 10, 5); x != -60 || y != -25 {
+		t.Errorf("a pointer on another monitor to the left: %d,%d want -60,-25", x, y)
+	}
+}
+
+// A drop snaps, saves the primary monitor as the empty name, saves both keys,
+// tries the second key even when the first fails, and reports every failure.
+func TestLampDrop(t *testing.T) {
+	type save struct {
+		key string
+		v   any
+	}
+	var got []save
+	ok := func(key string, v any) error { got = append(got, save{key, v}); return nil }
+
+	name, pos, err := lampDrop(lampTestMons, 3500, 100, 400, ok)
+	if err != nil || name != "DISPLAY3" || pos != "top-left" {
+		t.Fatalf("drop on DISPLAY3: %q %q %v", name, pos, err)
+	}
+	if len(got) != 2 || got[0] != (save{"lamp_monitor", "DISPLAY3"}) || got[1] != (save{"lamp_position", "top-left"}) {
+		t.Errorf("saves on DISPLAY3: %v", got)
+	}
+
+	got = nil
+	name, pos, err = lampDrop(lampTestMons, 3300, 500, 300, ok)
+	if err != nil || name != "" || pos != "top-right" {
+		t.Fatalf("drop on the primary: %q %q %v", name, pos, err)
+	}
+	if len(got) != 2 || got[0] != (save{"lamp_monitor", ""}) || got[1] != (save{"lamp_position", "top-right"}) {
+		t.Errorf("the primary must be saved as the empty name: %v", got)
+	}
+
+	got = nil
+	failFirst := errors.New("first")
+	fail := func(key string, v any) error {
+		got = append(got, save{key, v})
+		if key == "lamp_monitor" {
+			return failFirst
+		}
+		return nil
+	}
+	_, _, err = lampDrop(lampTestMons, 100, 500, 300, fail)
+	if !errors.Is(err, failFirst) || len(got) != 2 {
+		t.Errorf("a failed first save: err %v, saves %v", err, got)
+	}
+
+	got = nil
+	if name, pos, err = lampDrop(nil, 5, 5, 300, ok); err != nil || name != "" || pos != "top-center" || len(got) != 2 {
+		t.Errorf("no monitor list: %q %q %v %v", name, pos, err, got)
+	}
+}
+
+// The window starts clear whatever lamp_backdrop says, so a change of the
+// setting needs no restart: card is the page's panel only.
+func TestLampStartBackdrop(t *testing.T) {
+	k, v := lampStartBackdrop()
+	if k != "WEBVIEW2_DEFAULT_BACKGROUND_COLOR" || v != "00000000" {
+		t.Errorf("lampStartBackdrop = %q %q", k, v)
+	}
+	src, err := os.ReadFile("lamp_window_windows.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(src), "lampBackdropEnv(set.Backdrop)") || !strings.Contains(string(src), "lampStartBackdrop()") {
+		t.Error("the Windows window must start clear through lampStartBackdrop, not by the backdrop setting")
+	}
+}
+
 // The pointer in the page's CSS pixels: relative to the window, divided by the
 // window's scale, and it may be far outside the window.
 func TestLampPointerCSS(t *testing.T) {
