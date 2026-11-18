@@ -87,6 +87,10 @@ func main() {
 		os.Exit(runExport(os.Args[2:]))
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "lamp" {
+		os.Exit(runLamp(os.Args[2:]))
+		return
+	}
 
 	dataDir := appDataDir()
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {

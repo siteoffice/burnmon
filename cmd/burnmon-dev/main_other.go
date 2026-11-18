@@ -12,6 +12,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "lamp" {
+		os.Exit(lampUnsupported(os.Stderr))
+	}
 	fmt.Fprintf(os.Stderr, "burnmon-dev has no Linux build yet; this is a %s/%s build with nothing to run.\n", runtime.GOOS, runtime.GOARCH)
 	os.Exit(1)
 }

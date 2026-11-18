@@ -18,9 +18,12 @@ func firstLine(t *testing.T, name string) string {
 
 func TestDevBuildTags(t *testing.T) {
 	want := map[string]string{
-		"main.go":        "//go:build windows || (darwin && cgo)",
-		"main_other.go":  "//go:build !windows && !darwin",
-		"windowstate.go": "//go:build windows",
+		"main.go":                "//go:build windows || (darwin && cgo)",
+		"lamp_run.go":            "//go:build windows || (darwin && cgo)",
+		"lamp_window_windows.go": "//go:build windows",
+		"lamp_window_darwin.go":  "//go:build darwin && cgo",
+		"main_other.go":          "//go:build !windows && !darwin",
+		"windowstate.go":         "//go:build windows",
 	}
 	for _, f := range []string{
 		"agentmap_view.go", "agentview_line.go", "app.go", "burn_report.go",
@@ -74,5 +77,13 @@ func TestDarwinToastsAreLazy(t *testing.T) {
 func TestNoCgoDarwinMessage(t *testing.T) {
 	if !strings.Contains(readText(t, "main_nocgo_darwin.go"), "needs a cgo build on a Mac") {
 		t.Error("main_nocgo_darwin.go must say it needs a cgo build on a Mac")
+	}
+}
+
+// lamp_unsupported.go carries no build tag, so the sentence and the exit code
+// of the non-Windows lamp are tested on Windows too.
+func TestLampUnsupportedHasNoBuildTag(t *testing.T) {
+	if got := firstLine(t, "lamp_unsupported.go"); strings.HasPrefix(got, "//go:build") {
+		t.Errorf("lamp_unsupported.go has a build tag: %q", got)
 	}
 }
