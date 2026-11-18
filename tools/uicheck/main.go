@@ -64,7 +64,11 @@ func main() {
 	var hwnd uintptr
 	if !selfManaged[name] {
 		var err error
-		if isCentreCheck(name) {
+		if isLampCheck(name) {
+			// The lamp window (burnmon-dev.exe lamp, eval port 9336) is driven
+			// by eval only: no window handle, no cursor, no keys.
+			currentEvalAddr = evalAddrLamp
+		} else if isCentreCheck(name) {
 			// controlcentre.exe: its own window and dev eval port (9335). Each case
 			// sets its own window size.
 			currentEvalAddr = evalAddrCentre

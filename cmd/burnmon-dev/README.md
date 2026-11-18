@@ -1,3 +1,5 @@
+![Glim, the lamp of BurnMon Dev, plays a 24 second demo loop](../../assets/glim/glim-demo.svg)
+
 # BurnMon Dev
 
 `burnmon-dev.exe` (`v0.4.0-beta.4`) is the developer window of BurnMon. It shows what running AI
@@ -348,6 +350,56 @@ that count.
   takes their place. A scrolling list (Waits, Outcomes, Sessions, Turn ticker, To Do) ends on a whole row at its
   top. The Activity grid scales to its box. A pane never gets less than its header plus one row: each percent box
   shows that minimum on hover and turns amber below it.
+
+## The lamp
+
+The lamp is Glim, a small character in a thin pill at the top edge of the primary screen. It tells you
+when an agent waits on you, so you can leave the BurnMon Dev window closed. It reads the snapshot file
+that BurnMon or BurnMon Dev writes (`docs\snapshot_schema.md`) and nothing else. It never takes the
+focus when it shows, resizes or changes mood. Hover it to open the pill: tokens a minute, the cost of the
+last 5 minutes and up to 6 waiting items; a click on Glim shows another line; a double click opens
+BurnMon Dev.
+
+- **Switch it on.** The gear dialog has a group Lamp: show the lamp, position (top left, top centre, top
+  right), language (English or Dutch), one-liners on or off, include Foreman items. With `lamp_enabled`
+  true, BurnMon Dev starts `burnmon-dev.exe lamp` as a child of its own and stops it when you switch it
+  off or close BurnMon Dev. The keys are `lamp_enabled`, `lamp_position`, `lamp_language`, `lamp_lines`,
+  `lamp_foreman_items` and `lamp_burn_floor_tpm` in `burnmon-dev.json`. You can also start it by hand:
+  `burnmon-dev.exe lamp`.
+- **See it without any agents.** `burnmon-dev.exe lamp --demo` plays a fixed 24 second loop of made-up
+  states with the word "demo" on the pill. It reads no snapshot and no setting and writes no BurnMon file.
+- **The pictures.** `burnmon-dev.exe lamp --poses <folder>` writes the eight poses, a sheet and the demo
+  picture at the top of this file (`glim-demo.svg`) into an existing folder; `assets\glim\` holds that
+  output. `burnmon-dev.exe lamp --card <folder>` writes the card of the running week as two SVG files
+  (add `--demo` for made-up numbers, `--card-window` for a window with a Save PNG button).
+- **The ledger.** While it runs, the lamp keeps `lamp-waits.json` in the data folder: per day the seconds
+  agents waited on you, the longest wait, how many distinct items waited and how long the lamp was on.
+  It holds no id, title, project or path. It is the one file the lamp writes; the demo writes none.
+
+### Do this, Glim does that
+
+| You see | Glim is | Because |
+|---|---|---|
+| A thin dim line | off | neither BurnMon nor BurnMon Dev has written a fresh snapshot |
+| A thin amber line | asleep | no agent runs |
+| A thin amber line | working | agents run and nothing waits on you |
+| Pill, "N your turn" | your turn | an agent waits for your answer |
+| Pill, "N blocked" | blocked | an agent is stuck and needs a human |
+| Pill with a wall of bricks | bored | the longest wait is 10 minutes or more; one brick a minute, at most 30 |
+| Pill, "N tokens a minute" | sweating | the burn is at least 3 times the usual and above the floor |
+| Pill, "N ready to close" | done | something finished in the last 10 minutes |
+
+### Suggest a line
+
+Glim's sentences are in `internal\lamp\lines.go`, in English and Dutch. Send a new one with the issue
+form Glim line (`.github\ISSUE_TEMPLATE\glim-line.yml`): pick the mood, write the English line (at most
+60 characters, no exclamation mark, no em dash), the Dutch line if you can, and the name for the credit.
+A line you send in is MIT and is credited in `internal\lamp\CREDITS.md`. The name Glim and its drawing
+are not part of that: see `LICENSE-ASSETS.md`.
+
+Limits: Windows only in this version (a macOS build with cgo has a lamp panel, built and not seen on a
+Mac; on macOS without cgo and on Linux the lamp prints a sentence and exits); it needs BurnMon or BurnMon Dev running to have a snapshot to read; it has no control (no
+approve, no stop, no answer to an agent).
 
 ## 6. Limits and known issues
 

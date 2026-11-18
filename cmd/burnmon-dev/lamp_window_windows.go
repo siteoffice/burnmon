@@ -21,6 +21,7 @@ import (
 	"burnmon/internal/instance"
 	"burnmon/internal/lamp"
 	"burnmon/internal/snapshot"
+	"burnmon/internal/winbind"
 )
 
 var (
@@ -118,6 +119,14 @@ func runLampWindow(o lampOpts) int {
 	bind("lampOpenDev", func() { lampOpenDev() })
 	bind("lampSize", func(cssW, cssH int) {
 		pl.setSize(cssW, cssH)
+	})
+	// Dev-only: tools\uicheck drives the lamp page through this channel. It
+	// opens only when BURNMON_LAMP_UICHECK is set; a release never sets it.
+	winbind.StartUICheckServer(w, winbind.UICheckOptions{
+		Env:     "BURNMON_LAMP_UICHECK",
+		Addr:    "127.0.0.1:9336",
+		Binding: "lampUICheckResult",
+		Page:    func() string { return lampHTML },
 	})
 	w.SetHtml(lampHTML)
 

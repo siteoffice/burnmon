@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -176,6 +177,102 @@ func TestReadmeEightSections(t *testing.T) {
 				continue
 			}
 			pos = i
+		}
+	}
+}
+
+// firstHeadingAt returns the byte offset of the first line that starts with #.
+func firstHeadingAt(doc string) int {
+	if strings.HasPrefix(doc, "#") {
+		return 0
+	}
+	return strings.Index(doc, "\n#")
+}
+
+// TestReadmesShowTheLampDemoOnTop is the doc guard for lane scope X1: both
+// READMEs show glim-demo.svg above their first heading, by a relative link
+// that resolves to the file the lamp's --poses writes.
+func TestReadmesShowTheLampDemoOnTop(t *testing.T) {
+	for _, tc := range []struct{ file, link string }{
+		{"../../README.md", "assets/glim/glim-demo.svg"},
+		{"../burnmon-dev/README.md", "../../assets/glim/glim-demo.svg"},
+	} {
+		doc := readDoc(t, tc.file)
+		at := strings.Index(doc, "]("+tc.link+")")
+		if at < 0 {
+			t.Errorf("%s has no relative image link to %s", tc.file, tc.link)
+			continue
+		}
+		if !strings.HasPrefix(doc, "![") {
+			t.Errorf("%s does not start with the demo picture", tc.file)
+		}
+		if h := firstHeadingAt(doc); h < 0 || at > h {
+			t.Errorf("%s: the demo picture is not above the first heading", tc.file)
+		}
+		if _, err := os.Stat(filepath.Join(filepath.Dir(tc.file), tc.link)); err != nil {
+			t.Errorf("%s links %s, which does not resolve: %v", tc.file, tc.link, err)
+		}
+	}
+}
+
+// TestReadmeLampSection is the doc guard for spec item 7 and X6.
+func TestReadmeLampSection(t *testing.T) {
+	root := readDoc(t, "../../README.md")
+	table, _, _ := strings.Cut(root, "## Screenshots")
+	if !strings.Contains(table, "burnmon-dev.exe lamp") || !strings.Contains(flat(table), "`cmd\\burnmon-dev\\README.md`") {
+		t.Error("README.md: Which app do I open? has no row for the lamp")
+	}
+	dev := readDoc(t, "../burnmon-dev/README.md")
+	_, sec, ok := strings.Cut(dev, "\n## The lamp\n")
+	if !ok {
+		t.Fatal("cmd\\burnmon-dev\\README.md has no '## The lamp' section")
+	}
+	if i := strings.Index(sec, "\n## "); i >= 0 {
+		sec = sec[:i]
+	}
+	sec = flat(sec)
+	for _, want := range []string{
+		"burnmon-dev.exe lamp --demo", "lamp_enabled", "Do this, Glim does that",
+		"Windows only", "needs BurnMon or BurnMon Dev running", "no control",
+		"### Suggest a line", "glim-line.yml", "internal\\lamp\\CREDITS.md",
+		"lamp --poses", "lamp --card", "lamp-waits.json",
+	} {
+		if !strings.Contains(sec, want) {
+			t.Errorf("the lamp section lacks %q", want)
+		}
+	}
+	for _, mood := range []string{"asleep", "working", "your turn", "blocked", "bored", "sweating", "done"} {
+		if !strings.Contains(sec, mood) {
+			t.Errorf("the table Do this, Glim does that lacks the mood %q", mood)
+		}
+	}
+}
+
+// TestLampLicenceCreditsAndIssueForm guards LICENSE-ASSETS.md, CREDITS.md and
+// the glim-line issue form (X6), and that none of them has an em dash.
+func TestLampLicenceCreditsAndIssueForm(t *testing.T) {
+	lic := flat(readDoc(t, "../../LICENSE-ASSETS.md"))
+	for _, want := range []string{
+		"MIT", "Glim", "Copyright 2026 Wilco de Tree, ZeroNonsense.dev", "all rights reserved",
+		"assets\\glim\\", "internal\\lamp", "own name", "internal\\lamp\\CREDITS.md",
+	} {
+		if !strings.Contains(lic, want) {
+			t.Errorf("LICENSE-ASSETS.md lacks %q", want)
+		}
+	}
+	credits := flat(readDoc(t, "../../internal/lamp/CREDITS.md"))
+	if !strings.Contains(credits, "MIT") || !strings.Contains(credits, "credit") {
+		t.Error("internal\\lamp\\CREDITS.md does not say MIT and how a credit is given")
+	}
+	form := readDoc(t, "../../.github/ISSUE_TEMPLATE/glim-line.yml")
+	for _, want := range []string{"id: mood", "id: line_en", "id: line_nl", "id: credit", "labels: [\"glim-line\"]"} {
+		if !strings.Contains(form, want) {
+			t.Errorf("glim-line.yml lacks %q", want)
+		}
+	}
+	for name, doc := range map[string]string{"LICENSE-ASSETS.md": lic, "CREDITS.md": credits, "glim-line.yml": form} {
+		if strings.ContainsRune(doc, 0x2014) {
+			t.Errorf("%s contains an em dash", name)
 		}
 	}
 }

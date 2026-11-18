@@ -308,3 +308,33 @@ func TestCardPageBindingsAndText(t *testing.T) {
 		t.Error("the card page has no Save PNG button")
 	}
 }
+
+// The lamp's dev eval channel for tools\uicheck (lane scope X5, plan C16)
+// starts only with its own environment variable, on its own port beside 9333,
+// 9334 and 9335, and only winbind.StartUICheckServer may read the variable.
+func TestLampUICheckServerIsDevOnly(t *testing.T) {
+	b, err := os.ReadFile("lamp_window_windows.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var code []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "//") {
+			code = append(code, l)
+		}
+	}
+	src := strings.Join(code, "\n")
+	for _, want := range []string{`"BURNMON_LAMP_UICHECK"`, `"127.0.0.1:9336"`, `"lampUICheckResult"`, "winbind.StartUICheckServer"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("lamp_window_windows.go does not contain %s", want)
+		}
+	}
+	for _, other := range []string{"9333", "9334", "9335"} {
+		if strings.Contains(src, other) {
+			t.Errorf("lamp_window_windows.go uses port %s, which belongs to another exe", other)
+		}
+	}
+	if strings.Count(src, "BURNMON_LAMP_UICHECK") != 1 {
+		t.Error("the variable must appear once, in the options of the eval server")
+	}
+}

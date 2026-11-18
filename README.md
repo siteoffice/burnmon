@@ -1,3 +1,5 @@
+![Glim, the lamp of BurnMon Dev, plays a 24 second demo loop](assets/glim/glim-demo.svg)
+
 # BurnMon
 
 BurnMon is a vendor-agnostic token and cost monitor for your own AI coding sessions. It reads the
@@ -15,6 +17,7 @@ from v0.2 onward. Repo: [siteoffice/burnmon](https://github.com/siteoffice/burnm
 |---|---|---|
 | **BurnMon** (`burnmon.exe`) | history: tokens and cost per day, vendor, project and client, with its live Now page for a glance | `cmd\burnmon\README.md` |
 | **BurnMon Dev** (`burnmon-dev.exe`) | the last 30 minutes and acting now: Waits on you and the agent map | `cmd\burnmon-dev\README.md` |
+| **The lamp** (`burnmon-dev.exe lamp`) | a thin pill at the top edge of the screen that shows when an agent waits on you, and nothing else (Windows; the Mac panel is built, not seen) | `cmd\burnmon-dev\README.md` |
 | **Control Centre** (`controlcentre.exe`) | steering: the units, files, plan and boards under one root, gate decisions, Stop, comments, a Git overview | `cmd\controlcentre\README.md` |
 | **CLI** (`burnmon-cli.exe`) | scripts, exports and merges | `cmd\burnmon-cli\README.md` |
 

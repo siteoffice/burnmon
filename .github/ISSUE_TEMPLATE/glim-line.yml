@@ -1,0 +1,38 @@
+name: Glim line
+description: Suggest one sentence for Glim, the lamp
+labels: ["glim-line"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One line per issue. At most 60 characters, no exclamation mark, no em dash. A line you send in is MIT and is credited in internal/lamp/CREDITS.md.
+  - type: dropdown
+    id: mood
+    attributes:
+      label: Mood
+      options:
+        - asleep
+        - working
+        - your turn
+        - blocked
+        - bored
+        - sweating
+        - done
+    validations:
+      required: true
+  - type: input
+    id: line_en
+    attributes:
+      label: English line
+    validations:
+      required: true
+  - type: input
+    id: line_nl
+    attributes:
+      label: Dutch line
+      description: Optional. The lamp needs both languages before a line is added.
+  - type: input
+    id: credit
+    attributes:
+      label: Name for the credit
+      description: Optional. Leave empty to stay out of CREDITS.md.
