@@ -84,3 +84,4 @@ the click on the menu item in a window, the Mac cgo file.
 
 ## Turn log
 
+T1: done; commit 51ae0d2; measured: go vet 0, go test exit 0 with 50 packages ok and no FAIL, build.ps1 0, linux and darwin build and vet 0 (CGO off), uicheck-lamp.ps1 0 with both window tests green on this laptop (both red on the unrepaired code); open: the click on the menu item and the Mac cgo file are built, not seen; the parent-gone test cannot tell the window loop from the 3 s exit (the menu test can). No earlier test was edited. Stash: none.
