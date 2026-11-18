@@ -1,7 +1,7 @@
 # Credits for the lines of Glim
 
 The sentences Glim says live in `internal\lamp\lines.go`. A line that somebody else wrote is MIT,
-like the code, and is credited here by the name the sender gave. Glim's name and drawing are not
+like the code, and is credited here by the name the sender gave. Glim's drawing is not
 part of that: see `LICENSE-ASSETS.md`.
 
 How a credit is given: when a line is merged, the maintainer adds one row to the table below with
