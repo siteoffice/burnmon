@@ -4,10 +4,12 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -76,6 +78,104 @@ func TestLampChildStartShowsWindow(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("no visible lamp window of process %d within 3 s: %s", pid, last)
+}
+
+// Start flash fix T1, finding 12: from the moment the lamp process exists, no
+// reading may find its window visible and not cloaked while it still has a
+// caption or a thick frame, or while it is not yet at the top edge of its
+// monitor. The window is read every 20 ms for 3 seconds through execLampStart,
+// the start BurnMon Dev uses, and it must still end up as
+// TestLampChildStartShowsWindow expects it. Opt-in like the tests above.
+func TestLampStartNeverShowsAPlainWindow(t *testing.T) {
+	if os.Getenv("BURNMON_LAMP_WINDOW_TEST") != "1" {
+		t.Skip("opens a real window; set BURNMON_LAMP_WINDOW_TEST=1")
+	}
+	exe, _ := lampTestExe(t)
+	p, err := execLampStart(exe, []string{"lamp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		p.Stop()
+		<-p.Done()
+		// The web view's own processes outlive the lamp for a moment and hold
+		// files of the profile folder; the folder is removed when the test ends.
+		time.Sleep(3 * time.Second)
+	}()
+	pid := uint32(p.(*execLampProc).cmd.Process.Pid)
+
+	var bad []string
+	var finished bool
+	start := time.Now()
+	for deadline := start.Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if msg := lampPlainWindowReading(pid); msg != "" && len(bad) < 5 {
+			bad = append(bad, fmt.Sprintf("%v: %s", time.Since(start).Round(time.Millisecond), msg))
+		}
+		if !finished && lampWindowProblem(pid) == "" {
+			finished = true
+		}
+	}
+	if len(bad) > 0 {
+		t.Errorf("the plain window was on screen (first readings): %v", bad)
+	}
+	if !finished {
+		t.Errorf("no visible lamp window of process %d within 3 s: %s", pid, lampWindowProblem(pid))
+	}
+}
+
+// lampPlainWindowReading is "" when no top-level window of pid is on screen as
+// a plain window: visible, not cloaked, and with a caption or a thick frame or
+// away from the top edge of its monitor. Otherwise it says what shows.
+func lampPlainWindowReading(pid uint32) string {
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	getPid := user32.NewProc("GetWindowThreadProcessId")
+	isVisible := user32.NewProc("IsWindowVisible")
+	getRect := user32.NewProc("GetWindowRect")
+	getStyle := user32.NewProc("GetWindowLongPtrW")
+	monFromRect := user32.NewProc("MonitorFromRect")
+	monInfo := user32.NewProc("GetMonitorInfoW")
+	dwm := windows.NewLazySystemDLL("dwmapi.dll").NewProc("DwmGetWindowAttribute")
+
+	var msgs []string
+	cb := windows.NewCallback(func(h, _ uintptr) uintptr {
+		var owner uint32
+		getPid.Call(h, uintptr(unsafe.Pointer(&owner)))
+		if owner != pid {
+			return 1
+		}
+		if vis, _, _ := isVisible.Call(h); vis == 0 {
+			return 1
+		}
+		var cloaked uint32
+		if r, _, _ := dwm.Call(h, 14, uintptr(unsafe.Pointer(&cloaked)), 4); r == 0 && cloaked != 0 {
+			return 1
+		}
+		style, _, _ := getStyle.Call(h, ^uintptr(15)) // GWL_STYLE
+		const wsCaption, wsThickFrame = 0xC00000, 0x40000
+		var rc struct{ left, top, right, bottom int32 }
+		getRect.Call(h, uintptr(unsafe.Pointer(&rc)))
+		switch {
+		case style&wsCaption == wsCaption:
+			msgs = append(msgs, fmt.Sprintf("visible with a caption, style %#x, rect %v", style, rc))
+		case style&wsThickFrame != 0:
+			msgs = append(msgs, fmt.Sprintf("visible with a thick frame, style %#x, rect %v", style, rc))
+		default:
+			mon, _, _ := monFromRect.Call(uintptr(unsafe.Pointer(&rc)), 2) // MONITOR_DEFAULTTONEAREST
+			mi := struct {
+				size    uint32
+				monitor struct{ left, top, right, bottom int32 }
+				work    struct{ left, top, right, bottom int32 }
+				flags   uint32
+				device  [32]uint16
+			}{size: 104}
+			if r, _, _ := monInfo.Call(mon, uintptr(unsafe.Pointer(&mi))); r != 0 && rc.top != mi.monitor.top {
+				msgs = append(msgs, fmt.Sprintf("visible away from the top edge, rect %v, monitor top %d", rc, mi.monitor.top))
+			}
+		}
+		return 1
+	})
+	user32.NewProc("EnumWindows").Call(cb, 0)
+	return strings.Join(msgs, "; ")
 }
 
 // lampTestExe builds burnmon-dev.exe into dir and points the data folders of

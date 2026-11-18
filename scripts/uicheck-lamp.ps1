@@ -27,8 +27,9 @@ if ($targetChecks -contains "lamp") {
     $env:BURNMON_LAMP_WINDOW_TEST = "1"
     try {
         # Also: Close the lamp from the menu ends the process within 5 s, and a
-        # lamp whose BURNMON_LAMP_PARENT is gone ends within 6 s.
-        go test ./cmd/burnmon-dev -run "TestLampChildStartShowsWindow|TestLampCloseFromMenuEndsTheProcess|TestLampEndsWhenItsParentIsGone" -count=1 -v
+        # lamp whose BURNMON_LAMP_PARENT is gone ends within 6 s. And the window
+        # read every 20 ms for 3 s never shows with a title bar or off the top edge.
+        go test ./cmd/burnmon-dev -run "TestLampChildStartShowsWindow|TestLampStartNeverShowsAPlainWindow|TestLampCloseFromMenuEndsTheProcess|TestLampEndsWhenItsParentIsGone" -count=1 -v
         $childExit = $LASTEXITCODE
     } finally {
         $env:BURNMON_LAMP_WINDOW_TEST = $null

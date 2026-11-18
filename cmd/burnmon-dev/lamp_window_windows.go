@@ -107,12 +107,17 @@ func runLampWindow(o lampOpts) int {
 	startW, startH := lampWindowSize(set)
 
 	prev, _, _ := procGetForegroundWindow.Call()
+	// go-webview2 makes a titled window and shows it before the lamp can style
+	// it. The hook cloaks that window as it is created; it is uncloaked below,
+	// after the style and the place are set.
+	unhook := lampHookCloak()
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath: profile,
 		WindowOptions: webview2.WindowOptions{
 			Title: "Glim", Width: uint(startW), Height: uint(startH), IconId: 1,
 		},
 	})
+	unhook()
 	if w == nil {
 		log.Println("lamp: could not create the WebView2 window; the lamp needs the WebView2 runtime")
 		return 1
@@ -139,6 +144,11 @@ func runLampWindow(o lampOpts) int {
 	}
 	pl := &lampPlacer{hwnd: hwnd, setDir: setDir, demo: o.demo, w: startW, h: startH}
 	pl.place()
+	// Styled and placed: now the window may reach the screen. Not activated.
+	lampSetCloak(hwnd, false)
+	if lampCloaked != 0 && lampCloaked != hwnd {
+		lampSetCloak(lampCloaked, false) // never leave a window the hook cloaked by mistake
+	}
 
 	bind := func(n string, f interface{}) {
 		if err := w.Bind(n, f); err != nil {
