@@ -337,3 +337,5 @@ uicheck). Red after two rounds: a HAND line.
 
 ## Turn log
 
+T1: done; commit fa798b1; measured: vet 0, test 1694 pass 1 fail (TestDocCheckPassesOnRepoDocs, made by run 2's STATUS line, T2 repairs it, C1) 7 skip, build 0, linux build and vet 1 (cloudpull.go), darwin build and vet 0, guard holds; reviewer: 13 findings folded into the T2 row, C17 to C20 and "Gaps"; no stash; open: nothing
+
