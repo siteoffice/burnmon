@@ -88,3 +88,40 @@ func TestLampUnsupportedHasNoBuildTag(t *testing.T) {
 		t.Errorf("lamp_unsupported.go has a build tag: %q", got)
 	}
 }
+
+// lamp_window_darwin.go is the Mac lamp (lane scope X4). It cannot run in
+// this test binary, so the test reads its text: the borderless style, the
+// level above normal windows, every Space, never the key window, and no call
+// that takes the focus.
+func TestLampDarwinWindowFileStylesThePanel(t *testing.T) {
+	s := readText(t, "lamp_window_darwin.go")
+	for _, want := range []string{
+		`import "C"`,
+		"NSWindowStyleMaskBorderless",
+		"NSStatusWindowLevel",
+		"NSWindowCollectionBehaviorCanJoinAllSpaces",
+		"canBecomeKeyWindow",
+		"canBecomeMainWindow",
+		"NSApplicationActivationPolicyAccessory",
+		"orderFrontRegardless",
+		"visibleFrame",
+		"syscall.Flock",
+		"lampMutexName",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("lamp_window_darwin.go lacks %q", want)
+		}
+	}
+	for _, banned := range []string{"makeKeyAndOrderFront", "makeKeyWindow", "activateIgnoringOtherApps", "instance.Acquire("} {
+		if strings.Contains(s, banned) {
+			t.Errorf("lamp_window_darwin.go contains %q", banned)
+		}
+	}
+}
+
+// lamp_run.go is shared with Windows, so it holds no platform call.
+func TestLampRunHoldsNoSyscall(t *testing.T) {
+	if strings.Contains(readText(t, "lamp_run.go"), "syscall") {
+		t.Error("lamp_run.go uses syscall")
+	}
+}

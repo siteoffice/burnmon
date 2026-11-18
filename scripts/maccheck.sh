@@ -163,6 +163,17 @@ stop_burnmon_dev() {
   fi
 }
 
+# The Mac lamp (lane scope X4): start the demo, give it 3 seconds, check that
+# it still runs, stop it. It does not tell whether the panel looks right.
+lamp_demo() {
+  "$OUT/burnmon-dev" lamp --demo > "$OUT/lamp-demo.log" 2>&1 &
+  local pid=$! rc=0
+  sleep 3
+  kill -0 "$pid" 2>/dev/null || rc=1
+  kill "$pid" 2>/dev/null || true
+  return "$rc"
+}
+
 step build-burnmon env CGO_ENABLED=1 go build -o "$OUT/burnmon" ./cmd/burnmon
 step build-burnmon-dev env CGO_ENABLED=1 go build -o "$OUT/burnmon-dev" ./cmd/burnmon-dev
 step build-burnmon-cli env CGO_ENABLED=1 go build -o "$OUT/burnmon-cli" ./cmd/burnmon-cli
@@ -179,6 +190,7 @@ window_step start-burnmon-dev start_burnmon_dev
 for c in $DOM_CASES; do window_step "uicheck-$c" run_uicheck "$c"; done
 window_step screenshot-burnmon-dev screencapture -x "$OUT/burnmon-dev.png"
 window_step stop-burnmon-dev stop_burnmon_dev
+window_step lamp-demo lamp_demo
 
 {
   printf '\n'

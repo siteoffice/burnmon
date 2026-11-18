@@ -61,6 +61,7 @@ func TestMaccheckScriptShape(t *testing.T) {
 		"Root picker",
 		"Git page",
 		"Groundwork",
+		"lamp --demo",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("script lacks %q", want)
@@ -90,7 +91,7 @@ func TestMaccheckScriptShape(t *testing.T) {
 		t.Errorf("step names = %v, want %v", steps, wantSteps)
 	}
 	wantWin := []string{"start-burnmon", "probe-burnmon", "screenshot-burnmon", "stop-burnmon",
-		"start-burnmon-dev", "uicheck-$c", "screenshot-burnmon-dev", "stop-burnmon-dev"}
+		"start-burnmon-dev", "uicheck-$c", "screenshot-burnmon-dev", "stop-burnmon-dev", "lamp-demo"}
 	if !reflect.DeepEqual(windowSteps, wantWin) {
 		t.Errorf("window_step names = %v, want %v", windowSteps, wantWin)
 	}
