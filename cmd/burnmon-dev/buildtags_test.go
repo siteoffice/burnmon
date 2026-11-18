@@ -119,6 +119,41 @@ func TestLampDarwinWindowFileStylesThePanel(t *testing.T) {
 	}
 }
 
+// The Mac lamp of the finish lane (T10): the same page, a clear panel with a
+// clear web view background (documented calls only), the card look as an
+// opaque panel, idle seconds from the event source, sizes from lamp_size and
+// rows, the window area bound, and the end when the parent BurnMon Dev is gone.
+func TestLampDarwinWindowFileFinishLane(t *testing.T) {
+	s := readText(t, "lamp_window_darwin.go")
+	for _, want := range []string{
+		"setOpaque:NO",
+		"clearColor",
+		"underPageBackgroundColor",
+		"@available(macOS 12.0",
+		"setHasShadow:NO",
+		"setOpaque:YES",
+		"CGEventSourceSecondsSinceLastEventType",
+		"lampIdle = lampIdleSeconds",
+		"lampWindowSize(",
+		"lampBackdropEnv(",
+		`bind("lampArea"`,
+		"lampParentGone(",
+		"syscall.Kill(pid, 0)",
+		"lampParentEnv",
+		"-framework WebKit",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("lamp_window_darwin.go lacks %q", want)
+		}
+	}
+	// Documented API only (AGENTS.md: no undocumented endpoints).
+	for _, banned := range []string{"drawsBackground", "_setDrawsBackground", "setValue:"} {
+		if strings.Contains(s, banned) {
+			t.Errorf("lamp_window_darwin.go contains %q", banned)
+		}
+	}
+}
+
 // lamp_run.go is shared with Windows, so it holds no platform call.
 func TestLampRunHoldsNoSyscall(t *testing.T) {
 	if strings.Contains(readText(t, "lamp_run.go"), "syscall") {

@@ -4,8 +4,10 @@ package main
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa -framework QuartzCore
+#cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework WebKit -framework CoreGraphics
 #import <Cocoa/Cocoa.h>
+#import <WebKit/WebKit.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
@@ -19,10 +21,30 @@ static BOOL lampNever(id self, SEL _cmd) { return NO; }
 #define LAMP_BOOL_METHOD "c@:"
 #endif
 
+// lampFindWebView returns the WKWebView inside v (v itself or a subview).
+static WKWebView *lampFindWebView(NSView *v) {
+	if ([v isKindOfClass:[WKWebView class]]) return (WKWebView *)v;
+	for (NSView *s in [v subviews]) {
+		WKWebView *f = lampFindWebView(s);
+		if (f != nil) return f;
+	}
+	return nil;
+}
+
+// lampIdleC is the seconds since the last keyboard or mouse event of this
+// login session. It reads and stores nothing.
+static double lampIdleC(void) {
+	return CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateCombinedSessionState, (CGEventType)~0);
+}
+
 // lampStyle turns the webview's window into the lamp panel: no title bar,
 // above normal windows, on every Space, never the key or main window, no Dock
-// icon, bottom corners rounded. It runs on the main thread.
-static void lampStyle(void *win) {
+// icon. clear is 1 for the clear backdrop: a clear panel with no shadow and a
+// clear web view background (underPageBackgroundColor, documented, macOS 12 and
+// later), the page draws the ticker and Glim on it. clear is 0 for the card
+// backdrop: an opaque panel with its bottom corners rounded. It runs on the
+// main thread.
+static void lampStyle(void *win, int clear) {
 	NSWindow *w = (NSWindow *)win;
 	static Class cls = nil;
 	if (cls == nil) {
@@ -39,8 +61,20 @@ static void lampStyle(void *win) {
 		NSWindowCollectionBehaviorStationary | NSWindowCollectionBehaviorIgnoresCycle |
 		NSWindowCollectionBehaviorFullScreenAuxiliary];
 	[w setHidesOnDeactivate:NO];
-	[w setOpaque:NO];
-	[w setBackgroundColor:[NSColor clearColor]];
+	if (clear) {
+		[w setOpaque:NO];
+		[w setBackgroundColor:[NSColor clearColor]];
+		[w setHasShadow:NO];
+		WKWebView *wk = lampFindWebView([w contentView]);
+		if (wk != nil) {
+			if (@available(macOS 12.0, *)) {
+				wk.underPageBackgroundColor = [NSColor clearColor];
+			}
+		}
+		return;
+	}
+	[w setOpaque:YES];
+	[w setBackgroundColor:[NSColor windowBackgroundColor]];
 	[w setHasShadow:YES];
 	NSView *v = [w contentView];
 	[v setWantsLayer:YES];
@@ -126,6 +160,16 @@ func runLampWindow(o lampOpts) int {
 	if lampAlreadyRunning(o.demo) {
 		return 0
 	}
+	set := lamp.DefaultSettings()
+	if !o.demo {
+		set = readLampSettings(setDir)
+	}
+	// The clear backdrop and the card backdrop: the Windows environment variable
+	// is not used here, only the choice. Built, not seen: if the web view still
+	// paints an opaque square, lamp_backdrop card is the look that works.
+	_, _, glass := lampBackdropEnv(set.Backdrop)
+	startW, startH := lampWindowSize(set.TickerRows, set.Size)
+
 	w := webview.New(false)
 	if w == nil {
 		log.Println("lamp: could not create the window")
@@ -133,15 +177,20 @@ func runLampWindow(o lampOpts) int {
 	}
 	defer w.Destroy()
 	w.SetTitle("Glim")
-	w.SetSize(320, 40, webview.HintFixed)
-	C.lampStyle(w.Window())
+	w.SetSize(startW, startH, webview.HintFixed)
+	style := 0
+	if glass {
+		style = 1
+	}
+	C.lampStyle(w.Window(), C.int(style))
+	lampIdle = lampIdleSeconds
 
 	e := newLampEngine(o.demo, setDir, snapPath)
 	if !o.demo {
 		e.ledger = lamp.LoadLedger(filepath.Join(setDir, lamp.LedgerFile))
 		defer func() { e.ledger.Close(time.Now()) }()
 	}
-	pl := &lampMacPlacer{win: w.Window(), setDir: setDir, demo: o.demo, w: 320, h: 40}
+	pl := &lampMacPlacer{win: w.Window(), setDir: setDir, demo: o.demo, w: startW, h: startH}
 	pl.place()
 
 	bind := func(n string, f interface{}) {
@@ -153,6 +202,9 @@ func runLampWindow(o lampOpts) int {
 	bind("lampGlim", func(mood string, bricks int, theme string) string { return lamp.Glim(mood, bricks, theme) })
 	bind("lampNextLine", func() string { return e.nextLine() })
 	bind("lampOpenDev", func() { lampOpenDev() })
+	// macOS has no window region: the page still reports its area, the panel
+	// keeps its whole rectangle and clicks on the clear part reach the panel.
+	bind("lampArea", func(string) {})
 	bind("lampSize", func(cssW, cssH int) {
 		pl.setSize(cssW, cssH)
 		w.Dispatch(pl.place)
@@ -160,13 +212,38 @@ func runLampWindow(o lampOpts) int {
 	w.SetHtml(lampHTML)
 
 	// A change of lamp_position in the gear dialog moves the lamp within 2 s.
+	// The lamp also ends when the BurnMon Dev that started it is gone. A lamp
+	// started by hand has no BURNMON_LAMP_PARENT and stays.
+	parent := os.Getenv(lampParentEnv)
 	go func() {
 		for range time.Tick(2 * time.Second) {
+			if lampParentGone(parent, lampProcessAlive) {
+				w.Terminate()
+				return
+			}
 			w.Dispatch(pl.place)
 		}
 	}()
 	w.Run()
 	return 0
+}
+
+// lampProcessAlive reports whether process pid still runs: signal 0 checks
+// without sending anything. A process owned by another user answers EPERM and
+// is alive.
+func lampProcessAlive(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || err == syscall.EPERM
+}
+
+// lampIdleSeconds is the seconds since the last keyboard or mouse input on this
+// computer. It reads and stores nothing.
+func lampIdleSeconds() int {
+	s := float64(C.lampIdleC())
+	if s < 0 {
+		return 0
+	}
+	return int(s)
 }
 
 // lampMacPlacer holds the size the page asked for (points equal CSS pixels on

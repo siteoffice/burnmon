@@ -62,6 +62,10 @@ func TestMaccheckScriptShape(t *testing.T) {
 		"Git page",
 		"Groundwork",
 		"lamp --demo",
+		"lamp --poses",
+		"glim-demo.svg",
+		"sleep 6",
+		`mkdir -p "$OUT/glim"`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("script lacks %q", want)

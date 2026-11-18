@@ -163,14 +163,19 @@ stop_burnmon_dev() {
   fi
 }
 
-# The Mac lamp (lane scope X4): start the demo, give it 3 seconds, check that
-# it still runs, stop it. It does not tell whether the panel looks right.
+# The Mac lamp (lane scope X4, finish lane T10): start the demo (the 48 second
+# loop), give it 6 seconds so Glim has come down, check that it still runs, stop
+# it. Then write the poses and check that the animated demo file is there. It
+# does not tell whether the panel is clear or looks right.
 lamp_demo() {
   "$OUT/burnmon-dev" lamp --demo > "$OUT/lamp-demo.log" 2>&1 &
   local pid=$! rc=0
-  sleep 3
+  sleep 6
   kill -0 "$pid" 2>/dev/null || rc=1
   kill "$pid" 2>/dev/null || true
+  mkdir -p "$OUT/glim"
+  "$OUT/burnmon-dev" lamp --poses "$OUT/glim" >> "$OUT/lamp-demo.log" 2>&1 || rc=1
+  [ -s "$OUT/glim/glim-demo.svg" ] || rc=1
   return "$rc"
 }
 
