@@ -5,12 +5,14 @@ package main
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -31,6 +33,12 @@ var (
 	procGetDpiForWindow     = user32.NewProc("GetDpiForWindow")
 	procGetSystemMetricsLmp = user32.NewProc("GetSystemMetrics")
 	procFindWindowWLamp     = user32.NewProc("FindWindowW")
+	procCreateRectRgn       = gdi32Lamp.NewProc("CreateRectRgn")
+	procCombineRgn          = gdi32Lamp.NewProc("CombineRgn")
+	procDeleteObject        = gdi32Lamp.NewProc("DeleteObject")
+	procGetLastInputInfo    = user32.NewProc("GetLastInputInfo")
+	procGetTickCountLamp    = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetTickCount")
+	procDwmExtendFrame      = windows.NewLazySystemDLL("dwmapi.dll").NewProc("DwmExtendFrameIntoClientArea")
 )
 
 const (
@@ -47,6 +55,7 @@ const (
 	lampSmCxScreen     = 0
 	lampCornerCSS      = 8
 	lampTopmost        = ^uintptr(0) // HWND_TOPMOST (-1)
+	lampRgnOr          = 2           // RGN_OR
 )
 
 // runLampWindow opens the lamp window and runs until it is closed. A second
@@ -77,11 +86,26 @@ func runLampWindow(o lampOpts) int {
 	// process environment, not from Go memory.
 	_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", profile)
 
+	set := lamp.DefaultSettings()
+	if !o.demo {
+		set = readLampSettings(setDir)
+	}
+	// The clear backdrop: the WebView2 default background is fully transparent
+	// (the runtime reads this variable when it makes the controller) and the
+	// host window gets DWM glass below. Built, not seen. The card backdrop sets
+	// neither and the page draws a panel.
+	glass := false
+	if k, v, ok := lampBackdropEnv(set.Backdrop); ok {
+		_ = os.Setenv(k, v)
+		glass = true
+	}
+	startW, startH := lampWindowSize(set.TickerRows, set.Size)
+
 	prev, _, _ := procGetForegroundWindow.Call()
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath: profile,
 		WindowOptions: webview2.WindowOptions{
-			Title: "Glim", Width: 320, Height: 40, IconId: 1,
+			Title: "Glim", Width: uint(startW), Height: uint(startH), IconId: 1,
 		},
 	})
 	if w == nil {
@@ -90,7 +114,7 @@ func runLampWindow(o lampOpts) int {
 	}
 	defer w.Destroy()
 	hwnd := uintptr(w.Window())
-	lampStyleWindow(hwnd)
+	lampStyleWindow(hwnd, glass)
 	// go-webview2 shows the window and may activate it while it is made. Give
 	// the focus back to the program the person was typing in, if Windows lets
 	// us (best effort, not proven).
@@ -98,6 +122,7 @@ func runLampWindow(o lampOpts) int {
 		procSetForegroundWindow.Call(prev)
 	}
 
+	lampIdle = lampIdleSeconds
 	e := newLampEngine(o.demo, setDir, snapPath)
 	if !o.demo {
 		// The ledger of the waits (lane scope X2): written at most once a
@@ -105,7 +130,7 @@ func runLampWindow(o lampOpts) int {
 		e.ledger = lamp.LoadLedger(filepath.Join(setDir, lamp.LedgerFile))
 		defer func() { e.ledger.Close(time.Now()) }()
 	}
-	pl := &lampPlacer{hwnd: hwnd, setDir: setDir, demo: o.demo, w: 320, h: 40}
+	pl := &lampPlacer{hwnd: hwnd, setDir: setDir, demo: o.demo, w: startW, h: startH}
 	pl.place()
 
 	bind := func(n string, f interface{}) {
@@ -117,9 +142,12 @@ func runLampWindow(o lampOpts) int {
 	bind("lampGlim", func(mood string, bricks int, theme string) string { return lamp.Glim(mood, bricks, theme) })
 	bind("lampNextLine", func() string { return e.nextLine() })
 	bind("lampOpenDev", func() { lampOpenDev() })
-	// The window area (ticker, Glim's box, an act's extra box) is only stored
-	// here; the window turns it into a clip region in a later turn.
-	bind("lampArea", func(area string) { pl.setArea(area) })
+	// The window area (ticker, Glim's box, an act's extra box) becomes the
+	// window region: outside it nothing is drawn and clicks go to the windows below.
+	bind("lampArea", func(area string) {
+		pl.setArea(area)
+		w.Dispatch(pl.place)
+	})
 	bind("lampSize", func(cssW, cssH int) {
 		pl.setSize(cssW, cssH)
 	})
@@ -168,15 +196,37 @@ func lampProcessAlive(pid int) bool {
 
 // lampStyleWindow removes the caption and border, takes the window out of
 // the taskbar and marks it never-activate. It uses only the window handle.
-func lampStyleWindow(hwnd uintptr) {
+func lampStyleWindow(hwnd uintptr, glass bool) {
 	style, _, _ := procGetWindowLongPtrW.Call(hwnd, gwlStyle)
 	style = (style &^ uintptr(wsOverlappedWindowFrame)) | lampWsPopup | lampWsVisible
 	procSetWindowLongPtrW.Call(hwnd, gwlStyle, style)
 	ex, _, _ := procGetWindowLongPtrW.Call(hwnd, lampGwlExStyle)
 	ex = (ex &^ uintptr(lampWsExAppWindow)) | lampWsExToolWindow | lampWsExNoActivate
 	procSetWindowLongPtrW.Call(hwnd, lampGwlExStyle, ex)
+	if glass {
+		// DWM composes the whole client area with its alpha, so the transparent
+		// pixels of the web view show the windows below.
+		margins := [4]int32{-1, -1, -1, -1}
+		procDwmExtendFrame.Call(hwnd, uintptr(unsafe.Pointer(&margins[0])))
+	}
 	// A tool window is taken out of the taskbar only when it is shown again.
 	procShowWindowWS.Call(hwnd, lampSwHide)
+}
+
+// lampChildAttr starts the lamp child hidden: Windows applies the start-up
+// show value to the first ShowWindow call of the process, so the window shows
+// first through lampPlacer.place, which does not activate it.
+func lampChildAttr() *syscall.SysProcAttr { return &syscall.SysProcAttr{HideWindow: true} }
+
+// lampIdleSeconds is the seconds since the last keyboard or mouse input on
+// this computer. It reads and stores nothing.
+func lampIdleSeconds() int {
+	info := struct{ size, time uint32 }{size: 8}
+	if r, _, _ := procGetLastInputInfo.Call(uintptr(unsafe.Pointer(&info))); r == 0 {
+		return 0
+	}
+	now, _, _ := procGetTickCountLamp.Call()
+	return lampIdleFrom(uint32(now), info.time)
 }
 
 // lampPlacer puts the window at the top edge of the primary monitor. Sizes
@@ -191,6 +241,7 @@ type lampPlacer struct {
 	appX, appW int // what the window was last set to, so place does nothing when nothing changed
 	appH       int
 	area       string // the last lampArea from the page, JSON
+	rgnKey     string // area, size and scale of the region last set
 }
 
 // setArea remembers the rectangles the page asked the window to keep.
@@ -239,17 +290,50 @@ func (p *lampPlacer) place() {
 	case "top-right":
 		x = int(screenW) - w
 	}
-	if x == p.appX && w == p.appW && h == p.appH {
+	if x != p.appX || w != p.appW || h != p.appH {
+		p.appX, p.appW, p.appH = x, w, h
+		procSetWindowPosWS.Call(p.hwnd, lampTopmost,
+			uintptr(uint32(int32(x))), 0, uintptr(uint32(int32(w))), uintptr(uint32(int32(h))),
+			uintptr(lampSwpNoActivate|lampSwpFrameChange|lampSwpShowWindow))
+	}
+	key := fmt.Sprintf("%s|%d|%d|%.2f", p.area, w, h, scale)
+	if key == p.rgnKey {
 		return
 	}
-	p.appX, p.appW, p.appH = x, w, h
-	procSetWindowPosWS.Call(p.hwnd, lampTopmost,
-		uintptr(uint32(int32(x))), 0, uintptr(uint32(int32(w))), uintptr(uint32(int32(h))),
-		uintptr(lampSwpNoActivate|lampSwpFrameChange|lampSwpShowWindow))
-	// The round rectangle reaches above the window, so only the bottom
-	// corners are rounded.
-	r := min(int(lampCornerCSS*scale+0.5), h)
-	rgn, _, _ := procCreateRoundRectRgn.Call(0, uintptr(uint32(int32(-r))), uintptr(w+1), uintptr(h+1), uintptr(2*r), uintptr(2*r))
+	p.rgnKey = key
+	p.setRegion(w, h, scale)
+}
+
+// setRegion keeps only the window area: the ticker with rounded bottom
+// corners, Glim's box and an act's extra box. Without a usable area the whole
+// window rectangle is kept, bottom corners rounded. Clicks outside the region
+// go to the windows below. Built, not seen.
+func (p *lampPlacer) setRegion(w, h int, scale float64) {
+	// The round rectangle reaches above its top, so only the bottom corners
+	// are rounded.
+	round := func(x, y, rw, rh int) uintptr {
+		r := min(int(lampCornerCSS*scale+0.5), rh)
+		rgn, _, _ := procCreateRoundRectRgn.Call(uintptr(uint32(int32(x))), uintptr(uint32(int32(y-r))),
+			uintptr(uint32(int32(x+rw+1))), uintptr(uint32(int32(y+rh+1))), uintptr(2*r), uintptr(2*r))
+		return rgn
+	}
+	rects := lampRegionRects(p.area, scale)
+	var rgn uintptr
+	if len(rects) == 0 {
+		rgn = round(0, 0, w, h)
+	} else {
+		rgn = round(rects[0].X, rects[0].Y, rects[0].W, rects[0].H)
+		for _, r := range rects[1:] {
+			part, _, _ := procCreateRectRgn.Call(uintptr(uint32(int32(r.X))), uintptr(uint32(int32(r.Y))),
+				uintptr(uint32(int32(r.X+r.W))), uintptr(uint32(int32(r.Y+r.H))))
+			if part != 0 && rgn != 0 {
+				procCombineRgn.Call(rgn, rgn, part, lampRgnOr)
+			}
+			if part != 0 {
+				procDeleteObject.Call(part)
+			}
+		}
+	}
 	if rgn != 0 {
 		procSetWindowRgn.Call(p.hwnd, rgn, 1) // the window owns the region now
 	}
@@ -273,6 +357,8 @@ func lampOpenDev() {
 		return
 	}
 	cmd := exec.Command(exe)
+	// BurnMon Dev must not inherit the lamp's transparent background.
+	cmd.Env = lampWithoutEnv(os.Environ(), lampBackdropVar)
 	if err := cmd.Start(); err != nil {
 		log.Println("lamp: could not start BurnMon Dev:", err)
 		return

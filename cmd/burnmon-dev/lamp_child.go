@@ -147,6 +147,9 @@ func execLampStart(exe string, args []string) (lampProc, error) {
 	cmd := exec.Command(exe, args...)
 	// The lamp ends when this process is gone (lampParentGone).
 	cmd.Env = lampChildEnv(os.Environ(), os.Getpid())
+	// Started hidden, the window first shows through the lamp's own placement,
+	// which does not take the focus (inferred from the ShowWindow docs).
+	cmd.SysProcAttr = lampChildAttr()
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}

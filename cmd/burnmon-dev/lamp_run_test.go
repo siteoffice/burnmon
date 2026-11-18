@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -500,5 +501,119 @@ func TestLampActLines(t *testing.T) {
 		if strings.Join(got, "|") != strings.Join(c.want, "|") {
 			t.Errorf("lampActLines(%q,%q,%d,%d,%d) = %q, want %q", c.act, c.lang, c.count, c.hour, c.seq, got, c.want)
 		}
+	}
+}
+
+// The window size before the page reports one: the ticker is 300 px wide with
+// 26 px per row, Glim's box is 120 times the size scale below it. It always
+// covers the quiet sliver (120 by 6 times the scale).
+func TestLampWindowSize(t *testing.T) {
+	cases := []struct {
+		rows  int
+		size  string
+		wantW int
+		wantH int
+	}{
+		{1, "medium", 300, 26 + 180},
+		{4, "medium", 300, 104 + 180},
+		{1, "small", 300, 26 + 144},
+		{2, "large", 300, 52 + 228},
+		{0, "bad", 300, 26 + 180}, // bad values are the defaults
+		{9, "medium", 300, 104 + 180},
+	}
+	for _, c := range cases {
+		w, h := lampWindowSize(c.rows, c.size)
+		if w != c.wantW || h != c.wantH {
+			t.Errorf("lampWindowSize(%d,%q) = %dx%d, want %dx%d", c.rows, c.size, w, h, c.wantW, c.wantH)
+		}
+		if w < 120 || h < 6 {
+			t.Errorf("lampWindowSize(%d,%q) = %dx%d does not cover the sliver", c.rows, c.size, w, h)
+		}
+	}
+}
+
+// The page's lampArea JSON (CSS pixels) becomes device rectangles: rounded,
+// scaled, an empty or missing box left out, bad JSON gives none.
+func TestLampRegionRects(t *testing.T) {
+	area := `{"ticker":{"x":10,"y":0,"w":300,"h":26},"glim":{"x":100,"y":26,"w":120.4,"h":180},"extra":null}`
+	got := lampRegionRects(area, 1.5)
+	want := []lampRect{{15, 0, 450, 39}, {150, 39, 181, 270}}
+	if len(got) != len(want) {
+		t.Fatalf("rects = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("rect %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+	extra := `{"ticker":{"x":0,"y":0,"w":300,"h":26},"glim":null,"extra":{"x":0,"y":0,"w":500,"h":240}}`
+	if g := lampRegionRects(extra, 1); len(g) != 2 || g[1] != (lampRect{0, 0, 500, 240}) {
+		t.Errorf("extra box: %v", g)
+	}
+	for _, bad := range []string{"", "{", `{"ticker":{"x":0,"y":0,"w":0,"h":26}}`, `{"ticker":{"x":0,"y":0,"w":-3,"h":26}}`} {
+		if g := lampRegionRects(bad, 1); len(g) != 0 {
+			t.Errorf("lampRegionRects(%q) = %v, want none", bad, g)
+		}
+	}
+	if g := lampRegionRects(area, 0); len(g) != 2 || g[0].W != 300 {
+		t.Errorf("scale 0 must act as 1: %v", g)
+	}
+}
+
+// The clear backdrop sets the WebView2 default background to fully
+// transparent; the card backdrop sets nothing.
+func TestLampBackdropEnv(t *testing.T) {
+	k, v, ok := lampBackdropEnv("clear")
+	if !ok || k != "WEBVIEW2_DEFAULT_BACKGROUND_COLOR" || v != "00000000" {
+		t.Errorf("clear = %q %q %v", k, v, ok)
+	}
+	for _, b := range []string{"card", "", "x"} {
+		if _, _, ok := lampBackdropEnv(b); ok {
+			t.Errorf("backdrop %q must set no variable", b)
+		}
+	}
+}
+
+// BurnMon Dev must not inherit the transparent background from the lamp.
+func TestLampWithoutEnv(t *testing.T) {
+	base := []string{"A=1", "WEBVIEW2_DEFAULT_BACKGROUND_COLOR=00000000", "B=2", "WEBVIEW2_DEFAULT_BACKGROUND_COLORX=keep"}
+	got := lampWithoutEnv(base, "WEBVIEW2_DEFAULT_BACKGROUND_COLOR")
+	if strings.Join(got, "|") != "A=1|B=2|WEBVIEW2_DEFAULT_BACKGROUND_COLORX=keep" {
+		t.Errorf("got %v", got)
+	}
+	if len(base) != 4 || base[1] == "" {
+		t.Errorf("base changed: %v", base)
+	}
+}
+
+// Idle seconds from two 32 bit tick counts, also across the wrap at 49 days.
+func TestLampIdleFrom(t *testing.T) {
+	cases := []struct {
+		now, last uint32
+		want      int
+	}{
+		{10000, 10000, 0},
+		{12999, 10000, 2},
+		{310000, 10000, 300},
+		{500, 4294967000, 0}, // wrapped: 796 ms
+		{5000, 4294967000, 5},
+		{10000, 20000, 0}, // last after now: never negative
+	}
+	for _, c := range cases {
+		if got := lampIdleFrom(c.now, c.last); got != c.want {
+			t.Errorf("lampIdleFrom(%d,%d) = %d, want %d", c.now, c.last, got, c.want)
+		}
+	}
+}
+
+// The first-show focus try: on Windows the lamp child starts hidden so the
+// window shows first through SetWindowPos without activation.
+func TestLampChildAttrHidesOnWindows(t *testing.T) {
+	a := lampChildAttr()
+	if runtime.GOOS == "windows" && (a == nil || !a.HideWindow) {
+		t.Errorf("lampChildAttr = %+v, want HideWindow on Windows", a)
+	}
+	if runtime.GOOS != "windows" && a != nil {
+		t.Errorf("lampChildAttr = %+v, want nil off Windows", a)
 	}
 }

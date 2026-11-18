@@ -212,6 +212,9 @@ func (p *lampMacPlacer) place() {
 	C.lampPlace(p.win, C.double(w), C.double(h), C.int(p.position()))
 }
 
+// lampChildAttr is the Windows first-show focus try; the Mac has none.
+func lampChildAttr() *syscall.SysProcAttr { return nil }
+
 // lampOpenDev starts BurnMon Dev (this exe, no arguments, no shell). A
 // BurnMon Dev that already runs holds its own lock and logs that it will not
 // raise its window: macOS gives no documented way to raise another process's

@@ -8,6 +8,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -152,6 +153,100 @@ func lampChildEnv(base []string, pid int) []string {
 		}
 	}
 	return append(out, lampParentEnv+"="+strconv.Itoa(pid))
+}
+
+// The lamp window's fixed sizes in CSS pixels: the ticker is 300 wide with 26
+// per row; Glim's box is lampGlimBox times the size scale, below the ticker.
+const (
+	lampTickerW = 300
+	lampRowH    = 26
+	lampGlimBox = 120
+	lampMaxRows = 4
+)
+
+// lampWindowSize is the window the lamp opens with, before the page reports
+// its own size: the ticker at rows (1 to 4, anything else is 1 or 4) and
+// Glim's box at size. It also covers the quiet sliver (120 by 6).
+func lampWindowSize(rows int, size string) (w, h int) {
+	if rows < 1 {
+		rows = 1
+	}
+	if rows > lampMaxRows {
+		rows = lampMaxRows
+	}
+	box := int(lampGlimBox*lamp.SizeScale(size) + 0.5)
+	return lampTickerW, rows*lampRowH + box
+}
+
+// lampRect is a rectangle in device pixels, relative to the lamp window.
+type lampRect struct{ X, Y, W, H int }
+
+type lampBox struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
+// lampRegionRects turns the page's lampArea JSON (the ticker, Glim's box and
+// the extra box of an act, in CSS pixels) into the device rectangles the
+// window keeps: scaled, rounded, a missing or empty box left out. Bad JSON
+// gives none, and the window then keeps its whole rectangle.
+func lampRegionRects(area string, scale float64) []lampRect {
+	var a struct {
+		Ticker *lampBox `json:"ticker"`
+		Glim   *lampBox `json:"glim"`
+		Extra  *lampBox `json:"extra"`
+	}
+	if err := json.Unmarshal([]byte(area), &a); err != nil {
+		return nil
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	var out []lampRect
+	for _, b := range []*lampBox{a.Ticker, a.Glim, a.Extra} {
+		if b == nil || b.W <= 0 || b.H <= 0 {
+			continue
+		}
+		out = append(out, lampRect{
+			int(b.X*scale + 0.5), int(b.Y*scale + 0.5), int(b.W*scale + 0.5), int(b.H*scale + 0.5),
+		})
+	}
+	return out
+}
+
+// lampBackdropEnv is the process variable of the clear backdrop: the WebView2
+// default background, fully transparent. The card backdrop sets none.
+func lampBackdropEnv(backdrop string) (key, value string, ok bool) {
+	if backdrop == "clear" {
+		return lampBackdropVar, "00000000", true
+	}
+	return "", "", false
+}
+
+const lampBackdropVar = "WEBVIEW2_DEFAULT_BACKGROUND_COLOR"
+
+// lampWithoutEnv is base without the entries for key. It does not change base.
+func lampWithoutEnv(base []string, key string) []string {
+	out := make([]string, 0, len(base))
+	for _, e := range base {
+		if !strings.HasPrefix(e, key+"=") {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// lampIdleFrom is the idle seconds from two 32 bit millisecond tick counts
+// (GetTickCount and the time of the last input). The subtraction wraps with
+// the counter; a last input after now counts as 0.
+func lampIdleFrom(now, last uint32) int {
+	d := now - last
+	if d > 1<<31 {
+		return 0
+	}
+	return int(d / 1000)
 }
 
 // lampIdle is the seam for the idle seconds: the seconds since the last
