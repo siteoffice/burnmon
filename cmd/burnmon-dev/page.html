@@ -737,6 +737,18 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     <div class="sechint">Needs Claude Code installed and signed in to the same account.</div>
     <div class="sechint">Reads cloud sessions you start in the Claude app on this computer. Sessions started from your phone, the browser or another computer are not read, and neither is subagent usage inside a cloud session.</div>
   </div>
+  <div id="secLamp">
+    <h4>Lamp</h4>
+    <label class="setrow"><input type="checkbox" id="secLampEnabled"> Show the lamp</label>
+    <div class="setrow">Position
+      <select id="secLampPosition"><option value="top-center">top centre</option><option value="top-left">top left</option><option value="top-right">top right</option></select>
+    </div>
+    <div class="setrow">Language
+      <select id="secLampLanguage"><option value="en">English</option><option value="nl">Nederlands</option></select>
+    </div>
+    <label class="setrow"><input type="checkbox" id="secLampLines"> One-liners</label>
+    <label class="setrow"><input type="checkbox" id="secLampForeman"> Include Foreman items</label>
+  </div>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
@@ -3861,7 +3873,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
+  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, lamp:{ enabled:false, position:'top-center', language:'en', lines:true, foreman_items:true }, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
   var secReading = { status:'missing', age_seconds:0 };
   // secLine is Go's sentence about the snapshot. The window opens before the
   // first payload, so it starts as the starting line; null means the last
@@ -4322,7 +4334,19 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     if(tg) tg.checked = !!secState.toast;
     var cp = document.getElementById('secCloudPull');
     if(cp) cp.checked = !!secState.cloudPull;
+    secRenderLamp();
     pctRenderSizes();
+  }
+  // The Lamp group shows the saved lamp keys the payload carries.
+  var LAMP_GEAR = { secLampEnabled:['lamp_enabled','enabled'], secLampPosition:['lamp_position','position'],
+    secLampLanguage:['lamp_language','language'], secLampLines:['lamp_lines','lines'], secLampForeman:['lamp_foreman_items','foreman_items'] };
+  function secRenderLamp(){
+    Object.keys(LAMP_GEAR).forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      var v = secState.lamp[LAMP_GEAR[id][1]];
+      if(el.type === 'checkbox') el.checked = !!v; else el.value = v;
+    });
   }
   // A poll or a tick must never move a list the user scrolled. The scroll
   // position of each list in #secPanels, by its part (one list per part), so a
@@ -4433,7 +4457,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
   function secApplyPayload(p){
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space',
-      toast:p.toast_enabled !== false, cloudPull:!!p.cloud_pull, sectionsPct:p.sections_pct || pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:p.panes_pct || pctDefaults(PCT_DEFAULT_PANES) };
+      toast:p.toast_enabled !== false, cloudPull:!!p.cloud_pull, lamp:p.lamp || { enabled:false, position:'top-center', language:'en', lines:true, foreman_items:true }, sectionsPct:p.sections_pct || pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:p.panes_pct || pctDefaults(PCT_DEFAULT_PANES) };
     if(p.panes && p.panes.length) PCT_PANES = p.panes;
     secReading = p.reading || { status:'missing', age_seconds:0 };
     secLine = p.snapshot_line || null;
@@ -4522,6 +4546,18 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
           .catch(function(e){
             console.log('bdevSetCloudPull:', e);
             t.checked = !!secState.cloudPull;
+            secLastJSON = 'x';
+            return secPoll();
+          });
+      }
+    }
+    else if(LAMP_GEAR[t.id]){
+      // Saved to burnmon-dev.json; BurnMon Dev starts or stops the lamp to match.
+      if(typeof window.bdevSetLamp === 'function'){
+        Promise.resolve(window.bdevSetLamp(LAMP_GEAR[t.id][0], t.type === 'checkbox' ? t.checked : t.value)).then(function(){ secLastJSON = 'x'; return secPoll(); })
+          .catch(function(e){
+            console.log('bdevSetLamp:', e);
+            secRenderLamp();
             secLastJSON = 'x';
             return secPoll();
           });

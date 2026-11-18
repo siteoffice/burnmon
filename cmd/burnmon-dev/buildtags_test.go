@@ -20,6 +20,7 @@ func TestDevBuildTags(t *testing.T) {
 	want := map[string]string{
 		"main.go":                "//go:build windows || (darwin && cgo)",
 		"lamp_run.go":            "//go:build windows || (darwin && cgo)",
+		"lamp_child.go":          "//go:build windows || (darwin && cgo)",
 		"lamp_window_windows.go": "//go:build windows",
 		"lamp_window_darwin.go":  "//go:build darwin && cgo",
 		"main_other.go":          "//go:build !windows && !darwin",

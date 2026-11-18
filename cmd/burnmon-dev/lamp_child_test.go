@@ -1,0 +1,258 @@
+//go:build windows || (darwin && cgo)
+
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"burnmon/internal/lamp"
+)
+
+// fakeLampProc is a child the test ends by hand.
+type fakeLampProc struct {
+	done    chan struct{}
+	once    sync.Once
+	stopped bool
+}
+
+func (p *fakeLampProc) Stop()                 { p.stopped = true; p.end() }
+func (p *fakeLampProc) Done() <-chan struct{} { return p.done }
+func (p *fakeLampProc) end()                  { p.once.Do(func() { close(p.done) }) }
+
+// lampRig is a lampChild with a fake starter and a clock the test moves.
+type lampRig struct {
+	child *lampChild
+	procs []*fakeLampProc
+	argvs [][]string
+	now   time.Time
+}
+
+func newLampRig(t *testing.T) *lampRig {
+	t.Helper()
+	r := &lampRig{now: time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)}
+	r.child = newLampChild(`C:\x\burnmon-dev.exe`, func(exe string, args []string) (lampProc, error) {
+		r.argvs = append(r.argvs, append([]string{exe}, args...))
+		p := &fakeLampProc{done: make(chan struct{})}
+		r.procs = append(r.procs, p)
+		return p, nil
+	}, func() time.Time { return r.now }, func(string, ...any) {})
+	r.child.supported = true
+	return r
+}
+
+func TestLampChildOffStartsNothing(t *testing.T) {
+	r := newLampRig(t)
+	r.child.Sync(false)
+	if len(r.procs) != 0 {
+		t.Fatalf("lamp_enabled false started %d children", len(r.procs))
+	}
+}
+
+func TestLampChildOnStartsOneAndOffStopsIt(t *testing.T) {
+	r := newLampRig(t)
+	r.child.Sync(true)
+	r.child.Sync(true)
+	if len(r.procs) != 1 {
+		t.Fatalf("on twice started %d children, want 1", len(r.procs))
+	}
+	r.child.Sync(false)
+	if !r.procs[0].stopped {
+		t.Fatal("switching off did not stop the child")
+	}
+	r.child.Sync(true)
+	if len(r.procs) != 2 {
+		t.Fatalf("on again started %d children in total, want 2", len(r.procs))
+	}
+	r.child.Stop()
+	if !r.procs[1].stopped {
+		t.Fatal("Stop (BurnMon Dev exit) did not stop the child")
+	}
+}
+
+// The child is the own exe and the word lamp, nothing else.
+func TestLampChildArgvIsOwnExeAndLamp(t *testing.T) {
+	r := newLampRig(t)
+	r.child.Sync(true)
+	want := []string{`C:\x\burnmon-dev.exe`, "lamp"}
+	if len(r.argvs) != 1 || !reflect.DeepEqual(r.argvs[0], want) {
+		t.Fatalf("argv = %v, want %v", r.argvs, want)
+	}
+}
+
+// A lamp that dies starts again at most 3 times in 10 minutes; the fourth
+// restart is refused. After 10 minutes the count is clear again.
+func TestLampChildRestartLimit(t *testing.T) {
+	r := newLampRig(t)
+	r.child.Sync(true)
+	for i := 1; i <= 3; i++ {
+		r.child.died(r.procs[len(r.procs)-1])
+		if len(r.procs) != 1+i {
+			t.Fatalf("restart %d: %d children in total, want %d", i, len(r.procs), 1+i)
+		}
+		r.now = r.now.Add(time.Minute)
+	}
+	r.child.died(r.procs[len(r.procs)-1])
+	if len(r.procs) != 4 {
+		t.Fatalf("the fourth restart in 10 minutes ran: %d children in total, want 4", len(r.procs))
+	}
+	r.child.Sync(true)
+	if len(r.procs) != 4 {
+		t.Fatal("a Sync(true) after the refusal started a child past the limit")
+	}
+	// Off and on again is the person's own choice and starts clean.
+	r.child.Sync(false)
+	r.child.Sync(true)
+	if len(r.procs) != 5 {
+		t.Fatalf("off then on started %d children in total, want 5", len(r.procs))
+	}
+}
+
+func TestLampChildRestartWindowSlides(t *testing.T) {
+	r := newLampRig(t)
+	r.child.Sync(true)
+	for i := 0; i < 3; i++ {
+		r.child.died(r.procs[len(r.procs)-1])
+	}
+	r.now = r.now.Add(10*time.Minute + time.Second)
+	r.child.died(r.procs[len(r.procs)-1])
+	if len(r.procs) != 5 {
+		t.Fatalf("after 10 minutes a death was not restarted: %d children in total, want 5", len(r.procs))
+	}
+}
+
+// A child that was stopped on purpose is not restarted.
+func TestLampChildStoppedOnPurposeStaysStopped(t *testing.T) {
+	r := newLampRig(t)
+	r.child.Sync(true)
+	old := r.procs[0]
+	r.child.Sync(false)
+	r.child.died(old)
+	if len(r.procs) != 1 {
+		t.Fatalf("a stopped child was restarted: %d children in total", len(r.procs))
+	}
+}
+
+// A bindDev env without a child (the binding test) must not panic when the
+// binding runs.
+func TestLampChildNilIsSafe(t *testing.T) {
+	var c *lampChild
+	c.Sync(true)
+	c.Stop()
+	if err := setLampKey(t.TempDir(), "lamp_lines", false, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLampChildUnsupportedPlatformStartsNothing(t *testing.T) {
+	r := newLampRig(t)
+	r.child.supported = false
+	r.child.Sync(true)
+	if len(r.procs) != 0 {
+		t.Fatal("an unsupported platform started a child")
+	}
+}
+
+// bdevSetLamp takes only the five gear keys, with the right kind of value,
+// saves through saveDevConfigKey and tells the child.
+func TestSetLampKey(t *testing.T) {
+	dir := t.TempDir()
+	r := newLampRig(t)
+
+	for _, bad := range []struct {
+		key string
+		val any
+	}{
+		{"lamp_burn_floor_tpm", 5.0}, // a real lamp key, but not a gear key
+		{"toast_enabled", true},
+		{"lamp_enabled", "yes"},
+		{"lamp_position", "middle"},
+		{"lamp_position", true},
+		{"lamp_language", "de"},
+		{"lamp_lines", "true"},
+		{"lamp_foreman_items", nil},
+		{"", true},
+	} {
+		if err := setLampKey(dir, bad.key, bad.val, r.child); err == nil {
+			t.Errorf("setLampKey(%q, %v) accepted", bad.key, bad.val)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "burnmon-dev.json")); err == nil {
+		t.Fatal("a refused key still wrote burnmon-dev.json")
+	}
+	if len(r.procs) != 0 {
+		t.Fatal("a refused key started a child")
+	}
+
+	for _, ok := range []struct {
+		key string
+		val any
+	}{
+		{"lamp_position", "top-left"},
+		{"lamp_language", "nl"},
+		{"lamp_lines", false},
+		{"lamp_foreman_items", false},
+		{"lamp_enabled", true},
+	} {
+		if err := setLampKey(dir, ok.key, ok.val, r.child); err != nil {
+			t.Fatalf("setLampKey(%q, %v): %v", ok.key, ok.val, err)
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "burnmon-dev.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := lamp.ParseSettings(b)
+	want := lamp.DefaultSettings()
+	want.Position, want.Language, want.Lines, want.ForemanItems, want.Enabled = "top-left", "nl", false, false, true
+	if got != want {
+		t.Fatalf("saved settings %+v, want %+v", got, want)
+	}
+	if len(r.procs) != 1 {
+		t.Fatalf("lamp_enabled true started %d children, want 1", len(r.procs))
+	}
+	if err := setLampKey(dir, "lamp_enabled", false, r.child); err != nil {
+		t.Fatal(err)
+	}
+	if !r.procs[0].stopped {
+		t.Fatal("lamp_enabled false did not stop the child")
+	}
+}
+
+// A failed save leaves the child as it was.
+func TestSetLampKeySaveFailureLeavesChild(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "burnmon-dev.json"), []byte(`{"lamp_enabled": `), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := newLampRig(t)
+	err := setLampKey(dir, "lamp_enabled", true, r.child)
+	if err == nil || !strings.Contains(err.Error(), "not valid JSON") {
+		t.Fatalf("err = %v, want the not valid JSON refusal", err)
+	}
+	if len(r.procs) != 0 {
+		t.Fatal("a failed save started a child")
+	}
+}
+
+// BurnMon Dev starts the child from the saved file at its own start.
+func TestSyncLampFromFile(t *testing.T) {
+	dir := t.TempDir()
+	r := newLampRig(t)
+	syncLampFromFile(dir, r.child)
+	if len(r.procs) != 0 {
+		t.Fatal("no file started a child")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "burnmon-dev.json"), []byte(`{"lamp_enabled": true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	syncLampFromFile(dir, r.child)
+	if len(r.procs) != 1 {
+		t.Fatalf("lamp_enabled true in the file started %d children, want 1", len(r.procs))
+	}
+}
