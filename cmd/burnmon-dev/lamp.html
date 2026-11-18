@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Glim</title>
+<style>
+:root{--bg:#000000;--panel:#15110a;--fg:#fff1d6;--muted:#d4bf94;--accent:#ffc766;--demo:#ffc766;--bd:#5a4416}
+:root[data-theme="light"]{--bg:#fffaf0;--panel:#fff3dc;--fg:#2a1a04;--muted:#654a18;--accent:#8a4b00;--demo:#8a4b00;--bd:#c9a45c}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font:12px/1.2 "Segoe UI",system-ui,sans-serif;user-select:none;cursor:default}
+.sliver{width:120px;height:6px;background:var(--accent);animation:none}
+.sliver.off{background:var(--bd)}
+.pill{width:320px;height:40px;display:flex;align-items:center;gap:6px;padding:0 8px;box-sizing:border-box;background:var(--panel);border-bottom:1px solid var(--bd)}
+.opened{width:440px;height:40px}
+.gl{flex:none;height:32px;display:flex;align-items:center}
+.gl svg{height:32px;width:auto}
+.txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.head{font-weight:600;font-size:13px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.demo{flex:none;font-size:11px;font-weight:600;color:var(--demo);border:1px solid var(--demo);border-radius:3px;padding:0 4px}
+.rows{width:440px;background:var(--panel)}
+.lrow{height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;box-sizing:border-box;border-top:1px solid var(--bd);line-height:28px}
+.lword{flex:none;width:64px;color:var(--accent);white-space:nowrap}
+.ltitle{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.lwait{flex:none;color:var(--muted);white-space:nowrap}
+.lrow.more{color:var(--muted)}
+.glim-eye{transform-box:fill-box;transform-origin:center}
+.blink .glim-eye{animation:blink .3s ease-in-out 1}
+.glim-dome{animation:glow 4s ease-in-out infinite}
+.glim-ray{animation:pulse 1.2s ease-in-out infinite}
+.glim-brick{animation:drop .5s ease-out 1 backwards}
+@keyframes blink{50%{transform:scaleY(.1)}}
+@keyframes glow{50%{filter:brightness(1.18)}}
+@keyframes pulse{50%{opacity:.35}}
+@keyframes drop{from{transform:translateY(-24px);opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important}}
+</style></head>
+<body><div id="app"></div>
+<script>
+var SLIVER={asleep:1,working:1,off:1};
+var HOVER_LINGER_MS=2000;
+var cur=null,hover=false,linger=null,lastSize='',lastHTML='',svgCache={},blinkT=null;
+window.lampFreeze=window.lampFreeze||false;
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function label(k,d){return cur&&cur.labels&&cur.labels[k]?cur.labels[k]:d;}
+function fmtRate(r){var n=Math.round(r||0);return n>=1000?Math.round(n/1000)+'k':String(n);}
+function glimSVG(st,theme){
+  var bricks=st.mood==='bored'?st.wall_bricks:0,key=st.mood+'|'+bricks+'|'+theme;
+  if(svgCache[key]!==undefined)return svgCache[key];
+  svgCache[key]='';
+  lampGlim(st.mood,bricks,theme).then(function(s){svgCache[key]=s;draw();}).catch(function(){});
+  return '';
+}
+function rowsOf(st){return st.rows||[];}
+function openedHTML(st){
+  var first='<b>'+esc(fmtRate(st.burn_rate))+' '+esc(label('tokens','tokens a minute'))+'</b>';
+  if(!st.cost_5min)return first;
+  return first+', $'+esc((st.cost_5min.usd||0).toFixed(2))+' '+esc(st.cost_5min.label)+' (5 min)';
+}
+function rowHTML(r){
+  if(r.kind==='more')return '<div class="lrow more"><span class="ltitle" title="'+esc(r.title_full)+'">'+esc(r.title)+'</span></div>';
+  return '<div class="lrow" data-id="'+esc(r.id)+'"><span class="lword">'+esc(r.word)+'</span><span class="ltitle" title="'+esc(r.title_full)+'">'+esc(r.title)+'</span><span class="lwait" title="'+esc(r.wait_exact)+'">'+esc(r.wait)+'</span></div>';
+}
+function headHTML(st,theme,open){
+  var sub=open?openedHTML(st):esc(st.line||'');
+  return '<div class="pill'+(open?' opened':'')+'"><div class="gl" id="gl">'+glimSVG(st,theme)+'</div><div class="txt"><div class="head" title="'+esc(st.headline)+'">'+esc(st.headline)+'</div><div class="sub" title="'+esc(open?'':st.line)+'">'+sub+'</div></div>'+(st.demo?'<span class="demo">demo</span>':'')+'</div>';
+}
+function draw(){
+  if(!cur||!cur.state)return;
+  var st=cur.state,theme=cur.theme==='light'?'light':'dark',w,h,html;
+  document.documentElement.setAttribute('data-theme',theme);
+  var rows=rowsOf(st),open=hover||linger!==null;
+  if(SLIVER[st.mood]&&!open){
+    w=120;h=6;html='<div class="sliver'+(st.mood==='off'?' off':'')+'"></div>';
+  }else if(open&&rows.length>0){
+    w=440;h=40+28*rows.length;html=headHTML(st,theme,true)+'<div class="rows">'+rows.map(rowHTML).join('')+'</div>';
+  }else if(open){
+    w=440;h=40;html=headHTML(st,theme,true);
+  }else{
+    w=320;h=40;html=headHTML(st,theme,false);
+  }
+  if(html!==lastHTML){lastHTML=html;document.getElementById('app').innerHTML=html;}
+  var k=w+'x'+h;
+  if(k!==lastSize){lastSize=k;lampSize(w,h).catch(function(){});}
+}
+window.lampRender=function(p){cur=p;draw();};
+function poll(){
+  if(window.lampFreeze)return;
+  lampState().then(function(p){window.lampRender(p);}).catch(function(){});
+}
+function leaveHover(){
+  hover=false;
+  if(linger!==null)clearTimeout(linger);
+  linger=setTimeout(function(){linger=null;draw();},HOVER_LINGER_MS);
+  draw();
+}
+document.documentElement.addEventListener('mouseenter',function(){
+  hover=true;
+  if(linger!==null){clearTimeout(linger);linger=null;}
+  draw();
+});
+document.documentElement.addEventListener('mouseleave',leaveHover);
+document.addEventListener('click',function(e){
+  if(!e.target.closest||!e.target.closest('#gl'))return;
+  lampNextLine().then(function(line){
+    if(cur&&cur.state)cur.state.line=line;
+    document.body.classList.add('blink');
+    if(blinkT!==null)clearTimeout(blinkT);
+    blinkT=setTimeout(function(){document.body.classList.remove('blink');},400);
+    draw();
+  }).catch(function(){});
+});
+document.addEventListener('dblclick',function(e){
+  if(!e.target.closest)return;
+  if(e.target.closest('#gl')||e.target.closest('.lrow'))lampOpenDev().catch(function(){});
+});
+setInterval(poll,1000);
+poll();
+</script></body></html>
