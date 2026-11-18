@@ -208,6 +208,10 @@ func runLampWindow(o lampOpts) int {
 	// The drag to another monitor is built for Windows only (fix lane T2): the
 	// binding exists so the page runs, and does nothing here. Built, not seen.
 	bind("lampDragStart", func() {})
+	// Grab and swing: the same answer as on Windows. Built, not seen.
+	bind("lampSwing", func(maxDeg float64, changes int) lampSwingResult {
+		return e.swing(maxDeg, changes, time.Now())
+	})
 	// "Close the lamp": ledger first, lamp_enabled false only for a lamp BurnMon
 	// Dev started, then the lamp ends. Built, not seen.
 	bind("lampClose", func() {

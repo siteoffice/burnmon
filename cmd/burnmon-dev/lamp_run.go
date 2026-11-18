@@ -168,7 +168,7 @@ const (
 
 // lampWindowSize is the window the lamp opens with, before the page reports
 // its own size: the ticker at set.TickerRows (1 to 4, anything else is 1 or 4)
-// and Glim's box at set.Size. It also covers the quiet sliver (120 by 6).
+// and Glim's box at set.SizePct percent. It also covers the quiet sliver (120 by 6).
 func lampWindowSize(set lamp.Settings) (w, h int) {
 	rows := set.TickerRows
 	if rows < 1 {
@@ -177,7 +177,7 @@ func lampWindowSize(set lamp.Settings) (w, h int) {
 	if rows > lampMaxRows {
 		rows = lampMaxRows
 	}
-	box := int(lampGlimBox*lamp.SizeScale(set.Size) + 0.5)
+	box := int(lampGlimBox*lamp.PctScale(set.SizePct) + 0.5)
 	return lampTickerW, rows*lampRowH + box
 }
 
@@ -266,7 +266,8 @@ var lampIdle = func() int { return 0 }
 
 // lampLook is the six look settings after defaults, as the page reads them.
 type lampLook struct {
-	Size     string `json:"size"`
+	Size     int    `json:"size"`    // lamp_size, a percentage from 100 to 200
+	Monitor  string `json:"monitor"` // the monitor the lamp hangs on, after a gone one fell back to the primary
 	Theme    string `json:"theme"`
 	Motion   string `json:"motion"`
 	Quiet    string `json:"quiet"`
@@ -288,7 +289,16 @@ type lampPayload struct {
 	DotSeconds float64           `json:"dot_seconds"`
 	Quiet      bool              `json:"quiet"`
 	Look       lampLook          `json:"look"`
-	ActLines   []string          `json:"act_lines"` // the lines of the act that plays: slip has three, the others one, most acts none
+	ActLines   []string          `json:"act_lines"`   // the lines of the act that plays: slip has three, the others one, most acts none
+	Pose       string            `json:"pose"`        // the pose Glim is drawn in: the mood, except working for the coffee
+	CarryLines map[string]string `json:"carry_lines"` // the two lines of a drag: drag while carried, view after a drop on another monitor
+}
+
+// lampSwingResult is what the binding lampSwing answers: the line to show and
+// whether the grab was too hard (the page then flails the arms).
+type lampSwingResult struct {
+	Line string `json:"line"`
+	Hard bool   `json:"hard"`
 }
 
 // lampActLines are the lines of an act, in the order the page shows them. The
@@ -346,6 +356,8 @@ type lampEngine struct {
 	lastSet  lamp.Settings
 	lastNow  time.Time
 	lastLine string
+
+	lastProtest time.Time // the last too hard grab: a second one within 60 s gets the second line
 
 	// The act engine: the state and idle seconds of the last tick it judged,
 	// what already played, and the act that is playing until actUntil. While
@@ -437,7 +449,12 @@ func (e *lampEngine) finish(st lamp.State, set lamp.Settings, lineNow time.Time,
 		State: st, Theme: theme, Labels: lampLabels(set.Language),
 		Act: e.act, ActSeq: e.played.Seq, Holds: lamp.Holds(st, set),
 		DotSeconds: lamp.DotSeconds(st.BurnRate), Quiet: lamp.Quiet(st, set),
-		Look:     lampLook{Size: set.Size, Theme: set.Theme, Motion: set.Motion, Quiet: set.Quiet, Backdrop: set.Backdrop, Rows: set.TickerRows},
+		Pose: lamp.ActMood(e.act, st.Mood),
+		CarryLines: map[string]string{
+			"drag": lamp.ActLine("carry", "drag", set.Language, 0, 0),
+			"view": lamp.ActLine("carry", "view", set.Language, 0, 0),
+		},
+		Look:     lampLook{Size: set.SizePct, Monitor: lampMonitorUsed(set.Monitor), Theme: set.Theme, Motion: set.Motion, Quiet: set.Quiet, Backdrop: set.Backdrop, Rows: set.TickerRows},
 		ActLines: lampActLines(e.act, set.Language, st.Counted, hour, e.played.Seq),
 	}
 }
@@ -619,10 +636,32 @@ func lampCloseNow(writeLedger func(), parentSet bool, save func(key string, v an
 	end()
 }
 
+// lampMonitorUsed is the device name of the monitor the lamp hangs on: the saved
+// name when that monitor is connected, else the primary's, else the saved name.
+func lampMonitorUsed(saved string) string {
+	if _, _, used := lampPlaceOn(lampMonitors(), saved, "", 0); used != "" {
+		return used
+	}
+	return saved
+}
+
 // swing is the answer to a grab and swing: the line for the strongest angle
-// (degrees) and the direction changes the page counted. T3 fills it in; until
-// then there is no line.
-func (e *lampEngine) swing(maxDeg float64, changes int, now time.Time) string { return "" }
+// (degrees) and the direction changes the page counted. A too hard grab
+// remembers its time, so a second one under 60 s later gets the second line. In
+// motion calm and off Glim does not swing and there is no line.
+func (e *lampEngine) swing(maxDeg float64, changes int, now time.Time) lampSwingResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.lastSet.Motion == "calm" || e.lastSet.Motion == "off" {
+		return lampSwingResult{}
+	}
+	part := lamp.Protest(maxDeg, changes, now, e.lastProtest, true)
+	hard := lamp.ProtestTooHard(maxDeg, changes)
+	if hard {
+		e.lastProtest = now
+	}
+	return lampSwingResult{Line: lamp.ActLine("swing", part, e.lastSet.Language, 0, 0), Hard: hard}
+}
 
 // eyesOn is whether the lamp reads the pointer now: only while Glim is down
 // (not quiet and hidden) and lamp_motion is lively, judged on the last payload.

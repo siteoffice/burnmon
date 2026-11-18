@@ -62,6 +62,36 @@ var singularTable = []LineDef{
 	{MoodBlocked, "One thing is blocked. Guess whose turn.", "Een ding zit vast. Raad eens wie er aan zet is."},
 }
 
+// ProtestTooHard is the rule for "too hard" on a grab and swing: Glim pulled to
+// the 60 degree stop, or the pointer changed direction 3 times within 1.5 s
+// while it held him (the page counts the changes).
+func ProtestTooHard(maxDeg float64, changes int) bool { return maxDeg >= 60 || changes >= 3 }
+
+// Protest is the part of the act swing to say: protest2 for a too hard grab less
+// than 60 s after the last protest (last is the zero time for none), protest1
+// for a too hard grab, tickle for a gentle swing, "" when nothing swung.
+func Protest(maxDeg float64, changes int, now, last time.Time, gentle bool) string {
+	switch {
+	case ProtestTooHard(maxDeg, changes):
+		if !last.IsZero() && now.Sub(last) < 60*time.Second {
+			return "protest2"
+		}
+		return "protest1"
+	case gentle:
+		return "tickle"
+	}
+	return ""
+}
+
+// ActMood is the mood whose pose Glim shows during an act: awake and working
+// for the coffee, whatever the mood was; the mood itself for every other act.
+func ActMood(act, mood string) string {
+	if act == ActCoffee {
+		return MoodWorking
+	}
+	return mood
+}
+
 // ActLine is the sentence of an act, or "" when the act has none. The parts:
 // slip has start, air and back; stamp has a and b (the page alternates them
 // by act_seq); welcome takes the count of waiting items; coffee takes the
@@ -86,6 +116,16 @@ func ActLine(act, part, lang string, count, hour int) string {
 	case act == "welcome" && count >= 2:
 		n := strconv.Itoa(count)
 		en, nl = "Welcome back. "+n+" things waited.", "Welkom terug. Er wachtten "+n+" dingen."
+	case act == "carry" && part == "drag":
+		en, nl = "Put me down.", "Zet me neer."
+	case act == "carry" && part == "view":
+		en, nl = "Nice view.", "Mooi uitzicht."
+	case act == "swing" && part == "tickle":
+		en, nl = "That tickles.", "Dat kietelt."
+	case act == "swing" && part == "protest1":
+		en, nl = "Don't do that.", "Niet doen."
+	case act == "swing" && part == "protest2":
+		en, nl = "I said don't.", "Ik zei: niet doen."
 	case act == "coffee" && hour == 10:
 		en, nl = "Ten o'clock. Coffee.", "Tien uur. Koffie."
 	case act == "coffee" && hour == 15:
@@ -118,6 +158,18 @@ func Line(st State, s Settings, now time.Time) string {
 	if !s.Lines {
 		return ""
 	}
+	return pickFrom(lineTable, st, s, now)
+}
+
+// isEchoLine is a line that says what the headline already says: its text
+// starts with {count}, {rate} or "1 agent". It is never picked for the ticker.
+func isEchoLine(en string) bool {
+	return strings.HasPrefix(en, "{count}") || strings.HasPrefix(en, "{rate}") || strings.HasPrefix(en, "1 agent")
+}
+
+// pickFrom is the pick of Line over a table. A mood with only echo lines left
+// gives "".
+func pickFrom(table []LineDef, st State, s Settings, now time.Time) string {
 	topID, topKind := "", ""
 	if len(st.Rows) > 0 && st.Rows[0].Kind != RowKindMore {
 		topID, topKind = st.Rows[0].ID, st.Rows[0].Kind
@@ -144,8 +196,8 @@ func Line(st State, s Settings, now time.Time) string {
 	}
 
 	var fit []string
-	for _, l := range lineTable {
-		if l.Mood != st.Mood {
+	for _, l := range table {
+		if l.Mood != st.Mood || isEchoLine(l.EN) {
 			continue
 		}
 		text := l.EN
@@ -176,7 +228,7 @@ func Line(st State, s Settings, now time.Time) string {
 	}
 	if (st.Mood == MoodWorking && st.Agents == 1) || (st.Mood == MoodBlocked && st.Counts.Blocked == 1 && topKind != waits.KindGate) {
 		for _, l := range singularTable {
-			if l.Mood == st.Mood {
+			if l.Mood == st.Mood && !isEchoLine(l.EN) {
 				if s.Language == "nl" {
 					fit = append(fit, l.NL)
 				} else {

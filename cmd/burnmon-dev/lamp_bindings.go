@@ -16,6 +16,8 @@ package main
 //   - lampDragStart() starts the drag: the lamp process follows the pointer
 //     until the button is up, then snaps and saves lamp_monitor and lamp_position.
 //   - lampClose() closes the lamp from its menu.
+//   - lampSwing(maxDeg, changes) returns {line, hard} for a grab and swing: the
+//     line to show and whether Glim was pulled too hard.
 //
 // The page also defines window.lampPointer(x, y), which the lamp process
 // calls with the pointer in CSS pixels; it is not a binding.
@@ -28,4 +30,5 @@ var lampBindingNames = []string{
 	"lampOpenDev",
 	"lampSize",
 	"lampState",
+	"lampSwing",
 }

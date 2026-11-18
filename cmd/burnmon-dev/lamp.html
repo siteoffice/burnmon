@@ -9,7 +9,10 @@ html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transpar
 #stage{position:relative;width:100%;height:100%}
 .sliver{width:120px;height:6px;background:var(--accent);animation:none}
 .sliver.off{background:var(--bd)}
-.ticker{position:absolute;top:0;width:300px;background:var(--panel);border:1px solid var(--bd);border-top:0;border-radius:0 0 8px 8px;box-sizing:border-box;overflow:hidden;z-index:2}
+#meas{position:absolute;left:-9999px;top:0;visibility:hidden;display:flex;align-items:center;gap:6px;padding:0 8px;box-sizing:border-box;width:max-content;white-space:nowrap;height:26px}
+#meas .head{max-width:none;overflow:visible}
+#meas .sub{flex:none;overflow:visible}
+.ticker{position:absolute;top:0;width:300px;max-width:440px;background:var(--panel);border:1px solid var(--bd);border-top:0;border-radius:0 0 8px 8px;box-sizing:border-box;overflow:hidden;z-index:2}
 .trow{height:26px;display:flex;align-items:center;gap:6px;padding:0 8px;box-sizing:border-box;white-space:nowrap}
 .trow+.trow{border-top:1px solid var(--bd)}
 .head{flex:none;max-width:48%;font-weight:600;font-size:12px;color:var(--accent);overflow:hidden;text-overflow:ellipsis}
@@ -21,6 +24,9 @@ html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transpar
 .trow.more{color:var(--muted)}
 .trow.burn{color:var(--muted);font-size:11px}
 .trow.burn b{color:var(--fg);font-weight:600}
+.trow.burn span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.trow.burn .bb{flex:none}
+.trow.burn .bc{flex:1}
 .cmenu{position:absolute;z-index:5;height:26px;line-height:26px;padding:0 12px;box-sizing:border-box;white-space:nowrap;background:var(--panel);color:var(--fg);border:1px solid var(--bd);border-radius:4px;cursor:default}
 .cmenu:hover{background:var(--bd)}
 .cardbg{position:absolute;top:0;background:var(--panel);border-radius:0 0 8px 8px;z-index:0}
@@ -38,6 +44,13 @@ html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transpar
 .hang .armL{transform-origin:-26px 82px}
 .hang .stampi{translate:0 var(--sy,-70px)}
 .poke .hang .lid{animation:wink .4s ease-in-out 1}
+.hang.grab .swing{animation:none !important;transform:rotate(var(--ang,0deg))}
+.hang.grab .arm,.hang.flail .arm,.hang.carry .arm{opacity:1}
+.hang.carry .swing{animation:none !important;transform:rotate(var(--lean,0deg));transition:transform .15s}
+.hang.carry .armL{transform:rotate(36deg)}
+.hang.carry .armR{transform:rotate(-36deg)}
+.hang.flail .armL{animation:flailarm .2s linear infinite alternate}
+.hang.flail .armR{animation:flailarm .2s linear infinite alternate-reverse}
 .hang.a-alarm .swing{animation:alarm 2.6s ease-out}
 .hang.a-alarm .rays{opacity:1;animation:pulse .35s ease-in-out infinite alternate}
 .hang.a-knock .arm{opacity:1}
@@ -81,6 +94,7 @@ html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transpar
 @keyframes blink{0%,93%,100%{transform:scaleY(var(--lid,0))}96%{transform:scaleY(1)}}
 @keyframes wink{50%{transform:scaleY(1)}}
 @keyframes alarm{0%{transform:rotate(0)}12%{transform:rotate(24deg)}28%{transform:rotate(-19deg)}44%{transform:rotate(14deg)}60%{transform:rotate(-9deg)}76%{transform:rotate(5deg)}90%{transform:rotate(-2deg)}100%{transform:rotate(0)}}
+@keyframes flailarm{from{transform:rotate(-50deg)}to{transform:rotate(40deg)}}
 @keyframes pulse{from{opacity:.35}to{opacity:1}}
 @keyframes knock{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-38deg)}40%,80%{transform:rotate(12deg)}}
 @keyframes lean{0%,100%{transform:rotate(0)}30%,70%{transform:rotate(-7deg)}}
@@ -107,11 +121,17 @@ html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transpar
 @keyframes dots{0%{transform:translateX(0);opacity:0}15%{opacity:1}100%{transform:translateX(40px);opacity:0}}
 @media (prefers-reduced-motion:reduce){*{animation:none !important}}
 </style></head>
-<body><div id="stage"><div id="cardbg" class="cardbg" style="display:none"></div><div id="tick" class="ticker" style="display:none"></div><div id="hang" class="hang" style="display:none"></div><div id="sliver"></div><div id="cmenu" class="cmenu" style="display:none">Close the lamp</div></div>
+<body><div id="stage"><div id="cardbg" class="cardbg" style="display:none"></div><div id="tick" class="ticker" style="display:none"></div><div id="hang" class="hang" style="display:none"></div><div id="sliver"></div><div id="cmenu" class="cmenu" style="display:none">Close the lamp</div></div><div id="meas"></div>
 <script>
-var TICKER_W=300,ROW_H=26,OPEN_ITEMS=6,HOVER_LINGER_MS=2000,DRAG_PX=6;
+var TICKER_W=300,TICKER_MAX=440,ROW_H=26,OPEN_ITEMS=6,HOVER_LINGER_MS=2000,DRAG_PX=6;
+var SWING_MAX=60,SWING_REST_MS=3000,TURN_WINDOW_MS=1500,FLAIL_MS=1500,GRAB_PX=4,VIEW_MS=4000,SWING_LINE_MS=2500,CARRY_MAX_MS=20000;
 var held=false,menuOpen=false,dragFrom=null,dragged=false;
-var SIZE={small:1.2,medium:1.5,large:1.9};
+/* held is true while Glim is grabbed and until he rests. carrying is a drag
+   of the lamp (the lamp process moves the window), dragMon the monitor it
+   started on, carryDrop a drop that may show "view" once the saved monitor
+   differs. */
+var grab=null,swung=false,flailing=false,carrying=false,carryDrop=false,dragMon='',viewUntil=0,swingLine='',swingUntil=0;
+var tw=TICKER_W,padNow=0,pivot={x:0,y:0},ang=0,lastMeas='',measW=TICKER_W;
 var root=document.documentElement,cur=null,hover=false,linger=null,lastSize='',lastArea='',lastTick='',lastRig='',lastCls='',lastDs=null,motionNow='lively',svgCache={},seenSeq=0,actIdx=-1,actTimers=[],pokeT=null;
 window.lampFreeze=window.lampFreeze||false;
 function el(id){return document.getElementById(id);}
@@ -119,35 +139,50 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 function label(k,d){return cur&&cur.labels&&cur.labels[k]?cur.labels[k]:d;}
 function fmtRate(r){var n=Math.round(r||0);return n>=1000?Math.round(n/1000)+'k':String(n);}
 function isDark(t){return t==='dark'||(t!=='light'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches);}
-function glimSVG(st,theme){
-  var bricks=st.mood==='bored'?st.wall_bricks:0,key=st.mood+'|'+bricks+'|'+theme;
+function glimSVG(st,theme,pose){
+  var m=pose||st.mood,bricks=m==='bored'?st.wall_bricks:0,key=m+'|'+bricks+'|'+theme;
   if(svgCache[key]!==undefined)return svgCache[key];
   svgCache[key]='';
-  lampGlim(st.mood,bricks,theme).then(function(s){svgCache[key]=s;draw();}).catch(function(){delete svgCache[key];});
+  lampGlim(m,bricks,theme).then(function(s){svgCache[key]=s;draw();}).catch(function(){delete svgCache[key];});
   return '';
 }
 function openedHTML(st){
-  var first='<b>'+esc(fmtRate(st.burn_rate))+' '+esc(label('tokens','tokens a minute'))+'</b>';
+  var first='<span class="bb"><b>'+esc(fmtRate(st.burn_rate))+' '+esc(label('tokens','tokens a minute'))+'</b></span>';
   if(!st.cost_5min)return first;
-  return first+', $'+esc((st.cost_5min.usd||0).toFixed(2))+' '+esc(st.cost_5min.label)+' (5 min)';
+  var cost='$'+esc((st.cost_5min.usd||0).toFixed(2))+' '+esc(st.cost_5min.label)+' (5 min)';
+  return first+'<span class="bc" title="'+cost+'">'+cost+'</span>';
 }
 function rowHTML(r){
   if(r.kind==='more')return '<div class="trow lrow more"><span class="ltitle" title="'+esc(r.title_full)+'">'+esc(r.title)+'</span></div>';
   return '<div class="trow lrow" data-id="'+esc(r.id)+'"><span class="lword">'+esc(r.word)+'</span><span class="ltitle" title="'+esc(r.title_full)+'">'+esc(r.title)+'</span><span class="lwait" title="'+esc(r.wait_exact)+'">'+esc(r.wait)+'</span></div>';
 }
 function lineNow(p){
-  var L=p.act_lines||[];
+  var L=p.act_lines||[],now=Date.now();
+  if(carrying&&p.carry_lines&&p.carry_lines.drag)return p.carry_lines.drag;
+  if(now<viewUntil&&p.carry_lines&&p.carry_lines.view)return p.carry_lines.view;
+  if(now<swingUntil&&swingLine)return swingLine;
   if(p.act&&actIdx>=0&&L[actIdx])return L[actIdx];
   return p.state.line||'';
 }
-function tickerHTML(p,open,rows){
+function row1HTML(p){
   var st=p.state,line=lineNow(p);
-  var h='<div class="trow"><b class="head" title="'+esc(st.headline)+'">'+esc(st.headline)+'</b><span class="sub" title="'+esc(line)+'">'+esc(line)+'</span>';
+  var h='<b class="head" title="'+esc(st.headline)+'">'+esc(st.headline)+'</b><span class="sub" title="'+esc(line)+'">'+esc(line)+'</span>';
   if(st.wall_over)h+='<span class="w30">30+</span>';
   if(st.demo)h+='<span class="demo">demo</span>';
-  h+='</div>'+rows.map(rowHTML).join('');
+  return h;
+}
+function tickerHTML(p,open,rows){
+  var st=p.state;
+  var h='<div class="trow">'+row1HTML(p)+'</div>'+rows.map(rowHTML).join('');
   if(open)h+='<div class="trow burn">'+openedHTML(st)+'</div>';
   return h;
+}
+/* The ticker is as wide as row 1 needs: the hidden #meas holds row 1 at its
+   natural width, plus the border. Every other row takes the ticker's width. */
+function tickerWidth(p){
+  var r1=row1HTML(p);
+  if(r1!==lastMeas){lastMeas=r1;var m=el('meas');m.innerHTML=r1;measW=m.offsetWidth+2;}
+  return Math.min(TICKER_MAX,Math.max(TICKER_W,Math.ceil(measW)));
 }
 function startAct(p){
   actTimers.forEach(clearTimeout);actTimers=[];actIdx=-1;
@@ -158,7 +193,9 @@ function startAct(p){
 }
 function draw(){
   if(!cur||!cur.state)return;
-  var p=cur,st=p.state,look=p.look||{},s=SIZE[look.size]||1.5,motion=look.motion||'lively';
+  var p=cur,st=p.state,look=p.look||{},motion=look.motion||'lively';
+  if(!(look.size>=100&&look.size<=200))look.size=150;
+  var s=look.size/100;
   if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches)motion='off';
   root.setAttribute('data-theme',look.theme||'system');
   root.setAttribute('data-backdrop',look.backdrop==='card'?'card':'clear');
@@ -182,29 +219,34 @@ function draw(){
   tickRows=open?(st.rows||[]).slice(0,OPEN_ITEMS):items.slice(0,Math.max((st.ticker_rows||1)-1,0));
   tr=1+tickRows.length+(open?1:0);
   var tH=ROW_H*tr,wallOn=st.mood==='bored'&&st.wall_bricks>0,uw=wallOn?211:132;
-  var pad=Math.max(0,Math.ceil(150-66*s+uw*s-TICKER_W));
+  tw=tickerWidth(p);
+  var pad=Math.max(0,Math.ceil(tw/2-66*s+uw*s-tw));
   if(act==='slip')pad=Math.max(pad,Math.ceil(90*s));
   if(act==='alarm')pad=Math.max(pad,24);
   if(held)pad=Math.max(pad,Math.ceil(0.9*132*s));
-  var gx=pad+150-66*s,gy=tH-6*s,gw=uw*s,gh=132*s;
-  w=TICKER_W+2*pad;h=Math.round(tH+126*s+(act==='slip'?26*s:0));
-  var t=el('tick');t.style.display='';t.style.left=pad+'px';
+  var gx=pad+tw/2-66*s,gy=tH-6*s,gw=uw*s,gh=132*s;
+  padNow=pad;pivot={x:gx+66*s,y:tH};
+  w=tw+2*pad;h=Math.round(tH+126*s+(act==='slip'?26*s:0));
+  var t=el('tick');t.style.display='';t.style.left=pad+'px';t.style.width=tw+'px';
   var html=tickerHTML(p,open,tickRows);
   if(html!==lastTick){lastTick=html;t.innerHTML=html;}
   t.className='ticker'+(open?' open':'');
   var cb=el('cardbg');
-  if(look.backdrop==='card'){cb.style.display='';cb.style.left=pad+'px';cb.style.width=TICKER_W+'px';cb.style.height=h+'px';}else{cb.style.display='none';}
+  if(look.backdrop==='card'){cb.style.display='';cb.style.left=pad+'px';cb.style.width=tw+'px';cb.style.height=h+'px';}else{cb.style.display='none';}
   var hg=el('hang');
   if(!down){hg.style.display='none';}else{
     hg.style.display='';
     hg.style.left=gx+'px';hg.style.top=gy+'px';hg.style.width=gw+'px';hg.style.height=gh+'px';
     hg.style.setProperty('--hide','112');hg.style.setProperty('--pk',String(74-14/s));
-    hg.style.setProperty('--sl',String(150/s));hg.style.setProperty('--dir','1');hg.style.setProperty('--sy',String(-(56+13/s))+'px');
+    hg.style.setProperty('--sl',String(tw/2/s));hg.style.setProperty('--dir','1');hg.style.setProperty('--sy',String(-(56+13/s))+'px');
     if(lastDs!==p.dot_seconds){lastDs=p.dot_seconds;hg.style.setProperty('--ds',String(p.dot_seconds||2));}
-    var svg=glimSVG(st,isDark(look.theme)?'dark':'light');
+    var svg=glimSVG(st,isDark(look.theme)?'dark':'light',p.pose);
     if(svg&&svg!==lastRig){lastRig=svg;hg.innerHTML=svg;}
     var cls='hang'+(hides?' q':'')+(act?' '+'a-'+act:'');
-    if(motion!=='off')(p.holds||[]).forEach(function(x){cls+=' '+'h-'+x;});
+    /* grab, carry and flail only in lively; Glim is awake for the coffee, so
+       the sleep state does not hold then */
+    if(motion==='lively')cls+=(grab&&grab.moved?' grab':'')+(carrying?' carry':'')+(flailing?' flail':'');
+    if(motion!=='off')(p.holds||[]).forEach(function(x){if(act==='coffee'&&x==='sleep')return;cls+=' '+'h-'+x;});
     var key=cls+'|'+p.act_seq;
     if(key!==lastCls){hg.className='';void hg.offsetWidth;hg.className=cls;lastCls=key;}
   }
@@ -217,6 +259,14 @@ function draw(){
   if(lastSize!==w+'x'+h){lastSize=w+'x'+h;lampSize(w,h).catch(function(){});}
 }
 window.lampRender=function(p){
+  /* the drop may happen outside the window, where no mouse event reaches the
+     page: a saved monitor that differs from the one the drag started on ends
+     the carry too, and a timeout ends it when the monitor is the same */
+  if(carrying&&p&&p.look&&p.look.monitor!==dragMon)carryEnd();
+  /* a drag was dropped and the saved monitor is another one: the view line shows once */
+  if(p&&p.look&&carryDrop&&p.look.monitor!==dragMon){
+    carryDrop=false;viewUntil=Date.now()+VIEW_MS;setTimeout(draw,VIEW_MS+50);
+  }
   if(p&&p.act&&p.act_seq!==seenSeq){seenSeq=p.act_seq;startAct(p);}
   else if(p&&!p.act&&actIdx!==-1){actTimers.forEach(clearTimeout);actTimers=[];actIdx=-1;}
   cur=p;draw();
@@ -248,20 +298,112 @@ function lookAt(cx,cy){
   var r=eyes.getBoundingClientRect(),dx=cx-(r.left+r.width/2),dy=cy-(r.top+r.height/2),d=Math.sqrt(dx*dx+dy*dy)||1,q=Math.min(3.5,d/40),hg=el('hang');
   hg.style.setProperty('--px',(dx/d*q).toFixed(1)+'px');hg.style.setProperty('--py',(dy/d*q).toFixed(1)+'px');
 }
-window.lampPointer=function(x,y){lookAt(x,y);};
+window.lampPointer=function(x,y){
+  lookAt(x,y);
+  /* While the lamp is carried the pointer runs ahead of the window: Glim leans
+     against the direction of the move. */
+  if(carrying)el('hang').style.setProperty('--lean',Math.max(-14,Math.min(14,-(x-(padNow+tw/2))/8)).toFixed(1)+'deg');
+};
+function carryEnd(){
+  if(!carrying)return;
+  carrying=false;carryDrop=true;
+  setTimeout(function(){carryDrop=false;},3000);
+  draw();
+}
 document.addEventListener('mousemove',function(e){
   lookAt(e.clientX,e.clientY);
+  if(carrying&&!(e.buttons&1))carryEnd();
   /* A pointer down on the ticker that moves more than DRAG_PX is a drag: the
      lamp process takes over and follows the pointer until the button is up. */
   if(dragFrom&&!dragged&&(e.buttons&1)&&Math.abs(e.clientX-dragFrom.x)+Math.abs(e.clientY-dragFrom.y)>DRAG_PX){
     dragged=true;dragFrom=null;
+    carrying=true;carryDrop=false;dragMon=cur&&cur.look?cur.look.monitor:'';
+    draw();
+    setTimeout(carryEnd,CARRY_MAX_MS);
     lampDragStart().catch(function(){});
   }
 });
 el('tick').addEventListener('mousedown',function(e){
   if(e.button===0)dragFrom={x:e.clientX,y:e.clientY};
 });
-document.addEventListener('mouseup',function(){dragFrom=null;setTimeout(function(){dragged=false;},0);});
+document.addEventListener('mouseup',function(){dragFrom=null;carryEnd();setTimeout(function(){dragged=false;},0);});
+/* Grab and swing: the pointer goes down on Glim and moves more than GRAB_PX.
+   He swings on his cord toward the pointer, at most SWING_MAX degrees. On
+   release he swings back and forth and rests within SWING_REST_MS. The loop
+   below runs only from the first move of a grab until he rests; the lamp
+   process decides the line and whether it was too hard (lampSwing). A press
+   without a move is a click, and in calm and off a press is only a click. */
+function grabStart(e){
+  swung=false;
+  if(e.button!==0||motionNow!=='lively'||held||carrying)return;
+  grab={x:e.clientX,y:e.clientY,id:e.pointerId,moved:false,up:false,px:e.clientX,py:e.clientY,lastX:e.clientX,dir:0,turns:[],maxDeg:0,asked:false,upAt:0,ang0:0};
+  try{el('hang').setPointerCapture(e.pointerId);}catch(x){}
+}
+function grabMove(e){
+  var g=grab;
+  if(!g||g.up||e.pointerId!==g.id)return;
+  if(!g.moved){
+    if(Math.abs(e.clientX-g.x)+Math.abs(e.clientY-g.y)<=GRAB_PX)return;
+    g.moved=true;swung=true;held=true;ang=0;
+    draw();swingLoop();
+  }
+  g.px=e.clientX;g.py=e.clientY;
+  var dx=e.clientX-g.lastX;
+  if(Math.abs(dx)>2){
+    var d=dx>0?1:-1;
+    if(g.dir&&d!==g.dir)g.turns.push(performance.now());
+    g.dir=d;g.lastX=e.clientX;
+  }
+}
+function grabEnd(e){
+  var g=grab;
+  if(!g||e.pointerId!==g.id)return;
+  if(!g.moved){grab=null;return;}
+  g.up=true;g.upAt=performance.now();g.ang0=ang;
+  if(!g.asked)askSwing(g);
+}
+function askSwing(g){
+  g.asked=true;
+  var now=performance.now();
+  g.turns=g.turns.filter(function(t){return now-t<=TURN_WINDOW_MS;});
+  lampSwing(g.maxDeg,g.turns.length).then(function(r){
+    if(!r)return;
+    if(r.hard)flail();
+    if(r.line){swingLine=r.line;swingUntil=Date.now()+SWING_LINE_MS;draw();setTimeout(draw,SWING_LINE_MS+50);}
+  }).catch(function(){});
+}
+function flail(){
+  flailing=true;draw();
+  setTimeout(function(){flailing=false;draw();},FLAIL_MS);
+}
+function swingLoop(){
+  var g=grab,now=performance.now();
+  if(!g||!g.moved){return;}
+  var hg=el('hang');
+  if(!g.up){
+    var a=Math.atan2(g.px-pivot.x,g.py-pivot.y)*180/Math.PI;
+    a=-Math.max(-SWING_MAX,Math.min(SWING_MAX,a));
+    ang+=(a-ang)*0.35;
+    g.maxDeg=Math.max(g.maxDeg,Math.abs(a));
+    g.turns=g.turns.filter(function(t){return now-t<=TURN_WINDOW_MS;});
+    /* ask the lamp process once, when the pull reaches the stop or the pointer
+       turns often enough; it applies the rule and answers hard or gentle */
+    if(!g.asked&&(g.maxDeg>=SWING_MAX||g.turns.length>=3))askSwing(g);
+    hg.style.setProperty('--ang',ang.toFixed(1)+'deg');
+    requestAnimationFrame(swingLoop);
+    return;
+  }
+  var t=now-g.upAt;
+  if(t>=SWING_REST_MS){held=false;grab=null;ang=0;draw();return;}
+  var k=t/1000;
+  ang=g.ang0*Math.exp(-1.6*k)*Math.cos(2*Math.PI*k/1.2);
+  hg.style.setProperty('--ang',ang.toFixed(1)+'deg');
+  requestAnimationFrame(swingLoop);
+}
+el('hang').addEventListener('pointerdown',grabStart);
+el('hang').addEventListener('pointermove',grabMove);
+el('hang').addEventListener('pointerup',grabEnd);
+el('hang').addEventListener('pointercancel',grabEnd);
 function closeMenu(){menuOpen=false;el('cmenu').style.display='none';draw();}
 /* Right-click on the ticker or on Glim: one item, "Close the lamp". It never
    takes the keyboard focus and goes away when the pointer leaves it. */
@@ -276,7 +418,7 @@ document.addEventListener('contextmenu',function(e){
 el('cmenu').addEventListener('mouseleave',closeMenu);
 el('cmenu').addEventListener('click',function(){lampClose().catch(function(){});});
 document.addEventListener('click',function(e){
-  if(dragged||!e.target.closest||!e.target.closest('#hang'))return;
+  if(dragged||swung||!e.target.closest||!e.target.closest('#hang'))return;
   lampNextLine().then(function(line){
     if(cur&&cur.state)cur.state.line=line;
     if(pokeT!==null)clearTimeout(pokeT);

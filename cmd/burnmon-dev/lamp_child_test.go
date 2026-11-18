@@ -252,7 +252,7 @@ func TestSetLampKey(t *testing.T) {
 	got := lamp.ParseSettings(b)
 	want := lamp.DefaultSettings()
 	want.Position, want.Language, want.Lines, want.ForemanItems, want.Enabled = "top-left", "nl", false, false, true
-	want.TickerRows, want.Size, want.Theme, want.Motion, want.Quiet, want.Backdrop = 3, "large", "dark", "calm", "stay", "card"
+	want.TickerRows, want.Size, want.SizePct, want.Theme, want.Motion, want.Quiet, want.Backdrop = 3, "large", 190, "dark", "calm", "stay", "card"
 	if got != want {
 		t.Fatalf("saved settings %+v, want %+v", got, want)
 	}

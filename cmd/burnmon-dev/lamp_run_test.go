@@ -472,7 +472,7 @@ func TestEnginePayloadCarriesTheActAndItsSeq(t *testing.T) {
 	if p.Act != "" || p.ActSeq != 1 {
 		t.Fatalf("after the act: act %q seq %d, want none 1", p.Act, p.ActSeq)
 	}
-	if p.Look.Rows != 1 || p.Look.Size != "medium" || p.Look.Theme != "system" || p.Look.Motion != "lively" || p.Look.Quiet != "hide" || p.Look.Backdrop != "clear" {
+	if p.Look.Rows != 1 || p.Look.Size != 150 || p.Look.Theme != "system" || p.Look.Motion != "lively" || p.Look.Quiet != "hide" || p.Look.Backdrop != "clear" {
 		t.Errorf("look %+v, want the defaults", p.Look)
 	}
 	if p.Quiet {
@@ -548,24 +548,26 @@ func TestLampActLines(t *testing.T) {
 func TestLampWindowSize(t *testing.T) {
 	cases := []struct {
 		rows  int
-		size  string
+		size  int
 		wantW int
 		wantH int
 	}{
-		{1, "medium", 300, 26 + 180},
-		{4, "medium", 300, 104 + 180},
-		{1, "small", 300, 26 + 144},
-		{2, "large", 300, 52 + 228},
-		{0, "bad", 300, 26 + 180}, // bad values are the defaults
-		{9, "medium", 300, 104 + 180},
+		{1, 150, 300, 26 + 180},
+		{4, 150, 300, 104 + 180},
+		{1, 120, 300, 26 + 144},
+		{2, 190, 300, 52 + 228},
+		{1, 100, 300, 26 + 120},
+		{1, 200, 300, 26 + 240},
+		{0, 0, 300, 26 + 180}, // bad values are the defaults
+		{9, 150, 300, 104 + 180},
 	}
 	for _, c := range cases {
-		w, h := lampWindowSize(lamp.Settings{TickerRows: c.rows, Size: c.size})
+		w, h := lampWindowSize(lamp.Settings{TickerRows: c.rows, SizePct: c.size})
 		if w != c.wantW || h != c.wantH {
-			t.Errorf("lampWindowSize(%d,%q) = %dx%d, want %dx%d", c.rows, c.size, w, h, c.wantW, c.wantH)
+			t.Errorf("lampWindowSize(%d,%d) = %dx%d, want %dx%d", c.rows, c.size, w, h, c.wantW, c.wantH)
 		}
 		if w < 120 || h < 6 {
-			t.Errorf("lampWindowSize(%d,%q) = %dx%d does not cover the sliver", c.rows, c.size, w, h)
+			t.Errorf("lampWindowSize(%d,%d) = %dx%d does not cover the sliver", c.rows, c.size, w, h)
 		}
 	}
 }
@@ -809,12 +811,85 @@ func TestLampCloseNow(t *testing.T) {
 	}
 }
 
-// The grab and swing line is filled in by T3; until then the engine answers
-// with no line, so the page shows none.
-func TestEngineSwingHasNoLineYet(t *testing.T) {
+// A settings change reaches a running lamp within one tick: the engine reads
+// the file on every payload, so the second payload shows what the file says
+// now (criterion 3), for the size, the theme, the language and the monitor.
+func TestEngineSettingsChangeShowsInTheNextPayload(t *testing.T) {
+	t.Setenv(settingsDirEnv, "")
+	now := time.Date(2026, 3, 2, 12, 3, 10, 0, time.UTC)
+	e, setDir := liveFixture(t, now, 120, `{"lamp_size":100,"lamp_theme":"light","lamp_language":"en","lamp_monitor":"M2"}`)
+	oldMons := lampMonitors
+	lampMonitors = func() []lampMonitor {
+		return []lampMonitor{{Name: "M1", Primary: true, W: 100, H: 100, Scale: 1}, {Name: "M2", X: 100, W: 100, H: 100, Scale: 1}}
+	}
+	defer func() { lampMonitors = oldMons }()
+	p := e.payload(now)
+	if p.Look.Size != 100 || p.Look.Theme != "light" || p.Look.Monitor != "M2" || p.CarryLines["drag"] != "Put me down." || p.CarryLines["view"] != "Nice view." {
+		t.Fatalf("first payload look %+v carry %v", p.Look, p.CarryLines)
+	}
+	if err := os.WriteFile(filepath.Join(setDir, "burnmon-dev.json"), []byte(`{"lamp_size":200,"lamp_theme":"dark","lamp_language":"nl","lamp_monitor":"gone"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p = e.payload(now.Add(time.Second))
+	if p.Look.Size != 200 || p.Look.Theme != "dark" || p.CarryLines["drag"] != "Zet me neer." {
+		t.Errorf("second payload look %+v carry %v, want the new file", p.Look, p.CarryLines)
+	}
+	if p.Look.Monitor != "M1" {
+		t.Errorf("a monitor that is gone gave %q, want the primary M1", p.Look.Monitor)
+	}
+}
+
+// The coffee act shows Glim awake: the pose is working in any mood. Every other
+// act and no act keep the mood.
+func TestEnginePoseIsWorkingForTheCoffee(t *testing.T) {
 	e := newLampEngine(true, "", "")
-	if got := e.swing(60, 3, time.Now()); got != "" {
-		t.Errorf("swing = %q, want empty until T3", got)
+	now := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	for _, c := range []struct{ act, mood, want string }{
+		{lamp.ActCoffee, lamp.MoodAsleep, lamp.MoodWorking},
+		{lamp.ActCoffee, lamp.MoodOff, lamp.MoodWorking},
+		{"", lamp.MoodAsleep, lamp.MoodAsleep},
+		{lamp.ActAlarm, lamp.MoodBlocked, lamp.MoodBlocked},
+	} {
+		e.act = c.act
+		if p := e.finish(lamp.State{Mood: c.mood}, lamp.DefaultSettings(), now, "dark"); p.Pose != c.want {
+			t.Errorf("act %q mood %q: pose %q, want %q", c.act, c.mood, p.Pose, c.want)
+		}
+	}
+}
+
+// Grab and swing: the line comes from the pure rule; the engine keeps the time
+// of the last protest (60 s memory); calm and off do not swing.
+func TestEngineSwingLinesAndTheSixtySecondMemory(t *testing.T) {
+	e := newLampEngine(true, "", "")
+	e.lastSet = lamp.Settings{Language: "en", Motion: "lively"}
+	t0 := time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		deg     float64
+		changes int
+		at      time.Duration
+		line    string
+		hard    bool
+	}{
+		{30, 0, 0, "That tickles.", false},
+		{60, 0, 10 * time.Second, "Don't do that.", true},
+		{59, 3, 69 * time.Second, "I said don't.", true},   // 59 s after the last protest
+		{60, 0, 130 * time.Second, "Don't do that.", true}, // 61 s after the last
+		{20, 1, 131 * time.Second, "That tickles.", false},
+	} {
+		got := e.swing(c.deg, c.changes, t0.Add(c.at))
+		if got.Line != c.line || got.Hard != c.hard {
+			t.Errorf("swing(%v,%d) at %v = %+v, want %q hard %v", c.deg, c.changes, c.at, got, c.line, c.hard)
+		}
+	}
+	e.lastSet.Language = "nl"
+	if got := e.swing(60, 0, t0.Add(500*time.Second)); got.Line != "Niet doen." {
+		t.Errorf("Dutch protest = %q, want Niet doen.", got.Line)
+	}
+	for _, m := range []string{"calm", "off"} {
+		e.lastSet.Motion = m
+		if got := e.swing(60, 3, t0.Add(900*time.Second)); got.Line != "" || got.Hard {
+			t.Errorf("motion %s swung: %+v", m, got)
+		}
 	}
 }
 

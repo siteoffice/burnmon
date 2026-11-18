@@ -4,7 +4,7 @@ import "testing"
 
 func TestSettingsDefaults(t *testing.T) {
 	want := Settings{Enabled: false, Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 20000,
-		TickerRows: 1, Size: "medium", Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
+		TickerRows: 1, Size: "medium", SizePct: 150, Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
 	if got := DefaultSettings(); got != want {
 		t.Fatalf("DefaultSettings() = %+v, want %+v", got, want)
 	}
@@ -52,7 +52,7 @@ func TestNewLampKeys(t *testing.T) {
 	in := `{"lamp_ticker_rows":4,"lamp_size":"large","lamp_theme":"dark","lamp_motion":"calm","lamp_quiet":"stay","lamp_backdrop":"card"}`
 	got := ParseSettings([]byte(in))
 	want := DefaultSettings()
-	want.TickerRows, want.Size, want.Theme, want.Motion, want.Quiet, want.Backdrop = 4, "large", "dark", "calm", "stay", "card"
+	want.TickerRows, want.Size, want.SizePct, want.Theme, want.Motion, want.Quiet, want.Backdrop = 4, "large", 190, "dark", "calm", "stay", "card"
 	if got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
@@ -121,6 +121,42 @@ func TestLampMonitorKey(t *testing.T) {
 	} {
 		if got := ParseSettings([]byte(in)).Monitor; got != want {
 			t.Errorf("%s gave monitor %q, want %q", in, got, want)
+		}
+	}
+}
+
+// lamp_size is a percentage from 100 to 200 (default 150). The three old words
+// still load as 120, 150 and 190. Anything else is 150.
+func TestLampSizePct(t *testing.T) {
+	if DefaultSettings().SizePct != 150 {
+		t.Errorf("default size = %d, want 150", DefaultSettings().SizePct)
+	}
+	for in, want := range map[string]int{
+		`{"lamp_size":100}`:      100,
+		`{"lamp_size":200}`:      200,
+		`{"lamp_size":150}`:      150,
+		`{"lamp_size":137}`:      137, // a whole number in range is kept as saved
+		`{"lamp_size":99}`:       150,
+		`{"lamp_size":201}`:      150,
+		`{"lamp_size":137.5}`:    150, // a fraction is not a whole number
+		`{"lamp_size":"small"}`:  120,
+		`{"lamp_size":"medium"}`: 150,
+		`{"lamp_size":"large"}`:  190,
+		`{"lamp_size":"huge"}`:   150,
+		`{"lamp_size":true}`:     150,
+		`{"lamp_size":null}`:     150,
+		`{}`:                     150,
+	} {
+		if got := ParseSettings([]byte(in)).SizePct; got != want {
+			t.Errorf("%s gave size %d, want %d", in, got, want)
+		}
+	}
+}
+
+func TestPctScale(t *testing.T) {
+	for pct, want := range map[int]float64{100: 1, 150: 1.5, 200: 2, 120: 1.2, 0: 1.5, 99: 1.5, 201: 1.5} {
+		if got := PctScale(pct); got != want {
+			t.Errorf("PctScale(%d) = %v, want %v", pct, got, want)
 		}
 	}
 }

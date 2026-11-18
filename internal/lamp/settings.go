@@ -14,7 +14,8 @@ type Settings struct {
 	ForemanItems bool   // lamp_foreman_items
 	BurnFloorTPM int    // lamp_burn_floor_tpm, a first guess tuned at the first look
 	TickerRows   int    // lamp_ticker_rows: 1 to 4
-	Size         string // lamp_size: small, medium or large
+	Size         string // lamp_size as a word: small, medium or large (the gear still writes it until T4)
+	SizePct      int    // lamp_size as a percentage, 100 to 200; the old words load as 120, 150 and 190
 	Theme        string // lamp_theme: system, light or dark
 	Motion       string // lamp_motion: lively, calm or off
 	Quiet        string // lamp_quiet: hide (sliver, Glim up) or stay (Glim hangs)
@@ -33,6 +34,15 @@ func SizeScale(size string) float64 {
 	return 1.5
 }
 
+// PctScale is Glim's size factor for a lamp_size percentage; a value outside
+// 100 to 200 is 150 percent.
+func PctScale(pct int) float64 {
+	if pct < 100 || pct > 200 {
+		pct = 150
+	}
+	return float64(pct) / 100
+}
+
 func oneOf(v string, choices ...string) bool {
 	for _, c := range choices {
 		if v == c {
@@ -45,7 +55,7 @@ func oneOf(v string, choices ...string) bool {
 // DefaultSettings is what a missing file or a bad value gives.
 func DefaultSettings() Settings {
 	return Settings{Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 20000,
-		TickerRows: 1, Size: "medium", Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
+		TickerRows: 1, Size: "medium", SizePct: 150, Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
 }
 
 // ParseSettings reads the lamp keys from the bytes of burnmon-dev.json. A
@@ -88,6 +98,9 @@ func ParseSettings(b []byte) Settings {
 	}
 	if json.Unmarshal(raw["lamp_size"], &sv) == nil && oneOf(sv, "small", "medium", "large") {
 		s.Size = sv
+		s.SizePct = map[string]int{"small": 120, "medium": 150, "large": 190}[sv]
+	} else if json.Unmarshal(raw["lamp_size"], &fv) == nil && fv >= 100 && fv <= 200 && fv == float64(int(fv)) {
+		s.SizePct = int(fv)
 	}
 	if json.Unmarshal(raw["lamp_theme"], &sv) == nil && oneOf(sv, "system", "light", "dark") {
 		s.Theme = sv

@@ -167,6 +167,11 @@ func runLampWindow(o lampOpts) int {
 			go pl.drag(func() { w.Dispatch(pl.place) })
 		}
 	})
+	// A grab and swing of Glim ends or reaches the stop: the line to show and
+	// whether the grab was too hard (the 60 s memory lives in the engine).
+	bind("lampSwing", func(maxDeg float64, changes int) lampSwingResult {
+		return e.swing(maxDeg, changes, time.Now())
+	})
 	// "Close the lamp" from the menu: ledger first, lamp_enabled false only for
 	// a lamp BurnMon Dev started, then the lamp ends.
 	bind("lampClose", func() {

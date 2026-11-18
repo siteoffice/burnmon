@@ -165,7 +165,6 @@ func TestLampPageTickerSizes(t *testing.T) {
 	}
 	for _, want := range []string{
 		"TICKER_W=300", "ROW_H=26", "OPEN_ITEMS=6",
-		"small:1.2", "medium:1.5", "large:1.9",
 		"w=120;h=6", "ticker_rows", "ROW_H*",
 	} {
 		if !strings.Contains(lampHTML, want) {
@@ -333,5 +332,103 @@ func TestLampPageThemeAndContrast(t *testing.T) {
 	// lamp_theme replaces the theme BurnMon Dev saves.
 	if strings.Contains(lampHTML, "cur.theme") {
 		t.Error("the page still reads the theme of BurnMon Dev")
+	}
+}
+
+// jsBody returns the text of the function whose declaration starts with decl,
+// up to the first line that is a lone closing brace.
+func jsBody(t *testing.T, decl string) string {
+	t.Helper()
+	i := strings.Index(lampHTML, decl)
+	if i < 0 {
+		t.Fatalf("lamp.html lacks %q", decl)
+	}
+	j := strings.Index(lampHTML[i:], "\n}\n")
+	if j < 0 {
+		t.Fatalf("lamp.html: %q does not end", decl)
+	}
+	return lampHTML[i : i+j]
+}
+
+// Fix lane T3, read as text, nothing seen. The size is a percentage from the
+// payload, the ticker is as wide as row 1 needs (300 to 440 px), every opened
+// row is in the box of row 1, the rig is drawn in the pose of the payload and
+// the carry lines come from the payload.
+func TestLampPageSizeWidthAndPose(t *testing.T) {
+	if strings.Contains(lampHTML, "SIZE={") || strings.Contains(lampHTML, "small:1.2") {
+		t.Error("the page still holds a size word map")
+	}
+	for _, want := range []string{
+		"look.size/100", "TICKER_MAX=440", "Math.min(TICKER_MAX,Math.max(TICKER_W", `id="meas"`,
+		"p.pose", "carry_lines", "look.monitor",
+	} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
+	}
+	// The opened burn row is made of sized spans, so a long text is cut inside
+	// the row like row 1 and no bare text node runs past the padding.
+	body := jsBody(t, "function openedHTML(")
+	if strings.Count(body, "<span") < 2 || !strings.Contains(ruleBody(t, ".trow.burn span"), "text-overflow:ellipsis") {
+		t.Error("the burn row is not made of spans that cut with an ellipsis")
+	}
+	if !strings.Contains(ruleBody(t, ".ticker"), "width:300px") || !strings.Contains(ruleBody(t, ".trow"), "box-sizing:border-box") {
+		t.Error("the ticker and its rows lose the common box")
+	}
+	// The lines of the lamp are the payload's, also the carry lines.
+	for _, bad := range []string{"Put me down", "Nice view", "That tickles", "Don't do that", "I said don't", "Zet me neer"} {
+		if strings.Contains(lampHTML, bad) {
+			t.Errorf("lamp.html holds the line text %q: lines come from the payload", bad)
+		}
+	}
+}
+
+// Grab and swing: the pointer goes down on Glim, he swings on his cord toward
+// the pointer up to 60 degrees, rests within 3 s of the release, and is too hard
+// at 3 direction changes in 1.5 s (the rule itself is lamp.ProtestTooHard). The
+// swing loop runs only while he is held and until he rests; no other loop runs.
+func TestLampPageGrabAndSwing(t *testing.T) {
+	for _, want := range []string{
+		"SWING_MAX=60", "SWING_REST_MS=3000", "TURN_WINDOW_MS=1500", "FLAIL_MS=1500",
+		"'pointerdown'", "'pointermove'", "'pointerup'", "setPointerCapture(", "lampSwing(",
+		"@keyframes flailarm{", ".hang.flail", ".hang.grab", ".hang.carry", "--ang", "--lean",
+		"held=true", "held=false",
+	} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
+	}
+	// calm and off do not swing: a press shows the next line (the click).
+	if !strings.Contains(jsBody(t, "function grabStart("), "motionNow!=='lively'") {
+		t.Error("a grab starts in calm or off")
+	}
+	// No loop runs while Glim is not held and at rest: one setInterval, the state
+	// poll, and requestAnimationFrame only inside the swing loop.
+	if n := strings.Count(lampHTML, "setInterval("); n != 1 || !strings.Contains(lampHTML, "setInterval(poll,1000)") {
+		t.Errorf("the page holds %d setInterval calls, want only the state poll", n)
+	}
+	loop := jsBody(t, "function swingLoop(")
+	if strings.Count(lampHTML, "requestAnimationFrame(") != strings.Count(loop, "requestAnimationFrame(") || !strings.Contains(loop, "requestAnimationFrame(") {
+		t.Error("requestAnimationFrame is used outside the swing loop")
+	}
+	if !strings.Contains(loop, "held=false") {
+		t.Error("the swing loop does not end at rest")
+	}
+	// A swing is not a click.
+	if !strings.Contains(lampHTML, "swung") {
+		t.Error("a swing also counts as a click")
+	}
+}
+
+// A drag shows the carry line while carried and "view" once after a drop on
+// another monitor; the lean is against the direction of the move.
+func TestLampPageCarry(t *testing.T) {
+	for _, want := range []string{"carrying", "dragMon", "VIEW_MS", "carry_lines.drag", "carry_lines.view", " carry'"} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsBody(t, "function lineNow("), "carrying") {
+		t.Error("the line does not switch to the carry line while carried")
 	}
 }

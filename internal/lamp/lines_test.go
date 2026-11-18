@@ -223,7 +223,8 @@ func TestSingularRule(t *testing.T) {
 			t.Errorf("count 2 gave the singular line %q", got)
 		}
 	}
-	// The singular lines are reachable at count 1, in both languages.
+	// The singular lines are reachable at count 1, in both languages. The working one
+	// ("1 agent at work") is an echo line of the headline now and is never picked.
 	seen := map[string]bool{}
 	w1 := lineState(MoodWorking)
 	w1.Agents = 1
@@ -239,7 +240,6 @@ func TestSingularRule(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"1 agent at work. Nothing for you.", "1 agent aan het werk. Niets voor jou.",
 		"One thing is blocked. Guess whose turn.", "Een ding zit vast. Raad eens wie er aan zet is.",
 	} {
 		if !seen[want] {
@@ -305,6 +305,119 @@ func TestActLinesAreInBothLanguagesAndShort(t *testing.T) {
 	for _, c := range []call{{"coffee", "", 0, 12, "", ""}, {"welcome", "", 0, 0, "", ""}, {"alarm", "", 0, 0, "", ""}, {"slip", "side", 0, 0, "", ""}} {
 		if got := ActLine(c.act, c.part, "en", c.count, c.hour); got != "" {
 			t.Errorf("ActLine(%s,%s,en,%d,%d) = %q, want empty", c.act, c.part, c.count, c.hour, got)
+		}
+	}
+}
+
+// An echo line says what the headline already says: its text starts with
+// {count}, {rate} or "1 agent". It is never picked; a mood with only echo lines
+// left gives no line.
+func TestNoEchoLineIsPicked(t *testing.T) {
+	isEcho := func(s string) bool {
+		return strings.HasPrefix(s, "{count}") || strings.HasPrefix(s, "{rate}") || strings.HasPrefix(s, "1 agent")
+	}
+	echoOut := func(got string) bool {
+		// a picked line has its placeholders filled, so test the shape of the filled text too
+		for _, p := range []string{" agents at work", " agents aan het werk", " things are blocked", " dingen zitten vast", " tokens a minute", " tokens per minuut", "1 agent "} {
+			if strings.Contains(got, p) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, mood := range allMoods {
+		for _, lang := range []string{"en", "nl"} {
+			for _, n := range []int{1, 2, 5} {
+				st := lineState(mood, Row{ID: "session:claude:s1", Kind: waits.KindQuestion})
+				st.Agents, st.Counts.Blocked, st.BurnRate, st.LongestWaitMin = n, n, 12345, 20
+				s := DefaultSettings()
+				s.Language = lang
+				for i := 0; i < 60; i++ {
+					got := Line(st, s, t0.Add(time.Duration(i)*5*time.Minute))
+					if isEcho(got) || echoOut(got) {
+						t.Fatalf("%s %s count %d: picked the echo line %q", mood, lang, n, got)
+					}
+				}
+			}
+		}
+	}
+	// Mood working with one agent had its two lines left minus the echo ones: the
+	// other three still show. A mood whose lines are all echo gives none: test the rule on a table.
+	only := []LineDef{{MoodSweating, "{rate} tokens a minute. Bold.", "{rate} tokens per minuut. Gedurfd."}}
+	if got := pickFrom(only, lineState(MoodSweating), DefaultSettings(), t0); got != "" {
+		t.Errorf("a mood with only echo lines gave %q, want none", got)
+	}
+	for _, l := range lineTable {
+		if l.Mood == MoodSweating && !isEcho(l.EN) {
+			return
+		}
+	}
+	t.Error("mood sweating has no line left that is not an echo line")
+}
+
+// The two carry lines and the three swing lines exist in both languages, at most 60 runes.
+func TestCarryAndSwingLines(t *testing.T) {
+	for _, c := range []struct{ act, part, en, nl string }{
+		{"carry", "drag", "Put me down.", "Zet me neer."},
+		{"carry", "view", "Nice view.", "Mooi uitzicht."},
+		{"swing", "tickle", "That tickles.", "Dat kietelt."},
+		{"swing", "protest1", "Don't do that.", "Niet doen."},
+		{"swing", "protest2", "I said don't.", "Ik zei: niet doen."},
+	} {
+		for lang, want := range map[string]string{"en": c.en, "nl": c.nl} {
+			got := ActLine(c.act, c.part, lang, 0, 0)
+			if got != want {
+				t.Errorf("ActLine(%s,%s,%s) = %q, want %q", c.act, c.part, lang, got, want)
+			}
+			if utf8.RuneCountInString(got) > 60 || strings.Contains(got, emDash) {
+				t.Errorf("%q is over 60 runes or holds an em dash", got)
+			}
+		}
+	}
+}
+
+// Too hard is the pull to the 60 degree stop, or 3 direction changes in 1.5 s. A
+// second too hard under 60 s after the last gets the second line.
+func TestProtest(t *testing.T) {
+	now := t0
+	for _, c := range []struct {
+		deg     float64
+		changes int
+		want    bool
+	}{{59, 2, false}, {60, 2, true}, {59, 3, true}, {0, 2, false}, {10, 3, true}, {61, 0, true}} {
+		if got := ProtestTooHard(c.deg, c.changes); got != c.want {
+			t.Errorf("ProtestTooHard(%v,%d) = %v, want %v", c.deg, c.changes, got, c.want)
+		}
+	}
+	var none time.Time
+	if got := Protest(59, 2, now, none, true); got != "tickle" {
+		t.Errorf("gentle swing gave %q, want tickle", got)
+	}
+	if got := Protest(59, 2, now, none, false); got != "" {
+		t.Errorf("no swing gave %q, want none", got)
+	}
+	if got := Protest(60, 0, now, none, true); got != "protest1" {
+		t.Errorf("first too hard gave %q, want protest1", got)
+	}
+	if got := Protest(10, 3, now, now.Add(-59*time.Second), true); got != "protest2" {
+		t.Errorf("too hard 59 s after the last gave %q, want protest2", got)
+	}
+	if got := Protest(10, 3, now, now.Add(-61*time.Second), true); got != "protest1" {
+		t.Errorf("too hard 61 s after the last gave %q, want protest1", got)
+	}
+	if got := Protest(10, 2, now, now.Add(-5*time.Second), true); got != "tickle" {
+		t.Errorf("a gentle swing right after a protest gave %q, want tickle", got)
+	}
+}
+
+// Glim is awake for the coffee: the pose of the act coffee is working; every other act keeps the mood.
+func TestActMood(t *testing.T) {
+	for _, c := range []struct{ act, mood, want string }{
+		{"coffee", MoodAsleep, MoodWorking}, {"coffee", MoodOff, MoodWorking}, {"coffee", MoodBored, MoodWorking},
+		{"", MoodAsleep, MoodAsleep}, {"alarm", MoodBlocked, MoodBlocked}, {"peek", MoodAsleep, MoodAsleep},
+	} {
+		if got := ActMood(c.act, c.mood); got != c.want {
+			t.Errorf("ActMood(%q,%q) = %q, want %q", c.act, c.mood, got, c.want)
 		}
 	}
 }
