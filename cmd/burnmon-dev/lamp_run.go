@@ -154,11 +154,35 @@ func lampChildEnv(base []string, pid int) []string {
 	return append(out, lampParentEnv+"="+strconv.Itoa(pid))
 }
 
-// lampPayload is what the binding lampState returns to the page.
+// lampIdle is the seam for the idle seconds: the seconds since the last
+// keyboard or mouse input on this computer. It is 0 until the window code
+// sets the real one (Windows and macOS). It is read each poll and never stored.
+var lampIdle = func() int { return 0 }
+
+// lampLook is the six look settings after defaults, as the page reads them.
+type lampLook struct {
+	Size     string `json:"size"`
+	Theme    string `json:"theme"`
+	Motion   string `json:"motion"`
+	Quiet    string `json:"quiet"`
+	Backdrop string `json:"backdrop"`
+	Rows     int    `json:"rows"`
+}
+
+// lampPayload is what the binding lampState returns to the page. Act is the
+// act that plays now ("" for none) and ActSeq goes up by one each time an act
+// starts, so the page restarts the animation. Holds are the states that last,
+// DotSeconds the gap between two token dots, Quiet whether only the sliver shows.
 type lampPayload struct {
-	State  lamp.State        `json:"state"`
-	Theme  string            `json:"theme"`
-	Labels map[string]string `json:"labels"`
+	State      lamp.State        `json:"state"`
+	Theme      string            `json:"theme"`
+	Labels     map[string]string `json:"labels"`
+	Act        string            `json:"act"`
+	ActSeq     int64             `json:"act_seq"`
+	Holds      []string          `json:"holds"`
+	DotSeconds float64           `json:"dot_seconds"`
+	Quiet      bool              `json:"quiet"`
+	Look       lampLook          `json:"look"`
 }
 
 type lampBurnSample struct {
@@ -194,6 +218,16 @@ type lampEngine struct {
 	lastSet  lamp.Settings
 	lastNow  time.Time
 	lastLine string
+
+	// The act engine: the state and idle seconds of the last tick it judged,
+	// what already played, and the act that is playing until actUntil. While
+	// an act plays no other starts and the previous state is kept, so a change
+	// that happens meanwhile is judged when the act is over.
+	prevSt   lamp.State
+	prevIdle int
+	played   lamp.Played
+	act      string
+	actUntil time.Time
 }
 
 func newLampEngine(demo bool, setDir, snapPath string) *lampEngine {
@@ -255,6 +289,7 @@ func (e *lampEngine) payload(now time.Time) lampPayload {
 			e.tick = time.Duration(e.snap.TickSeconds) * time.Second
 		}
 	}
+	e.judge(st, set, now)
 	return e.finish(st, set, now, loadUITheme(e.setDir))
 }
 
@@ -265,7 +300,30 @@ func (e *lampEngine) finish(st lamp.State, set lamp.Settings, lineNow time.Time,
 		st.Line = ov.line
 	}
 	e.lastSt, e.lastSet, e.lastNow, e.lastLine = st, set, lineNow, st.Line
-	return lampPayload{State: st, Theme: theme, Labels: lampLabels(set.Language)}
+	return lampPayload{
+		State: st, Theme: theme, Labels: lampLabels(set.Language),
+		Act: e.act, ActSeq: e.played.Seq, Holds: lamp.Holds(st, set),
+		DotSeconds: lamp.DotSeconds(st.BurnRate), Quiet: lamp.Quiet(st, set),
+		Look: lampLook{Size: set.Size, Theme: set.Theme, Motion: set.Motion, Quiet: set.Quiet, Backdrop: set.Backdrop, Rows: set.TickerRows},
+	}
+}
+
+// judge runs the act engine for a live tick at now. The demo does not call it.
+func (e *lampEngine) judge(st lamp.State, set lamp.Settings, now time.Time) {
+	if e.act != "" && now.Before(e.actUntil) {
+		return
+	}
+	e.act = ""
+	idle := lampIdle()
+	a, _, p := lamp.NextAct(lamp.ActInput{
+		Prev: e.prevSt, Cur: st, Now: now, Idle: idle, PrevIdle: e.prevIdle, Settings: set, Played: e.played,
+	})
+	e.played = p
+	if a != "" {
+		e.act = a
+		e.actUntil = now.Add(time.Duration(lamp.ActSeconds(a) * float64(time.Second)))
+	}
+	e.prevSt, e.prevIdle = st, idle
 }
 
 // nextLine picks the next line for the mood on show: the first later

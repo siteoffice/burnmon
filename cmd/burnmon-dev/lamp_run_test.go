@@ -381,3 +381,94 @@ func TestLampUICheckServerIsDevOnly(t *testing.T) {
 		t.Error("the variable must appear once, in the options of the eval server")
 	}
 }
+
+// writeLampSnap rewrites the fixture snapshot with n blocked questions, written at at.
+func writeLampSnap(t *testing.T, path string, at time.Time, n int) {
+	t.Helper()
+	var items []waits.Item
+	for i := 0; i < n; i++ {
+		items = append(items, waits.Item{
+			Kind: waits.KindQuestion, ID: "session:claude:fx" + string(rune('a'+i)), Title: "Pick one",
+			Group: waits.GroupBlocked, AgeSeconds: 120,
+		})
+	}
+	snap := snapshot.Snapshot{
+		SchemaVersion: snapshot.SchemaVersion, WrittenAt: at.UTC().Format(time.RFC3339), TickSeconds: 2,
+		WaitItems: items, WaitCounts: waits.CountOf(items),
+	}
+	b, _ := json.Marshal(snap)
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEnginePayloadCarriesTheActAndItsSeq(t *testing.T) {
+	t.Setenv(settingsDirEnv, "")
+	now := time.Date(2026, 3, 2, 12, 3, 10, 0, time.UTC)
+	e, _ := liveFixture(t, now, 120, "")
+	snapPath := e.snapPath
+	old := lampIdle
+	lampIdle = func() int { return 0 }
+	defer func() { lampIdle = old }()
+
+	if p := e.payload(now); p.Act != "" || p.ActSeq != 0 {
+		t.Fatalf("first tick: act %q seq %d, want none (what is already there is not news)", p.Act, p.ActSeq)
+	}
+	// A second blocked item arrives: alarm.
+	at := now.Add(3 * time.Second)
+	writeLampSnap(t, snapPath, at, 2)
+	p := e.payload(at)
+	if p.Act != "alarm" || p.ActSeq != 1 {
+		t.Fatalf("blocked 1 to 2: act %q seq %d, want alarm 1", p.Act, p.ActSeq)
+	}
+	// The act keeps showing, with the same seq, for its 2.6 seconds.
+	writeLampSnap(t, snapPath, at.Add(time.Second), 2)
+	p = e.payload(at.Add(time.Second))
+	if p.Act != "alarm" || p.ActSeq != 1 {
+		t.Fatalf("1 s into the act: act %q seq %d, want alarm 1", p.Act, p.ActSeq)
+	}
+	// After it, no act and the seq stays.
+	writeLampSnap(t, snapPath, at.Add(3*time.Second), 2)
+	p = e.payload(at.Add(3 * time.Second))
+	if p.Act != "" || p.ActSeq != 1 {
+		t.Fatalf("after the act: act %q seq %d, want none 1", p.Act, p.ActSeq)
+	}
+	if p.Look.Rows != 1 || p.Look.Size != "medium" || p.Look.Theme != "system" || p.Look.Motion != "lively" || p.Look.Quiet != "hide" || p.Look.Backdrop != "clear" {
+		t.Errorf("look %+v, want the defaults", p.Look)
+	}
+	if p.Quiet {
+		t.Error("blocked mood shows the sliver")
+	}
+}
+
+func TestEngineWelcomeUsesTheIdleSeam(t *testing.T) {
+	t.Setenv(settingsDirEnv, "")
+	now := time.Date(2026, 3, 2, 12, 3, 10, 0, time.UTC)
+	e, _ := liveFixture(t, now, 120, "")
+	old := lampIdle
+	defer func() { lampIdle = old }()
+	idle := 400
+	lampIdle = func() int { return idle }
+	e.payload(now) // first tick, idle 400
+	idle = 1
+	at := now.Add(3 * time.Second)
+	writeLampSnap(t, e.snapPath, at, 1)
+	if p := e.payload(at); p.Act != "welcome" {
+		t.Fatalf("idle 400 then 1: act %q, want welcome", p.Act)
+	}
+}
+
+func TestEngineCalmMotionPlaysNoAct(t *testing.T) {
+	t.Setenv(settingsDirEnv, "")
+	now := time.Date(2026, 3, 2, 12, 3, 10, 0, time.UTC)
+	e, _ := liveFixture(t, now, 120, `{"lamp_motion":"calm"}`)
+	old := lampIdle
+	lampIdle = func() int { return 0 }
+	defer func() { lampIdle = old }()
+	e.payload(now)
+	at := now.Add(3 * time.Second)
+	writeLampSnap(t, e.snapPath, at, 2)
+	if p := e.payload(at); p.Act != "" {
+		t.Fatalf("calm: act %q", p.Act)
+	}
+}
