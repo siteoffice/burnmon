@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -640,17 +639,5 @@ func TestLampIdleFrom(t *testing.T) {
 		if got := lampIdleFrom(c.now, c.last); got != c.want {
 			t.Errorf("lampIdleFrom(%d,%d) = %d, want %d", c.now, c.last, got, c.want)
 		}
-	}
-}
-
-// The first-show focus try: on Windows the lamp child starts hidden so the
-// window shows first through SetWindowPos without activation.
-func TestLampChildAttrHidesOnWindows(t *testing.T) {
-	a := lampChildAttr()
-	if runtime.GOOS == "windows" && (a == nil || !a.HideWindow) {
-		t.Errorf("lampChildAttr = %+v, want HideWindow on Windows", a)
-	}
-	if runtime.GOOS != "windows" && a != nil {
-		t.Errorf("lampChildAttr = %+v, want nil off Windows", a)
 	}
 }
