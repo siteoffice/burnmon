@@ -187,3 +187,5 @@ Then `burnmon-dev.exe lamp --poses assets\glim` and `.\scripts\uicheck-lamp.ps1`
 
 ## Turn log
 
+
+T1: done; commit 59eacd4; measured: vet 0, test exit 0 (1748 pass, 7 skip, 0 fail, 50 packages ok), build 0, linux build and vet 0, darwin build and vet 0 (CGO off), doccheck ok on the plan, gh pr checks 60 macos pass, guard holds (raw push denied); causes by reading: finding 1 the hidden child start (high, mechanism medium), 3 the window region (high, which part medium, T2 measures first), 4 low, 9 not found by reading (low, T5 measures); reviewer: T3 would not build and was over budget (fixed by C18, SizePct in two steps), T2 missed lamp_bindings.go (now 12 files), lampAliveFrom moved off syscall types, the finding 3 cause weakened, C12 and C13 rewritten, C19 added; no stash; open: nothing
