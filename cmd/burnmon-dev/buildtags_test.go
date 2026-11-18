@@ -32,7 +32,7 @@ func TestDevBuildTags(t *testing.T) {
 		"history_delta.go", "item_files.go", "perf.go", "sections_view.go",
 		"snapshot_line.go", "snapshot_writer.go", "station_theme.go",
 		"toast_watch.go", "todo_gate.go", "uicheck_devserver.go", "viewstate.go",
-		"payloads.go", "toast_start.go",
+		"payloads.go", "toast_start.go", "cloudpull.go",
 	} {
 		want[f] = "//go:build windows || darwin"
 	}

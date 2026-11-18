@@ -145,6 +145,8 @@ func (p *execLampProc) Done() <-chan struct{} { return p.done }
 
 func execLampStart(exe string, args []string) (lampProc, error) {
 	cmd := exec.Command(exe, args...)
+	// The lamp ends when this process is gone (lampParentGone).
+	cmd.Env = lampChildEnv(os.Environ(), os.Getpid())
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}

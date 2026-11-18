@@ -14,6 +14,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -124,6 +126,32 @@ func runCardAt(o lampOpts, now time.Time) int {
 		return runCardWindow(o.card, wk, lang)
 	}
 	return 0
+}
+
+// lampParentEnv names the variable BurnMon Dev sets for the lamp it starts: its
+// own process id. The lamp checks it each tick and ends when that process is gone.
+const lampParentEnv = "BURNMON_LAMP_PARENT"
+
+// lampParentGone reports whether the BurnMon Dev named by the variable's value
+// is gone. An empty or unreadable value (a lamp started by hand) is never gone.
+func lampParentGone(env string, alive func(pid int) bool) bool {
+	pid, err := strconv.Atoi(env)
+	if err != nil || pid <= 0 {
+		return false
+	}
+	return !alive(pid)
+}
+
+// lampChildEnv is base with exactly one BURNMON_LAMP_PARENT entry for pid. It
+// does not change base.
+func lampChildEnv(base []string, pid int) []string {
+	out := make([]string, 0, len(base)+1)
+	for _, e := range base {
+		if !strings.HasPrefix(e, lampParentEnv+"=") {
+			out = append(out, e)
+		}
+	}
+	return append(out, lampParentEnv+"="+strconv.Itoa(pid))
 }
 
 // lampPayload is what the binding lampState returns to the page.

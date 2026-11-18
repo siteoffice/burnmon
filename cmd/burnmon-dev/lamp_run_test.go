@@ -309,6 +309,49 @@ func TestCardPageBindingsAndText(t *testing.T) {
 	}
 }
 
+// The lamp ends when the BurnMon Dev that started it is gone. A lamp started
+// by hand has no variable and stays; so does one with an unreadable value.
+func TestLampParentGone(t *testing.T) {
+	var asked []int
+	alive := func(pid int) bool { asked = append(asked, pid); return pid == 4242 }
+	for _, c := range []struct {
+		env  string
+		want bool
+	}{
+		{"", false}, {"abc", false}, {"0", false}, {"-5", false}, {"4242", false}, {"4243", true},
+	} {
+		if got := lampParentGone(c.env, alive); got != c.want {
+			t.Errorf("lampParentGone(%q) = %v, want %v", c.env, got, c.want)
+		}
+	}
+	if len(asked) != 2 {
+		t.Errorf("alive was asked %v, want only the two good process ids", asked)
+	}
+}
+
+func TestLampChildEnvAddsTheParentOnceAndKeepsTheRest(t *testing.T) {
+	base := []string{"A=1", "BURNMON_LAMP_PARENT=99", "B=2"}
+	got := lampChildEnv(base, 4242)
+	n, kept := 0, 0
+	for _, e := range got {
+		switch {
+		case strings.HasPrefix(e, "BURNMON_LAMP_PARENT="):
+			n++
+			if e != "BURNMON_LAMP_PARENT=4242" {
+				t.Errorf("parent entry %q", e)
+			}
+		case e == "A=1" || e == "B=2":
+			kept++
+		}
+	}
+	if n != 1 || kept != 2 {
+		t.Errorf("env %v: %d parent entries, %d kept", got, n, kept)
+	}
+	if len(base) != 3 || base[1] != "BURNMON_LAMP_PARENT=99" {
+		t.Errorf("the base slice was changed: %v", base)
+	}
+}
+
 // The lamp's dev eval channel for tools\uicheck (lane scope X5, plan C16)
 // starts only with its own environment variable, on its own port beside 9333,
 // 9334 and 9335, and only winbind.StartUICheckServer may read the variable.

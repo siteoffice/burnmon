@@ -59,7 +59,8 @@ func TestLedgerTwoDaysAndARestart(t *testing.T) {
 		t.Fatalf("day 1: %+v", d1)
 	}
 	d2 := l.Days()["2026-03-03"]
-	if d2.AgentWaitSeconds != 12 || d2.LampOnSeconds != 6 || len(d2.Items) != 2 {
+	// The two items first waited on day 1, so day 2 does not count them again (F2).
+	if d2.AgentWaitSeconds != 12 || d2.LampOnSeconds != 6 || len(d2.Items) != 0 {
 		t.Fatalf("day 2: %+v", d2)
 	}
 
@@ -72,6 +73,24 @@ func TestLedgerTwoDaysAndARestart(t *testing.T) {
 	r.Close(t3)
 	if got := r.Days()["2026-03-03"]; got.AgentWaitSeconds != 12 || got.LampOnSeconds != 6 {
 		t.Fatalf("the first read after a restart added time: %+v", got)
+	}
+}
+
+// F2: items counts distinct items first seen that day. An item that waits over
+// midnight counts on its first day only; a new item on day 2 counts on day 2.
+func TestLedgerItemCountsOnItsFirstDayOnly(t *testing.T) {
+	l := LoadLedger(ledgerPath(t))
+	set := DefaultSettings()
+	t0 := time.Date(2026, 3, 2, 23, 59, 58, 0, time.UTC)
+	l.Observe(t0, ledgerSnap(t0, "session:fx:old"), set)
+	t1 := t0.Add(4 * time.Second) // 00:00:02 on the next day
+	l.Observe(t1, ledgerSnap(t1, "session:fx:old", "session:fx:new"), set)
+	days := l.Days()
+	if n := len(days["2026-03-02"].Items); n != 1 {
+		t.Fatalf("day 1 holds %d items, want 1", n)
+	}
+	if n := len(days["2026-03-03"].Items); n != 1 {
+		t.Fatalf("day 2 holds %d items, want only the new one", n)
 	}
 }
 

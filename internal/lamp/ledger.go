@@ -126,7 +126,7 @@ func (l *Ledger) observeWaits(now time.Time, snap *snapshot.Snapshot, set Settin
 		h := fnv.New32a()
 		_, _ = h.Write([]byte(it.ID))
 		key := now.Format(ledgerDayLayout)
-		if sum := h.Sum32(); !l.seen[key][sum] && len(day.Items) < ledgerMaxItems {
+		if sum := h.Sum32(); !l.seenOnAnyDay(sum) && len(day.Items) < ledgerMaxItems {
 			l.seen[key][sum] = true
 			day.Items = append(day.Items, sum)
 			l.dirty = true
@@ -139,6 +139,18 @@ func (l *Ledger) observeWaits(now time.Time, snap *snapshot.Snapshot, set Settin
 		}
 		l.lastFresh, l.lastStamp = now, snap.WrittenAt
 	}
+}
+
+// seenOnAnyDay reports whether an item hash is in any kept day. An item counts
+// in `items` only on the first day it is seen, so one that waits over midnight
+// is not counted again.
+func (l *Ledger) seenOnAnyDay(sum uint32) bool {
+	for _, set := range l.seen {
+		if set[sum] {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *Ledger) day(now time.Time) *DayRec {

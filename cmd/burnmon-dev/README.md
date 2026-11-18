@@ -372,9 +372,11 @@ BurnMon Dev.
   picture at the top of this file (`glim-demo.svg`) into an existing folder; `assets\glim\` holds that
   output. `burnmon-dev.exe lamp --card <folder>` writes the card of the running week as two SVG files
   (add `--demo` for made-up numbers, `--card-window` for a window with a Save PNG button).
-- **The ledger.** While it runs, the lamp keeps `lamp-waits.json` in the data folder: per day the seconds
-  agents waited on you, the longest wait, how many distinct items waited and how long the lamp was on.
-  It holds no id, title, project or path. It is the one file the lamp writes; the demo writes none.
+- **What the lamp keeps on disk.** Two things, both in the data folder. The ledger `lamp-waits.json`:
+  per day the seconds agents waited on you, the longest wait, how many distinct items waited and how
+  long the lamp was on. It holds no id, title, project or path. And the WebView2 profile folder
+  `wv2-lamp`, the browser's own cache for the lamp page. The ledger is the only file the lamp writes
+  itself. The demo writes neither: its profile folder is under the temp folder.
 
 ### Do this, Glim does that
 

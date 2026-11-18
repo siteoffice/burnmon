@@ -131,13 +131,36 @@ func runLampWindow(o lampOpts) int {
 	w.SetHtml(lampHTML)
 
 	// A change of lamp_position in the gear dialog moves the lamp within 2 s.
+	// The lamp also ends when the BurnMon Dev that started it is gone. A lamp
+	// started by hand has no BURNMON_LAMP_PARENT and stays.
+	parent := os.Getenv(lampParentEnv)
 	go func() {
 		for range time.Tick(2 * time.Second) {
+			if lampParentGone(parent, lampProcessAlive) {
+				w.Terminate()
+				return
+			}
 			w.Dispatch(pl.place)
 		}
 	}()
 	w.Run()
 	return 0
+}
+
+// lampProcessAlive reports whether process pid still runs. A process that
+// cannot be opened (it is gone) is not alive; exit code 259 (STILL_ACTIVE)
+// means it runs.
+func lampProcessAlive(pid int) bool {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(h)
+	var code uint32
+	if windows.GetExitCodeProcess(h, &code) != nil {
+		return false
+	}
+	return code == 259
 }
 
 // lampStyleWindow removes the caption and border, takes the window out of
