@@ -68,7 +68,8 @@ type lampGearPayload struct {
 	Lines        bool   `json:"lines"`
 	ForemanItems bool   `json:"foreman_items"`
 	TickerRows   int    `json:"ticker_rows"`
-	Size         string `json:"size"`
+	Size         int    `json:"size"`    // lamp_size, a percentage from 100 to 200
+	Monitor      string `json:"monitor"` // lamp_monitor, empty is the primary screen
 	Theme        string `json:"theme"`
 	Motion       string `json:"motion"`
 	Quiet        string `json:"quiet"`

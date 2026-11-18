@@ -4,7 +4,7 @@ import "testing"
 
 func TestSettingsDefaults(t *testing.T) {
 	want := Settings{Enabled: false, Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 20000,
-		TickerRows: 1, Size: "medium", SizePct: 150, Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
+		TickerRows: 1, SizePct: 150, Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
 	if got := DefaultSettings(); got != want {
 		t.Fatalf("DefaultSettings() = %+v, want %+v", got, want)
 	}
@@ -52,7 +52,7 @@ func TestNewLampKeys(t *testing.T) {
 	in := `{"lamp_ticker_rows":4,"lamp_size":"large","lamp_theme":"dark","lamp_motion":"calm","lamp_quiet":"stay","lamp_backdrop":"card"}`
 	got := ParseSettings([]byte(in))
 	want := DefaultSettings()
-	want.TickerRows, want.Size, want.SizePct, want.Theme, want.Motion, want.Quiet, want.Backdrop = 4, "large", 190, "dark", "calm", "stay", "card"
+	want.TickerRows, want.SizePct, want.Theme, want.Motion, want.Quiet, want.Backdrop = 4, 190, "dark", "calm", "stay", "card"
 	if got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
@@ -63,7 +63,7 @@ func TestNewLampKeys(t *testing.T) {
 	}{
 		{`{"lamp_ticker_rows":2}`, func(s Settings) any { return s.TickerRows }, 2},
 		{`{"lamp_ticker_rows":3}`, func(s Settings) any { return s.TickerRows }, 3},
-		{`{"lamp_size":"small"}`, func(s Settings) any { return s.Size }, "small"},
+		{`{"lamp_size":"small"}`, func(s Settings) any { return s.SizePct }, 120},
 		{`{"lamp_theme":"light"}`, func(s Settings) any { return s.Theme }, "light"},
 		{`{"lamp_motion":"off"}`, func(s Settings) any { return s.Motion }, "off"},
 	} {

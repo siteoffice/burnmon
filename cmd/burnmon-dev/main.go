@@ -341,9 +341,11 @@ func bindDev(e devBindEnv) {
 	}); err != nil {
 		log.Println("could not bind bdevSetCloudPull:", err)
 	}
-	// bdevSetLamp saves one of the five keys of the gear's Lamp group
+	// bdevSetLamp saves one of the twelve keys of the gear's Lamp group
 	// (lamp_enabled, lamp_position, lamp_language, lamp_lines,
-	// lamp_foreman_items) and starts or stops the lamp child to match.
+	// lamp_foreman_items, lamp_ticker_rows, lamp_size, lamp_theme,
+	// lamp_motion, lamp_quiet, lamp_backdrop, and lamp_monitor, which only
+	// takes the empty name) and starts or stops the lamp child to match.
 	if err := w.Bind("bdevSetLamp", func(key string, value any) error {
 		err := setLampKey(setDir, key, value, e.lampKid)
 		if err != nil {
