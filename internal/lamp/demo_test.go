@@ -357,3 +357,63 @@ func TestDemoSVGIsStable(t *testing.T) {
 		t.Fatal("DemoSVG is not deterministic")
 	}
 }
+
+// TestDemoCoffeeShowsGlimAwake: at the coffee seconds the demo draws the
+// working pose (open lids), not the asleep pose of the mood.
+func TestDemoCoffeeShowsGlimAwake(t *testing.T) {
+	s := DemoSVG()
+	frames := strings.Split(s, `<g class="f"`)[1:]
+	start := demoActStarts[ActCoffee]
+	for sec := start; sec < start+int(ActSeconds(ActCoffee)); sec++ {
+		if !strings.Contains(frames[sec], `href="#gl-working"`) {
+			t.Errorf("second %d (coffee) does not draw the working pose", sec)
+		}
+		if strings.Contains(frames[sec], `href="#gl-asleep"`) {
+			t.Errorf("second %d (coffee) draws Glim asleep", sec)
+		}
+	}
+	// the rig of the working pose has open lids: scaleY(1) is only set for off and asleep
+	if rig := Glim(ActMood(ActCoffee, MoodAsleep), 0, "dark"); !strings.HasPrefix(rig, `<svg class="glim glim-working mood-working `) {
+		t.Error("the coffee pose is not the working rig")
+	}
+}
+
+// heightOf reads the height of every glim picture placed in an svg text.
+func heightsOfGlims(s string) []string {
+	var out []string
+	for _, m := range regexp.MustCompile(`<svg class="glim [^>]*? height="([0-9.]+)"`).FindAllStringSubmatch(s, -1) {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+func TestSheetAndPoseFilesDrawEveryPoseAtOneHeight(t *testing.T) {
+	dir := t.TempDir()
+	if err := WritePoses(dir); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "glim-sheet.svg"))
+	hs := heightsOfGlims(string(b))
+	if len(hs) != len(AllMoods) {
+		t.Fatalf("the sheet holds %d pictures, want %d", len(hs), len(AllMoods))
+	}
+	for i, h := range hs {
+		if h != hs[0] {
+			t.Errorf("sheet pose %s is %s high, the first is %s", AllMoods[i], h, hs[0])
+		}
+	}
+	first := ""
+	for _, m := range AllMoods {
+		b, _ := os.ReadFile(filepath.Join(dir, "glim-"+m+".svg"))
+		h := heightsOfGlims(string(b))
+		if len(h) != 1 {
+			t.Fatalf("glim-%s.svg holds %d pictures, want 1", m, len(h))
+		}
+		if first == "" {
+			first = h[0]
+		}
+		if h[0] != first {
+			t.Errorf("glim-%s.svg draws Glim %s high, the first pose file %s", m, h[0], first)
+		}
+	}
+}

@@ -19,6 +19,24 @@ if (-not (Test-Path $exe)) {
 $targetChecks = @($args)
 if ($targetChecks.Count -eq 0) { $targetChecks = @("lamp") }
 
+# Child start: start the lamp the way BurnMon Dev starts it (execLampStart) and
+# read from Windows that its window is visible within 3 seconds. It runs first,
+# while no demo lamp holds the desktop, and only for the full group.
+if ($targetChecks -contains "lamp") {
+    Write-Host "--- child start: TestLampChildStartShowsWindow ---"
+    $env:BURNMON_LAMP_WINDOW_TEST = "1"
+    try {
+        go test ./cmd/burnmon-dev -run TestLampChildStartShowsWindow -count=1 -v
+        $childExit = $LASTEXITCODE
+    } finally {
+        $env:BURNMON_LAMP_WINDOW_TEST = $null
+    }
+    if ($childExit -ne 0) {
+        Write-Host "child start check FAILED"
+        exit $childExit
+    }
+}
+
 $env:BURNMON_LAMP_UICHECK = "1"
 $proc = $null
 try {

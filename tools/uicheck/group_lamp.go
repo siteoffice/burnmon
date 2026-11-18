@@ -14,8 +14,10 @@ import (
 // lamp --demo`, started by scripts\uicheck-lamp.ps1 with BURNMON_LAMP_UICHECK=1,
 // its own eval port 9336). It freezes the page's own poll and hands the page a
 // fixed state through window.lampRender. It checks the slim ticker layout of
-// the glim finish lane: the ticker is 300 px wide with 26 px rows (1 to 4, one
-// more row when opened), Glim hangs under it at the lamp_size scale, nothing
+// the glim finish and fix lanes: the ticker is 300 to 440 px wide by its text
+// with 26 px rows (1 to 4, one more row when opened), every opened row has the
+// left edge and width of row 1, Glim hangs under it at the lamp_size percentage
+// (100, 150 and 200) in the pose of his act (awake at the coffee), nothing
 // scrolls, cut text has a hover title, the text has contrast in both themes,
 // and each act, frozen at its middle, runs the animation the page owns for it.
 // The lamp needs no window handle: the eval connection proves it runs. Nothing
@@ -41,7 +43,20 @@ const (
 	lampOpenMax = 6
 )
 
-var lampScale = map[string]float64{"small": 1.2, "medium": 1.5, "large": 1.9}
+// lampTickerMax is the widest the ticker grows with its text.
+const lampTickerMax = 440.0
+
+// lampScaleOf is the scale of the lamp_size percentage of a case.
+func lampScaleOf(c lampCase) float64 { return float64(c.Size) / 100 }
+
+// lampWantPose is the pose Glim is drawn in: awake and working for the coffee,
+// else the mood.
+func lampWantPose(c lampCase) string {
+	if c.Act == "coffee" {
+		return "working"
+	}
+	return c.Mood
+}
 
 // lampActMs is the length of each act, from the Definitions table.
 var lampActMs = map[string]float64{
@@ -66,9 +81,10 @@ var lampActMood = map[string]string{
 type lampCase struct {
 	Mood  string
 	Theme string
-	Size  string
-	Rows  int // lamp_ticker_rows
-	Items int // counted items the fixture carries
+	Size  int    // lamp_size, a percentage
+	Text  string // "" the fixture lines, "short" a line that fits 300 px, "huge" one that does not fit 440 px
+	Rows  int    // lamp_ticker_rows
+	Items int    // counted items the fixture carries
 	Open  bool
 	Act   string
 }
@@ -104,19 +120,19 @@ func lampBoxW(c lampCase) float64 {
 
 // lampWantGlim is the box of Glim: width, height and top in CSS pixels.
 func lampWantGlim(c lampCase) (w, h, top float64) {
-	s := lampScale[c.Size]
+	s := lampScaleOf(c)
 	return lampBoxW(c) * s, 132 * s, lampRowH*float64(lampWantTickerRows(c)) - 6*s
 }
 
-// lampWantWindow is the CSS size the window must have. The act and the wall
-// make it grow the way the lane's window area says.
-func lampWantWindow(c lampCase) (w, h float64) {
+// lampWantWindow is the CSS size the window must have for a ticker tw wide.
+// The act and the wall make it grow the way the lane's window area says.
+func lampWantWindow(c lampCase, tw float64) (w, h float64) {
 	if lampSliverOnly(c) {
 		return 120, 6
 	}
-	s := lampScale[c.Size]
+	s := lampScaleOf(c)
 	tH := lampRowH * float64(lampWantTickerRows(c))
-	pad := math.Max(0, math.Ceil(150-66*s+lampBoxW(c)*s-lampTickerW))
+	pad := math.Max(0, math.Ceil(tw/2-66*s+lampBoxW(c)*s-tw))
 	extra := 0.0
 	if c.Act == "slip" {
 		pad = math.Max(pad, math.Ceil(90*s))
@@ -125,7 +141,7 @@ func lampWantWindow(c lampCase) (w, h float64) {
 	if c.Act == "alarm" {
 		pad = math.Max(pad, 24)
 	}
-	return lampTickerW + 2*pad, math.Round(tH + 126*s + extra)
+	return tw + 2*pad, math.Round(tH + 126*s + extra)
 }
 
 // lampItemsOf is how many items the fixture of a mood carries by default.
@@ -138,9 +154,9 @@ func lampCases() []lampCase {
 	for _, rows := range []int{1, 4} {
 		for _, theme := range []string{"dark", "light"} {
 			for _, mood := range lampMoods {
-				out = append(out, lampCase{Mood: mood, Theme: theme, Size: "medium", Rows: rows, Items: lampItemsOf[mood]})
+				out = append(out, lampCase{Mood: mood, Theme: theme, Size: 150, Rows: rows, Items: lampItemsOf[mood]})
 			}
-			for _, size := range []string{"small", "medium", "large"} {
+			for _, size := range []int{100, 150, 200} {
 				out = append(out, lampCase{Mood: "blocked", Theme: theme, Size: size, Rows: rows, Items: 5})
 			}
 		}
@@ -148,8 +164,12 @@ func lampCases() []lampCase {
 	for _, theme := range []string{"dark", "light"} {
 		for _, act := range []string{"alarm", "knock", "stamp", "welcome", "wake", "slip", "coffee", "peek"} {
 			mood := lampActMood[act]
-			out = append(out, lampCase{Mood: mood, Theme: theme, Size: "medium", Rows: 1, Items: lampItemsOf[mood], Act: act})
+			out = append(out, lampCase{Mood: mood, Theme: theme, Size: 150, Rows: 1, Items: lampItemsOf[mood], Act: act})
 		}
+		// the text length: a short line holds the ticker at 300 px, a huge one at 440
+		out = append(out,
+			lampCase{Mood: "your_turn", Theme: theme, Size: 150, Rows: 1, Items: 1, Text: "short"},
+			lampCase{Mood: "blocked", Theme: theme, Size: 150, Rows: 4, Items: 2, Text: "huge"})
 	}
 	return out
 }
@@ -196,8 +216,15 @@ func lampPayload(c lampCase, seq int) string {
 		rows = append(rows, lampFixtureRow{ID: fmt.Sprintf("fx-%d", i+1), Kind: words[i], Word: words[i],
 			Title: cut, TitleFull: full, Wait: waits[i], WaitExact: waits[i] + " 4 s"})
 	}
+	head, line := heads[c.Mood], lines[c.Mood]
+	switch c.Text {
+	case "short":
+		head, line = "1 ready", "Hi."
+	case "huge":
+		line = strings.Repeat("This line is far too long for the ticker and must be cut. ", 4)
+	}
 	st := map[string]any{
-		"mood": c.Mood, "headline": heads[c.Mood], "line": lines[c.Mood], "rows": rows,
+		"mood": c.Mood, "headline": head, "line": line, "rows": rows,
 		"ticker_rows": 1 + min(c.Items, c.Rows-1), "counted": c.Items,
 		"counts": map[string]int{}, "agents": 3, "longest_wait_min": 0, "wall_bricks": 0,
 		"wall_over": false, "burn_rate": 24000.0, "demo": false,
@@ -211,6 +238,7 @@ func lampPayload(c lampCase, seq int) string {
 		// No labels and no act lines: the page falls back to its English words.
 		"look":        map[string]any{"size": c.Size, "theme": c.Theme, "motion": "lively", "quiet": "hide", "backdrop": "clear", "rows": c.Rows},
 		"act":         c.Act,
+		"pose":        lampWantPose(c),
 		"act_seq":     seq,
 		"holds":       []string{},
 		"dot_seconds": 2,
@@ -226,22 +254,31 @@ type lampColor struct {
 	BG   string `json:"bg"`
 }
 
+// lampRowBox is the left edge and width of one ticker row, relative to the
+// ticker's own box.
+type lampRowBox struct {
+	L float64 `json:"l"`
+	W float64 `json:"w"`
+}
+
 type lampRead struct {
-	InnerW     float64     `json:"innerW"`
-	InnerH     float64     `json:"innerH"`
-	DocW       float64     `json:"docW"`
-	DocH       float64     `json:"docH"`
-	Sliver     bool        `json:"sliver"`
-	TickW      float64     `json:"tickW"`
-	TickH      float64     `json:"tickH"`
-	TickRows   int         `json:"tickRows"`
-	HangShown  bool        `json:"hangShown"`
-	HangW      float64     `json:"hangW"`
-	HangH      float64     `json:"hangH"`
-	HangTop    float64     `json:"hangTop"`
-	Anims      []string    `json:"anims"`
-	CutNoTitle []string    `json:"cutNoTitle"`
-	Colors     []lampColor `json:"colors"`
+	InnerW     float64      `json:"innerW"`
+	InnerH     float64      `json:"innerH"`
+	DocW       float64      `json:"docW"`
+	DocH       float64      `json:"docH"`
+	Sliver     bool         `json:"sliver"`
+	TickW      float64      `json:"tickW"`
+	TickH      float64      `json:"tickH"`
+	TickRows   int          `json:"tickRows"`
+	HangShown  bool         `json:"hangShown"`
+	HangW      float64      `json:"hangW"`
+	HangH      float64      `json:"hangH"`
+	HangTop    float64      `json:"hangTop"`
+	Anims      []string     `json:"anims"`
+	CutNoTitle []string     `json:"cutNoTitle"`
+	Rows       []lampRowBox `json:"rows"`
+	HangClass  string       `json:"hangClass"`
+	Colors     []lampColor  `json:"colors"`
 }
 
 var lampRGB = regexp.MustCompile(`^rgb\((\d+), (\d+), (\d+)\)$`)
@@ -289,8 +326,8 @@ func near(a, b float64) bool { return math.Abs(a-b) <= 2 }
 // window grows for it on purpose, so no scrollbar is looked for.
 func lampProblems(c lampCase, r lampRead) []string {
 	var p []string
-	where := fmt.Sprintf("%s/%s/%s rows=%d items=%d open=%v act=%q", c.Mood, c.Theme, c.Size, c.Rows, c.Items, c.Open, c.Act)
-	w, h := lampWantWindow(c)
+	where := fmt.Sprintf("%s/%s/%d%% rows=%d items=%d text=%q open=%v act=%q", c.Mood, c.Theme, c.Size, c.Rows, c.Items, c.Text, c.Open, c.Act)
+	w, h := lampWantWindow(c, math.Round(r.TickW))
 	if !near(r.InnerW, w) || !near(r.InnerH, h) {
 		p = append(p, fmt.Sprintf("%s: the window is %.0f x %.0f px, want %.0f x %.0f", where, r.InnerW, r.InnerH, w, h))
 	}
@@ -315,8 +352,18 @@ func lampProblems(c lampCase, r lampRead) []string {
 	if r.TickRows != rows {
 		p = append(p, fmt.Sprintf("%s: the ticker has %d rows, want %d", where, r.TickRows, rows))
 	}
-	if !near(r.TickW, lampTickerW) {
-		p = append(p, fmt.Sprintf("%s: the ticker is %.0f px wide, want %.0f", where, r.TickW, lampTickerW))
+	switch {
+	case r.TickW < lampTickerW-2 || r.TickW > lampTickerMax+2:
+		p = append(p, fmt.Sprintf("%s: the ticker is %.0f px wide, want %.0f to %.0f", where, r.TickW, lampTickerW, lampTickerMax))
+	case c.Text == "short" && !near(r.TickW, lampTickerW):
+		p = append(p, fmt.Sprintf("%s: a short line gives a %.0f px ticker, want %.0f", where, r.TickW, lampTickerW))
+	case c.Text == "huge" && !near(r.TickW, lampTickerMax):
+		p = append(p, fmt.Sprintf("%s: a line too long for the ticker gives %.0f px, want %.0f", where, r.TickW, lampTickerMax))
+	}
+	for i, b := range r.Rows {
+		if i > 0 && (math.Abs(b.L-r.Rows[0].L) > 1 || math.Abs(b.W-r.Rows[0].W) > 1) {
+			p = append(p, fmt.Sprintf("%s: row %d starts at %.0f and is %.0f wide, row 1 starts at %.0f and is %.0f wide", where, i+1, b.L, b.W, r.Rows[0].L, r.Rows[0].W))
+		}
 	}
 	if !near(r.TickH, lampRowH*float64(rows)) {
 		p = append(p, fmt.Sprintf("%s: the ticker is %.0f px high, want %.0f", where, r.TickH, lampRowH*float64(rows)))
@@ -328,6 +375,8 @@ func lampProblems(c lampCase, r lampRead) []string {
 			p = append(p, where+": Glim is not shown")
 		case !near(r.HangW, gw) || !near(r.HangH, gh) || !near(r.HangTop, gt):
 			p = append(p, fmt.Sprintf("%s: Glim's box is %.0f x %.0f at %.0f, want %.0f x %.0f at %.0f", where, r.HangW, r.HangH, r.HangTop, gw, gh, gt))
+		case !strings.Contains(" "+r.HangClass+" ", " mood-"+lampWantPose(c)+" "):
+			p = append(p, fmt.Sprintf("%s: Glim is drawn as %q, want the pose %s", where, r.HangClass, lampWantPose(c)))
 		}
 	} else if r.HangShown {
 		p = append(p, where+": Glim is shown while the lamp is quiet")
@@ -351,7 +400,7 @@ func lampProblems(c lampCase, r lampRead) []string {
 		if err != nil {
 			p = append(p, fmt.Sprintf("%s: %s: %v", where, col.Name, err))
 		} else if ratio < 4.5 {
-			p = append(p, fmt.Sprintf("%s: %s has contrast %.2f, want 4.5", where, col.Name, ratio))
+			p = append(p, fmt.Sprintf("%s: %s has contrast %.2f (%s on %s), want 4.5", where, col.Name, ratio, col.FG, col.BG))
 		}
 	}
 	return p
@@ -361,10 +410,10 @@ func lampProblems(c lampCase, r lampRead) []string {
 const lampReadJS = `(function(){
   var bgOf = function(e){ while (e) { var c = getComputedStyle(e).backgroundColor; if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') return c; e = e.parentElement; } return 'rgb(0, 0, 0)'; };
   var colors = [], cut = [];
-  [['head', '.head'], ['sub', '.sub'], ['word', '.lword'], ['title', '.ltitle'], ['wait', '.lwait']].forEach(function(p){
+  [['head', '#tick .head'], ['sub', '#tick .sub'], ['word', '#tick .lword'], ['title', '#tick .ltitle'], ['wait', '#tick .lwait']].forEach(function(p){
     [].forEach.call(document.querySelectorAll(p[1]), function(e){
       colors.push({name: p[0], fg: getComputedStyle(e).color, bg: bgOf(e)});
-      if (e.scrollWidth > e.clientWidth + 1 && !(e.getAttribute('title') || '').trim()) cut.push(p[1]);
+      if (e.scrollWidth > e.clientWidth + 1 && !(e.getAttribute('title') || '').trim()) cut.push(p[1].replace('#tick ', ''));
     });
   });
   var vis = function(e){ return e && e.style.display !== 'none'; };
@@ -372,10 +421,12 @@ const lampReadJS = `(function(){
   var tr = vis(tk) ? tk.getBoundingClientRect() : null, hr = vis(hg) ? hg.getBoundingClientRect() : null;
   var anims = hg && hg.getAnimations ? hg.getAnimations({subtree: true}).map(function(a){ return a.animationName || ''; }) : [];
   var de = document.documentElement;
+  var rows = vis(tk) ? [].map.call(tk.querySelectorAll('.trow'), function(e){ var b = e.getBoundingClientRect(); return {l: b.left - tr.left, w: b.width}; }) : [];
+  var hs = hg ? hg.querySelector('svg') : null;
   return {innerW: window.innerWidth, innerH: window.innerHeight, docW: de.scrollWidth, docH: de.scrollHeight,
     sliver: vis(sl), tickW: tr ? tr.width : 0, tickH: tr ? tr.height : 0, tickRows: vis(tk) ? tk.querySelectorAll('.trow').length : 0,
     hangShown: !!hr, hangW: hr ? hr.width : 0, hangH: hr ? hr.height : 0, hangTop: hr ? hr.top : 0,
-    anims: anims, cutNoTitle: cut, colors: colors};
+anims: anims, cutNoTitle: cut, colors: colors, rows: rows, hangClass: hs ? (hs.getAttribute('class') || '') : ''};
 })()`
 
 // lampFreezeJS pauses every animation of Glim at the middle of its act.

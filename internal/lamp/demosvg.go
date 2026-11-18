@@ -134,7 +134,7 @@ func demoFrame(sec int, st State) string {
 				cls += " hold-" + h
 			}
 		}
-		b.WriteString(`<g class="` + cls + `"><use href="#` + demoGlimID(st) + `" x="` + strconv.Itoa(demoGlimX) + `" y="` + strconv.Itoa(demoGlimY) + `"/>`)
+		b.WriteString(`<g class="` + cls + `"><use href="#` + demoGlimID(st, act) + `" x="` + strconv.Itoa(demoGlimX) + `" y="` + strconv.Itoa(demoGlimY) + `"/>`)
 		if act == ActAlarm {
 			b.WriteString(`<path class="rayp" d="M120 60 l-10 -4 M120 72 l-12 0 M200 60 l10 -4 M200 72 l12 0 M130 36 l-6 -8 M190 36 l6 -8"/>`)
 		}
@@ -172,16 +172,18 @@ func DemoSVG() string {
 	for sec := range frame {
 		frame[sec] = DemoState(sec)
 		st := frame[sec]
-		id := demoGlimID(st)
+		act, _ := DemoAct(sec)
+		id := demoGlimID(st, act)
 		if ids[id] {
 			continue
 		}
 		ids[id] = true
+		pose := ActMood(act, st.Mood)
 		bricks := 0
-		if st.Mood == MoodBored {
+		if pose == MoodBored {
 			bricks = st.WallBricks
 		}
-		b.WriteString(glimSized(st.Mood, bricks, "dark", `id="`+id+`"`, demoGlimSize))
+		b.WriteString(glimSized(pose, bricks, "dark", `id="`+id+`"`, demoGlimSize))
 	}
 	b.WriteString(`</defs>`)
 	b.WriteString(`<rect width="320" height="112" fill="#2b2823"/>`)
@@ -192,9 +194,12 @@ func DemoSVG() string {
 	return b.String()
 }
 
-func demoGlimID(st State) string {
-	if st.Mood == MoodBored {
+// demoGlimID names the picture of Glim at a second: the pose of the act (awake
+// and working for the coffee), with the wall's brick count for bored.
+func demoGlimID(st State, act string) string {
+	pose := ActMood(act, st.Mood)
+	if pose == MoodBored {
 		return "gl-bored-" + strconv.Itoa(st.WallBricks)
 	}
-	return "gl-" + st.Mood
+	return "gl-" + pose
 }

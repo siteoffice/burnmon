@@ -9,7 +9,8 @@ import (
 
 // goodLampRead is a read that matches its case exactly.
 func goodLampRead(c lampCase) lampRead {
-	w, h := lampWantWindow(c)
+	tw := goodTickW(c)
+	w, h := lampWantWindow(c, tw)
 	r := lampRead{
 		InnerW: w, InnerH: h, DocW: w, DocH: h,
 		Colors: []lampColor{{Name: "head", FG: "rgb(250, 199, 117)", BG: "rgb(20, 17, 13)"}},
@@ -19,16 +20,31 @@ func goodLampRead(c lampCase) lampRead {
 		return r
 	}
 	tr := lampWantTickerRows(c)
-	r.TickW, r.TickH, r.TickRows = lampTickerW, float64(lampRowH*tr), tr
+	r.TickW, r.TickH, r.TickRows = tw, float64(lampRowH*tr), tr
+	for i := 0; i < tr; i++ {
+		r.Rows = append(r.Rows, lampRowBox{L: 1, W: tw - 2})
+	}
 	if lampDown(c) {
 		gw, gh, gt := lampWantGlim(c)
 		r.HangShown, r.HangW, r.HangH, r.HangTop = true, gw, gh, gt
+		r.HangClass = "glim mood-" + lampWantPose(c)
 	}
 	return r
 }
 
+// goodTickW is a ticker width that fits the text of the case.
+func goodTickW(c lampCase) float64 {
+	switch c.Text {
+	case "short":
+		return 300
+	case "huge":
+		return 440
+	}
+	return 372
+}
+
 func caseOf(mood string, rows, items int) lampCase {
-	return lampCase{Mood: mood, Theme: "dark", Size: "medium", Rows: rows, Items: items}
+	return lampCase{Mood: mood, Theme: "dark", Size: 150, Rows: rows, Items: items}
 }
 
 // The lamp checks target burnmon-dev.exe's lamp window, not another exe.
@@ -58,7 +74,7 @@ func TestLampChecksAreRouted(t *testing.T) {
 // every act of the lamp spec, each act frozen at its middle.
 func TestLampCasesCoverTheNewLayout(t *testing.T) {
 	cases := lampCases()
-	rows, sizes, themes, moods, acts := map[int]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
+	rows, sizes, themes, moods, acts := map[int]bool{}, map[int]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, c := range cases {
 		if c.Act == "" {
 			rows[c.Rows], sizes[c.Size], themes[c.Theme], moods[c.Mood] = true, true, true, true
@@ -69,9 +85,18 @@ func TestLampCasesCoverTheNewLayout(t *testing.T) {
 	if !rows[1] || !rows[4] || len(rows) != 2 {
 		t.Errorf("rows covered: %v, want 1 and 4", rows)
 	}
-	for _, s := range []string{"small", "medium", "large"} {
+	for _, s := range []int{100, 150, 200} {
 		if !sizes[s] {
-			t.Errorf("size %s is not covered", s)
+			t.Errorf("size %d is not covered", s)
+		}
+	}
+	texts := map[string]bool{}
+	for _, c := range cases {
+		texts[c.Text] = true
+	}
+	for _, x := range []string{"short", "huge"} {
+		if !texts[x] {
+			t.Errorf("the text length %q is not covered", x)
 		}
 	}
 	if !themes["dark"] || !themes["light"] {
@@ -107,17 +132,18 @@ func TestLampFixturesCoverEveryCase(t *testing.T) {
 				Rows       []json.RawMessage `json:"rows"`
 			} `json:"state"`
 			Look struct {
-				Size   string `json:"size"`
+				Size   int    `json:"size"`
 				Theme  string `json:"theme"`
 				Motion string `json:"motion"`
 			} `json:"look"`
-			Act string `json:"act"`
+			Act  string `json:"act"`
+			Pose string `json:"pose"`
 		}
 		if err := json.Unmarshal([]byte(raw), &p); err != nil {
 			t.Fatalf("%+v: %v", c, err)
 		}
-		if p.State.Mood != c.Mood || p.State.Headline == "" || p.Look.Theme != c.Theme || p.Look.Size != c.Size || p.Look.Motion != "lively" || p.Act != c.Act {
-			t.Errorf("%+v: got mood %q headline %q theme %q size %q motion %q act %q", c, p.State.Mood, p.State.Headline, p.Look.Theme, p.Look.Size, p.Look.Motion, p.Act)
+		if p.State.Mood != c.Mood || p.State.Headline == "" || p.Look.Theme != c.Theme || p.Look.Size != c.Size || p.Look.Motion != "lively" || p.Act != c.Act || p.Pose != lampWantPose(c) {
+			t.Errorf("%+v: got mood %q headline %q theme %q size %d motion %q act %q pose %q", c, p.State.Mood, p.State.Headline, p.Look.Theme, p.Look.Size, p.Look.Motion, p.Act, p.Pose)
 		}
 		if p.State.TickerRows != 1+min(c.Items, c.Rows-1) || len(p.State.Rows) != c.Items {
 			t.Errorf("%+v: ticker_rows %d, rows %d", c, p.State.TickerRows, len(p.State.Rows))
@@ -158,29 +184,33 @@ func TestLampWantWindow(t *testing.T) {
 		{caseOf("asleep", 1, 0), 120, 6},
 		{caseOf("off", 4, 0), 120, 6},
 		{caseOf("working", 4, 0), 120, 6},
-		// medium is 1.5: one row 26 + 126*1.5 = 215.
+		// 150 percent: one row 26 + 126*1.5 = 215.
 		{caseOf("done", 1, 0), 300, 215},
 		// four rows: 104 + 189 = 293.
 		{caseOf("blocked", 4, 5), 300, 293},
-		{lampCase{Mood: "blocked", Theme: "dark", Size: "small", Rows: 1, Items: 5}, 300, 26 + 151.2},
-		{lampCase{Mood: "blocked", Theme: "dark", Size: "large", Rows: 4, Items: 5}, 300, 104 + 239.4},
+		{lampCase{Mood: "blocked", Theme: "dark", Size: 100, Rows: 1, Items: 5}, 300, 26 + 126},
+		{lampCase{Mood: "blocked", Theme: "dark", Size: 200, Rows: 4, Items: 5}, 300, 104 + 252},
 		// opened: header, five items and the burn row.
-		{lampCase{Mood: "blocked", Theme: "dark", Size: "medium", Rows: 1, Items: 5, Open: true}, 300, 26*7 + 189},
+		{lampCase{Mood: "blocked", Theme: "dark", Size: 150, Rows: 1, Items: 5, Open: true}, 300, 26*7 + 189},
 	} {
-		w, h := lampWantWindow(tc.c)
+		w, h := lampWantWindow(tc.c, 300)
 		if w != tc.wantW || math.Abs(h-tc.wantH) > 1 {
 			t.Errorf("%+v: %v x %v, want %v x %v", tc.c, w, h, tc.wantW, tc.wantH)
 		}
 	}
 	// The wall widens the window, slip and alarm too.
-	if w, _ := lampWantWindow(caseOf("bored", 1, 3)); w <= 300 {
+	if w, _ := lampWantWindow(caseOf("bored", 1, 3), 300); w <= 300 {
 		t.Errorf("the wall did not widen the window: %v", w)
 	}
-	if w, _ := lampWantWindow(lampCase{Mood: "bored", Theme: "dark", Size: "medium", Rows: 1, Act: "slip"}); w < 300+2*135 {
+	if w, _ := lampWantWindow(lampCase{Mood: "bored", Theme: "dark", Size: 150, Rows: 1, Act: "slip"}, 300); w < 300+2*135 {
 		t.Errorf("slip window %v wide", w)
 	}
-	if w, _ := lampWantWindow(lampCase{Mood: "blocked", Theme: "dark", Size: "large", Rows: 1, Act: "alarm"}); w != 300+48 {
+	if w, _ := lampWantWindow(lampCase{Mood: "blocked", Theme: "dark", Size: 190, Rows: 1, Act: "alarm"}, 300); w != 300+48 {
 		t.Errorf("alarm window %v wide, want 348", w)
+	}
+	// A 440 px ticker is a window as wide as the ticker.
+	if w, _ := lampWantWindow(caseOf("done", 1, 0), 440); w != 440 {
+		t.Errorf("a 440 px ticker gives a %v px window, want 440", w)
 	}
 }
 
@@ -207,7 +237,11 @@ func TestLampProblems(t *testing.T) {
 	}
 	c := caseOf("blocked", 4, 5)
 	for name, mut := range map[string]func(*lampRead){
-		"wrong ticker width":  func(r *lampRead) { r.TickW = 320 },
+		"ticker under 300":    func(r *lampRead) { r.TickW = 290 },
+		"ticker over 440":     func(r *lampRead) { r.TickW = 460 },
+		"opened row too left": func(r *lampRead) { r.Rows[len(r.Rows)-1].L = -4 },
+		"opened row too wide": func(r *lampRead) { r.Rows[len(r.Rows)-1].W += 12 },
+		"wrong pose":          func(r *lampRead) { r.HangClass = "glim mood-asleep" },
 		"wrong ticker height": func(r *lampRead) { r.TickH = 40 },
 		"wrong row count":     func(r *lampRead) { r.TickRows = 2 },
 		"wrong window":        func(r *lampRead) { r.InnerW = 440 },
@@ -245,7 +279,7 @@ func TestLampProblems(t *testing.T) {
 // An act frozen at its middle must run the animation the page owns for it,
 // and a scrollbar is not checked there (the window grows by design).
 func TestLampActProblems(t *testing.T) {
-	c := lampCase{Mood: "blocked", Theme: "dark", Size: "medium", Rows: 1, Items: 2, Act: "alarm"}
+	c := lampCase{Mood: "blocked", Theme: "dark", Size: 150, Rows: 1, Items: 2, Act: "alarm"}
 	r := goodLampRead(c)
 	r.Anims = []string{"alarm", "pulse", "sway"}
 	r.DocW = r.InnerW + 40
@@ -286,5 +320,37 @@ func TestLampContrast(t *testing.T) {
 	}
 	if _, err := lampContrast("rgba(0, 0, 0, 0)", "rgb(0, 0, 0)"); err == nil {
 		t.Error("a transparent colour was accepted")
+	}
+}
+
+// A short line keeps the ticker at 300, a huge one stops it at 440, and the
+// coffee act draws Glim awake (the working pose) in the asleep mood.
+func TestLampTextWidthAndCoffeePose(t *testing.T) {
+	short := caseOf("working", 1, 0)
+	short.Text = "short"
+	short.Act = "wake"
+	r := goodLampRead(short)
+	r.TickW = 340
+	if p := lampProblems(short, r); len(p) == 0 {
+		t.Error("a short line with a 340 px ticker was not reported")
+	}
+	huge := caseOf("blocked", 1, 2)
+	huge.Text = "huge"
+	r = goodLampRead(huge)
+	r.TickW = 400
+	if p := lampProblems(huge, r); len(p) == 0 {
+		t.Error("a huge line with a 400 px ticker was not reported")
+	}
+	if lampWantPose(lampCase{Mood: "asleep", Act: "coffee"}) != "working" {
+		t.Error("the coffee pose is not working")
+	}
+	if lampWantPose(lampCase{Mood: "asleep", Act: "peek"}) != "asleep" {
+		t.Error("the peek pose is not the mood")
+	}
+	c := lampCase{Mood: "asleep", Theme: "dark", Size: 150, Rows: 1, Act: "coffee"}
+	r = goodLampRead(c)
+	r.HangClass = "glim mood-asleep"
+	if p := lampProblems(c, r); len(p) == 0 {
+		t.Error("Glim asleep at the coffee was not reported")
 	}
 }

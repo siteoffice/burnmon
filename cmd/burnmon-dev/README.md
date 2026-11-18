@@ -380,9 +380,32 @@ BurnMon Dev. The lamp also ends by itself when that process is gone. A lamp you 
 
 Hover the ticker or Glim to open it: up to 6 waiting items, tokens a minute and the cost of the last 5
 minutes (labelled API price equivalent). It closes 2 seconds after the pointer leaves. A click on Glim
-shows another line; a double click opens BurnMon Dev. The lamp tries not to take the focus: BurnMon Dev
-starts it hidden and the window is shown without activating it, and a window that still takes the focus
-on its first show hands it back. That comes from the Windows documentation and is built, not seen.
+shows another line; a double click opens BurnMon Dev. The ticker is as wide as its first row needs, from
+300 to 440 px; a longer line is cut and shows in full on hover. The opened rows start at the same left
+edge and have the same width as the first row. The lamp tries not to take the focus: the window is shown
+without activating it, and a window that still takes the focus on its first show hands it back. BurnMon
+Dev starts the lamp in a normal, visible window (an earlier build started it hidden, which made it
+invisible; a check in `scripts\uicheck-lamp.ps1` now starts it the same way and reads from Windows that
+its window is visible within 3 seconds). The focus part comes from the Windows documentation and is built,
+not seen.
+
+- **Drag the ticker** (press on the ticker, move more than 6 px): the lamp follows the pointer with Glim
+  hanging under it, and the line says "Put me down." On release it snaps to the top edge of the monitor
+  under the pointer, at the nearest of left, centre and right, and saves `lamp_monitor` and
+  `lamp_position`. A drag never takes the keyboard focus. A saved monitor that is not connected counts as
+  the primary one.
+- **Grab Glim** (press on Glim, not on the ticker, and move): he swings on his cord toward the pointer, at
+  most 60 degrees to either side, and swings back and comes to rest within 3 seconds. A gentle swing gets
+  "That tickles." Pulled to the 60 degree stop, or with the pointer changing direction 3 times in 1.5
+  seconds, it is too hard: he says "Don't do that." and both arms flail for 1.5 seconds; a second time
+  within a minute he says "I said don't." With `lamp_motion` calm or off he does not swing, a press only
+  shows the next line. A click without a move still shows the next line.
+- **The eyes.** While Glim hangs and `lamp_motion` is lively, his eyes follow the pointer wherever it is,
+  on any monitor. The lamp reads the pointer position and the idle seconds and keeps neither: they are
+  never stored.
+- **Close the lamp.** Right-click the ticker or Glim and pick "Close the lamp". The lamp writes its ledger
+  and ends. For a lamp that BurnMon Dev started it also saves `lamp_enabled` false, so BurnMon Dev does not
+  start it again. A lamp you started by hand just ends.
 
 - **See it without any agents.** `burnmon-dev.exe lamp --demo` plays a fixed 48 second loop of made-up
   states and plays every act and every state that lasts once, with the word "demo" on the ticker. It
@@ -434,7 +457,8 @@ All keys are in `burnmon-dev.json`; the gear dialog group Lamp sets them. A bad 
 | `lamp_foreman_items` | true, false | true | count Foreman items |
 | `lamp_burn_floor_tpm` | whole number, 0 or more | 20000 | tokens a minute below which Glim never sweats |
 | `lamp_ticker_rows` | 1 to 4 | 1 | rows of the ticker: the headline, then the items that wait longest |
-| `lamp_size` | small, medium, large | medium | Glim at 1.2, 1.5 or 1.9 times |
+| `lamp_size` | 100 to 200 | 150 | Glim's size in percent. The gear dialog has a slider in steps of 5 with min, middle and max under it; `small` (120), `medium` (150) and `large` (190) from older files still load, any other value is 150 |
+| `lamp_monitor` | a monitor device name, or empty | empty | the monitor the lamp hangs on; empty is the primary monitor. A drag saves it; the gear dialog shows the one in use and a button "Back to the primary screen" |
 | `lamp_theme` | system, light, dark | system | colours of ticker, text and cord; the dome keeps its ambers |
 | `lamp_motion` | lively, calm, off | lively | calm plays no act and only blinks; off shows still poses (reduced motion counts as off) |
 | `lamp_quiet` | hide, stay | hide | when nothing waits Glim hides and peeks, or always hangs |
@@ -455,6 +479,12 @@ Mac; on macOS without cgo and on Linux the lamp prints a sentence and exits); it
 approve, no stop, no answer to an agent). Every window, backdrop, animation and position of the lamp is
 built, not seen: nothing of it was looked at in a window in the build run.
 
+- What is seen, and what is still unseen. Reported by the owner after the first look on 2026-11-18: the 48 second demo, the clear
+  window around Glim, the acts, and a lamp started by hand over a terminal. Everything the fix lane
+  changed is built, not seen: the visible start from BurnMon Dev, the slider, the drag to another monitor,
+  the grab and swing, the eyes beyond the lamp window, the close menu, the ticker width and the aligned
+  opened rows. Measured, not looked at: the child start (a real window found through Windows), the layout
+  of the lamp page in the uicheck group `lamp` at 100, 150 and 200 percent, and the height of every pose.
 - Next: the first look on Windows (the clear window, click through, the focus on the first show) and a
   look on a Mac.
 - Backlog: window styles beyond the ticker; the phone face of Glim (SiteOffice); sounds, outfits, chat and

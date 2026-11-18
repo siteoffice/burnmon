@@ -238,6 +238,9 @@ func TestReadmeLampSection(t *testing.T) {
 		"lamp --poses", "lamp --card", "lamp-waits.json",
 		"### Goal", "### Where it fits", "### Install", "### Use", "### Settings", "### Next steps and backlog",
 		"slim ticker", "48 second", "built, not seen", "BURNMON_LAMP_PARENT", "lamp_backdrop",
+		// the glim fix lane: size as a percentage, the monitor, drag, grab and swing, eyes, close
+		"100 to 200", "`lamp_monitor`", "Back to the primary screen", "Drag the ticker", "Grab Glim",
+		"Don't do that", "his eyes follow the pointer", "Close the lamp", "never stored", "What is seen",
 	} {
 		if !strings.Contains(sec, want) {
 			t.Errorf("the lamp section lacks %q", want)

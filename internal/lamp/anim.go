@@ -81,15 +81,13 @@ func poseBrickCount(mood string) int {
 // poseSVG is one mood, centred on a 256 by 256 canvas, dark theme.
 func poseSVG(mood string) string {
 	const size = 256.0
-	h := 180.0
+	// every pose is 155 high; the bored one is wider (1.6 times) for the wall
+	// and still fits the canvas (248 of 256)
+	h := 155.0
 	bricks := poseBrickCount(mood)
 	w := h
 	if bricks > 0 {
 		w = h * 320 / 200
-		if w > size-8 {
-			w = size - 8
-			h = w * 200 / 320
-		}
 	}
 	x, y := (size-w)/2, (size-h)/2
 	attrs := `x="` + ftoa(x) + `" y="` + ftoa(y) + `"`
@@ -104,11 +102,12 @@ func sheetSVG() string {
 	b.WriteString(`<rect width="1200" height="630" fill="#15110a"/>`)
 	for i, m := range AllMoods {
 		cx, top := float64(150+300*(i%4)), float64(40+300*(i/4))
-		h := 190.0
+		// every pose is 170 high; the bored one is wider (272) for the wall
+		h := 170.0
 		bricks := poseBrickCount(m)
 		w := h
 		if bricks > 0 {
-			h, w = 150, 240
+			w = h * 320 / 200
 		}
 		attrs := `x="` + ftoa(cx-w/2) + `" y="` + ftoa(top+(190-h)/2) + `"`
 		b.WriteString(glimSized(m, bricks, "dark", attrs, h))
