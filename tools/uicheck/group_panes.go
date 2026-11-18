@@ -253,7 +253,7 @@ const d51ReadJS = `(function(){
   if(!panel || !row) return { labels: 0, visible: 0, visibleBottom: 0, monthsBottom: 0, wrapH: 0, gridH: 0, panelH: 0, win: window.innerWidth };
   var pr = panel.getBoundingClientRect();
   var clips = function(e){ return getComputedStyle(e).overflowY !== 'visible'; };
-  var labels = 0, visible = 0;
+  var labels = 0, visible = 0, rects = [];
   Array.prototype.forEach.call(row.children, function(el){
     if(!(el.textContent || '').trim()) return;
     labels++;
@@ -262,7 +262,13 @@ const d51ReadJS = `(function(){
       if(clips(a)) edge = Math.min(edge, a.getBoundingClientRect().bottom);
       if(a === panel) break;
     }
-    if(r.height > 0 && r.top >= pr.top && r.bottom <= edge + 1 && r.left < pr.right) visible++;
+    var ok = r.height > 0 && r.top >= pr.top && r.bottom <= edge + 1 && r.left < pr.right;
+    if(ok) visible++;
+    if(rects.length < 3){
+      var cs = getComputedStyle(el);
+      rects.push(el.textContent.trim() + ' l' + Math.round(r.left) + ' t' + Math.round(r.top) + ' r' + Math.round(r.right) + ' b' + Math.round(r.bottom) + ' h' + Math.round(r.height) +
+        ' edge' + Math.round(edge) + ' panel[' + Math.round(pr.left) + ',' + Math.round(pr.top) + ',' + Math.round(pr.right) + ',' + Math.round(pr.bottom) + '] vis=' + cs.visibility + ' op=' + cs.opacity + ' disp=' + cs.display + ' class=' + el.className + ' lh=' + cs.lineHeight);
+    }
   });
   var vb = pr.bottom, b;
   for(b = row.parentElement; b; b = b.parentElement){
@@ -270,7 +276,7 @@ const d51ReadJS = `(function(){
     if(b === panel) break;
   }
   return { labels: labels, visible: visible, monthsCut: row.classList.contains('pct-cut'), visibleBottom: Math.round(vb), monthsBottom: Math.round(row.getBoundingClientRect().bottom),
-    wrapH: wrap ? Math.round(wrap.clientHeight) : 0, gridH: grid ? Math.round(grid.scrollHeight) : 0, panelH: Math.round(pr.height), win: window.innerWidth };
+    wrapH: wrap ? Math.round(wrap.clientHeight) : 0, gridH: grid ? Math.round(grid.scrollHeight) : 0, panelH: Math.round(pr.height), win: window.innerWidth, rects: rects.join(' | ') };
 })()`
 
 type d51Read struct {
@@ -283,6 +289,7 @@ type d51Read struct {
 	GridH         float64 `json:"gridH"`
 	PanelH        float64 `json:"panelH"`
 	Win           float64 `json:"win"`
+	Rects         string  `json:"rects"`
 }
 
 // d51Check returns the problems in one read; pure, so it can be tested.
@@ -301,6 +308,43 @@ func d51Check(r d51Read) []string {
 	return nil
 }
 
+// d51Size is one window size of d51; Pct puts Wilco's section and pane percents
+// (d51WilcoPct) on it instead of the checks' default sizes.
+type d51Size struct {
+	W, H int32
+	Pct  bool
+}
+
+// d51WilcoPct is the Standard layout of the Glim fix lane's finding 9: sections
+// status 15, sessions 40, processes 35, to do 10; panes burn 40, vendor strip 20,
+// activity and heatmap 20, turn ticker 20. His Processes parts are off, and
+// uicheck turns every part on, so those three panes add up to 100 here, not 120.
+const d51WilcoPct = `{pct:{standard:{sections:{status:15,sessions_30min:40,processes_30min:35,todo:10},panes:{status_row1:60,sessions:40,burn_30min:40,vendor_strip:20,activity_heatmap:20,turn_ticker:20,system:50,process_groups:30,processes:20}}}}`
+
+// d51Defaults: 1280x900 and 1500x900 fit a laptop at 200 percent scale, where
+// the larger sizes are skipped (a skipped size is not a pass). 1500x650 is the
+// shortest window that leaves the panel any room for a grid: the panel is 44 px
+// at 600 and below, with 2 px of room, where nothing fits. 1136x1554 with his
+// percents is Wilco's window on the portrait monitor (his 1146x1554 CSS px, ten
+// px narrower so it fits that monitor's 1152 px at the 100 percent this process
+// sees), which only a tall monitor can hold: run it there with UICHECK_ORIGIN
+// set to that monitor's top left.
+var d51Defaults = []d51Size{{1500, 650, false}, {1280, 900, false}, {1500, 900, false}, {1600, 900, false}, {1920, 1080, false}, {2560, 1440, false}, {1136, 1554, true}}
+
+// d51Sizes reads UICHECK_D51_SIZE: "WxH" entries, "WxHp" with Wilco's percents.
+func d51Sizes(v string) []d51Size {
+	var out []d51Size
+	for _, one := range strings.Split(v, ",") {
+		one = strings.TrimSpace(one)
+		pct := strings.HasSuffix(one, "p")
+		var w, h int32
+		if n, _ := fmt.Sscanf(strings.TrimSuffix(one, "p"), "%dx%d", &w, &h); n == 2 {
+			out = append(out, d51Size{w, h, pct})
+		}
+	}
+	return out
+}
+
 func caseD51(hwnd uintptr, args []string) error {
 	snap, err := d34Snapshot(false)
 	if err != nil {
@@ -308,24 +352,17 @@ func caseD51(hwnd uintptr, args []string) error {
 	}
 	var fails []string
 	ran := 0
-	// 1280x900 and 1500x900 fit a laptop at 200 percent scale, where the larger
-	// sizes are skipped (a skipped size is not a pass).
-	// 1500x650 is the shortest window that leaves the panel any room for a grid:
-	// the panel is 44 px at 600 and below, with 2 px of room, where nothing fits.
-	sizes := [][2]int32{{1500, 650}, {1280, 900}, {1500, 900}, {1600, 900}, {1920, 1080}, {2560, 1440}}
+	sizes := d51Defaults
 	// UICHECK_D51_SIZE=1500x900,1500x700 checks those sizes instead (Wilco's window).
 	if v := os.Getenv("UICHECK_D51_SIZE"); v != "" {
-		sizes = nil
-		for _, one := range strings.Split(v, ",") {
-			var w, h int32
-			if n, _ := fmt.Sscanf(one, "%dx%d", &w, &h); n == 2 {
-				sizes = append(sizes, [2]int32{w, h})
-			}
-		}
+		sizes = d51Sizes(v)
 	}
 	for _, sz := range sizes {
-		tag := fmt.Sprintf("%dx%d", sz[0], sz[1])
-		if err := ensureWindowSizeWH(hwnd, sz[0], sz[1]); err != nil {
+		tag := fmt.Sprintf("%dx%d", sz.W, sz.H)
+		if sz.Pct {
+			tag += "-pct"
+		}
+		if err := ensureWindowSizeWH(hwnd, sz.W, sz.H); err != nil {
 			return err
 		}
 		if windowCapped {
@@ -333,6 +370,15 @@ func caseD51(hwnd uintptr, args []string) error {
 			continue
 		}
 		ran++
+		// The sizes go in through the page's own binding; the checks' default
+		// sizes come back for every size without percents.
+		pct := startClearSizes
+		if sz.Pct {
+			pct = d51WilcoPct
+		}
+		if err := evalAwait(`window.bdevSetSections(`+pct+`)`, nil); err != nil {
+			return fmt.Errorf("d51 %s: set sizes: %w", tag, err)
+		}
 		time.Sleep(500 * time.Millisecond)
 		payload, err := d41Payload(d29Opts{Status: "ok", Snap: snap, Scrollbar: true}, nil)
 		if err != nil {
@@ -351,6 +397,7 @@ func caseD51(hwnd uintptr, args []string) error {
 		}
 		fmt.Printf("uicheck: d51: %s: %d month labels, %d visible; panel %.0f px, wrap %.0f px, grid %.0f px, month line ends %.0f px, visible bottom %.0f px\n",
 			tag, r.Labels, r.Visible, r.PanelH, r.WrapH, r.GridH, r.MonthsBottom, r.VisibleBottom)
+		fmt.Printf("uicheck: d51: %s: first labels (CSS px): %s\n", tag, r.Rects)
 		if _, err := screenshot(hwnd, "d51-"+tag); err != nil {
 			return err
 		}

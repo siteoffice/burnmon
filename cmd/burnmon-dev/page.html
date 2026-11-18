@@ -280,7 +280,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
    panel's right edge, so no scrollbar ever appears. renderHeatmap's own JS
    pass (below) still skips a label that would overlap the previous one. */
 .heatmonths{position:relative; height:10px; margin-top:3px; overflow:hidden}
-.heatmonth{position:absolute; top:0; font-size:8px; color:var(--dim); white-space:nowrap}
+/* line-height equals .heatmonths' own 10px: with the normal line height the label box is taller than
+   the clipping month line, and the whole-row pass (pctWhole) counts it as cut and hides it. */
+.heatmonth{position:absolute; top:0; font-size:8px; line-height:10px; color:var(--dim); white-space:nowrap}
 
 /* harness x minute heatmap, phase 3 */
 .heatrow{display:flex; align-items:center; gap:6px; margin-bottom:2px}
