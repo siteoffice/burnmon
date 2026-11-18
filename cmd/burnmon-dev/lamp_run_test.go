@@ -172,7 +172,7 @@ func TestEngineDemoWritesNoFileAndFollowsItsOwnClock(t *testing.T) {
 		}
 		moods = append(moods, p.State.Mood)
 	}
-	if moods[0] != lamp.MoodAsleep || moods[4] != lamp.MoodBored || moods[7] != lamp.MoodWorking {
+	if moods[0] != lamp.MoodAsleep || moods[7] != lamp.MoodBored || moods[15] != lamp.MoodAsleep {
 		t.Fatalf("moods %v", moods)
 	}
 	e.nextLine()
@@ -185,6 +185,43 @@ func TestEngineDemoWritesNoFileAndFollowsItsOwnClock(t *testing.T) {
 	})
 	if len(left) != 0 {
 		t.Fatalf("the demo wrote files: %v", left)
+	}
+}
+
+func TestEngineDemoPlaysTheActsOfTheTimeline(t *testing.T) {
+	e := newLampEngine(true, "", "")
+	start := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	e.start = start
+	var order []string
+	seq := map[string]int64{}
+	holds := map[string]bool{}
+	for sec := 0; sec < 2*lamp.DemoSeconds; sec++ {
+		p := e.payload(start.Add(time.Duration(sec) * time.Second))
+		for _, h := range p.Holds {
+			holds[h] = true
+		}
+		if p.Act == "" {
+			continue
+		}
+		if sec < lamp.DemoSeconds && (len(order) == 0 || order[len(order)-1] != p.Act) {
+			order = append(order, p.Act)
+			seq[p.Act] = p.ActSeq
+		}
+		if sec >= lamp.DemoSeconds && p.ActSeq == seq[p.Act] {
+			t.Errorf("second %d: act %s has the seq of the first loop", sec, p.Act)
+		}
+		if len(p.ActLines) == 0 && p.Act != "knock" && p.Act != "alarm" && p.Act != "peek" {
+			t.Errorf("second %d: act %s has no line", sec, p.Act)
+		}
+	}
+	want := []string{"wake", "knock", "alarm", "stamp", "slip", "welcome", "coffee", "peek"}
+	if strings.Join(order, " ") != strings.Join(want, " ") {
+		t.Fatalf("acts in the demo loop %v, want %v", order, want)
+	}
+	for _, h := range []string{lamp.HoldWall, lamp.HoldSweat, lamp.HoldSleep, lamp.HoldDots} {
+		if !holds[h] {
+			t.Errorf("the demo payload never holds %s", h)
+		}
 	}
 }
 

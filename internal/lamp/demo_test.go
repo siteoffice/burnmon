@@ -6,40 +6,163 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"burnmon/internal/waits"
 )
 
+// demoSegs is the loop of 48 seconds: the first second, the end (exclusive)
+// and the mood of each segment.
+var demoSegs = []struct {
+	from, to int
+	mood     string
+}{
+	{0, 4, MoodAsleep}, {4, 10, MoodWorking}, {10, 13, MoodYourTurn}, {13, 16, MoodBlocked},
+	{16, 19, MoodDone}, {19, 31, MoodBored}, {31, 35, MoodSweating}, {35, 38, MoodYourTurn},
+	{38, 47, MoodAsleep}, {47, 48, MoodDone},
+}
+
+// demoActStarts is the second each act starts at in the loop.
+var demoActStarts = map[string]int{
+	ActWake: 4, ActKnock: 10, ActAlarm: 13, ActStamp: 16,
+	ActSlip: 24, ActWelcome: 35, ActCoffee: 38, ActPeek: 42,
+}
+
 func TestDemoTimelineMoodsInOrder(t *testing.T) {
-	want := []string{
-		MoodAsleep, MoodWorking, MoodYourTurn, MoodBlocked,
-		MoodBored, MoodSweating, MoodDone, MoodWorking,
+	if DemoSeconds != 48 {
+		t.Fatalf("DemoSeconds = %d, want 48", DemoSeconds)
 	}
-	if DemoSeconds != 24 {
-		t.Fatalf("DemoSeconds = %d, want 24", DemoSeconds)
+	for _, seg := range demoSegs {
+		for sec := seg.from; sec < seg.to; sec++ {
+			st := DemoState(sec)
+			if st.Mood != seg.mood {
+				t.Errorf("second %d: mood %q, want %q", sec, st.Mood, seg.mood)
+			}
+			if !st.Demo {
+				t.Errorf("second %d: demo is false", sec)
+			}
+			if st.Headline == "" {
+				t.Errorf("second %d: no headline", sec)
+			}
+		}
 	}
+}
+
+func TestDemoWallGrowsFromTenToFourteenThenFifteen(t *testing.T) {
+	for sec := 19; sec < 24; sec++ {
+		if got, want := DemoState(sec).WallBricks, 10+sec-19; got != want {
+			t.Errorf("second %d: %d bricks, want %d", sec, got, want)
+		}
+	}
+	for sec := 24; sec < 31; sec++ {
+		if got := DemoState(sec).LongestWaitMin; got < slipMinutes {
+			t.Errorf("second %d: longest wait %d minutes, want %d or more for the slip", sec, got, slipMinutes)
+		}
+	}
+}
+
+func TestDemoPlaysEveryActOnceInTheLoop(t *testing.T) {
+	runs := map[string]int{}
+	prev, prevSeq := "", int64(0)
+	seqOf := map[string]int64{}
 	for sec := 0; sec < DemoSeconds; sec++ {
-		st := DemoState(sec)
-		if st.Mood != want[sec/3] {
-			t.Errorf("second %d: mood %q, want %q", sec, st.Mood, want[sec/3])
+		act, seq := DemoAct(sec)
+		if act != "" {
+			if act != prev {
+				runs[act]++
+				if _, dup := seqOf[act]; !dup {
+					seqOf[act] = seq
+				}
+				if seq == prevSeq {
+					t.Errorf("second %d: act %s keeps the seq %d of the act before", sec, act, seq)
+				}
+			} else if seq != prevSeq {
+				t.Errorf("second %d: seq changed inside the act %s", sec, act)
+			}
+			if act != prev && sec != demoActStarts[act] {
+				t.Errorf("second %d: act %s starts here, want second %d", sec, act, demoActStarts[act])
+			}
 		}
-		if !st.Demo {
-			t.Errorf("second %d: demo is false", sec)
+		prev, prevSeq = act, seq
+	}
+	for act, start := range demoActStarts {
+		if runs[act] != 1 {
+			t.Errorf("act %s plays %d times in the loop, want 1", act, runs[act])
 		}
-		if st.Headline == "" {
-			t.Errorf("second %d: no headline", sec)
+		end := start + int(ActSeconds(act)+0.999)
+		for sec := start; sec < end; sec++ {
+			if got, _ := DemoAct(sec); got != act {
+				t.Errorf("second %d: act %q, want %s (starts at %d, %.1f s)", sec, got, act, start, ActSeconds(act))
+			}
+		}
+		if got, _ := DemoAct(end); got == act {
+			t.Errorf("act %s still plays at second %d, after its length", act, end)
+		}
+	}
+	if len(runs) != len(actSeconds) {
+		t.Errorf("the loop plays %d acts, the engine has %d", len(runs), len(actSeconds))
+	}
+}
+
+func TestDemoActSeqDiffersFromLoopToLoop(t *testing.T) {
+	a1, s1 := DemoAct(10)
+	a2, s2 := DemoAct(10 + DemoSeconds)
+	if a1 != ActKnock || a2 != ActKnock || s1 == s2 {
+		t.Fatalf("loop 1 %q %d, loop 2 %q %d: want knock twice with different seq", a1, s1, a2, s2)
+	}
+	if a, _ := DemoAct(-DemoSeconds + 10); a != ActKnock {
+		t.Fatalf("DemoAct before the first loop = %q, want knock", a)
+	}
+}
+
+func TestDemoShowsEveryStateThatLastsOnce(t *testing.T) {
+	runs := map[string]int{}
+	at := map[string][]int{}
+	var prev map[string]bool
+	for sec := 0; sec < DemoSeconds; sec++ {
+		cur := map[string]bool{}
+		for _, h := range Holds(DemoState(sec), DemoSettings(sec)) {
+			cur[h] = true
+			at[h] = append(at[h], sec)
+			if !prev[h] {
+				runs[h]++
+			}
+		}
+		prev = cur
+	}
+	for _, h := range []string{HoldWall, HoldSweat, HoldSleep, HoldDots} {
+		if runs[h] != 1 {
+			t.Errorf("state %s starts %d times in the loop (seconds %v), want 1", h, runs[h], at[h])
+		}
+	}
+	for _, h := range at[HoldSleep] {
+		if h >= 4 {
+			t.Errorf("sleep holds at second %d, want only the first segment", h)
 		}
 	}
 }
 
-func TestDemoWallGrowsFromTenToTwenty(t *testing.T) {
-	got := []int{DemoState(12).WallBricks, DemoState(13).WallBricks, DemoState(14).WallBricks}
-	if got[0] != 10 || got[1] != 15 || got[2] != 20 {
-		t.Fatalf("wall bricks over the bored segment = %v, want [10 15 20]", got)
+func TestDemoSettingsKeepGlimDownThenHideHim(t *testing.T) {
+	for sec := 0; sec < 10; sec++ {
+		if Quiet(DemoState(sec), DemoSettings(sec)) {
+			t.Errorf("second %d: the demo hides Glim, want him down", sec)
+		}
+	}
+	for sec := 38; sec < 47; sec++ {
+		if !Quiet(DemoState(sec), DemoSettings(sec)) {
+			t.Errorf("second %d: the demo shows Glim, want the lamp quiet and hidden for coffee and peek", sec)
+		}
+	}
+	if DemoState(35).Counted < 1 {
+		t.Error("welcome needs a counted item at second 35")
+	}
+	if DemoState(38).Counted != 0 {
+		t.Error("coffee needs no counted item at second 38")
 	}
 }
 
-func TestDemoStateWrapsAfter24Seconds(t *testing.T) {
-	if DemoState(24).Mood != DemoState(0).Mood || DemoState(-1).Mood != DemoState(23).Mood {
-		t.Fatal("DemoState does not wrap at 24 seconds")
+func TestDemoStateWrapsAfter48Seconds(t *testing.T) {
+	if DemoState(48).Mood != DemoState(0).Mood || DemoState(-1).Mood != DemoState(47).Mood {
+		t.Fatal("DemoState does not wrap at 48 seconds")
 	}
 }
 
@@ -124,7 +247,7 @@ func TestPosesHoldNoScriptImageOrOutsideResource(t *testing.T) {
 	for _, e := range ents {
 		b, _ := os.ReadFile(filepath.Join(dir, e.Name()))
 		s := string(b)
-		for _, bad := range []string{"<script", "<image", "http://", "https://", "—"} {
+		for _, bad := range []string{"<script", "<image", "http://", "https://", emDash} {
 			// the xmlns of an SVG is the one allowed http:// text
 			if bad == "http://" {
 				s = strings.ReplaceAll(s, `xmlns="http://www.w3.org/2000/svg"`, "")
@@ -143,13 +266,13 @@ func TestPosesHoldNoScriptImageOrOutsideResource(t *testing.T) {
 
 func TestDemoSVG(t *testing.T) {
 	s := DemoSVG()
-	if len(s) >= 200*1024 {
-		t.Errorf("glim-demo.svg is %d bytes, want under 200 KB", len(s))
+	if len(s) >= 300*1024 {
+		t.Errorf("glim-demo.svg is %d bytes, want under 300 KB", len(s))
 	}
 	if !strings.Contains(s, "@keyframes") {
 		t.Error("no @keyframes")
 	}
-	for _, bad := range []string{"<script", "<image", "https://", "—"} {
+	for _, bad := range []string{"<script", "<image", "https://", emDash} {
 		if strings.Contains(s, bad) {
 			t.Errorf("demo svg holds %q", bad)
 		}
@@ -166,10 +289,66 @@ func TestDemoSVG(t *testing.T) {
 			t.Errorf("frame %d holds defs", i)
 		}
 	}
+	for act := range demoActStarts {
+		if !strings.Contains(s, "@keyframes act-"+act+"{") {
+			t.Errorf("no keyframes for the act %s", act)
+		}
+		sec := demoActStarts[act]
+		if !strings.Contains(frames[sec], `a-`+act+`"`) {
+			t.Errorf("the frame of second %d does not carry the class a-%s", sec, act)
+		}
+	}
+	for _, h := range []string{HoldSweat, HoldSleep, HoldDots} {
+		if !strings.Contains(s, "@keyframes hold-"+h+"{") {
+			t.Errorf("no keyframes for the state %s", h)
+		}
+	}
 	for _, m := range regexp.MustCompile(`href="([^"]*)"`).FindAllStringSubmatch(s, -1) {
 		if !strings.HasPrefix(m[1], "#") {
 			t.Errorf("demo svg has an href to %q", m[1])
 		}
+	}
+}
+
+func TestDemoSVGShowsActLinesAndTheTicker(t *testing.T) {
+	s := DemoSVG()
+	for _, want := range []string{
+		"Somebody started something.", "I am not bored. I am testing the rail.", "Welcome back.", "Ten o&#39;clock. Coffee.",
+	} {
+		if !strings.Contains(s, want) && !strings.Contains(s, strings.ReplaceAll(want, "&#39;", "'")) {
+			t.Errorf("the demo svg does not show the line %q", want)
+		}
+	}
+}
+
+func TestPosesAreAllTheSameSizeAndSheetUsesPlainWords(t *testing.T) {
+	dir := t.TempDir()
+	if err := WritePoses(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range AllMoods {
+		b, _ := os.ReadFile(filepath.Join(dir, "glim-"+m+".svg"))
+		if !strings.HasPrefix(string(b), svgHead+`viewBox="0 0 256 256" width="256" height="256">`) {
+			t.Errorf("glim-%s.svg has another size than the other poses", m)
+		}
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "glim-sheet.svg"))
+	sheet := string(b)
+	texts := regexp.MustCompile(`<text[^>]*font-size="22"[^>]*>([^<]*)</text>`).FindAllStringSubmatch(sheet, -1)
+	if len(texts) != len(AllMoods) {
+		t.Fatalf("the sheet has %d labels, want %d", len(texts), len(AllMoods))
+	}
+	for i, m := range AllMoods {
+		want := waits.MoodWord(m)
+		if want == "" || texts[i][1] != want {
+			t.Errorf("sheet label %d is %q, want %q", i, texts[i][1], want)
+		}
+		if strings.Contains(texts[i][1], "_") {
+			t.Errorf("sheet label %q has an underscore", texts[i][1])
+		}
+	}
+	if !strings.Contains(sheet, ">your turn<") {
+		t.Error(`the sheet does not say "your turn"`)
 	}
 }
 

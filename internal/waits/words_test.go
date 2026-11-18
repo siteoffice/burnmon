@@ -1,6 +1,9 @@
 package waits
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestKindWordSevenWords(t *testing.T) {
 	want := map[string]string{
@@ -37,5 +40,23 @@ func TestWordForFallsBackToGroup(t *testing.T) {
 		if got := WordFor(c.it); got != c.want {
 			t.Errorf("WordFor(%+v) = %q, want %q", c.it, got, c.want)
 		}
+	}
+}
+
+func TestMoodWordsArePlain(t *testing.T) {
+	want := map[string]string{
+		"off": "off", "asleep": "asleep", "working": "working", "done": "done",
+		"your_turn": "your turn", "blocked": "blocked", "bored": "bored", "sweating": "sweating",
+	}
+	for mood, w := range want {
+		if got := MoodWord(mood); got != w {
+			t.Errorf("MoodWord(%q) = %q, want %q", mood, got, w)
+		}
+		if strings.Contains(MoodWord(mood), "_") {
+			t.Errorf("MoodWord(%q) has an underscore", mood)
+		}
+	}
+	if MoodWord("mystery") != "" {
+		t.Error("an unknown mood has a word")
 	}
 }

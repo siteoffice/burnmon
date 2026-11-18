@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"burnmon/internal/fsutil"
+	"burnmon/internal/waits"
 )
 
 // AllMoods lists the eight moods, the order of the sheet and the poses.
@@ -111,69 +112,8 @@ func sheetSVG() string {
 		}
 		attrs := `x="` + ftoa(cx-w/2) + `" y="` + ftoa(top+(190-h)/2) + `"`
 		b.WriteString(glimSized(m, bricks, "dark", attrs, h))
-		b.WriteString(`<text x="` + ftoa(cx) + `" y="` + ftoa(top+225) + `" text-anchor="middle" fill="#ffc766" font-family="Segoe UI, sans-serif" font-size="22">` + xmlText(m) + `</text>`)
+		b.WriteString(`<text x="` + ftoa(cx) + `" y="` + ftoa(top+225) + `" text-anchor="middle" fill="#ffc766" font-family="Segoe UI, sans-serif" font-size="22">` + xmlText(waits.MoodWord(m)) + `</text>`)
 	}
 	b.WriteString(`</svg>` + "\n")
 	return b.String()
-}
-
-// DemoSVG is the moving picture of the README: the 24 seconds of the demo as
-// one looping SVG, 24 frames of one second each. The motion is one CSS
-// keyframe animation, no script and no outside resource. Glim is drawn once
-// per mood in defs and placed with use.
-func DemoSVG() string {
-	var b strings.Builder
-	b.WriteString(svgHead + `viewBox="0 0 320 40" width="640" height="80">`)
-	b.WriteString(`<style>.f{opacity:0;animation:show 24s step-end infinite}` +
-		`@keyframes show{0%{opacity:1}4.1%{opacity:1}4.2%{opacity:0}100%{opacity:0}}</style>`)
-	b.WriteString(`<defs><clipPath id="tc"><rect x="46" y="0" width="212" height="40"/></clipPath>`)
-	ids := map[string]bool{}
-	frame := make([]State, DemoSeconds)
-	for sec := range frame {
-		frame[sec] = DemoState(sec)
-		st := frame[sec]
-		id := demoGlimID(st)
-		if ids[id] {
-			continue
-		}
-		ids[id] = true
-		bricks := 0
-		if st.Mood == MoodBored {
-			bricks = st.WallBricks
-		}
-		b.WriteString(glimSized(st.Mood, bricks, "dark", `id="`+id+`"`, 32))
-	}
-	b.WriteString(`</defs>`)
-	b.WriteString(`<rect width="320" height="40" fill="#000000"/>`)
-	for sec, st := range frame {
-		b.WriteString(`<g class="f" style="animation-delay:` + strconv.Itoa(sec) + `s">`)
-		if st.Mood == MoodAsleep || st.Mood == MoodWorking {
-			// asleep and working show the sliver
-			b.WriteString(`<rect x="100" y="0" width="120" height="6" fill="#ffc766"/>`)
-		} else {
-			b.WriteString(`<rect width="320" height="40" fill="#15110a"/>`)
-			b.WriteString(`<use href="#` + demoGlimID(st) + `" x="8" y="4"/>`)
-			b.WriteString(`<g clip-path="url(#tc)" font-family="Segoe UI, sans-serif">` +
-				`<text x="50" y="17" fill="#ffc766" font-size="13" font-weight="600">` + xmlText(st.Headline) + `</text>` +
-				`<text x="50" y="32" fill="#d4bf94" font-size="11">` + xmlText(st.Line) + `</text></g>`)
-		}
-		b.WriteString(`<text x="290" y="` + demoTagY(st) + `" fill="#ffc766" font-family="Segoe UI, sans-serif" font-size="11" font-weight="600">demo</text>`)
-		b.WriteString(`</g>`)
-	}
-	b.WriteString(`</svg>` + "\n")
-	return b.String()
-}
-
-func demoTagY(st State) string {
-	if st.Mood == MoodAsleep || st.Mood == MoodWorking {
-		return "14"
-	}
-	return "24"
-}
-
-func demoGlimID(st State) string {
-	if st.Mood == MoodBored {
-		return "gl-bored-" + strconv.Itoa(st.WallBricks)
-	}
-	return "gl-" + st.Mood
 }

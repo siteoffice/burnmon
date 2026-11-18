@@ -375,7 +375,8 @@ func (e *lampEngine) payload(now time.Time) lampPayload {
 	if e.demo {
 		sec := int(now.Sub(e.start) / time.Second)
 		st := lamp.DemoState(sec)
-		return e.finish(st, lamp.DefaultSettings(), lamp.DemoBase(), "dark")
+		e.act, e.played.Seq = lamp.DemoAct(sec)
+		return e.finish(st, lamp.DemoSettings(sec), lamp.DemoBase(), "dark")
 	}
 	set := lamp.DefaultSettings()
 	if b, err := os.ReadFile(devConfigReadPath(e.setDir)); err == nil {
@@ -418,12 +419,16 @@ func (e *lampEngine) finish(st lamp.State, set lamp.Settings, lineNow time.Time,
 		st.Line = ov.line
 	}
 	e.lastSt, e.lastSet, e.lastNow, e.lastLine = st, set, lineNow, st.Line
+	hour := lineNow.Hour()
+	if e.demo && e.act == lamp.ActCoffee {
+		hour = 10 // the made-up clock stands at 9, the coffee line needs a slot
+	}
 	return lampPayload{
 		State: st, Theme: theme, Labels: lampLabels(set.Language),
 		Act: e.act, ActSeq: e.played.Seq, Holds: lamp.Holds(st, set),
 		DotSeconds: lamp.DotSeconds(st.BurnRate), Quiet: lamp.Quiet(st, set),
 		Look:     lampLook{Size: set.Size, Theme: set.Theme, Motion: set.Motion, Quiet: set.Quiet, Backdrop: set.Backdrop, Rows: set.TickerRows},
-		ActLines: lampActLines(e.act, set.Language, st.Counted, lineNow.Hour(), e.played.Seq),
+		ActLines: lampActLines(e.act, set.Language, st.Counted, hour, e.played.Seq),
 	}
 }
 
