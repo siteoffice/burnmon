@@ -405,7 +405,14 @@ not seen.
   never stored.
 - **Close the lamp.** Right-click the ticker or Glim and pick "Close the lamp". The lamp writes its ledger
   and ends. For a lamp that BurnMon Dev started it also saves `lamp_enabled` false, so BurnMon Dev does not
-  start it again. A lamp you started by hand just ends.
+  start it again. A lamp you started by hand just ends. Proven by a test on this laptop (opt-in, run by
+  `.\scripts\uicheck-lamp.ps1`): a lamp started the way BurnMon Dev starts it, asked to close through the
+  page's menu call, was gone 180 ms later (the test fails at 2.5 s or more) with `lamp_enabled` false saved, and a lamp whose
+  `BURNMON_LAMP_PARENT` process is gone ends within 6 seconds. The cause of the earlier failure: the
+  lamp asked its window to quit from another thread, which the window loop never sees; it now asks on the
+  window's own thread, and exits after 3 seconds if it still lives. BurnMon Dev also stops a lamp child
+  whose saved `lamp_enabled` is false within 2 seconds. Still unseen: the click on the menu item itself
+  (the test calls what the click calls), and the Mac panel.
 
 - **See it without any agents.** `burnmon-dev.exe lamp --demo` plays a fixed 48 second loop of made-up
   states and plays every act and every state that lasts once, with the word "demo" on the ticker. It

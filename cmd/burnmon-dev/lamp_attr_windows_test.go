@@ -3,6 +3,8 @@
 package main
 
 import (
+	"bufio"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +13,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"burnmon/internal/lamp"
 )
 
 // Fix lane T2, finding 1: the lamp child is not started hidden. A hidden start
@@ -72,6 +76,131 @@ func TestLampChildStartShowsWindow(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("no visible lamp window of process %d within 3 s: %s", pid, last)
+}
+
+// lampTestExe builds burnmon-dev.exe into dir and points the data folders of
+// this test (and of every child it starts) at folders under dir, so nothing of
+// the person's is touched. It returns the exe and the settings folder.
+func lampTestExe(t *testing.T) (exe, setDir string) {
+	t.Helper()
+	dir := t.TempDir()
+	exe = filepath.Join(dir, "burnmon-dev.exe")
+	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	setDir = filepath.Join(dir, "settings")
+	t.Setenv("LOCALAPPDATA", filepath.Join(dir, "local"))
+	t.Setenv("APPDATA", filepath.Join(dir, "roaming"))
+	t.Setenv(settingsDirEnv, setDir)
+	for _, d := range []string{"local", "roaming", "settings"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return exe, setDir
+}
+
+// waitLampWindow waits up to 10 s for pid's window to be visible.
+func waitLampWindow(t *testing.T, pid uint32) {
+	t.Helper()
+	var last string
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if last = lampWindowProblem(pid); last == "" {
+			return
+		}
+	}
+	t.Fatalf("no visible lamp window of process %d within 10 s: %s", pid, last)
+}
+
+// Close fix T1, finding 11: "Close the lamp" must end the process. The lamp
+// starts through execLampStart (the start BurnMon Dev uses), the test runs the
+// page's own menu call lampClose() through the dev eval channel (the click
+// handler of the menu item calls exactly that), and the process must be gone
+// within 5 seconds with lamp_enabled false saved. Opt-in like the test above.
+func TestLampCloseFromMenuEndsTheProcess(t *testing.T) {
+	if os.Getenv("BURNMON_LAMP_WINDOW_TEST") != "1" {
+		t.Skip("opens a real window; set BURNMON_LAMP_WINDOW_TEST=1")
+	}
+	exe, setDir := lampTestExe(t)
+	if err := saveDevConfigKey(setDir, "lamp_enabled", true); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BURNMON_LAMP_UICHECK", "1")
+	p, err := execLampStart(exe, []string{"lamp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		p.Stop()
+		<-p.Done()
+	}()
+	waitLampWindow(t, uint32(p.(*execLampProc).cmd.Process.Pid))
+
+	var conn net.Conn
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		if conn, err = net.Dial("tcp", "127.0.0.1:9336"); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("the lamp eval channel never opened (is another lamp demo running?): %v", err)
+	}
+	closed := time.Now()
+	if _, err := conn.Write([]byte(`{"script":"window.lampClose()"}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	// The answer may not come: the lamp can end before it writes it.
+	_ = conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	_, _ = bufio.NewReader(conn).ReadString('\n')
+	conn.Close()
+
+	select {
+	case <-p.Done():
+		// Under 3 s means the window loop ended; 3 s or more means the second line (exit) did.
+		took := time.Since(closed)
+		t.Logf("the lamp ended %v after the menu call", took.Round(10*time.Millisecond))
+		if took >= lampEndGrace-500*time.Millisecond {
+			t.Fatalf("the lamp took %v: the window loop did not end, only the exit after the grace time did", took)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the lamp process is still running 5 s after Close the lamp")
+	}
+	b, err := os.ReadFile(devConfigReadPath(setDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lamp.ParseSettings(b).Enabled {
+		t.Fatalf("lamp_enabled is not false after Close the lamp: %s", b)
+	}
+}
+
+// Close fix T1: a lamp whose BURNMON_LAMP_PARENT names a process that does not
+// exist ends within 6 seconds. The id is the one of a process that has just ended.
+func TestLampEndsWhenItsParentIsGone(t *testing.T) {
+	if os.Getenv("BURNMON_LAMP_WINDOW_TEST") != "1" {
+		t.Skip("opens a real window; set BURNMON_LAMP_WINDOW_TEST=1")
+	}
+	exe, _ := lampTestExe(t)
+	gone := exec.Command("cmd", "/c", "exit", "0")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(exe, "lamp")
+	cmd.Env = lampChildEnv(os.Environ(), gone.Process.Pid)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	defer func() {
+		_ = cmd.Process.Kill()
+		<-done
+	}()
+	select {
+	case <-done:
+	case <-time.After(6 * time.Second):
+		t.Fatalf("the lamp is still running 6 s after its parent %d ended", gone.Process.Pid)
+	}
 }
 
 // lampWindowProblem is "" when pid owns a visible, uncloaked top-level window

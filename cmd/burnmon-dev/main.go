@@ -211,6 +211,13 @@ func main() {
 	defer lampKid.Stop()
 	if !uicheckActive() {
 		syncLampFromFile(setDir, lampKid)
+		// A lamp that still runs while the saved lamp_enabled is false is
+		// stopped within one tick (a lamp that did not end from its menu).
+		go func() {
+			for range time.Tick(2 * time.Second) {
+				lampKid.Tick()
+			}
+		}()
 	}
 	bindDev(devBindEnv{
 		w: w, a: a, st: st, sys: sys,

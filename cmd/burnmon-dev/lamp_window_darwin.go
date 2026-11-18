@@ -221,7 +221,7 @@ func runLampWindow(o lampOpts) int {
 					return nil
 				}
 				return saveDevConfigKey(setDir, key, v)
-			}, func() { w.Terminate() })
+			}, func() { lampEnd(w.Dispatch, w.Terminate, os.Exit, lampEndGrace) })
 	})
 	bind("lampSize", func(cssW, cssH int) {
 		pl.setSize(cssW, cssH)
@@ -236,7 +236,8 @@ func runLampWindow(o lampOpts) int {
 	go func() {
 		for range time.Tick(2 * time.Second) {
 			if lampParentGone(parent, lampProcessAlive) {
-				w.Terminate()
+				e.ledger.Close(time.Now()) // the exit after the grace time skips the deferred write
+				lampEnd(w.Dispatch, w.Terminate, os.Exit, lampEndGrace)
 				return
 			}
 			w.Dispatch(pl.place)

@@ -26,7 +26,9 @@ if ($targetChecks -contains "lamp") {
     Write-Host "--- child start: TestLampChildStartShowsWindow ---"
     $env:BURNMON_LAMP_WINDOW_TEST = "1"
     try {
-        go test ./cmd/burnmon-dev -run TestLampChildStartShowsWindow -count=1 -v
+        # Also: Close the lamp from the menu ends the process within 5 s, and a
+        # lamp whose BURNMON_LAMP_PARENT is gone ends within 6 s.
+        go test ./cmd/burnmon-dev -run "TestLampChildStartShowsWindow|TestLampCloseFromMenuEndsTheProcess|TestLampEndsWhenItsParentIsGone" -count=1 -v
         $childExit = $LASTEXITCODE
     } finally {
         $env:BURNMON_LAMP_WINDOW_TEST = $null

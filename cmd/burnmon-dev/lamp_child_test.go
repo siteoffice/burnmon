@@ -297,6 +297,88 @@ func TestSetLampKeySaveFailureLeavesChild(t *testing.T) {
 	}
 }
 
+// Close fix T1: a lamp that is still running while the saved lamp_enabled is
+// false is stopped by the next tick, and not started again by itself.
+func TestLampChildTickStopsAChildTheFileSaysOff(t *testing.T) {
+	r := newLampRig(t)
+	on := true
+	r.child.enabled = func() bool { return on }
+	r.child.Sync(true)
+	r.child.Tick()
+	if r.procs[0].stopped {
+		t.Fatal("a tick stopped a child while the file says on")
+	}
+	on = false
+	r.child.Tick()
+	if !r.procs[0].stopped {
+		t.Fatal("a tick left a child running while the file says lamp_enabled false")
+	}
+	time.Sleep(20 * time.Millisecond) // let died() see the end
+	if len(r.procs) != 1 {
+		t.Fatalf("the child was started again after the tick stopped it: %d starts", len(r.procs))
+	}
+	r.child.Tick() // nothing runs: nothing happens
+	on = true
+	r.child.Sync(true)
+	if len(r.procs) != 2 {
+		t.Fatalf("on again started %d children in total, want 2", len(r.procs))
+	}
+}
+
+// An unreadable file (savedOff false) never stops a running child.
+func TestLampChildTickIgnoresAnUnreadableFile(t *testing.T) {
+	r := newLampRig(t)
+	r.child.enabled = func() bool { return false } // what a failed read gives
+	r.child.savedOff = func() bool { return false }
+	r.child.Sync(true)
+	r.child.Tick()
+	if r.procs[0].stopped {
+		t.Fatal("a tick stopped the child although the file was not read as off")
+	}
+}
+
+// Without a file reader (nil) and on a nil child a tick does nothing.
+func TestLampChildTickWithoutReaderIsSafe(t *testing.T) {
+	r := newLampRig(t)
+	r.child.Sync(true)
+	r.child.Tick()
+	if r.procs[0].stopped {
+		t.Fatal("a tick without a file reader stopped the child")
+	}
+	var c *lampChild
+	c.Tick()
+}
+
+// Close fix T1: the lamp ends on the window's own thread. Terminate of
+// go-webview2 posts the quit message to the calling thread, so it must run
+// inside the dispatch, never straight from the caller's goroutine. When the
+// process still lives after the grace time, it exits.
+func TestLampEndRunsTerminateOnTheWindowThread(t *testing.T) {
+	var queued []func()
+	terminated := 0
+	exited := make(chan int, 1)
+	lampEnd(func(f func()) { queued = append(queued, f) }, func() { terminated++ },
+		func(code int) { exited <- code }, 30*time.Millisecond)
+	if terminated != 0 {
+		t.Fatal("Terminate ran on the caller's thread, not inside the dispatch")
+	}
+	if len(queued) != 1 {
+		t.Fatalf("lampEnd dispatched %d functions, want 1", len(queued))
+	}
+	queued[0]()
+	if terminated != 1 {
+		t.Fatalf("Terminate ran %d times when the dispatch ran, want 1", terminated)
+	}
+	select {
+	case code := <-exited:
+		if code != 0 {
+			t.Fatalf("the second line exited with %d, want 0", code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the process was not made to exit after the grace time")
+	}
+}
+
 // BurnMon Dev starts the child from the saved file at its own start.
 func TestSyncLampFromFile(t *testing.T) {
 	dir := t.TempDir()

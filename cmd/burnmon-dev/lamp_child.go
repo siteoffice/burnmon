@@ -39,6 +39,7 @@ type lampChild struct {
 	now       func() time.Time
 	logf      func(string, ...any)
 	supported bool        // the lamp runs on Windows only in this version
+	savedOff  func() bool // true only when the file was read and says lamp_enabled false; an unreadable file is not off. Tick uses it when set
 	enabled   func() bool // lamp_enabled as the file says now; nil means on. A lamp closed from its menu saved false before it ended
 
 	mu       sync.Mutex
@@ -71,6 +72,47 @@ func (c *lampChild) Sync(on bool) {
 	}
 	c.startLocked()
 }
+
+// Tick stops a running child when the saved lamp_enabled is false. A lamp that
+// closed itself from its menu saves false first, but a lamp that stays up (or
+// a file changed by hand) must not outlive the file. The stop is on purpose,
+// so died() does not start it again. Called by BurnMon Dev every 2 seconds.
+func (c *lampChild) Tick() {
+	if c == nil || !c.supported || (c.enabled == nil && c.savedOff == nil) {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.proc == nil {
+		return
+	}
+	// Read under the lock: a Sync(true) that ran just before must not be undone
+	// by an older read of the file.
+	if c.savedOff != nil {
+		if !c.savedOff() {
+			return
+		}
+	} else if c.enabled() {
+		return
+	}
+	c.want = false
+	c.stopLocked()
+}
+
+// lampEnd ends the lamp from any goroutine. Terminate of go-webview2 is
+// PostQuitMessage, which posts the quit message to the thread that calls it, so
+// from another goroutine the window's message loop never sees it. terminate
+// therefore runs inside dispatch (the window's own thread). As a second line,
+// when the process still lives after grace, exit ends it; the ledger is
+// written before this is called.
+func lampEnd(dispatch func(func()), terminate func(), exit func(int), grace time.Duration) {
+	dispatch(terminate)
+	time.AfterFunc(grace, func() { exit(0) })
+}
+
+// lampEndGrace is how long the lamp gets to end on its own after the ledger
+// was written.
+const lampEndGrace = 3 * time.Second
 
 // Stop ends the child for good, at BurnMon Dev exit.
 func (c *lampChild) Stop() {
@@ -177,6 +219,10 @@ func newLampChildForApp() *lampChild {
 	}
 	c := newLampChild(exe, execLampStart, time.Now, log.Printf)
 	c.enabled = func() bool { return readLampSettings(settingsDir()).Enabled }
+	c.savedOff = func() bool {
+		b, err := os.ReadFile(devConfigReadPath(settingsDir()))
+		return err == nil && !lamp.ParseSettings(b).Enabled
+	}
 	return c
 }
 

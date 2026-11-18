@@ -179,7 +179,7 @@ func runLampWindow(o lampOpts) int {
 					return nil
 				}
 				return saveDevConfigKey(setDir, key, v)
-			}, func() { w.Terminate() })
+			}, func() { lampEnd(w.Dispatch, w.Terminate, os.Exit, lampEndGrace) })
 	})
 	// Dev-only: tools\uicheck drives the lamp page through this channel. It
 	// opens only when BURNMON_LAMP_UICHECK is set; a release never sets it.
@@ -198,7 +198,8 @@ func runLampWindow(o lampOpts) int {
 	go func() {
 		for range time.Tick(2 * time.Second) {
 			if lampParentGone(parent, lampProcessAlive) {
-				w.Terminate()
+				e.ledger.Close(time.Now()) // the exit after the grace time skips the deferred write
+				lampEnd(w.Dispatch, w.Terminate, os.Exit, lampEndGrace)
 				return
 			}
 			w.Dispatch(pl.place)
