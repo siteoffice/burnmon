@@ -1,4 +1,4 @@
-![Glim, the lamp of BurnMon Dev, plays a 24 second demo loop](../../assets/glim/glim-demo.svg)
+![Glim, the lamp of BurnMon Dev, plays a 48 second demo loop](../../assets/glim/glim-demo.svg)
 
 # BurnMon Dev
 
@@ -353,25 +353,49 @@ that count.
 
 ## The lamp
 
-The lamp is Glim, a small character in a thin pill at the top edge of the primary screen. It tells you
-when an agent waits on you, so you can leave the BurnMon Dev window closed. It reads the snapshot file
-that BurnMon or BurnMon Dev writes (`docs\snapshot_schema.md`) and nothing else. It never takes the
-focus when it shows, resizes or changes mood. Hover it to open the pill: tokens a minute, the cost of the
-last 5 minutes and up to 6 waiting items; a click on Glim shows another line; a double click opens
-BurnMon Dev.
+### Goal
 
-- **Switch it on.** The gear dialog has a group Lamp: show the lamp, position (top left, top centre, top
-  right), language (English or Dutch), one-liners on or off, include Foreman items. With `lamp_enabled`
-  true, BurnMon Dev starts `burnmon-dev.exe lamp` as a child of its own and stops it when you switch it
-  off or close BurnMon Dev. The keys are `lamp_enabled`, `lamp_position`, `lamp_language`, `lamp_lines`,
-  `lamp_foreman_items` and `lamp_burn_floor_tpm` in `burnmon-dev.json`. You can also start it by hand:
-  `burnmon-dev.exe lamp`.
-- **See it without any agents.** `burnmon-dev.exe lamp --demo` plays a fixed 24 second loop of made-up
-  states with the word "demo" on the pill. It reads no snapshot and no setting and writes no BurnMon file.
+The lamp tells you when an agent waits on you, so you can leave the BurnMon Dev window closed. It is a
+slim ticker at the top edge of the primary screen, with Glim, a small character, hanging under it on a
+cord. The ticker shows one row (the headline and Glim's line) and, if you ask for more rows, the items
+that wait longest. Glim moves like a cartoon character: he idles, follows your pointer with his eyes and
+plays a short act when something changes (`alarm`, `knock`, `stamp`, `welcome`, `wake`, `slip`, `coffee`
+and `peek`). When nothing waits he can hide and peek out now and then.
+
+### Where it fits
+
+The lamp is a third window of `burnmon-dev.exe`, beside the main window and the Station. It reads the
+snapshot file that BurnMon or BurnMon Dev writes (`docs\snapshot_schema.md`) and nothing else, so one of
+the two must run. It has no control: no approve, no stop, no answer to an agent.
+
+### Install
+
+Nothing to install: the lamp is in `burnmon-dev.exe`. The gear dialog has a group Lamp. With
+`lamp_enabled` true, BurnMon Dev starts `burnmon-dev.exe lamp` as a child of its own, passes its process
+id in the environment variable `BURNMON_LAMP_PARENT`, and stops the lamp when you switch it off or close
+BurnMon Dev. The lamp also ends by itself when that process is gone. A lamp you start by hand
+(`burnmon-dev.exe lamp`) has no parent and stays until you stop it.
+
+### Use
+
+Hover the ticker or Glim to open it: up to 6 waiting items, tokens a minute and the cost of the last 5
+minutes (labelled API price equivalent). It closes 2 seconds after the pointer leaves. A click on Glim
+shows another line; a double click opens BurnMon Dev. The lamp tries not to take the focus: BurnMon Dev
+starts it hidden and the window is shown without activating it, and a window that still takes the focus
+on its first show hands it back. That comes from the Windows documentation and is built, not seen.
+
+- **See it without any agents.** `burnmon-dev.exe lamp --demo` plays a fixed 48 second loop of made-up
+  states and plays every act and every state that lasts once, with the word "demo" on the ticker. It
+  reads no snapshot and writes no BurnMon file.
 - **The pictures.** `burnmon-dev.exe lamp --poses <folder>` writes the eight poses, a sheet and the demo
   picture at the top of this file (`glim-demo.svg`) into an existing folder; `assets\glim\` holds that
   output. `burnmon-dev.exe lamp --card <folder>` writes the card of the running week as two SVG files
   (add `--demo` for made-up numbers, `--card-window` for a window with a Save PNG button).
+- **A clear window.** With `lamp_backdrop` `clear` the lamp window shows only the ticker and Glim, and
+  other windows show through around them; clicks outside the ticker and Glim go to the windows below. This
+  is built from the WebView2 and DWM documentation and is built, not seen. If you see a black or stale
+  square around Glim, set `lamp_backdrop` to `card`: Glim then hangs in front of a panel in the theme's
+  colour.
 - **What the lamp keeps on disk.** Two things, both in the data folder. The ledger `lamp-waits.json`:
   per day the seconds agents waited on you, the longest wait, how many distinct items waited and how
   long the lamp was on. It holds no id, title, project or path. And the WebView2 profile folder
@@ -382,14 +406,39 @@ BurnMon Dev.
 
 | You see | Glim is | Because |
 |---|---|---|
-| A thin dim line | off | neither BurnMon nor BurnMon Dev has written a fresh snapshot |
-| A thin amber line | asleep | no agent runs |
-| A thin amber line | working | agents run and nothing waits on you |
-| Pill, "N your turn" | your turn | an agent waits for your answer |
-| Pill, "N blocked" | blocked | an agent is stuck and needs a human |
-| Pill with a wall of bricks | bored | the longest wait is 10 minutes or more; one brick a minute, at most 30 |
-| Pill, "N tokens a minute" | sweating | the burn is at least 3 times the usual and above the floor |
-| Pill, "N ready to close" | done | something finished in the last 10 minutes |
+| A thin dim line (with `lamp_quiet` hide) | off | neither BurnMon nor BurnMon Dev has written a fresh snapshot |
+| A thin amber line (with `lamp_quiet` hide) | asleep | no agent runs |
+| A thin amber line (with `lamp_quiet` hide) | working | agents run and nothing waits on you |
+| Ticker, "N your turn" | your turn | an agent waits for your answer |
+| Ticker, "N blocked" | blocked | an agent is stuck and needs a human |
+| Ticker with a plank of bricks beside Glim | bored | the longest wait is 10 minutes or more; one brick a minute, at 30 the plank is full and the ticker shows 30+ |
+| Ticker, "N tokens a minute" | sweating | the burn is at least 3 times the usual and above the floor |
+| Ticker, "N ready to close" | done | something finished in the last 10 minutes |
+
+Acts, one at a time, in this order when several are due: `alarm` (blocked items went up, 2.6 s), `knock`
+(your turn items went up, 1.6 s), `stamp` (an item is gone, 2.4 s), `welcome` (you are back after 5
+minutes idle and something waits, 2.4 s), `wake` (agents started, 1.6 s), `slip` (the longest wait
+reached 15 minutes, once per bored stretch, 6.4 s), `coffee` (10:00 and 15:00 with nothing waiting, 4 s) and `peek` (quiet lamp
+that hides and is not off, every 4th minute, 4.4 s).
+
+### Settings
+
+All keys are in `burnmon-dev.json`; the gear dialog group Lamp sets them. A bad value becomes the default.
+
+| Key | Values | Default | What it does |
+|---|---|---|---|
+| `lamp_enabled` | true, false | false | BurnMon Dev starts and stops the lamp |
+| `lamp_position` | top-left, top-center, top-right | top-center | where the ticker hangs |
+| `lamp_language` | en, nl | en | the language of the lines |
+| `lamp_lines` | true, false | true | one-liners on or off |
+| `lamp_foreman_items` | true, false | true | count Foreman items |
+| `lamp_burn_floor_tpm` | whole number, 0 or more | 20000 | tokens a minute below which Glim never sweats |
+| `lamp_ticker_rows` | 1 to 4 | 1 | rows of the ticker: the headline, then the items that wait longest |
+| `lamp_size` | small, medium, large | medium | Glim at 1.2, 1.5 or 1.9 times |
+| `lamp_theme` | system, light, dark | system | colours of ticker, text and cord; the dome keeps its ambers |
+| `lamp_motion` | lively, calm, off | lively | calm plays no act and only blinks; off shows still poses (reduced motion counts as off) |
+| `lamp_quiet` | hide, stay | hide | when nothing waits Glim hides and peeks, or always hangs |
+| `lamp_backdrop` | clear, card | clear | a clear window, or a panel behind Glim |
 
 ### Suggest a line
 
@@ -399,9 +448,17 @@ form Glim line (`.github\ISSUE_TEMPLATE\glim-line.yml`): pick the mood, write th
 A line you send in is MIT and is credited in `internal\lamp\CREDITS.md`. The name Glim and its drawing
 are not part of that: see `LICENSE-ASSETS.md`.
 
+### Next steps and backlog
+
 Limits: Windows only in this version (a macOS build with cgo has a lamp panel, built and not seen on a
 Mac; on macOS without cgo and on Linux the lamp prints a sentence and exits); it needs BurnMon or BurnMon Dev running to have a snapshot to read; it has no control (no
-approve, no stop, no answer to an agent).
+approve, no stop, no answer to an agent). Every window, backdrop, animation and position of the lamp is
+built, not seen: nothing of it was looked at in a window in the build run.
+
+- Next: the first look on Windows (the clear window, click through, the focus on the first show) and a
+  look on a Mac.
+- Backlog: window styles beyond the ticker; the phone face of Glim (SiteOffice); sounds, outfits, chat and
+  approvals are dropped.
 
 ## 6. Limits and known issues
 

@@ -236,6 +236,8 @@ func TestReadmeLampSection(t *testing.T) {
 		"Windows only", "needs BurnMon or BurnMon Dev running", "no control",
 		"### Suggest a line", "glim-line.yml", "internal\\lamp\\CREDITS.md",
 		"lamp --poses", "lamp --card", "lamp-waits.json",
+		"### Goal", "### Where it fits", "### Install", "### Use", "### Settings", "### Next steps and backlog",
+		"slim ticker", "48 second", "built, not seen", "BURNMON_LAMP_PARENT", "lamp_backdrop",
 	} {
 		if !strings.Contains(sec, want) {
 			t.Errorf("the lamp section lacks %q", want)
@@ -245,6 +247,21 @@ func TestReadmeLampSection(t *testing.T) {
 		if !strings.Contains(sec, mood) {
 			t.Errorf("the table Do this, Glim does that lacks the mood %q", mood)
 		}
+	}
+	// The table of settings names every lamp key, with its default.
+	for _, key := range []string{"lamp_enabled", "lamp_position", "lamp_language", "lamp_lines", "lamp_foreman_items",
+		"lamp_burn_floor_tpm", "lamp_ticker_rows", "lamp_size", "lamp_theme", "lamp_motion", "lamp_quiet", "lamp_backdrop"} {
+		if !strings.Contains(sec, "| `"+key+"` |") {
+			t.Errorf("the settings table has no row for %s", key)
+		}
+	}
+	for _, act := range []string{"alarm", "knock", "stamp", "welcome", "wake", "slip", "coffee", "peek"} {
+		if !strings.Contains(sec, "`"+act+"`") {
+			t.Errorf("the lamp section does not name the act %s", act)
+		}
+	}
+	if strings.Contains(readDoc(t, "../../README.md")+readDoc(t, "../burnmon-dev/README.md"), "24 second") {
+		t.Error("a README still says the demo loop is 24 seconds")
 	}
 }
 
