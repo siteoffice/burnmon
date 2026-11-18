@@ -184,7 +184,7 @@ func syncLampFromFile(setDir string, c *lampChild) {
 	c.Sync(readLampSettings(setDir).Enabled)
 }
 
-// setLampKey is bdevSetLamp: one of the five gear keys with a value of the
+// setLampKey is bdevSetLamp: one of the eleven gear keys with a value of the
 // right kind is saved into burnmon-dev.json, then the child follows the file.
 // Anything else is refused before a byte is written.
 func setLampKey(setDir, key string, value any, c *lampChild) error {
@@ -201,6 +201,30 @@ func setLampKey(setDir, key string, value any, c *lampChild) error {
 		if s, _ := value.(string); s != "en" && s != "nl" {
 			return fmt.Errorf("lamp_language takes en or nl")
 		}
+	case "lamp_ticker_rows":
+		if f, ok := value.(float64); !ok || f < 1 || f > 4 || f != float64(int(f)) {
+			return fmt.Errorf("lamp_ticker_rows takes 1, 2, 3 or 4")
+		}
+	case "lamp_size":
+		if s, _ := value.(string); s != "small" && s != "medium" && s != "large" {
+			return fmt.Errorf("lamp_size takes small, medium or large")
+		}
+	case "lamp_theme":
+		if s, _ := value.(string); s != "system" && s != "light" && s != "dark" {
+			return fmt.Errorf("lamp_theme takes system, light or dark")
+		}
+	case "lamp_motion":
+		if s, _ := value.(string); s != "lively" && s != "calm" && s != "off" {
+			return fmt.Errorf("lamp_motion takes lively, calm or off")
+		}
+	case "lamp_quiet":
+		if s, _ := value.(string); s != "hide" && s != "stay" {
+			return fmt.Errorf("lamp_quiet takes hide or stay")
+		}
+	case "lamp_backdrop":
+		if s, _ := value.(string); s != "clear" && s != "card" {
+			return fmt.Errorf("lamp_backdrop takes clear or card")
+		}
 	default:
 		return fmt.Errorf("%q is not a lamp setting of the gear", key)
 	}
@@ -214,5 +238,6 @@ func setLampKey(setDir, key string, value any, c *lampChild) error {
 // lampGear is the lamp object of bdevSections (lampGearPayload).
 func lampGear(setDir string) lampGearPayload {
 	s := readLampSettings(setDir)
-	return lampGearPayload{s.Enabled, s.Position, s.Language, s.Lines, s.ForemanItems}
+	return lampGearPayload{s.Enabled, s.Position, s.Language, s.Lines, s.ForemanItems,
+		s.TickerRows, s.Size, s.Theme, s.Motion, s.Quiet, s.Backdrop}
 }

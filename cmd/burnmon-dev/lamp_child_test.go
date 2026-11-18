@@ -177,6 +177,16 @@ func TestSetLampKey(t *testing.T) {
 		{"lamp_lines", "true"},
 		{"lamp_foreman_items", nil},
 		{"", true},
+		{"lamp_ticker_rows", 0.0},
+		{"lamp_ticker_rows", 5.0},
+		{"lamp_ticker_rows", 2.5},
+		{"lamp_ticker_rows", "2"},
+		{"lamp_size", "huge"},
+		{"lamp_size", 1.5},
+		{"lamp_theme", "sepia"},
+		{"lamp_motion", "wild"},
+		{"lamp_quiet", true},
+		{"lamp_backdrop", "glass"},
 	} {
 		if err := setLampKey(dir, bad.key, bad.val, r.child); err == nil {
 			t.Errorf("setLampKey(%q, %v) accepted", bad.key, bad.val)
@@ -197,6 +207,12 @@ func TestSetLampKey(t *testing.T) {
 		{"lamp_language", "nl"},
 		{"lamp_lines", false},
 		{"lamp_foreman_items", false},
+		{"lamp_ticker_rows", 3.0},
+		{"lamp_size", "large"},
+		{"lamp_theme", "dark"},
+		{"lamp_motion", "calm"},
+		{"lamp_quiet", "stay"},
+		{"lamp_backdrop", "card"},
 		{"lamp_enabled", true},
 	} {
 		if err := setLampKey(dir, ok.key, ok.val, r.child); err != nil {
@@ -210,8 +226,13 @@ func TestSetLampKey(t *testing.T) {
 	got := lamp.ParseSettings(b)
 	want := lamp.DefaultSettings()
 	want.Position, want.Language, want.Lines, want.ForemanItems, want.Enabled = "top-left", "nl", false, false, true
+	want.TickerRows, want.Size, want.Theme, want.Motion, want.Quiet, want.Backdrop = 3, "large", "dark", "calm", "stay", "card"
 	if got != want {
 		t.Fatalf("saved settings %+v, want %+v", got, want)
+	}
+	g := lampGear(dir)
+	if g.TickerRows != 3 || g.Size != "large" || g.Theme != "dark" || g.Motion != "calm" || g.Quiet != "stay" || g.Backdrop != "card" {
+		t.Fatalf("lampGear does not carry the six new settings: %+v", g)
 	}
 	if len(r.procs) != 1 {
 		t.Fatalf("lamp_enabled true started %d children, want 1", len(r.procs))

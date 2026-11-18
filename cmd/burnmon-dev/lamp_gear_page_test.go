@@ -27,7 +27,22 @@ func TestPageLampGearGroup(t *testing.T) {
 			t.Errorf("page.html lacks %q", want)
 		}
 	}
-	for _, key := range []string{"lamp_enabled", "lamp_position", "lamp_language", "lamp_lines", "lamp_foreman_items"} {
+	for _, want := range []string{
+		`id="secLampRows"`, `<option value="1">`, `<option value="4">`,
+		`id="secLampSize"`, `<option value="small">`, `<option value="medium">`, `<option value="large">`,
+		`id="secLampTheme"`, `<option value="system">`, `<option value="light">`, `<option value="dark">`,
+		`id="secLampMotion"`, `<option value="lively">`, `<option value="calm">`, `<option value="off">`,
+		`id="secLampQuiet"`, `<option value="hide">`, `<option value="stay">`,
+		`id="secLampBackdrop"`, `<option value="clear">`, `<option value="card">`,
+		"Number(t.value)",
+		"ticker_rows:1, size:'medium', theme:'system', motion:'lively', quiet:'hide', backdrop:'clear'",
+	} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page.html lacks %q", want)
+		}
+	}
+	for _, key := range []string{"lamp_enabled", "lamp_position", "lamp_language", "lamp_lines", "lamp_foreman_items",
+		"lamp_ticker_rows", "lamp_size", "lamp_theme", "lamp_motion", "lamp_quiet", "lamp_backdrop"} {
 		if !strings.Contains(pageHTML, "'"+key+"'") {
 			t.Errorf("page.html never sends the key %s", key)
 		}

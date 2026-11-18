@@ -748,6 +748,24 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     </div>
     <label class="setrow"><input type="checkbox" id="secLampLines"> One-liners</label>
     <label class="setrow"><input type="checkbox" id="secLampForeman"> Include Foreman items</label>
+    <div class="setrow">Ticker rows
+      <select id="secLampRows"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+    </div>
+    <div class="setrow">Glim size
+      <select id="secLampSize"><option value="small">small</option><option value="medium">medium</option><option value="large">large</option></select>
+    </div>
+    <div class="setrow">Theme
+      <select id="secLampTheme"><option value="system">system</option><option value="light">light</option><option value="dark">dark</option></select>
+    </div>
+    <div class="setrow">Motion
+      <select id="secLampMotion"><option value="lively">lively</option><option value="calm">calm</option><option value="off">off</option></select>
+    </div>
+    <div class="setrow">When nothing waits
+      <select id="secLampQuiet"><option value="hide">Glim hides and peeks</option><option value="stay">Glim always hangs</option></select>
+    </div>
+    <div class="setrow">Backdrop
+      <select id="secLampBackdrop"><option value="clear">clear</option><option value="card">card</option></select>
+    </div>
   </div>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
@@ -3873,7 +3891,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, lamp:{ enabled:false, position:'top-center', language:'en', lines:true, foreman_items:true }, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
+  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, lamp:{ enabled:false, position:'top-center', language:'en', lines:true, foreman_items:true, ticker_rows:1, size:'medium', theme:'system', motion:'lively', quiet:'hide', backdrop:'clear' }, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
   var secReading = { status:'missing', age_seconds:0 };
   // secLine is Go's sentence about the snapshot. The window opens before the
   // first payload, so it starts as the starting line; null means the last
@@ -4339,7 +4357,9 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
   }
   // The Lamp group shows the saved lamp keys the payload carries.
   var LAMP_GEAR = { secLampEnabled:['lamp_enabled','enabled'], secLampPosition:['lamp_position','position'],
-    secLampLanguage:['lamp_language','language'], secLampLines:['lamp_lines','lines'], secLampForeman:['lamp_foreman_items','foreman_items'] };
+    secLampLanguage:['lamp_language','language'], secLampLines:['lamp_lines','lines'], secLampForeman:['lamp_foreman_items','foreman_items'],
+    secLampRows:['lamp_ticker_rows','ticker_rows'], secLampSize:['lamp_size','size'], secLampTheme:['lamp_theme','theme'],
+    secLampMotion:['lamp_motion','motion'], secLampQuiet:['lamp_quiet','quiet'], secLampBackdrop:['lamp_backdrop','backdrop'] };
   function secRenderLamp(){
     Object.keys(LAMP_GEAR).forEach(function(id){
       var el = document.getElementById(id);
@@ -4554,7 +4574,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     else if(LAMP_GEAR[t.id]){
       // Saved to burnmon-dev.json; BurnMon Dev starts or stops the lamp to match.
       if(typeof window.bdevSetLamp === 'function'){
-        Promise.resolve(window.bdevSetLamp(LAMP_GEAR[t.id][0], t.type === 'checkbox' ? t.checked : t.value)).then(function(){ secLastJSON = 'x'; return secPoll(); })
+        Promise.resolve(window.bdevSetLamp(LAMP_GEAR[t.id][0], t.type === 'checkbox' ? t.checked : (t.id === 'secLampRows' ? Number(t.value) : t.value))).then(function(){ secLastJSON = 'x'; return secPoll(); })
           .catch(function(e){
             console.log('bdevSetLamp:', e);
             secRenderLamp();

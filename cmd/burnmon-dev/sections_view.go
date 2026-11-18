@@ -67,6 +67,12 @@ type lampGearPayload struct {
 	Language     string `json:"language"`
 	Lines        bool   `json:"lines"`
 	ForemanItems bool   `json:"foreman_items"`
+	TickerRows   int    `json:"ticker_rows"`
+	Size         string `json:"size"`
+	Theme        string `json:"theme"`
+	Motion       string `json:"motion"`
+	Quiet        string `json:"quiet"`
+	Backdrop     string `json:"backdrop"`
 }
 
 // controlsPayload is what the page needs to draw the control chips and the
