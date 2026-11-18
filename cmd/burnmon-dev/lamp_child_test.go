@@ -194,7 +194,12 @@ func TestSetLampKey(t *testing.T) {
 		key string
 		val any
 	}{
-		{"lamp_burn_floor_tpm", 5.0}, // a real lamp key, but not a gear key
+		{"lamp_burn_floor_tpm", -1.0},
+		{"lamp_burn_floor_tpm", 250000.5},
+		{"lamp_burn_floor_tpm", "300000"},
+		{"lamp_burn_floor_tpm", true},
+		{"lamp_burn_floor_tpm", nil},
+		{"lamp_retention_days", 5.0}, // a key that is not a gear key
 		{"toast_enabled", true},
 		{"lamp_enabled", "yes"},
 		{"lamp_position", "middle"},
@@ -249,6 +254,9 @@ func TestSetLampKey(t *testing.T) {
 		{"lamp_motion", "calm"},
 		{"lamp_quiet", "stay"},
 		{"lamp_backdrop", "card"},
+		{"lamp_burn_floor_tpm", 0.0},
+		{"lamp_burn_floor_tpm", 1000000.0},
+		{"lamp_burn_floor_tpm", 350000.0},
 		{"lamp_enabled", true},
 	} {
 		if err := setLampKey(dir, ok.key, ok.val, r.child); err != nil {
@@ -263,11 +271,12 @@ func TestSetLampKey(t *testing.T) {
 	want := lamp.DefaultSettings()
 	want.Position, want.Language, want.Lines, want.ForemanItems, want.Enabled = "top-left", "nl", false, false, true
 	want.TickerRows, want.SizePct, want.Theme, want.Motion, want.Quiet, want.Backdrop = 3, 190, "dark", "calm", "stay", "card"
+	want.BurnFloorTPM = 350000
 	if got != want {
 		t.Fatalf("saved settings %+v, want %+v", got, want)
 	}
 	g := lampGear(dir)
-	if g.TickerRows != 3 || g.Size != 190 || g.Monitor != "" || g.Theme != "dark" || g.Motion != "calm" || g.Quiet != "stay" || g.Backdrop != "card" {
+	if g.TickerRows != 3 || g.Size != 190 || g.Monitor != "" || g.Theme != "dark" || g.Motion != "calm" || g.Quiet != "stay" || g.Backdrop != "card" || g.BurnFloor != 350000 {
 		t.Fatalf("lampGear does not carry the six new settings: %+v", g)
 	}
 	if len(r.procs) != 1 {

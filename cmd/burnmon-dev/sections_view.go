@@ -74,6 +74,7 @@ type lampGearPayload struct {
 	Motion       string `json:"motion"`
 	Quiet        string `json:"quiet"`
 	Backdrop     string `json:"backdrop"`
+	BurnFloor    int    `json:"burn_floor"` // lamp_burn_floor_tpm, tokens a minute from which Glim sweats; 0 is off
 }
 
 // controlsPayload is what the page needs to draw the control chips and the
