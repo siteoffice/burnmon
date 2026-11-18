@@ -43,3 +43,4 @@ Built, not seen: whether the cloak leaves no pixel on screen is read from Window
 
 ## Turn log
 
+T1: done; commit d1f1580; measured: go vet 0, go test ./... -count=1 50 packages ok and no FAIL, build.ps1 0, linux and darwin build and vet 0 (CGO off), uicheck-lamp.ps1 exit 0 (sampling test failed on bceeffe, passes); reviewer gap (a second cloaked window stays cloaked) closed; no earlier test edited; open: nothing in scope, built not seen. Left outside the repo: scratch folder C:\Users\WilcoDeTree\AppData\Local\Temp\glimdbg (mine, delete is Wilco's under rule L2)
