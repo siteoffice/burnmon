@@ -5,6 +5,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -558,7 +560,7 @@ func TestLampWindowSize(t *testing.T) {
 		{9, "medium", 300, 104 + 180},
 	}
 	for _, c := range cases {
-		w, h := lampWindowSize(c.rows, c.size)
+		w, h := lampWindowSize(lamp.Settings{TickerRows: c.rows, Size: c.size})
 		if w != c.wantW || h != c.wantH {
 			t.Errorf("lampWindowSize(%d,%q) = %dx%d, want %dx%d", c.rows, c.size, w, h, c.wantW, c.wantH)
 		}
@@ -639,5 +641,242 @@ func TestLampIdleFrom(t *testing.T) {
 		if got := lampIdleFrom(c.now, c.last); got != c.want {
 			t.Errorf("lampIdleFrom(%d,%d) = %d, want %d", c.now, c.last, got, c.want)
 		}
+	}
+}
+
+// Fix lane T2, finding 3: the window region holds every box whole. Each edge
+// rounds outward (floor on the left and top, ceiling on the right and bottom),
+// so a border that falls on a fraction of a device pixel at 125 or 150 percent
+// is never cut.
+func TestLampRegionRectsHoldEveryBoxWhole(t *testing.T) {
+	boxes := []lampBox{
+		{X: 10.4, Y: 0, W: 300, H: 26},
+		{X: 51.3, Y: 26.2, W: 198.7, H: 180.1},
+		{X: 0, Y: 0, W: 301.7, H: 105.5},
+	}
+	for _, scale := range []float64{1, 1.25, 1.5, 2} {
+		for _, b := range boxes {
+			area, err := json.Marshal(map[string]lampBox{"ticker": b})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := lampRegionRects(string(area), scale)
+			if len(got) != 1 {
+				t.Fatalf("scale %v box %+v: %d rects", scale, b, len(got))
+			}
+			r := got[0]
+			const eps = 1e-6
+			if float64(r.X) > b.X*scale+eps || float64(r.Y) > b.Y*scale+eps ||
+				float64(r.X+r.W) < (b.X+b.W)*scale-eps || float64(r.Y+r.H) < (b.Y+b.H)*scale-eps {
+				t.Errorf("scale %v: rect %+v does not hold box %+v whole", scale, r, b)
+			}
+			// Outward rounding adds at most one device pixel on each edge.
+			if float64(r.X+r.W) > (b.X+b.W)*scale+1+eps || float64(r.Y+r.H) > (b.Y+b.H)*scale+1+eps {
+				t.Errorf("scale %v: rect %+v is more than a pixel too big for box %+v", scale, r, b)
+			}
+		}
+	}
+}
+
+var lampTestMons = []lampMonitor{
+	{Name: "DISPLAY1", X: -1600, Y: 0, W: 1600, H: 1000, Scale: 1},
+	{Name: "DISPLAY2", X: 0, Y: 0, W: 3440, H: 1440, Primary: true, Scale: 1},
+	{Name: "DISPLAY3", X: 3440, Y: -300, W: 1440, H: 2560, Scale: 1.25},
+}
+
+// The lamp hangs at the top edge of the monitor named in lamp_monitor, at left,
+// centre or right. A name that is not connected, or an empty one, is the primary.
+func TestLampPlaceOn(t *testing.T) {
+	cases := []struct {
+		name, pos string
+		w         int
+		wantX     int
+		wantY     int
+		wantUsed  string
+	}{
+		{"DISPLAY2", "top-left", 300, 0, 0, "DISPLAY2"},
+		{"DISPLAY2", "top-center", 300, 1570, 0, "DISPLAY2"},
+		{"DISPLAY2", "top-right", 300, 3140, 0, "DISPLAY2"},
+		{"DISPLAY3", "top-left", 400, 3440, -300, "DISPLAY3"},
+		{"DISPLAY3", "top-center", 400, 3960, -300, "DISPLAY3"},
+		{"DISPLAY3", "top-right", 400, 4480, -300, "DISPLAY3"},
+		{"DISPLAY1", "top-right", 300, -300, 0, "DISPLAY1"},
+		{"GONE", "top-center", 300, 1570, 0, "DISPLAY2"},
+		{"", "top-left", 300, 0, 0, "DISPLAY2"},
+		{"DISPLAY3", "bad", 400, 3960, -300, "DISPLAY3"},
+	}
+	for _, c := range cases {
+		x, y, used := lampPlaceOn(lampTestMons, c.name, c.pos, c.w)
+		if x != c.wantX || y != c.wantY || used != c.wantUsed {
+			t.Errorf("lampPlaceOn(%q,%q,%d) = %d,%d,%q want %d,%d,%q", c.name, c.pos, c.w, x, y, used, c.wantX, c.wantY, c.wantUsed)
+		}
+	}
+	if x, y, used := lampPlaceOn(nil, "DISPLAY2", "top-left", 300); x != 0 || y != 0 || used != "" {
+		t.Errorf("no monitor list: %d,%d,%q", x, y, used)
+	}
+}
+
+// A dropped lamp snaps to the monitor under the pointer and to the nearest of
+// left, centre and right. A pointer between monitors takes the nearest one.
+func TestLampSnap(t *testing.T) {
+	cases := []struct {
+		px, py   int
+		w        int
+		wantName string
+		wantPos  string
+	}{
+		{100, 500, 300, "DISPLAY2", "top-left"},
+		{1720, 500, 300, "DISPLAY2", "top-center"},
+		{3300, 500, 300, "DISPLAY2", "top-right"},
+		{3500, 100, 400, "DISPLAY3", "top-left"},
+		{4160, 100, 400, "DISPLAY3", "top-center"},
+		{4800, 100, 400, "DISPLAY3", "top-right"},
+		{-800, 300, 300, "DISPLAY1", "top-center"},
+		{3440, 2000, 400, "DISPLAY3", "top-left"}, // on the shared edge: the monitor that holds the point
+		{-2500, 400, 300, "DISPLAY1", "top-left"}, // left of every monitor: the nearest one
+		{9000, 400, 400, "DISPLAY3", "top-right"},
+	}
+	for _, c := range cases {
+		name, pos := lampSnap(lampTestMons, c.px, c.py, c.w)
+		if name != c.wantName || pos != c.wantPos {
+			t.Errorf("lampSnap(%d,%d,%d) = %q,%q want %q,%q", c.px, c.py, c.w, name, pos, c.wantName, c.wantPos)
+		}
+	}
+	if name, pos := lampSnap(nil, 5, 5, 300); name != "" || pos != "top-center" {
+		t.Errorf("no monitor list: %q,%q", name, pos)
+	}
+}
+
+// The pointer in the page's CSS pixels: relative to the window, divided by the
+// window's scale, and it may be far outside the window.
+func TestLampPointerCSS(t *testing.T) {
+	x, y := lampPointerCSS(3150, 1200, 150, 0, 1.5)
+	if x != 2000 || y != 800 {
+		t.Errorf("pointer 3000 px right of the window = %v,%v, want 2000,800", x, y)
+	}
+	x, y = lampPointerCSS(-3000, -10, 100, 0, 0) // scale 0 acts as 1
+	if x != -3100 || y != -10 {
+		t.Errorf("negative pointer = %v,%v", x, y)
+	}
+}
+
+// "Access denied" on the parent check counts as alive; a process that cannot be
+// opened for any other reason is gone; an opened one is alive only while its
+// exit code is 259 (STILL_ACTIVE).
+func TestLampAliveFrom(t *testing.T) {
+	cases := []struct {
+		opened, denied bool
+		code           uint32
+		want           bool
+	}{
+		{false, true, 0, true},
+		{false, false, 0, false},
+		{true, false, 259, true},
+		{true, false, 0, false},
+		{true, false, 1, false},
+		{true, true, 259, true},
+	}
+	for _, c := range cases {
+		if got := lampAliveFrom(c.opened, c.denied, c.code); got != c.want {
+			t.Errorf("lampAliveFrom(%v,%v,%d) = %v, want %v", c.opened, c.denied, c.code, got, c.want)
+		}
+	}
+}
+
+// Close: the ledger is written first, lamp_enabled false is saved only for a
+// lamp BurnMon Dev started (BURNMON_LAMP_PARENT set), and the lamp ends last.
+func TestLampCloseNow(t *testing.T) {
+	for _, parentSet := range []bool{true, false} {
+		var order []string
+		save := func(key string, v any) error {
+			order = append(order, "save:"+key+"="+strings.TrimSpace(fmt.Sprint(v)))
+			return nil
+		}
+		lampCloseNow(func() { order = append(order, "ledger") }, parentSet, save, func() { order = append(order, "end") })
+		want := "ledger,end"
+		if parentSet {
+			want = "ledger,save:lamp_enabled=false,end"
+		}
+		if got := strings.Join(order, ","); got != want {
+			t.Errorf("parentSet %v: order %q, want %q", parentSet, got, want)
+		}
+	}
+	// A failed save still ends the lamp.
+	ended := false
+	lampCloseNow(func() {}, true, func(string, any) error { return errors.New("disk") }, func() { ended = true })
+	if !ended {
+		t.Error("a failed save kept the lamp open")
+	}
+}
+
+// The grab and swing line is filled in by T3; until then the engine answers
+// with no line, so the page shows none.
+func TestEngineSwingHasNoLineYet(t *testing.T) {
+	e := newLampEngine(true, "", "")
+	if got := e.swing(60, 3, time.Now()); got != "" {
+		t.Errorf("swing = %q, want empty until T3", got)
+	}
+}
+
+// The pointer is read only while Glim is down and lamp_motion is lively.
+func TestEngineEyesOnOnlyWhileDownAndLively(t *testing.T) {
+	for _, c := range []struct {
+		mood, motion, quiet string
+		want                bool
+	}{
+		{lamp.MoodBlocked, "lively", "hide", true},
+		{lamp.MoodWorking, "lively", "hide", false}, // quiet: Glim is up
+		{lamp.MoodWorking, "lively", "stay", true},
+		{lamp.MoodBlocked, "calm", "hide", false},
+		{lamp.MoodBlocked, "off", "hide", false},
+	} {
+		e := newLampEngine(true, "", "")
+		e.lastSt = lamp.State{Mood: c.mood}
+		e.lastSet = lamp.Settings{Motion: c.motion, Quiet: c.quiet}
+		if got := e.eyesOn(); got != c.want {
+			t.Errorf("eyesOn %+v = %v, want %v", c, got, c.want)
+		}
+	}
+}
+
+// The pointer is read only to point the eyes. With a marker value behind the
+// pointer seam, one live engine tick and the ledger close must leave no file
+// that holds it. This covers the engine and the ledger only: that the window
+// code passes the pointer on to the page and nowhere else is read from
+// lamp_window_windows.go (lampCursor feeds lampPointerCSS and Eval, and the
+// drag saves only a monitor name and a position).
+func TestPointerReachesNoFile(t *testing.T) {
+	dir := t.TempDir()
+	const markerX, markerY = 987654, 876543
+	oldCursor := lampCursor
+	lampCursor = func() (int, int, bool) { return markerX, markerY, true }
+	defer func() { lampCursor = oldCursor }()
+
+	e := newLampEngine(false, dir, filepath.Join(dir, "snapshot.json"))
+	e.ledger = lamp.LoadLedger(filepath.Join(dir, lamp.LedgerFile))
+	if x, y, ok := lampCursor(); ok {
+		cx, cy := lampPointerCSS(x, y, 0, 0, 1)
+		_ = cx + cy
+	}
+	e.payload(time.Now())
+	e.ledger.Close(time.Now())
+
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, rerr := os.ReadFile(p)
+		if rerr != nil {
+			return rerr
+		}
+		for _, m := range []string{"987654", "876543"} {
+			if bytes.Contains(b, []byte(m)) {
+				t.Errorf("%s holds the pointer marker %s", p, m)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

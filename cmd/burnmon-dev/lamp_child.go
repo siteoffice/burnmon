@@ -38,7 +38,8 @@ type lampChild struct {
 	start     lampStarter
 	now       func() time.Time
 	logf      func(string, ...any)
-	supported bool // the lamp runs on Windows only in this version
+	supported bool        // the lamp runs on Windows only in this version
+	enabled   func() bool // lamp_enabled as the file says now; nil means on. A lamp closed from its menu saved false before it ended
 
 	mu       sync.Mutex
 	want     bool
@@ -117,6 +118,12 @@ func (c *lampChild) died(p lampProc) {
 	if !c.want {
 		return
 	}
+	// The lamp closed itself from its menu: the file already says off, so it is
+	// not started again.
+	if c.enabled != nil && !c.enabled() {
+		c.want = false
+		return
+	}
 	now := c.now()
 	kept := c.restarts[:0]
 	for _, t := range c.restarts {
@@ -147,8 +154,9 @@ func execLampStart(exe string, args []string) (lampProc, error) {
 	cmd := exec.Command(exe, args...)
 	// The lamp ends when this process is gone (lampParentGone).
 	cmd.Env = lampChildEnv(os.Environ(), os.Getpid())
-	// Started hidden, the window first shows through the lamp's own placement,
-	// which does not take the focus (inferred from the ShowWindow docs).
+	// Not started hidden: a hidden start (SW_HIDE in the start-up info) made the
+	// window of a lamp that BurnMon Dev started invisible. Not taking the focus
+	// stays a best effort of the lamp itself.
 	cmd.SysProcAttr = lampChildAttr()
 	if err := cmd.Start(); err != nil {
 		return nil, err
@@ -167,7 +175,9 @@ func newLampChildForApp() *lampChild {
 	if err != nil {
 		log.Println("lamp child: own exe path:", err)
 	}
-	return newLampChild(exe, execLampStart, time.Now, log.Printf)
+	c := newLampChild(exe, execLampStart, time.Now, log.Printf)
+	c.enabled = func() bool { return readLampSettings(settingsDir()).Enabled }
+	return c
 }
 
 // readLampSettings reads the lamp keys from the settings folder's burnmon-dev.json.

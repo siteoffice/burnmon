@@ -13,6 +13,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -165,16 +167,17 @@ const (
 )
 
 // lampWindowSize is the window the lamp opens with, before the page reports
-// its own size: the ticker at rows (1 to 4, anything else is 1 or 4) and
-// Glim's box at size. It also covers the quiet sliver (120 by 6).
-func lampWindowSize(rows int, size string) (w, h int) {
+// its own size: the ticker at set.TickerRows (1 to 4, anything else is 1 or 4)
+// and Glim's box at set.Size. It also covers the quiet sliver (120 by 6).
+func lampWindowSize(set lamp.Settings) (w, h int) {
+	rows := set.TickerRows
 	if rows < 1 {
 		rows = 1
 	}
 	if rows > lampMaxRows {
 		rows = lampMaxRows
 	}
-	box := int(lampGlimBox*lamp.SizeScale(size) + 0.5)
+	box := int(lampGlimBox*lamp.SizeScale(set.Size) + 0.5)
 	return lampTickerW, rows*lampRowH + box
 }
 
@@ -188,15 +191,17 @@ type lampBox struct {
 	H float64 `json:"h"`
 }
 
-// lampRegionRects turns the page's lampArea JSON (the ticker, Glim's box and
-// the extra box of an act, in CSS pixels) into the device rectangles the
-// window keeps: scaled, rounded, a missing or empty box left out. Bad JSON
-// gives none, and the window then keeps its whole rectangle.
+// lampRegionRects turns the page's lampArea JSON (the ticker, Glim's box, the
+// extra box of an act and the open menu, in CSS pixels) into the device
+// rectangles the window keeps: scaled, each edge rounded outward so no border
+// that falls on a fraction of a device pixel is cut, a missing or empty box
+// left out. Bad JSON gives none, and the window then keeps its whole rectangle.
 func lampRegionRects(area string, scale float64) []lampRect {
 	var a struct {
 		Ticker *lampBox `json:"ticker"`
 		Glim   *lampBox `json:"glim"`
 		Extra  *lampBox `json:"extra"`
+		Menu   *lampBox `json:"menu"`
 	}
 	if err := json.Unmarshal([]byte(area), &a); err != nil {
 		return nil
@@ -204,14 +209,19 @@ func lampRegionRects(area string, scale float64) []lampRect {
 	if scale <= 0 {
 		scale = 1
 	}
+	// A product such as 26.4 * 1.25 can come out a hair above 33; the margin
+	// keeps that from costing a whole extra pixel.
+	const eps = 1e-6
 	var out []lampRect
-	for _, b := range []*lampBox{a.Ticker, a.Glim, a.Extra} {
+	for _, b := range []*lampBox{a.Ticker, a.Glim, a.Extra, a.Menu} {
 		if b == nil || b.W <= 0 || b.H <= 0 {
 			continue
 		}
-		out = append(out, lampRect{
-			int(b.X*scale + 0.5), int(b.Y*scale + 0.5), int(b.W*scale + 0.5), int(b.H*scale + 0.5),
-		})
+		x := int(math.Floor(b.X*scale + eps))
+		y := int(math.Floor(b.Y*scale + eps))
+		r := int(math.Ceil((b.X+b.W)*scale - eps))
+		bt := int(math.Ceil((b.Y+b.H)*scale - eps))
+		out = append(out, lampRect{x, y, r - x, bt - y})
 	}
 	return out
 }
@@ -468,4 +478,156 @@ func (e *lampEngine) nextLine() string {
 		}
 	}
 	return e.lastLine
+}
+
+// lampMonitor is one monitor in device pixels: its full rectangle, its device
+// name (the value of lamp_monitor) and its scale (1 is 96 dpi).
+type lampMonitor struct {
+	Name    string
+	X, Y    int
+	W, H    int
+	Primary bool
+	Scale   float64
+}
+
+// lampMonitors is the seam for the connected monitors. The window code sets
+// the real reader; it is empty until then.
+var lampMonitors = func() []lampMonitor { return nil }
+
+// lampCursor is the seam for the pointer position in device pixels. The
+// lamp reads it to point Glim's eyes and to follow a drag. It is never stored.
+var lampCursor = func() (x, y int, ok bool) { return 0, 0, false }
+
+// lampPrimary is the primary monitor, else the first one, else none.
+func lampPrimary(mons []lampMonitor) (lampMonitor, bool) {
+	for _, m := range mons {
+		if m.Primary {
+			return m, true
+		}
+	}
+	if len(mons) > 0 {
+		return mons[0], true
+	}
+	return lampMonitor{}, false
+}
+
+// lampPlaceOn is where a lamp of width w hangs: the top edge of the monitor
+// called name, at left, centre or right (anything else is centre). A name that
+// is not in the list, or an empty one, is the primary monitor. used is the name
+// of the monitor taken; with no monitors at all the answer is 0, 0 and "".
+func lampPlaceOn(mons []lampMonitor, name, position string, w int) (x, y int, used string) {
+	m, ok := lampPrimary(mons)
+	if name != "" {
+		for _, c := range mons {
+			if c.Name == name {
+				m, ok = c, true
+				break
+			}
+		}
+	}
+	if !ok {
+		return 0, 0, ""
+	}
+	x = m.X + (m.W-w)/2
+	switch position {
+	case "top-left":
+		x = m.X
+	case "top-right":
+		x = m.X + m.W - w
+	}
+	return x, m.Y, m.Name
+}
+
+// lampSnap is the monitor and the place a lamp dropped at the pointer (px, py)
+// takes: the monitor that holds the pointer (the nearest one when none does),
+// and the nearest of left, centre and right by the window's centre. The place
+// comes back as the value lamp_position saves. With no monitors it is "" and centre.
+func lampSnap(mons []lampMonitor, px, py, w int) (name, position string) {
+	if len(mons) == 0 {
+		return "", "top-center"
+	}
+	best, bestD := 0, -1
+	for i, m := range mons {
+		dx, dy := 0, 0
+		if px < m.X {
+			dx = m.X - px
+		} else if px >= m.X+m.W {
+			dx = px - (m.X + m.W - 1)
+		}
+		if py < m.Y {
+			dy = m.Y - py
+		} else if py >= m.Y+m.H {
+			dy = py - (m.Y + m.H - 1)
+		}
+		if d := dx*dx + dy*dy; bestD < 0 || d < bestD {
+			best, bestD = i, d
+		}
+	}
+	m := mons[best]
+	position, dist := "top-left", abs(px-(m.X+w/2))
+	for _, c := range []struct {
+		pos string
+		cx  int
+	}{{"top-center", m.X + m.W/2}, {"top-right", m.X + m.W - w/2}} {
+		if d := abs(px - c.cx); d < dist {
+			position, dist = c.pos, d
+		}
+	}
+	return m.Name, position
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// lampPointerCSS is the pointer (px, py) in the page's CSS pixels, relative to
+// the window at (winX, winY) with the given scale. It can lie far outside the
+// window. A scale of 0 or less acts as 1.
+func lampPointerCSS(px, py, winX, winY int, scale float64) (x, y float64) {
+	if scale <= 0 {
+		scale = 1
+	}
+	return float64(px-winX) / scale, float64(py-winY) / scale
+}
+
+// lampAliveFrom is whether the parent process runs, from what the operating
+// system said when the lamp asked. A process that could not be opened because
+// access was denied is alive; one that could not be opened otherwise is gone;
+// an opened one is alive only while its exit code is 259 (STILL_ACTIVE).
+func lampAliveFrom(opened, denied bool, code uint32) bool {
+	if !opened {
+		return denied
+	}
+	return code == 259 || denied
+}
+
+// lampCloseNow closes the lamp from its menu: the ledger is written first,
+// lamp_enabled false is saved only when BurnMon Dev started this lamp (parentSet),
+// and the lamp ends last. A failed save does not keep the lamp open.
+func lampCloseNow(writeLedger func(), parentSet bool, save func(key string, v any) error, end func()) {
+	if writeLedger != nil {
+		writeLedger()
+	}
+	if parentSet && save != nil {
+		if err := save("lamp_enabled", false); err != nil {
+			log.Println("lamp: could not save lamp_enabled false:", err)
+		}
+	}
+	end()
+}
+
+// swing is the answer to a grab and swing: the line for the strongest angle
+// (degrees) and the direction changes the page counted. T3 fills it in; until
+// then there is no line.
+func (e *lampEngine) swing(maxDeg float64, changes int, now time.Time) string { return "" }
+
+// eyesOn is whether the lamp reads the pointer now: only while Glim is down
+// (not quiet and hidden) and lamp_motion is lively, judged on the last payload.
+func (e *lampEngine) eyesOn() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.lastSet.Motion == "lively" && !lamp.Quiet(e.lastSt, e.lastSet)
 }

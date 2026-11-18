@@ -138,6 +138,32 @@ func TestLampChildStoppedOnPurposeStaysStopped(t *testing.T) {
 	}
 }
 
+// Fix lane T2, close: a lamp that closed itself from its menu saved
+// lamp_enabled false before it ended. The supervisor reads the setting before
+// it restarts a dead child, so that child is not started again. While the file
+// still says on, a dead child is restarted as before.
+func TestLampChildNotRestartedWhenTheFileSaysOff(t *testing.T) {
+	r := newLampRig(t)
+	on := true
+	r.child.enabled = func() bool { return on }
+	r.child.Sync(true)
+	r.child.died(r.procs[0])
+	if len(r.procs) != 2 {
+		t.Fatalf("a death with lamp_enabled true: %d children in total, want 2", len(r.procs))
+	}
+	on = false
+	r.child.died(r.procs[1])
+	if len(r.procs) != 2 {
+		t.Fatalf("a death with lamp_enabled false was restarted: %d children in total", len(r.procs))
+	}
+	// Switching on again from the gear starts a child.
+	on = true
+	r.child.Sync(true)
+	if len(r.procs) != 3 {
+		t.Fatalf("on again: %d children in total, want 3", len(r.procs))
+	}
+}
+
 // A bindDev env without a child (the binding test) must not panic when the
 // binding runs.
 func TestLampChildNilIsSafe(t *testing.T) {

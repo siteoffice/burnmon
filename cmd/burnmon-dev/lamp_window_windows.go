@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -28,8 +29,13 @@ import (
 
 var (
 	gdi32Lamp               = windows.NewLazySystemDLL("gdi32.dll")
-	procCreateRoundRectRgn  = gdi32Lamp.NewProc("CreateRoundRectRgn")
 	procSetWindowRgn        = user32.NewProc("SetWindowRgn")
+	procGetCursorPosLmp     = user32.NewProc("GetCursorPos")
+	procGetAsyncKeyStateLmp = user32.NewProc("GetAsyncKeyState")
+	procEnumMonitorsLmp     = user32.NewProc("EnumDisplayMonitors")
+	procGetMonitorInfoLmp   = user32.NewProc("GetMonitorInfoW")
+	procGetDpiForMonitorLmp = windows.NewLazySystemDLL("shcore.dll").NewProc("GetDpiForMonitor")
+	procGetWindowRectLmp    = user32.NewProc("GetWindowRect")
 	procGetDpiForWindow     = user32.NewProc("GetDpiForWindow")
 	procGetSystemMetricsLmp = user32.NewProc("GetSystemMetrics")
 	procFindWindowWLamp     = user32.NewProc("FindWindowW")
@@ -52,8 +58,9 @@ const (
 	lampSwpNoActivate  = 0x0010
 	lampSwpFrameChange = 0x0020
 	lampSwpShowWindow  = 0x0040
+	lampSwpNoSize      = 0x0001
 	lampSmCxScreen     = 0
-	lampCornerCSS      = 8
+	lampVkLButton      = 0x01
 	lampTopmost        = ^uintptr(0) // HWND_TOPMOST (-1)
 	lampRgnOr          = 2           // RGN_OR
 )
@@ -99,7 +106,7 @@ func runLampWindow(o lampOpts) int {
 		_ = os.Setenv(k, v)
 		glass = true
 	}
-	startW, startH := lampWindowSize(set.TickerRows, set.Size)
+	startW, startH := lampWindowSize(set)
 
 	prev, _, _ := procGetForegroundWindow.Call()
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
@@ -123,6 +130,8 @@ func runLampWindow(o lampOpts) int {
 	}
 
 	lampIdle = lampIdleSeconds
+	lampMonitors = lampReadMonitors
+	lampCursor = lampReadCursor
 	e := newLampEngine(o.demo, setDir, snapPath)
 	if !o.demo {
 		// The ledger of the waits (lane scope X2): written at most once a
@@ -151,6 +160,24 @@ func runLampWindow(o lampOpts) int {
 	bind("lampSize", func(cssW, cssH int) {
 		pl.setSize(cssW, cssH)
 	})
+	// A pointer down on the ticker that moved more than 6 px: the lamp process
+	// follows the pointer until the button is up, then snaps and saves.
+	bind("lampDragStart", func() {
+		if !o.demo {
+			go pl.drag(func() { w.Dispatch(pl.place) })
+		}
+	})
+	// "Close the lamp" from the menu: ledger first, lamp_enabled false only for
+	// a lamp BurnMon Dev started, then the lamp ends.
+	bind("lampClose", func() {
+		go lampCloseNow(func() { e.ledger.Close(time.Now()) }, os.Getenv(lampParentEnv) != "",
+			func(key string, v any) error {
+				if o.demo {
+					return nil
+				}
+				return saveDevConfigKey(setDir, key, v)
+			}, func() { w.Terminate() })
+	})
 	// Dev-only: tools\uicheck drives the lamp page through this channel. It
 	// opens only when BURNMON_LAMP_UICHECK is set; a release never sets it.
 	winbind.StartUICheckServer(w, winbind.UICheckOptions{
@@ -174,24 +201,106 @@ func runLampWindow(o lampOpts) int {
 			w.Dispatch(pl.place)
 		}
 	}()
+	// The eyes: 10 times a second, only while Glim is down and the motion is
+	// lively, the pointer position goes to the page as a position in CSS pixels
+	// and is stored nowhere. The page's lampPointer may be called with a point
+	// far outside the window, on any monitor.
+	go func() {
+		for range time.Tick(100 * time.Millisecond) {
+			if !e.eyesOn() {
+				continue
+			}
+			px, py, ok := lampCursor()
+			if !ok {
+				continue
+			}
+			w.Dispatch(func() {
+				var rc windows.Rect
+				procGetWindowRectLmp.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
+				x, y := lampPointerCSS(px, py, int(rc.Left), int(rc.Top), lampWindowScale(hwnd))
+				w.Eval(fmt.Sprintf("window.lampPointer&&window.lampPointer(%.1f,%.1f)", x, y))
+			})
+		}
+	}()
 	w.Run()
 	return 0
 }
 
 // lampProcessAlive reports whether process pid still runs. A process that
-// cannot be opened (it is gone) is not alive; exit code 259 (STILL_ACTIVE)
-// means it runs.
+// cannot be opened is gone, except when access is denied: that one is alive.
+// An opened one runs while its exit code is 259 (STILL_ACTIVE).
 func lampProcessAlive(pid int) bool {
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
-		return false
+		return lampAliveFrom(false, errors.Is(err, windows.ERROR_ACCESS_DENIED), 0)
 	}
 	defer windows.CloseHandle(h)
 	var code uint32
 	if windows.GetExitCodeProcess(h, &code) != nil {
 		return false
 	}
-	return code == 259
+	return lampAliveFrom(true, false, code)
+}
+
+// lampWindowScale is the scale of the monitor the window is on (1 is 96 dpi).
+func lampWindowScale(hwnd uintptr) float64 {
+	if dpi, _, _ := procGetDpiForWindow.Call(hwnd); dpi > 0 {
+		return float64(dpi) / 96
+	}
+	return 1
+}
+
+// lampReadCursor is the pointer position in device pixels of the whole desktop.
+// It reads and stores nothing.
+func lampReadCursor() (x, y int, ok bool) {
+	var pt struct{ x, y int32 }
+	if r, _, _ := procGetCursorPosLmp.Call(uintptr(unsafe.Pointer(&pt))); r == 0 {
+		return 0, 0, false
+	}
+	return int(pt.x), int(pt.y), true
+}
+
+// lampMonitorCB is the one EnumDisplayMonitors callback of the process. Go
+// never frees a callback made by windows.NewCallback and allows about 2000, so
+// it is made once; it fills lampMonitorOut under lampMonitorMu.
+var (
+	lampMonitorMu  sync.Mutex
+	lampMonitorOut []lampMonitor
+	lampMonitorCB  = windows.NewCallback(func(hMon, _, _, _ uintptr) uintptr {
+		var mi struct {
+			size    uint32
+			monitor windows.Rect
+			work    windows.Rect
+			flags   uint32
+			device  [32]uint16
+		}
+		mi.size = uint32(unsafe.Sizeof(mi))
+		if r, _, _ := procGetMonitorInfoLmp.Call(hMon, uintptr(unsafe.Pointer(&mi))); r == 0 {
+			return 1
+		}
+		scale := 1.0
+		var dx, dy uint32
+		if r, _, _ := procGetDpiForMonitorLmp.Call(hMon, 0, uintptr(unsafe.Pointer(&dx)), uintptr(unsafe.Pointer(&dy))); r == 0 && dx > 0 {
+			scale = float64(dx) / 96
+		}
+		lampMonitorOut = append(lampMonitorOut, lampMonitor{
+			Name: windows.UTF16ToString(mi.device[:]),
+			X:    int(mi.monitor.Left), Y: int(mi.monitor.Top),
+			W: int(mi.monitor.Right - mi.monitor.Left), H: int(mi.monitor.Bottom - mi.monitor.Top),
+			Primary: mi.flags&1 != 0, // MONITORINFOF_PRIMARY
+			Scale:   scale,
+		})
+		return 1
+	})
+)
+
+// lampReadMonitors lists the connected monitors with their device names.
+func lampReadMonitors() []lampMonitor {
+	lampMonitorMu.Lock()
+	defer lampMonitorMu.Unlock()
+	lampMonitorOut = nil
+	procEnumMonitorsLmp.Call(0, 0, lampMonitorCB, 0)
+	return lampMonitorOut
 }
 
 // lampStyleWindow removes the caption and border, takes the window out of
@@ -213,10 +322,12 @@ func lampStyleWindow(hwnd uintptr, glass bool) {
 	procShowWindowWS.Call(hwnd, lampSwHide)
 }
 
-// lampChildAttr starts the lamp child hidden: Windows applies the start-up
-// show value to the first ShowWindow call of the process, so the window shows
-// first through lampPlacer.place, which does not activate it.
-func lampChildAttr() *syscall.SysProcAttr { return &syscall.SysProcAttr{HideWindow: true} }
+// lampChildAttr is nil: the lamp child is not started hidden. HideWindow puts
+// SW_HIDE in the child's start-up info, Windows applies it to the first
+// ShowWindow call of the process, and go-webview2 makes the web view under a
+// window that call hid. The window of a lamp that BurnMon Dev started stayed
+// invisible. Not taking the focus is the lamp's own best effort.
+func lampChildAttr() *syscall.SysProcAttr { return nil }
 
 // lampIdleSeconds is the seconds since the last keyboard or mouse input on
 // this computer. It reads and stores nothing.
@@ -229,16 +340,20 @@ func lampIdleSeconds() int {
 	return lampIdleFrom(uint32(now), info.time)
 }
 
-// lampPlacer puts the window at the top edge of the primary monitor. Sizes
-// come from the page in CSS pixels and are multiplied by the window's scale.
+// lampPlacer puts the window at the top edge of the monitor in lamp_monitor
+// (the primary one when it is empty or not connected). Sizes come from the page
+// in CSS pixels and are multiplied by the window's scale.
 type lampPlacer struct {
 	hwnd   uintptr
 	setDir string
 	demo   bool
 
+	dragging atomic.Bool // a drag loop runs
+
 	mu         sync.Mutex
 	w, h       int
 	appX, appW int // what the window was last set to, so place does nothing when nothing changed
+	appY       int
 	appH       int
 	area       string // the last lampArea from the page, JSON
 	rgnKey     string // area, size and scale of the region last set
@@ -261,39 +376,44 @@ func (p *lampPlacer) setSize(cssW, cssH int) {
 	p.place()
 }
 
-func (p *lampPlacer) position() string {
+// settings are the lamp keys now: read from the file each time, so a change
+// in the gear dialog reaches the window within the next tick. The demo has none.
+func (p *lampPlacer) settings() lamp.Settings {
 	if p.demo {
-		return "top-center"
+		return lamp.DefaultSettings()
 	}
-	if b, err := os.ReadFile(devConfigReadPath(p.setDir)); err == nil {
-		return lamp.ParseSettings(b).Position
-	}
-	return lamp.DefaultSettings().Position
+	return readLampSettings(p.setDir)
 }
 
-// place sizes and positions the window without activating it, rounds its
-// bottom corners and keeps it on top.
+// place sizes and positions the window without activating it and keeps it on
+// top. While a drag runs the drag loop owns the position.
 func (p *lampPlacer) place() {
+	if p.dragging.Load() {
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cssW, cssH := p.w, p.h
-	scale := 1.0
-	if dpi, _, _ := procGetDpiForWindow.Call(p.hwnd); dpi > 0 {
-		scale = float64(dpi) / 96
-	}
+	scale := lampWindowScale(p.hwnd)
 	w, h := int(float64(cssW)*scale+0.5), int(float64(cssH)*scale+0.5)
-	screenW, _, _ := procGetSystemMetricsLmp.Call(lampSmCxScreen)
-	x := (int(screenW) - w) / 2
-	switch p.position() {
-	case "top-left":
-		x = 0
-	case "top-right":
-		x = int(screenW) - w
+	set := p.settings()
+	var x, y int
+	if mons := lampMonitors(); len(mons) > 0 {
+		x, y, _ = lampPlaceOn(mons, set.Monitor, set.Position, w)
+	} else {
+		screenW, _, _ := procGetSystemMetricsLmp.Call(lampSmCxScreen)
+		x = (int(screenW) - w) / 2
+		switch set.Position {
+		case "top-left":
+			x = 0
+		case "top-right":
+			x = int(screenW) - w
+		}
 	}
-	if x != p.appX || w != p.appW || h != p.appH {
-		p.appX, p.appW, p.appH = x, w, h
+	if x != p.appX || y != p.appY || w != p.appW || h != p.appH {
+		p.appX, p.appY, p.appW, p.appH = x, y, w, h
 		procSetWindowPosWS.Call(p.hwnd, lampTopmost,
-			uintptr(uint32(int32(x))), 0, uintptr(uint32(int32(w))), uintptr(uint32(int32(h))),
+			uintptr(uint32(int32(x))), uintptr(uint32(int32(y))), uintptr(uint32(int32(w))), uintptr(uint32(int32(h))),
 			uintptr(lampSwpNoActivate|lampSwpFrameChange|lampSwpShowWindow))
 	}
 	key := fmt.Sprintf("%s|%d|%d|%.2f", p.area, w, h, scale)
@@ -304,39 +424,89 @@ func (p *lampPlacer) place() {
 	p.setRegion(w, h, scale)
 }
 
-// setRegion keeps only the window area: the ticker with rounded bottom
-// corners, Glim's box and an act's extra box. Without a usable area the whole
-// window rectangle is kept, bottom corners rounded. Clicks outside the region
-// go to the windows below. Built, not seen.
+// setRegion keeps only the window area: the ticker, Glim's box, an act's extra
+// box and the open menu, as plain rectangles each rounded outward, so every
+// border of the ticker lies inside it. The rounded corners come from the page's
+// CSS only: a round region cut the side borders. Without a usable area the whole
+// window rectangle is kept. Clicks outside the region go to the windows
+// below. Built, not seen.
 func (p *lampPlacer) setRegion(w, h int, scale float64) {
-	// The round rectangle reaches above its top, so only the bottom corners
-	// are rounded.
-	round := func(x, y, rw, rh int) uintptr {
-		r := min(int(lampCornerCSS*scale+0.5), rh)
-		rgn, _, _ := procCreateRoundRectRgn.Call(uintptr(uint32(int32(x))), uintptr(uint32(int32(y-r))),
-			uintptr(uint32(int32(x+rw+1))), uintptr(uint32(int32(y+rh+1))), uintptr(2*r), uintptr(2*r))
+	rects := lampRegionRects(p.area, scale)
+	if len(rects) == 0 {
+		rects = []lampRect{{0, 0, w, h}}
+	}
+	rectRgn := func(r lampRect) uintptr {
+		rgn, _, _ := procCreateRectRgn.Call(uintptr(uint32(int32(r.X))), uintptr(uint32(int32(r.Y))),
+			uintptr(uint32(int32(r.X+r.W))), uintptr(uint32(int32(r.Y+r.H))))
 		return rgn
 	}
-	rects := lampRegionRects(p.area, scale)
-	var rgn uintptr
-	if len(rects) == 0 {
-		rgn = round(0, 0, w, h)
-	} else {
-		rgn = round(rects[0].X, rects[0].Y, rects[0].W, rects[0].H)
-		for _, r := range rects[1:] {
-			part, _, _ := procCreateRectRgn.Call(uintptr(uint32(int32(r.X))), uintptr(uint32(int32(r.Y))),
-				uintptr(uint32(int32(r.X+r.W))), uintptr(uint32(int32(r.Y+r.H))))
-			if part != 0 && rgn != 0 {
-				procCombineRgn.Call(rgn, rgn, part, lampRgnOr)
-			}
-			if part != 0 {
-				procDeleteObject.Call(part)
-			}
+	rgn := rectRgn(rects[0])
+	for _, r := range rects[1:] {
+		part := rectRgn(r)
+		if part != 0 && rgn != 0 {
+			procCombineRgn.Call(rgn, rgn, part, lampRgnOr)
+		}
+		if part != 0 {
+			procDeleteObject.Call(part)
 		}
 	}
 	if rgn != 0 {
 		procSetWindowRgn.Call(p.hwnd, rgn, 1) // the window owns the region now
 	}
+}
+
+// drag follows the pointer with the window until the left button is up, then
+// snaps the lamp to the top edge of the monitor under the pointer at left,
+// centre or right, and saves lamp_monitor and lamp_position the way BurnMon Dev
+// saves a key. The primary monitor is saved as the empty name, so a lamp on
+// the primary follows it. The drag never takes the focus (SWP_NOACTIVATE). The
+// loop runs only during a drag. done runs after the drop, on the window thread.
+func (p *lampPlacer) drag(done func()) {
+	if !p.dragging.CompareAndSwap(false, true) {
+		return
+	}
+	var rc windows.Rect
+	px, py, ok := lampCursor()
+	if !ok {
+		p.dragging.Store(false)
+		return
+	}
+	procGetWindowRectLmp.Call(p.hwnd, uintptr(unsafe.Pointer(&rc)))
+	offX, offY := px-int(rc.Left), py-int(rc.Top)
+	for lampButtonDown() {
+		if x, y, ok := lampCursor(); ok {
+			procSetWindowPosWS.Call(p.hwnd, lampTopmost,
+				uintptr(uint32(int32(x-offX))), uintptr(uint32(int32(y-offY))), 0, 0,
+				uintptr(lampSwpNoActivate|lampSwpNoSize))
+		}
+		time.Sleep(16 * time.Millisecond)
+	}
+	if x, y, ok := lampCursor(); ok {
+		mons := lampMonitors()
+		name, pos := lampSnap(mons, x, y, int(rc.Right-rc.Left))
+		if m, ok := lampPrimary(mons); ok && m.Name == name {
+			name = ""
+		}
+		if err := saveDevConfigKey(p.setDir, "lamp_monitor", name); err != nil {
+			log.Println("lamp: could not save lamp_monitor:", err)
+		}
+		if err := saveDevConfigKey(p.setDir, "lamp_position", pos); err != nil {
+			log.Println("lamp: could not save lamp_position:", err)
+		}
+	}
+	p.mu.Lock()
+	p.appW = 0 // force the next place to set the position again
+	p.mu.Unlock()
+	p.dragging.Store(false)
+	if done != nil {
+		done()
+	}
+}
+
+// lampButtonDown is whether the left mouse button is down.
+func lampButtonDown() bool {
+	r, _, _ := procGetAsyncKeyStateLmp.Call(lampVkLButton)
+	return uint16(r)&0x8000 != 0
 }
 
 // lampOpenDev brings the BurnMon Dev window to the front, or starts BurnMon

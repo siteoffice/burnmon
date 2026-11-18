@@ -103,3 +103,24 @@ func TestSizeScale(t *testing.T) {
 		}
 	}
 }
+
+// lamp_monitor is the device name of the monitor the lamp hangs on. Any string
+// is kept; empty (or a missing, null or wrong typed key) is the primary monitor.
+func TestLampMonitorKey(t *testing.T) {
+	if DefaultSettings().Monitor != "" {
+		t.Errorf("default monitor = %q, want empty", DefaultSettings().Monitor)
+	}
+	for in, want := range map[string]string{
+		`{"lamp_monitor":"DISPLAY3"}`:        "DISPLAY3",
+		`{"lamp_monitor":""}`:                "",
+		`{}`:                                 "",
+		`{"lamp_monitor":null}`:              "",
+		`{"lamp_monitor":3}`:                 "",
+		`{"lamp_monitor":true}`:              "",
+		`{"lamp_monitor":"\\\\.\\DISPLAY3"}`: `\\.\DISPLAY3`,
+	} {
+		if got := ParseSettings([]byte(in)).Monitor; got != want {
+			t.Errorf("%s gave monitor %q, want %q", in, got, want)
+		}
+	}
+}

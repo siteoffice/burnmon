@@ -65,6 +65,48 @@ func TestLampPageKeyframesForEveryActAndState(t *testing.T) {
 	}
 }
 
+// Fix lane T2, read as text, nothing seen. The window area comes from the
+// ticker element's own rectangle (border included), a pointer down on the
+// ticker that moves more than 6 px starts the drag in the lamp process, a
+// right-click shows the one item menu that closes the lamp, and the eyes take
+// the pointer the lamp process feeds them.
+func TestLampPageFixLaneWindowWork(t *testing.T) {
+	for _, want := range []string{
+		"getBoundingClientRect",            // the area is measured, not computed
+		"el('tick').getBoundingClientRect", // from the ticker itself
+		"DRAG_PX=6",
+		"lampDragStart(",
+		"'contextmenu'",
+		"Close the lamp",
+		"lampClose(",
+		"window.lampPointer=",
+		"held",
+	} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
+	}
+	// The ticker area is no longer worked out from rows times the row height.
+	if strings.Contains(lampHTML, "ticker:{x:pad,y:0,w:TICKER_W,h:tH}") {
+		t.Error("the ticker area is still computed, not measured")
+	}
+	// A drag never takes the keyboard focus, and neither does the menu.
+	for _, bad := range []string{".focus(", "tabindex", "<input", "<button", "<select"} {
+		if strings.Contains(lampHTML, bad) {
+			t.Errorf("lamp.html holds %q, which can take the keyboard focus", bad)
+		}
+	}
+	// The menu closes when the pointer leaves it, and is inside the window area.
+	for _, want := range []string{"id=\"cmenu\"", "mouseleave"} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
+	}
+	if !strings.Contains(lampHTML, "menu:") {
+		t.Error("the area does not carry the open menu")
+	}
+}
+
 func TestLampPageMotionAndReducedMotion(t *testing.T) {
 	i := strings.Index(lampHTML, "@media (prefers-reduced-motion:reduce)")
 	if i < 0 {

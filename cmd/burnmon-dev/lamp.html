@@ -21,6 +21,8 @@ html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transpar
 .trow.more{color:var(--muted)}
 .trow.burn{color:var(--muted);font-size:11px}
 .trow.burn b{color:var(--fg);font-weight:600}
+.cmenu{position:absolute;z-index:5;height:26px;line-height:26px;padding:0 12px;box-sizing:border-box;white-space:nowrap;background:var(--panel);color:var(--fg);border:1px solid var(--bd);border-radius:4px;cursor:default}
+.cmenu:hover{background:var(--bd)}
 .cardbg{position:absolute;top:0;background:var(--panel);border-radius:0 0 8px 8px;z-index:0}
 .hang{position:absolute;z-index:1;--px:0px;--py:0px}
 .hang.a-stamp{z-index:3}
@@ -105,9 +107,10 @@ html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transpar
 @keyframes dots{0%{transform:translateX(0);opacity:0}15%{opacity:1}100%{transform:translateX(40px);opacity:0}}
 @media (prefers-reduced-motion:reduce){*{animation:none !important}}
 </style></head>
-<body><div id="stage"><div id="cardbg" class="cardbg" style="display:none"></div><div id="tick" class="ticker" style="display:none"></div><div id="hang" class="hang" style="display:none"></div><div id="sliver"></div></div>
+<body><div id="stage"><div id="cardbg" class="cardbg" style="display:none"></div><div id="tick" class="ticker" style="display:none"></div><div id="hang" class="hang" style="display:none"></div><div id="sliver"></div><div id="cmenu" class="cmenu" style="display:none">Close the lamp</div></div>
 <script>
-var TICKER_W=300,ROW_H=26,OPEN_ITEMS=6,HOVER_LINGER_MS=2000;
+var TICKER_W=300,ROW_H=26,OPEN_ITEMS=6,HOVER_LINGER_MS=2000,DRAG_PX=6;
+var held=false,menuOpen=false,dragFrom=null,dragged=false;
 var SIZE={small:1.2,medium:1.5,large:1.9};
 var root=document.documentElement,cur=null,hover=false,linger=null,lastSize='',lastArea='',lastTick='',lastRig='',lastCls='',lastDs=null,motionNow='lively',svgCache={},seenSeq=0,actIdx=-1,actTimers=[],pokeT=null;
 window.lampFreeze=window.lampFreeze||false;
@@ -169,6 +172,7 @@ function draw(){
   if(hides&&!down&&!open){
     w=120;h=6;
     el('tick').style.display='none';el('hang').style.display='none';el('cardbg').style.display='none';
+    menuOpen=false;el('cmenu').style.display='none';
     var sv=el('sliver');sv.style.display='';
     if(sv.className!=='sliver'+(st.mood==='off'?' off':'')){sv.className='sliver'+(st.mood==='off'?' off':'');}
     if(lastSize!==w+'x'+h){lastSize=w+'x'+h;lampSize(w,h).catch(function(){});}
@@ -181,6 +185,7 @@ function draw(){
   var pad=Math.max(0,Math.ceil(150-66*s+uw*s-TICKER_W));
   if(act==='slip')pad=Math.max(pad,Math.ceil(90*s));
   if(act==='alarm')pad=Math.max(pad,24);
+  if(held)pad=Math.max(pad,Math.ceil(0.9*132*s));
   var gx=pad+150-66*s,gy=tH-6*s,gw=uw*s,gh=132*s;
   w=TICKER_W+2*pad;h=Math.round(tH+126*s+(act==='slip'?26*s:0));
   var t=el('tick');t.style.display='';t.style.left=pad+'px';
@@ -203,7 +208,10 @@ function draw(){
     var key=cls+'|'+p.act_seq;
     if(key!==lastCls){hg.className='';void hg.offsetWidth;hg.className=cls;lastCls=key;}
   }
-  var area={ticker:{x:pad,y:0,w:TICKER_W,h:tH},glim:down?{x:Math.round(gx),y:tH,w:Math.round(gw),h:Math.round(126*s)}:null,extra:(act==='alarm'||act==='slip'||wallOn)&&down?{x:0,y:0,w:w,h:h}:null};
+  /* The ticker's area is the element's own rectangle, border included, so the
+     window region cannot cut a border; the menu is part of the area while open. */
+  var tb=el('tick').getBoundingClientRect(),mb=menuOpen?el('cmenu').getBoundingClientRect():null;
+  var area={ticker:{x:tb.left,y:tb.top,w:tb.width,h:tb.height},glim:down?{x:Math.round(gx),y:tH,w:Math.round(gw),h:Math.round(126*s)}:null,extra:(act==='alarm'||act==='slip'||wallOn||held)&&down?{x:0,y:0,w:w,h:h}:null,menu:mb?{x:mb.left,y:mb.top,w:mb.width,h:mb.height}:null};
   var ak=JSON.stringify(area);
   if(ak!==lastArea){lastArea=ak;lampArea(ak).catch(function(){});}
   if(lastSize!==w+'x'+h){lastSize=w+'x'+h;lampSize(w,h).catch(function(){});}
@@ -231,14 +239,44 @@ function leaveHover(){
   });
   el(id).addEventListener('mouseleave',leaveHover);
 });
-document.addEventListener('mousemove',function(e){
+/* The pupils look toward a point in window CSS pixels. The lamp process feeds
+   the pointer anywhere on any monitor through window.lampPointer 10 times a
+   second; a mousemove inside the window gives the same point. */
+function lookAt(cx,cy){
   var eyes=document.querySelector('#hang .eyes');
   if(!eyes||motionNow!=='lively')return;
-  var r=eyes.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),d=Math.sqrt(dx*dx+dy*dy)||1,q=Math.min(3.5,d/40),hg=el('hang');
+  var r=eyes.getBoundingClientRect(),dx=cx-(r.left+r.width/2),dy=cy-(r.top+r.height/2),d=Math.sqrt(dx*dx+dy*dy)||1,q=Math.min(3.5,d/40),hg=el('hang');
   hg.style.setProperty('--px',(dx/d*q).toFixed(1)+'px');hg.style.setProperty('--py',(dy/d*q).toFixed(1)+'px');
+}
+window.lampPointer=function(x,y){lookAt(x,y);};
+document.addEventListener('mousemove',function(e){
+  lookAt(e.clientX,e.clientY);
+  /* A pointer down on the ticker that moves more than DRAG_PX is a drag: the
+     lamp process takes over and follows the pointer until the button is up. */
+  if(dragFrom&&!dragged&&(e.buttons&1)&&Math.abs(e.clientX-dragFrom.x)+Math.abs(e.clientY-dragFrom.y)>DRAG_PX){
+    dragged=true;dragFrom=null;
+    lampDragStart().catch(function(){});
+  }
 });
+el('tick').addEventListener('mousedown',function(e){
+  if(e.button===0)dragFrom={x:e.clientX,y:e.clientY};
+});
+document.addEventListener('mouseup',function(){dragFrom=null;setTimeout(function(){dragged=false;},0);});
+function closeMenu(){menuOpen=false;el('cmenu').style.display='none';draw();}
+/* Right-click on the ticker or on Glim: one item, "Close the lamp". It never
+   takes the keyboard focus and goes away when the pointer leaves it. */
+document.addEventListener('contextmenu',function(e){
+  e.preventDefault();
+  if(!e.target.closest||(!e.target.closest('#hang')&&!e.target.closest('#tick')))return;
+  var m=el('cmenu');m.style.display='';menuOpen=true;
+  m.style.left=Math.max(0,Math.min(e.clientX,window.innerWidth-m.offsetWidth))+'px';
+  m.style.top=Math.max(0,Math.min(e.clientY,window.innerHeight-m.offsetHeight))+'px';
+  draw();
+});
+el('cmenu').addEventListener('mouseleave',closeMenu);
+el('cmenu').addEventListener('click',function(){lampClose().catch(function(){});});
 document.addEventListener('click',function(e){
-  if(!e.target.closest||!e.target.closest('#hang'))return;
+  if(dragged||!e.target.closest||!e.target.closest('#hang'))return;
   lampNextLine().then(function(line){
     if(cur&&cur.state)cur.state.line=line;
     if(pokeT!==null)clearTimeout(pokeT);

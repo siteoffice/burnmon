@@ -19,6 +19,7 @@ type Settings struct {
 	Motion       string // lamp_motion: lively, calm or off
 	Quiet        string // lamp_quiet: hide (sliver, Glim up) or stay (Glim hangs)
 	Backdrop     string // lamp_backdrop: clear or card
+	Monitor      string // lamp_monitor: device name of the monitor the lamp hangs on; empty is the primary
 }
 
 // SizeScale is Glim's size factor for a lamp_size value; a bad value is medium.
@@ -99,6 +100,9 @@ func ParseSettings(b []byte) Settings {
 	}
 	if json.Unmarshal(raw["lamp_backdrop"], &sv) == nil && oneOf(sv, "clear", "card") {
 		s.Backdrop = sv
+	}
+	if json.Unmarshal(raw["lamp_monitor"], &sv) == nil {
+		s.Monitor = sv
 	}
 	return s
 }

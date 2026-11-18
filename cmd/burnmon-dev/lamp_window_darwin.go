@@ -168,7 +168,7 @@ func runLampWindow(o lampOpts) int {
 	// is not used here, only the choice. Built, not seen: if the web view still
 	// paints an opaque square, lamp_backdrop card is the look that works.
 	_, _, glass := lampBackdropEnv(set.Backdrop)
-	startW, startH := lampWindowSize(set.TickerRows, set.Size)
+	startW, startH := lampWindowSize(set)
 
 	w := webview.New(false)
 	if w == nil {
@@ -205,6 +205,20 @@ func runLampWindow(o lampOpts) int {
 	// macOS has no window region: the page still reports its area, the panel
 	// keeps its whole rectangle and clicks on the clear part reach the panel.
 	bind("lampArea", func(string) {})
+	// The drag to another monitor is built for Windows only (fix lane T2): the
+	// binding exists so the page runs, and does nothing here. Built, not seen.
+	bind("lampDragStart", func() {})
+	// "Close the lamp": ledger first, lamp_enabled false only for a lamp BurnMon
+	// Dev started, then the lamp ends. Built, not seen.
+	bind("lampClose", func() {
+		go lampCloseNow(func() { e.ledger.Close(time.Now()) }, os.Getenv(lampParentEnv) != "",
+			func(key string, v any) error {
+				if o.demo {
+					return nil
+				}
+				return saveDevConfigKey(setDir, key, v)
+			}, func() { w.Terminate() })
+	})
 	bind("lampSize", func(cssW, cssH int) {
 		pl.setSize(cssW, cssH)
 		w.Dispatch(pl.place)
