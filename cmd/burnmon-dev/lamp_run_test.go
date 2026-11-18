@@ -472,3 +472,33 @@ func TestEngineCalmMotionPlaysNoAct(t *testing.T) {
 		t.Fatalf("calm: act %q", p.Act)
 	}
 }
+
+// The page shows the line of an act; the engine gives the lines, so the page
+// works out none (UI standard 16).
+func TestLampActLines(t *testing.T) {
+	cases := []struct {
+		act   string
+		lang  string
+		count int
+		hour  int
+		seq   int64
+		want  []string
+	}{
+		{"slip", "en", 0, 12, 1, []string{"I am not bored. I am testing the rail.", "Whoa.", "You saw nothing."}},
+		{"slip", "nl", 0, 12, 1, []string{"Ik verveel me niet. Ik test de rail.", "Ho.", "Je hebt niets gezien."}},
+		{"stamp", "en", 0, 12, 1, []string{"Stamped. Back to work."}},
+		{"stamp", "en", 0, 12, 2, []string{"Answered. That was all it took."}},
+		{"welcome", "en", 1, 12, 1, []string{"Welcome back. One thing waited."}},
+		{"welcome", "en", 3, 12, 1, []string{"Welcome back. 3 things waited."}},
+		{"coffee", "en", 0, 15, 1, []string{"Three o'clock. Coffee. The agents get none."}},
+		{"wake", "nl", 0, 12, 1, []string{"Iemand is iets begonnen."}},
+		{"alarm", "en", 2, 12, 1, nil},
+		{"", "en", 2, 12, 1, nil},
+	}
+	for _, c := range cases {
+		got := lampActLines(c.act, c.lang, c.count, c.hour, c.seq)
+		if strings.Join(got, "|") != strings.Join(c.want, "|") {
+			t.Errorf("lampActLines(%q,%q,%d,%d,%d) = %q, want %q", c.act, c.lang, c.count, c.hour, c.seq, got, c.want)
+		}
+	}
+}

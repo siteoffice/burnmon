@@ -39,7 +39,7 @@ func TestLampBindingNamesEqualPageCalls(t *testing.T) {
 	if len(lampBindingNames) == 0 {
 		t.Error("lampBindingNames is empty")
 	}
-	for _, want := range []string{"lampState", "lampNextLine", "lampOpenDev", "lampSize", "lampGlim"} {
+	for _, want := range []string{"lampState", "lampNextLine", "lampOpenDev", "lampSize", "lampGlim", "lampArea"} {
 		if !listed[want] {
 			t.Errorf("lampBindingNames lacks %s", want)
 		}

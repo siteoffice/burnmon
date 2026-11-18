@@ -183,6 +183,29 @@ type lampPayload struct {
 	DotSeconds float64           `json:"dot_seconds"`
 	Quiet      bool              `json:"quiet"`
 	Look       lampLook          `json:"look"`
+	ActLines   []string          `json:"act_lines"` // the lines of the act that plays: slip has three, the others one, most acts none
+}
+
+// lampActLines are the lines of an act, in the order the page shows them. The
+// page works out no line itself. Stamp alternates its two lines by seq.
+func lampActLines(act, lang string, count, hour int, seq int64) []string {
+	parts := []string{""}
+	switch act {
+	case "slip":
+		parts = []string{"start", "air", "back"}
+	case "stamp":
+		parts = []string{"a"}
+		if seq%2 == 0 {
+			parts = []string{"b"}
+		}
+	}
+	var out []string
+	for _, p := range parts {
+		if l := lamp.ActLine(act, p, lang, count, hour); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 type lampBurnSample struct {
@@ -304,7 +327,8 @@ func (e *lampEngine) finish(st lamp.State, set lamp.Settings, lineNow time.Time,
 		State: st, Theme: theme, Labels: lampLabels(set.Language),
 		Act: e.act, ActSeq: e.played.Seq, Holds: lamp.Holds(st, set),
 		DotSeconds: lamp.DotSeconds(st.BurnRate), Quiet: lamp.Quiet(st, set),
-		Look: lampLook{Size: set.Size, Theme: set.Theme, Motion: set.Motion, Quiet: set.Quiet, Backdrop: set.Backdrop, Rows: set.TickerRows},
+		Look:     lampLook{Size: set.Size, Theme: set.Theme, Motion: set.Motion, Quiet: set.Quiet, Backdrop: set.Backdrop, Rows: set.TickerRows},
+		ActLines: lampActLines(e.act, set.Language, st.Counted, lineNow.Hour(), e.played.Seq),
 	}
 }
 

@@ -117,6 +117,9 @@ func runLampWindow(o lampOpts) int {
 	bind("lampGlim", func(mood string, bricks int, theme string) string { return lamp.Glim(mood, bricks, theme) })
 	bind("lampNextLine", func() string { return e.nextLine() })
 	bind("lampOpenDev", func() { lampOpenDev() })
+	// The window area (ticker, Glim's box, an act's extra box) is only stored
+	// here; the window turns it into a clip region in a later turn.
+	bind("lampArea", func(area string) { pl.setArea(area) })
 	bind("lampSize", func(cssW, cssH int) {
 		pl.setSize(cssW, cssH)
 	})
@@ -187,6 +190,14 @@ type lampPlacer struct {
 	w, h       int
 	appX, appW int // what the window was last set to, so place does nothing when nothing changed
 	appH       int
+	area       string // the last lampArea from the page, JSON
+}
+
+// setArea remembers the rectangles the page asked the window to keep.
+func (p *lampPlacer) setArea(area string) {
+	p.mu.Lock()
+	p.area = area
+	p.mu.Unlock()
 }
 
 func (p *lampPlacer) setSize(cssW, cssH int) {

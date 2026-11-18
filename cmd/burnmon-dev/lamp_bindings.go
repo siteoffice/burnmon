@@ -10,7 +10,10 @@ package main
 //   - lampNextLine() returns the next line for the same mood.
 //   - lampOpenDev() brings BurnMon Dev to the front, or starts it.
 //   - lampSize(w, h) asks the window for a size in CSS pixels.
+//   - lampArea(json) reports the rectangles the window must keep, in CSS pixels:
+//     the ticker, Glim's box and, while an act needs room, one more box.
 var lampBindingNames = []string{
+	"lampArea",
 	"lampGlim",
 	"lampNextLine",
 	"lampOpenDev",

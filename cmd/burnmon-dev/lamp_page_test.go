@@ -32,7 +32,40 @@ func TestLampPageNoEmDashNoOutsideResource(t *testing.T) {
 	}
 }
 
-func TestLampPageReducedMotionAndKeyframes(t *testing.T) {
+// Every act and every state that lasts has its keyframes, and so has the idle life.
+func TestLampPageKeyframesForEveryActAndState(t *testing.T) {
+	for _, k := range []string{
+		"alarm", "knock", "stamp", "welcome", "wake", "slip", "coffee", "peek",
+		"wall", "sweat", "sleep", "dots",
+		"sway", "breathe", "blink",
+	} {
+		if !strings.Contains(lampHTML, "@keyframes "+k+"{") {
+			t.Errorf("lamp.html lacks @keyframes %s", k)
+		}
+	}
+	// The act and hold classes the script sets are styled: a-<act> and h-<hold>.
+	for _, c := range []string{
+		".a-alarm", ".a-knock", ".a-stamp", ".a-welcome", ".a-wake", ".a-slip", ".a-coffee", ".a-peek",
+		".h-wall", ".h-sweat", ".h-sleep", ".h-dots",
+	} {
+		if !strings.Contains(lampHTML, c+" ") && !strings.Contains(lampHTML, c+".") && !strings.Contains(lampHTML, c+",") {
+			t.Errorf("lamp.html styles no %s", c)
+		}
+	}
+	for _, want := range []string{"'a-'+", "'h-'+", "act_seq", "holds", "dot_seconds"} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
+	}
+	// The rig is animated by the class names of lamp.Glim.
+	for _, c := range []string{".swing", ".body", ".lid", ".pup", ".arm", ".rays", ".drop", ".zz", ".plank", ".brick", ".mug", ".dot", ".stampi", ".rip", ".eyes"} {
+		if !strings.Contains(lampHTML, c) {
+			t.Errorf("lamp.html does not style %s", c)
+		}
+	}
+}
+
+func TestLampPageMotionAndReducedMotion(t *testing.T) {
 	i := strings.Index(lampHTML, "@media (prefers-reduced-motion:reduce)")
 	if i < 0 {
 		t.Fatal("lamp.html has no prefers-reduced-motion block")
@@ -44,20 +77,23 @@ func TestLampPageReducedMotionAndKeyframes(t *testing.T) {
 	if !strings.Contains(block, "animation:none") {
 		t.Error("the reduced-motion block does not stop the animation")
 	}
-	for _, k := range []string{"blink", "glow", "pulse", "drop"} {
-		if !strings.Contains(lampHTML, "@keyframes "+k) {
-			t.Errorf("lamp.html lacks @keyframes %s", k)
+	// lamp_motion: lively plays everything, calm only the blink, off still poses.
+	for _, want := range []string{"look.motion", "'lively'", ".m-calm", ".m-off"} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
 		}
 	}
-	// The animations name the classes Glim carries.
-	for _, c := range []string{".glim-eye", ".glim-ray", ".glim-brick", ".glim-dome"} {
-		if !strings.Contains(lampHTML, c) {
-			t.Errorf("lamp.html does not style %s", c)
-		}
+	// An act is applied only in lively.
+	if !strings.Contains(lampHTML, "motion==='lively'") {
+		t.Error("the script does not limit acts to lamp_motion lively")
 	}
 	// Nothing animates in the sliver.
 	if !strings.Contains(ruleBody(t, ".sliver"), "animation:none") {
 		t.Error(".sliver rule does not say animation:none")
+	}
+	// Calm keeps the blink and drops the rest; off drops all.
+	if !strings.Contains(lampHTML, ".m-off *{animation:none !important}") {
+		t.Error("m-off does not stop every animation")
 	}
 }
 
@@ -71,12 +107,12 @@ func TestLampPageNoScrollbar(t *testing.T) {
 	}
 }
 
-func TestLampPageSizes(t *testing.T) {
+// The ticker is 300 px wide with 26 px rows and rounded bottom corners; the sliver is 120 by 6.
+func TestLampPageTickerSizes(t *testing.T) {
 	for sel, want := range map[string][]string{
 		".sliver": {"width:120px", "height:6px"},
-		".pill":   {"width:320px", "height:40px"},
-		".opened": {"width:440px"},
-		".lrow":   {"height:28px"},
+		".ticker": {"width:300px", "border-radius:0 0 8px 8px"},
+		".trow":   {"height:26px"},
 	} {
 		body := ruleBody(t, sel)
 		for _, w := range want {
@@ -85,40 +121,72 @@ func TestLampPageSizes(t *testing.T) {
 			}
 		}
 	}
-	// opened pill: 40 px plus 28 px per row.
-	if !strings.Contains(lampHTML, "40+28*") {
-		t.Error("the opened pill height is not 40+28*rows")
+	for _, want := range []string{
+		"TICKER_W=300", "ROW_H=26", "OPEN_ITEMS=6",
+		"small:1.2", "medium:1.5", "large:1.9",
+		"w=120;h=6", "ticker_rows", "ROW_H*",
+	} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
+	}
+	// 30+ in the ticker when the plank is full.
+	if !strings.Contains(lampHTML, "wall_over") || !strings.Contains(lampHTML, "30+") {
+		t.Error("the ticker does not show 30+ for a full plank")
 	}
 }
 
 func TestLampPageModesAndInteraction(t *testing.T) {
-	m := regexp.MustCompile(`var SLIVER=\{([^}]*)\}`).FindStringSubmatch(lampHTML)
-	if m == nil {
-		t.Fatal("lamp.html has no SLIVER table")
-	}
-	for _, mood := range []string{"asleep", "working", "off"} {
-		if !strings.Contains(m[1], mood) {
-			t.Errorf("SLIVER lacks %s", mood)
-		}
-	}
-	for _, mood := range []string{"done", "your_turn", "blocked", "bored", "sweating"} {
-		if strings.Contains(m[1], mood) {
-			t.Errorf("SLIVER holds %s, which shows the pill", mood)
-		}
-	}
 	for _, want := range []string{
 		"HOVER_LINGER_MS=2000", "setInterval(", ",1000)", "mouseenter", "mouseleave",
-		"lampNextLine(", "dblclick", "lampOpenDev(", "lampState(", "lampGlim(", "lampSize(",
+		"lampNextLine(", "dblclick", "lampOpenDev(", "lampState(", "lampGlim(", "lampSize(", "lampArea(",
 		"window.lampRender=function", "window.lampFreeze",
-		"w=120;h=6", "w=320;h=40", "w=440;h=40+28*rows.length", "classList.add('blink')",
-		"e.target.closest('#gl')||e.target.closest('.lrow')", "html!==lastHTML",
+		"p.quiet", "look.quiet", "look.size", "look.theme", "look.backdrop",
+		"e.target.closest('#hang')||e.target.closest('.trow')",
 	} {
 		if !strings.Contains(lampHTML, want) {
 			t.Errorf("lamp.html lacks %q", want)
 		}
 	}
 	if !strings.Contains(lampHTML, `class="demo">demo<`) {
-		t.Error("the pill does not show the word demo for a demo state")
+		t.Error("the ticker does not show the word demo for a demo state")
+	}
+	// A quiet lamp that hides still lets peek and coffee bring Glim down.
+	for _, want := range []string{"'peek'", "'coffee'"} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html does not bring Glim down for %s", want)
+		}
+	}
+}
+
+// The page works out no line, no group and no count: lines come from the payload.
+func TestLampPageTakesLinesFromThePayload(t *testing.T) {
+	if !strings.Contains(lampHTML, "act_lines") {
+		t.Error("the page does not read act_lines")
+	}
+	for _, bad := range []string{"Whoa", "Stamped", "Welcome back", "Coffee", "Somebody started", "testing the rail"} {
+		if strings.Contains(lampHTML, bad) {
+			t.Errorf("lamp.html holds the line text %q: lines come from act_lines", bad)
+		}
+	}
+}
+
+// Glim's eyes follow the pointer while it is inside the lamp window.
+func TestLampPageEyesFollowThePointer(t *testing.T) {
+	for _, want := range []string{"mousemove", "--px", "--py", "getBoundingClientRect"} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
+	}
+	// Calm and off keep the pupils still; hover opens only over the ticker, Glim or the sliver.
+	if !strings.Contains(lampHTML, "motionNow!=='lively'") {
+		t.Error("the pupils follow the pointer in calm and off")
+	}
+	if !strings.Contains(lampHTML, "['tick','hang','sliver'].forEach") || strings.Contains(lampHTML, "root.addEventListener('mouseenter'") {
+		t.Error("hover must open from the ticker, Glim and the sliver only")
+	}
+	if !strings.Contains(lampHTML, ".pup{") {
+		t.Error("the pupils do not read --px and --py")
 	}
 }
 
@@ -144,7 +212,7 @@ func TestLampPageHoverTitles(t *testing.T) {
 	}
 }
 
-// The opened pill shows tokens a minute first, then the 5 minute cost with its label.
+// The opened ticker shows tokens a minute first, then the 5 minute cost with its label.
 func TestLampPageTokensBeforeCost(t *testing.T) {
 	s := strings.Index(lampHTML, "function openedHTML(")
 	if s < 0 {
@@ -164,17 +232,38 @@ func TestLampPageTokensBeforeCost(t *testing.T) {
 	}
 }
 
-// Text on its surface is at least 4.5:1 in both themes (method of contrast_test.go).
-func TestLampPageContrast(t *testing.T) {
-	dark := strings.Index(lampHTML, ":root{")
-	light := strings.Index(lampHTML, `:root[data-theme="light"]{`)
-	if dark < 0 || light < dark {
-		t.Fatal("lamp.html lacks the dark and light :root blocks")
+// The backdrop: clear shows only the ticker, Glim and what an act adds; card puts a panel behind him.
+func TestLampPageBackdrop(t *testing.T) {
+	if !strings.Contains(lampHTML, `data-backdrop`) {
+		t.Fatal("the page does not set data-backdrop from the look")
 	}
-	blocks := map[string]string{
-		"dark":  lampHTML[dark:light],
-		"light": lampHTML[light : light+strings.Index(lampHTML[light:], "}")],
+	if !strings.Contains(lampHTML, `html[data-backdrop="clear"]`) || !strings.Contains(lampHTML, "background:transparent") {
+		t.Error("a clear backdrop does not make the page transparent")
 	}
+	if !strings.Contains(lampHTML, ".cardbg") {
+		t.Error("the card backdrop has no panel")
+	}
+}
+
+// themeBlock returns the declarations of the first rule that starts with sel.
+func themeBlock(t *testing.T, sel string) string {
+	t.Helper()
+	i := strings.Index(lampHTML, sel+"{")
+	if i < 0 {
+		t.Fatalf("lamp.html lacks the rule %s", sel)
+	}
+	return lampHTML[i : i+strings.Index(lampHTML[i:], "}")]
+}
+
+// The theme follows lamp_theme: system follows prefers-color-scheme, light and dark force it.
+// Text on its surface is at least 4.5:1 in both palettes (method of contrast_test.go).
+func TestLampPageThemeAndContrast(t *testing.T) {
+	light := themeBlock(t, ":root")
+	dark := themeBlock(t, `:root[data-theme="dark"]`)
+	if !strings.Contains(lampHTML, "@media (prefers-color-scheme:dark){:root[data-theme=\"system\"]{") {
+		t.Fatal("the system theme does not follow prefers-color-scheme")
+	}
+	sys := themeBlock(t, `:root[data-theme="system"]`)
 	tok := func(block, name string) string {
 		m := regexp.MustCompile(`--` + name + `:(#[0-9a-fA-F]{6})`).FindStringSubmatch(block)
 		if m == nil {
@@ -182,30 +271,25 @@ func TestLampPageContrast(t *testing.T) {
 		}
 		return m[1]
 	}
-	for theme, block := range blocks {
-		for _, pair := range [][2]string{{"fg", "bg"}, {"fg", "panel"}, {"muted", "bg"}, {"muted", "panel"}, {"accent", "bg"}, {"accent", "panel"}, {"demo", "bg"}, {"demo", "panel"}} {
-			r := contrast(t, tok(block, pair[0]), tok(block, pair[1]))
-			if r < 4.5 {
+	for _, name := range []string{"panel", "fg", "muted", "accent", "demo"} {
+		if tok(sys, name) != tok(dark, name) {
+			t.Errorf("system dark --%s differs from the dark palette", name)
+		}
+	}
+	for theme, block := range map[string]string{"light": light, "dark": dark} {
+		for _, pair := range [][2]string{{"fg", "panel"}, {"muted", "panel"}, {"accent", "panel"}, {"demo", "panel"}} {
+			if r := contrast(t, tok(block, pair[0]), tok(block, pair[1])); r < 4.5 {
 				t.Errorf("%s: --%s on --%s is %.2f:1, want at least 4.5:1", theme, pair[0], pair[1], r)
 			}
 		}
 	}
-	if !strings.Contains(lampHTML, `data-theme`) {
-		t.Error("the page does not set data-theme from the state")
+	for _, want := range []string{"data-theme", "matchMedia('(prefers-color-scheme:dark)')"} {
+		if !strings.Contains(lampHTML, want) {
+			t.Errorf("lamp.html lacks %q", want)
+		}
 	}
-}
-
-// Dark is amber on black.
-func TestLampPageDarkIsAmberOnBlack(t *testing.T) {
-	i, j := strings.Index(lampHTML, ":root{"), strings.Index(lampHTML, `:root[data-theme="light"]{`)
-	if i < 0 || j < i {
-		t.Fatal("lamp.html lacks the dark and light :root blocks")
-	}
-	dark := lampHTML[i:j]
-	if !strings.Contains(dark, "--bg:#000000") {
-		t.Error("dark --bg is not black")
-	}
-	if !strings.Contains(dark, "--accent:#ffc766") {
-		t.Error("dark --accent is not the amber of Glim")
+	// lamp_theme replaces the theme BurnMon Dev saves.
+	if strings.Contains(lampHTML, "cur.theme") {
+		t.Error("the page still reads the theme of BurnMon Dev")
 	}
 }
