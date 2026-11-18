@@ -132,3 +132,46 @@ func TestPageLampGearGroup(t *testing.T) {
 		t.Error("page.html does not log a failed bdevSetLamp")
 	}
 }
+
+// The sweat floor is a slider right under the size slider and built like it:
+// min, middle and max under it, the number beside it in short form, one line
+// of small text under it, the save on release, and a poll does not move it
+// while it is held.
+func TestPageLampGearSweatSlider(t *testing.T) {
+	for _, want := range []string{
+		`Glim sweats from`,
+		`<input type="range" id="secLampSweat" class="setin" min="100000" max="1000000" step="50000" value="300000"`,
+		`id="secLampSweatNum"`,
+		`Tokens a minute, averaged over the last 5 minutes. Cache reads count.`,
+		`secLampSweat:['lamp_burn_floor_tpm','burn_floor']`,
+		"t.id === 'secLampRows' || t.id === 'secLampSize' || t.id === 'secLampSweat' ? Number(t.value)",
+		"id !== 'secLampSweat' || document.activeElement !== el",
+		"function sweatShort(",
+		"burn_floor:300000",
+	} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page.html lacks %q", want)
+		}
+	}
+	// The slider sits in the group Lamp, between the size slider and the theme.
+	size, sweat, theme := strings.Index(pageHTML, `id="secLampSize"`), strings.Index(pageHTML, `id="secLampSweat"`), strings.Index(pageHTML, `id="secLampTheme"`)
+	if size < 0 || sweat < size || theme < sweat {
+		t.Fatalf("the sweat slider is not between the size slider and the theme: %d %d %d", size, sweat, theme)
+	}
+	// It is a row of the same kind as the size slider, with the three words.
+	i := strings.Index(pageHTML, `id="secLampSweat"`)
+	row := pageHTML[strings.LastIndex(pageHTML[:i], `<div class="setrow setslider">`):]
+	row = row[:strings.Index(row, `<div class="setrow">Theme`)]
+	if !strings.Contains(row, `<div class="slwords"><span>min</span><span>middle</span><span>max</span></div>`) {
+		t.Error("the sweat slider row lacks the words min, middle and max")
+	}
+	if !strings.Contains(row, `class="sldim"`) {
+		t.Error("the sweat slider row lacks the dim line")
+	}
+	// The line is dim, small and as wide as the group.
+	for _, want := range []string{`#secLamp .setslider .sldim{`} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("page.html lacks the rule %q", want)
+		}
+	}
+}

@@ -12,7 +12,7 @@ type Settings struct {
 	Language     string // lamp_language: en or nl
 	Lines        bool   // lamp_lines
 	ForemanItems bool   // lamp_foreman_items
-	BurnFloorTPM int    // lamp_burn_floor_tpm, a first guess tuned at the first look
+	BurnFloorTPM int    // lamp_burn_floor_tpm: tokens a minute (all tokens of the last 5 minutes over 5, cache reads count) below which Glim never sweats; 0 is off
 	TickerRows   int    // lamp_ticker_rows: 1 to 4
 	SizePct      int    // lamp_size as a percentage, 100 to 200; the old words load as 120, 150 and 190
 	Theme        string // lamp_theme: system, light or dark
@@ -53,7 +53,7 @@ func oneOf(v string, choices ...string) bool {
 
 // DefaultSettings is what a missing file or a bad value gives.
 func DefaultSettings() Settings {
-	return Settings{Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 20000,
+	return Settings{Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 300000,
 		TickerRows: 1, SizePct: 150, Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
 }
 

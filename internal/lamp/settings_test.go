@@ -3,7 +3,7 @@ package lamp
 import "testing"
 
 func TestSettingsDefaults(t *testing.T) {
-	want := Settings{Enabled: false, Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 20000,
+	want := Settings{Enabled: false, Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 300000,
 		TickerRows: 1, SizePct: 150, Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
 	if got := DefaultSettings(); got != want {
 		t.Fatalf("DefaultSettings() = %+v, want %+v", got, want)

@@ -292,7 +292,7 @@ func lampIdleFrom(now, last uint32) int {
 // sets the real one (Windows and macOS). It is read each poll and never stored.
 var lampIdle = func() int { return 0 }
 
-// lampLook is the six look settings after defaults, as the page reads them.
+// lampLook is the look settings and the sweat floor after defaults, as the page reads them.
 type lampLook struct {
 	Size     int    `json:"size"`    // lamp_size, a percentage from 100 to 200
 	Monitor  string `json:"monitor"` // the monitor the lamp hangs on, after a gone one fell back to the primary
@@ -301,6 +301,8 @@ type lampLook struct {
 	Quiet    string `json:"quiet"`
 	Backdrop string `json:"backdrop"`
 	Rows     int    `json:"rows"`
+	// BurnFloor is lamp_burn_floor_tpm, the tokens a minute from which Glim sweats.
+	BurnFloor int `json:"burn_floor"`
 }
 
 // lampPayload is what the binding lampState returns to the page. Act is the
@@ -482,7 +484,7 @@ func (e *lampEngine) finish(st lamp.State, set lamp.Settings, lineNow time.Time,
 			"drag": lamp.ActLine("carry", "drag", set.Language, 0, 0),
 			"view": lamp.ActLine("carry", "view", set.Language, 0, 0),
 		},
-		Look:     lampLook{Size: set.SizePct, Monitor: lampMonitorUsed(set.Monitor), Theme: set.Theme, Motion: set.Motion, Quiet: set.Quiet, Backdrop: set.Backdrop, Rows: set.TickerRows},
+		Look:     lampLook{Size: set.SizePct, Monitor: lampMonitorUsed(set.Monitor), Theme: set.Theme, Motion: set.Motion, Quiet: set.Quiet, Backdrop: set.Backdrop, Rows: set.TickerRows, BurnFloor: set.BurnFloorTPM},
 		ActLines: lampActLines(e.act, set.Language, st.Counted, hour, e.played.Seq),
 	}
 }

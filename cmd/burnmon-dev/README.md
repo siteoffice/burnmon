@@ -379,7 +379,10 @@ BurnMon Dev. The lamp also ends by itself when that process is gone. A lamp you 
 ### Use
 
 Hover the ticker or Glim to open it: up to 6 waiting items, tokens a minute and the cost of the last 5
-minutes (labelled API price equivalent). It closes 2 seconds after the pointer leaves. A click on Glim
+minutes (labelled API price equivalent). It closes 2 seconds after the pointer leaves. Glim sweats
+when the burn, in tokens a minute over the last 5 minutes with cache reads counted, is at least 3 times
+his usual burn of the last 30 minutes and at least `lamp_burn_floor_tpm`; set that floor with the slider
+"Glim sweats from" in the gear dialog. A click on Glim
 shows another line; a double click opens BurnMon Dev. The ticker is as wide as its first row needs, from
 300 to 440 px; a longer line is cut and shows in full on hover. The opened rows start at the same left
 edge and have the same width as the first row. The lamp tries not to take the focus: the window is shown
@@ -462,7 +465,7 @@ All keys are in `burnmon-dev.json`; the gear dialog group Lamp sets them. A bad 
 | `lamp_language` | en, nl | en | the language of the lines |
 | `lamp_lines` | true, false | true | one-liners on or off |
 | `lamp_foreman_items` | true, false | true | count Foreman items |
-| `lamp_burn_floor_tpm` | whole number, 0 or more | 20000 | tokens a minute below which Glim never sweats |
+| `lamp_burn_floor_tpm` | whole number, 0 or more | 300000 | tokens a minute from which Glim can sweat: all tokens of the last 5 minutes divided by 5, cache reads count. The gear dialog has a slider "Glim sweats from" from 100000 to 1000000 in steps of 50000 with min, middle and max under it, the number beside it as `300k` or `1M`; a saved value outside that range still holds, the slider then stands at its nearest end. 0 switches the floor off |
 | `lamp_ticker_rows` | 1 to 4 | 1 | rows of the ticker: the headline, then the items that wait longest |
 | `lamp_size` | 100 to 200 | 150 | Glim's size in percent. The gear dialog has a slider in steps of 5 with min, middle and max under it; `small` (120), `medium` (150) and `large` (190) from older files still load, any other value is 150 |
 | `lamp_monitor` | a monitor device name, or empty | empty | the monitor the lamp hangs on; empty is the primary monitor. A drag saves it; the gear dialog shows the one in use and a button "Back to the primary screen" |

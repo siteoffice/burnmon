@@ -120,10 +120,12 @@ func DemoState(sec int) State {
 		minutes := 10 + sec - 19 // 10 minutes at second 19, one more a second: 15 is the slip at 24
 		add(waits.Item{Kind: waits.KindQuestion, ID: "session:claude:demo-3", Title: "Still waiting on a made-up answer", AgeSeconds: int64(minutes) * 60})
 	case MoodSweating:
-		snap.Burn.TokensPerMinute = 60000
+		// 400000 a minute over a usual 100000 is 4 times the usual and above
+		// the default floor of 300000, so the demo sweats at the default.
+		snap.Burn.TokensPerMinute = 400000
 		samples = make([]float64, minSamples)
 		for i := range samples {
-			samples[i] = 10000
+			samples[i] = 100000
 		}
 	case MoodDone:
 		add(waits.Item{Kind: waits.KindFinished, ID: "session:claude:demo-4", Title: "A made-up task finished", AgeSeconds: 30})

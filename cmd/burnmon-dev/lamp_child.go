@@ -240,7 +240,7 @@ func syncLampFromFile(setDir string, c *lampChild) {
 	c.Sync(readLampSettings(setDir).Enabled)
 }
 
-// setLampKey is bdevSetLamp: one of the twelve gear keys with a value of the
+// setLampKey is bdevSetLamp: one of the thirteen gear keys with a value of the
 // right kind is saved into burnmon-dev.json, then the child follows the file.
 // Anything else is refused before a byte is written.
 func setLampKey(setDir, key string, value any, c *lampChild) error {
@@ -264,6 +264,10 @@ func setLampKey(setDir, key string, value any, c *lampChild) error {
 	case "lamp_size":
 		if f, ok := value.(float64); !ok || f < 100 || f > 200 || f != float64(int(f)) || int(f)%5 != 0 {
 			return fmt.Errorf("lamp_size takes a whole number from 100 to 200 in steps of 5")
+		}
+	case "lamp_burn_floor_tpm":
+		if f, ok := value.(float64); !ok || f < 0 || f != float64(int(f)) {
+			return fmt.Errorf("lamp_burn_floor_tpm takes a whole number of 0 or more")
 		}
 	case "lamp_monitor":
 		// The gear only sends the empty name (the primary screen); the lamp saves
@@ -301,5 +305,5 @@ func setLampKey(setDir, key string, value any, c *lampChild) error {
 func lampGear(setDir string) lampGearPayload {
 	s := readLampSettings(setDir)
 	return lampGearPayload{s.Enabled, s.Position, s.Language, s.Lines, s.ForemanItems,
-		s.TickerRows, s.SizePct, s.Monitor, s.Theme, s.Motion, s.Quiet, s.Backdrop}
+		s.TickerRows, s.SizePct, s.Monitor, s.Theme, s.Motion, s.Quiet, s.Backdrop, s.BurnFloorTPM}
 }

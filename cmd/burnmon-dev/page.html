@@ -547,6 +547,7 @@ body.plain #mapOverlay{font-size:13.5px}
 #secLamp .setslider{display:flex; flex-direction:column; gap:2px}
 #secLamp .setslider .slrow{display:flex; gap:8px; align-items:center}
 #secLamp .setslider .slwords{display:flex; justify-content:space-between; width:150px; color:var(--dim); font-size:10px}
+#secLamp .setslider .sldim{width:100%; color:var(--dim); font-size:10px}
 #secLamp .setmon{display:flex; gap:10px; align-items:center}
 #secLamp .setmon .setbtn{margin-left:auto}
 /* One table: name | Standard (tick + percent) | Plain (tick + percent). A section row is bold on a band, its panes and parts indented below it. */
@@ -769,6 +770,14 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
         <span id="secLampSizeNum">150</span>%
       </div>
       <div class="slwords"><span>min</span><span>middle</span><span>max</span></div>
+    </div>
+    <div class="setrow setslider">
+      <div class="slrow">Glim sweats from
+        <input type="range" id="secLampSweat" class="setin" min="100000" max="1000000" step="50000" value="300000" aria-label="Glim sweats from, tokens a minute">
+        <span id="secLampSweatNum">300k</span>
+      </div>
+      <div class="slwords"><span>min</span><span>middle</span><span>max</span></div>
+      <div class="sldim">Tokens a minute, averaged over the last 5 minutes. Cache reads count.</div>
     </div>
     <div class="setrow">Theme
       <select id="secLampTheme" class="setin"><option value="system">system</option><option value="light">light</option><option value="dark">dark</option></select>
@@ -3910,7 +3919,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, lamp:{ enabled:false, position:'top-center', language:'en', lines:true, foreman_items:true, ticker_rows:1, size:150, monitor:'', theme:'system', motion:'lively', quiet:'hide', backdrop:'clear' }, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
+  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, lamp:{ enabled:false, position:'top-center', language:'en', lines:true, foreman_items:true, ticker_rows:1, size:150, monitor:'', theme:'system', motion:'lively', quiet:'hide', backdrop:'clear', burn_floor:300000 }, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
   var secReading = { status:'missing', age_seconds:0 };
   // secLine is Go's sentence about the snapshot. The window opens before the
   // first payload, so it starts as the starting line; null means the last
@@ -4378,23 +4387,38 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
   var LAMP_GEAR = { secLampEnabled:['lamp_enabled','enabled'], secLampPosition:['lamp_position','position'],
     secLampLanguage:['lamp_language','language'], secLampLines:['lamp_lines','lines'], secLampForeman:['lamp_foreman_items','foreman_items'],
     secLampRows:['lamp_ticker_rows','ticker_rows'], secLampSize:['lamp_size','size'], secLampTheme:['lamp_theme','theme'],
-    secLampMotion:['lamp_motion','motion'], secLampQuiet:['lamp_quiet','quiet'], secLampBackdrop:['lamp_backdrop','backdrop'] };
+    secLampMotion:['lamp_motion','motion'], secLampQuiet:['lamp_quiet','quiet'], secLampBackdrop:['lamp_backdrop','backdrop'],
+    secLampSweat:['lamp_burn_floor_tpm','burn_floor'] };
   function secRenderLamp(){
     Object.keys(LAMP_GEAR).forEach(function(id){
       var el = document.getElementById(id);
       if(!el) return;
       var v = secState.lamp[LAMP_GEAR[id][1]];
       // A slider that is being dragged keeps its place; a poll must not move it.
-      if(el.type === 'checkbox') el.checked = !!v; else if(id !== 'secLampSize' || document.activeElement !== el) el.value = v;
+      if(el.type === 'checkbox') el.checked = !!v; else if(id !== 'secLampSize' || document.activeElement !== el){ if(id !== 'secLampSweat' || document.activeElement !== el) el.value = v; }
     });
     var sn = document.getElementById('secLampSizeNum');
     if(sn && document.activeElement !== document.getElementById('secLampSize')) sn.textContent = secState.lamp.size;
+    // A saved floor outside the slider still holds in the lamp: the slider stands at its
+    // nearest end (a range input clamps) and the number shows the saved value.
+    var wn = document.getElementById('secLampSweatNum');
+    if(wn && document.activeElement !== document.getElementById('secLampSweat') && typeof secState.lamp.burn_floor === 'number') wn.textContent = sweatShort(secState.lamp.burn_floor);
     var mon = document.getElementById('secLampMonitor'), back = document.getElementById('secLampMonitorBack');
     if(mon) mon.textContent = secState.lamp.monitor ? secState.lamp.monitor : 'primary screen';
     if(back) back.disabled = !secState.lamp.monitor;
   }
+  // The floor in short form: 300000 reads 300k, 1000000 reads 1M, 0 reads 0.
+  function sweatShort(n){
+    if(n >= 999950) return (+(n / 1000000).toFixed(2)) + 'M';
+    if(n >= 1000) return (+(n / 1000).toFixed(1)) + 'k';
+    return String(n);
+  }
   // The number beside the slider follows it while it moves; the save is on release.
   document.addEventListener('input', function(e){
+    if(e.target && e.target.id === 'secLampSweat'){
+      var wn = document.getElementById('secLampSweatNum');
+      if(wn) wn.textContent = sweatShort(Number(e.target.value));
+    }
     if(e.target && e.target.id === 'secLampSize'){
       var sn = document.getElementById('secLampSizeNum');
       if(sn) sn.textContent = e.target.value;
@@ -4613,7 +4637,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     else if(LAMP_GEAR[t.id]){
       // Saved to burnmon-dev.json; BurnMon Dev starts or stops the lamp to match.
       if(typeof window.bdevSetLamp === 'function'){
-        Promise.resolve(window.bdevSetLamp(LAMP_GEAR[t.id][0], t.type === 'checkbox' ? t.checked : (t.id === 'secLampRows' || t.id === 'secLampSize' ? Number(t.value) : t.value))).then(function(){ secLastJSON = 'x'; return secPoll(); })
+        Promise.resolve(window.bdevSetLamp(LAMP_GEAR[t.id][0], t.type === 'checkbox' ? t.checked : (t.id === 'secLampRows' || t.id === 'secLampSize' || t.id === 'secLampSweat' ? Number(t.value) : t.value))).then(function(){ secLastJSON = 'x'; return secPoll(); })
           .catch(function(e){
             console.log('bdevSetLamp:', e);
             secRenderLamp();
