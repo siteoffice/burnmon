@@ -1,0 +1,52 @@
+{
+  "mood": "bored",
+  "headline": "2 blocked, 1 your turn",
+  "line": "11 minutes. I started a wall.",
+  "rows": [
+    {
+      "id": "gate:flow-1:g2",
+      "kind": "gate",
+      "word": "Gate",
+      "title": "Approve the plan",
+      "title_full": "Approve the plan",
+      "wait": "31 min",
+      "wait_exact": "31 min 40 s"
+    },
+    {
+      "id": "session:claude:s1",
+      "kind": "question",
+      "word": "Question",
+      "title": "Which table?",
+      "title_full": "Which table?",
+      "wait": "11 min",
+      "wait_exact": "11 min 40 s"
+    },
+    {
+      "id": "session:codex:s2",
+      "kind": "your_turn",
+      "word": "Your turn",
+      "title": "title session:codex:s2",
+      "title_full": "title session:codex:s2",
+      "wait": "30 s",
+      "wait_exact": "30 s"
+    }
+  ],
+  "counts": {
+    "blocked": 2,
+    "your_turn": 1,
+    "done": 1
+  },
+  "agents": 1,
+  "longest_wait_min": 11,
+  "wall_bricks": 11,
+  "wall_over": false,
+  "burn_rate": 4200,
+  "cost_5min": {
+    "usd": 1.25,
+    "eur": 1.15,
+    "label": "API price equivalent"
+  },
+  "demo": false,
+  "ticker_rows": 1,
+  "counted": 3
+}

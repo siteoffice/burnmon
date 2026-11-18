@@ -38,6 +38,9 @@ type sectionsPayload struct {
 	// CloudPull is the saved cloud_pull for the gear's "Read Cowork (Cloud)
 	// sessions" switch, read from burnmon.json by the bdevSections binding.
 	CloudPull bool `json:"cloud_pull"`
+	// Lamp is the saved lamp keys for the gear's Lamp group, filled by the
+	// bdevSections binding.
+	Lamp lampGearPayload `json:"lamp"`
 	Reading      snapshot.Reading `json:"reading"`
 	// AgentMap is the live map for the Agents map section, nil unless the
 	// snapshot is current. History is a separate call (agentmap_view.go).
@@ -53,6 +56,24 @@ type sectionsPayload struct {
 	// refused (agentview_line.go); empty when it runs or the snapshot is not
 	// current.
 	AgentViewLine string `json:"agent_view_line,omitempty"`
+}
+
+// lampGearPayload is the lamp object of bdevSections: the saved values the
+// gear shows. It lives here, not in lamp_child.go, so the darwin build
+// without cgo still compiles sectionsPayload.
+type lampGearPayload struct {
+	Enabled      bool   `json:"enabled"`
+	Position     string `json:"position"`
+	Language     string `json:"language"`
+	Lines        bool   `json:"lines"`
+	ForemanItems bool   `json:"foreman_items"`
+	TickerRows   int    `json:"ticker_rows"`
+	Size         int    `json:"size"`    // lamp_size, a percentage from 100 to 200
+	Monitor      string `json:"monitor"` // lamp_monitor, empty is the primary screen
+	Theme        string `json:"theme"`
+	Motion       string `json:"motion"`
+	Quiet        string `json:"quiet"`
+	Backdrop     string `json:"backdrop"`
 }
 
 // controlsPayload is what the page needs to draw the control chips and the

@@ -31,6 +31,36 @@ func TestD48Check(t *testing.T) {
 	}
 }
 
+// d51Sizes reads "WxH" and "WxHp" (p: the section and pane percents of Wilco's
+// window, finding 9 of the Glim fix lane) and skips anything else.
+func TestD51Sizes(t *testing.T) {
+	got := d51Sizes("1500x900, 1146x1554p ,bad,12x")
+	want := []d51Size{{1500, 900, false}, {1146, 1554, true}}
+	if len(got) != len(want) {
+		t.Fatalf("d51Sizes = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("d51Sizes[%d] = %v, want %v", i, got[i], want[i])
+		}
+	}
+	// The default list holds Wilco's window: a short window alone never reached it.
+	found := false
+	for _, s := range d51Defaults {
+		if s.W == 1136 && s.H == 1554 && s.Pct {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("d51Defaults lacks 1146x1554 with Wilco's percents")
+	}
+	for _, want := range []string{"status:15", "sessions_30min:40", "processes_30min:35", "todo:10", "burn_30min:40", "vendor_strip:20", "activity_heatmap:20", "turn_ticker:20"} {
+		if !strings.Contains(d51WilcoPct, want) {
+			t.Errorf("d51WilcoPct lacks %s", want)
+		}
+	}
+}
+
 // d51Check: a month label inside the visible panel passes; no label with text
 // is a data failure; text that exists but lies outside the visible box is the
 // Activity bug of 2026-11-17 and its message carries the measured boxes.

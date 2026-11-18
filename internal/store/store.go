@@ -1495,7 +1495,9 @@ func (s *Store) PurgePullCopies(projectDir string) (events, toolCalls, cursors i
 	}
 	defer tx.Rollback()
 	for _, p := range paths {
-		sid := sessionIDFromPath(p)
+		// The cursor path may be a Windows path read on another OS, where
+		// filepath.Base does not split on a backslash.
+		sid := sessionIDFromPath(strings.ReplaceAll(p, `\`, `/`))
 		res, err := tx.Exec(`DELETE FROM events WHERE vendor = 'anthropic' AND session_id = ? AND agent <> 'cowork-cloud'`, sid)
 		if err != nil {
 			return 0, 0, 0, fmt.Errorf("store: purge pull events for %s: %w", p, err)

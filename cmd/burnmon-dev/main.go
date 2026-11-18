@@ -87,6 +87,10 @@ func main() {
 		os.Exit(runExport(os.Args[2:]))
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "lamp" {
+		os.Exit(runLamp(os.Args[2:]))
+		return
+	}
 
 	dataDir := appDataDir()
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
@@ -201,10 +205,24 @@ func main() {
 	stopToasts := startToasts(snapPath, setDir, a.initialCollectDone, hooks)
 	defer stopToasts()
 	ctlSvc := newControlService(cfg, setDir, snapPath, storePath)
+	// The lamp child follows lamp_enabled; a uicheck run is a test window and
+	// never starts it.
+	lampKid := newLampChildForApp()
+	defer lampKid.Stop()
+	if !uicheckActive() {
+		syncLampFromFile(setDir, lampKid)
+		// A lamp that still runs while the saved lamp_enabled is false is
+		// stopped within one tick (a lamp that did not end from its menu).
+		go func() {
+			for range time.Tick(2 * time.Second) {
+				lampKid.Tick()
+			}
+		}()
+	}
 	bindDev(devBindEnv{
 		w: w, a: a, st: st, sys: sys,
 		setDir: setDir, dataDir: dataDir, snapPath: snapPath,
-		ctlSvc: ctlSvc, devCfg: devCfg, hooks: hooks,
+		ctlSvc: ctlSvc, devCfg: devCfg, hooks: hooks, lampKid: lampKid,
 	})
 
 	// Dispatch heartbeat (alpha.7): why it exists is in winbind.StartHeartbeat.
@@ -230,6 +248,7 @@ type devBindEnv struct {
 	ctlSvc   *controls.Service
 	devCfg   devConfig
 	hooks    windowHooks
+	lampKid  *lampChild // the lamp process of the gear's Lamp group
 }
 
 // bindDev registers every bdev binding on the window, in the order of
@@ -329,12 +348,27 @@ func bindDev(e devBindEnv) {
 	}); err != nil {
 		log.Println("could not bind bdevSetCloudPull:", err)
 	}
+	// bdevSetLamp saves one of the twelve keys of the gear's Lamp group
+	// (lamp_enabled, lamp_position, lamp_language, lamp_lines,
+	// lamp_foreman_items, lamp_ticker_rows, lamp_size, lamp_theme,
+	// lamp_motion, lamp_quiet, lamp_backdrop, and lamp_monitor, which only
+	// takes the empty name) and starts or stops the lamp child to match.
+	if err := w.Bind("bdevSetLamp", func(key string, value any) error {
+		err := setLampKey(setDir, key, value, e.lampKid)
+		if err != nil {
+			log.Println("bdevSetLamp:", err)
+		}
+		return err
+	}); err != nil {
+		log.Println("could not bind bdevSetLamp:", err)
+	}
 	// bdevSections (B2): the part switches per mode, the overall scrollbar flag, and the
 	// newest snapshot reading. bdevSetSections saves one change from the page
 	// (Plain Mode, the scrollbar flag, or one part switch). Both read and write files only.
 	if err := w.Bind("bdevSections", func() sectionsPayload {
 		p := sectionsPayloadWith(setDir, snapPath, time.Now(), ctlSvc.Availability, a.snapStatus.View)
 		p.CloudPull = pricing.ReadCloudPull(a.cloudCfgPath)
+		p.Lamp = lampGear(setDir)
 		return p
 	}); err != nil {
 		log.Println("could not bind bdevSections:", err)

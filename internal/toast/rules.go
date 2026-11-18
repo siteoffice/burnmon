@@ -19,17 +19,6 @@ const (
 	MaxText = 200
 )
 
-// words names each kind in a toast. A kind without one says its group.
-var words = map[string]string{
-	waits.KindGate:        "Gate",
-	waits.KindSprint:      "Sprint waiting",
-	waits.KindFailedCheck: "Failed check",
-	waits.KindQuestion:    "Question",
-	waits.KindPrompt:      "Permission prompt",
-	waits.KindSession:     "Session waiting",
-	waits.KindYourTurn:    "Your turn",
-}
-
 // Gate holds what the rules remember between wait lists. The zero value is
 // ready to use. It is not safe for concurrent use.
 type Gate struct {
@@ -87,14 +76,9 @@ func (g *Gate) Step(now time.Time, items []waits.Item) (text string, ok bool) {
 // of the item goes in: its detail and paths can hold a prompt, a command or
 // a folder name.
 func line(it waits.Item) string {
-	word, ok := words[it.Kind]
-	if !ok {
-		word = "Blocked"
-		if it.Group == waits.GroupYourTurn {
-			word = "Your turn"
-		}
-	}
-	s := word + ": " + oneLine(it.Title)
+	// The word comes from the one table the lamp reads too: a kind without
+	// a word says its group.
+	s := waits.WordFor(it) + ": " + oneLine(it.Title)
 	if r := []rune(s); len(r) > MaxText {
 		s = string(r[:MaxText-3]) + "..."
 	}

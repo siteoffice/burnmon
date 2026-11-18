@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en" data-theme="system" data-backdrop="clear"><head><meta charset="utf-8"><title>Glim</title>
+<style>
+:root{--panel:#FFFFFF;--fg:#1C1A16;--muted:#5F5E5A;--accent:#854F0B;--demo:#854F0B;--bd:#D3D1C7}
+:root[data-theme="dark"]{--panel:#14110D;--fg:#F1EFE8;--muted:#B4B2A9;--accent:#FAC775;--demo:#FAC775;--bd:#444441}
+@media (prefers-color-scheme:dark){:root[data-theme="system"]{--panel:#14110D;--fg:#F1EFE8;--muted:#B4B2A9;--accent:#FAC775;--demo:#FAC775;--bd:#444441}}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;color:var(--fg);font:12px/1.2 "Segoe UI",system-ui,sans-serif;user-select:none;cursor:default}
+html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transparent}
+#stage{position:relative;width:100%;height:100%}
+.sliver{width:120px;height:6px;background:var(--accent);animation:none}
+.sliver.off{background:var(--bd)}
+#meas{position:absolute;left:-9999px;top:0;visibility:hidden;display:flex;align-items:center;gap:6px;padding:0 8px;box-sizing:border-box;width:max-content;white-space:nowrap;height:26px}
+#meas .head{max-width:none;overflow:visible}
+#meas .sub{flex:none;overflow:visible}
+.ticker{position:absolute;top:0;width:300px;max-width:440px;background:var(--panel);border:1px solid var(--bd);border-top:0;border-radius:0 0 8px 8px;box-sizing:border-box;overflow:hidden;z-index:2}
+.trow{height:26px;display:flex;align-items:center;gap:6px;padding:0 8px;box-sizing:border-box;white-space:nowrap}
+.trow+.trow{border-top:1px solid var(--bd)}
+.head{flex:none;max-width:48%;font-weight:600;font-size:12px;color:var(--accent);overflow:hidden;text-overflow:ellipsis}
+.sub{flex:1;min-width:0;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.demo,.w30{flex:none;font-size:11px;font-weight:600;color:var(--demo);border:1px solid var(--demo);border-radius:3px;padding:0 3px}
+.lword{flex:none;width:58px;color:var(--accent);overflow:hidden;text-overflow:ellipsis}
+.ltitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.lwait{flex:none;color:var(--muted)}
+.trow.more{color:var(--muted)}
+.trow.burn{color:var(--muted);font-size:11px}
+.trow.burn b{color:var(--fg);font-weight:600}
+.trow.burn span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.trow.burn .bb{flex:none}
+.trow.burn .bc{flex:1}
+.cmenu{position:absolute;z-index:5;height:26px;line-height:26px;padding:0 12px;box-sizing:border-box;white-space:nowrap;background:var(--panel);color:var(--fg);border:1px solid var(--bd);border-radius:4px;cursor:default}
+.cmenu:hover{background:var(--bd)}
+.cardbg{position:absolute;top:0;background:var(--panel);border-radius:0 0 8px 8px;z-index:0}
+.hang{position:absolute;z-index:1;--px:0px;--py:0px}
+.hang.a-stamp{z-index:3}
+.hang svg{display:block;width:100%;height:100%;overflow:visible}
+.hang .swing{animation:sway 4s ease-in-out infinite}
+.hang .body,.hang .lid,.hang .brick,.hang .stampi,.hang .rip,.hang .mug,.hang .dot{transform-box:fill-box}
+.hang .body{transform-origin:50% 100%;animation:breathe 3s ease-in-out infinite}
+.hang .lid{transform-origin:50% 0;animation:blink 5.5s infinite}
+.hang .mood-bored .lid{--lid:.5}
+.hang .mood-asleep .lid,.hang .mood-off .lid{animation:none}
+.hang .pup{transform:translate(var(--px),var(--py))}
+.hang .armR{transform-origin:26px 82px}
+.hang .armL{transform-origin:-26px 82px}
+.hang .stampi{translate:0 var(--sy,-70px)}
+.poke .hang .lid{animation:wink .4s ease-in-out 1}
+.hang.grab .swing{animation:none !important;transform:rotate(var(--ang,0deg))}
+.hang.grab .arm,.hang.flail .arm,.hang.carry .arm{opacity:1}
+.hang.carry .swing{animation:none !important;transform:rotate(var(--lean,0deg));transition:transform .15s}
+.hang.carry .armL{transform:rotate(36deg)}
+.hang.carry .armR{transform:rotate(-36deg)}
+.hang.flail .armL{animation:flailarm .2s linear infinite alternate}
+.hang.flail .armR{animation:flailarm .2s linear infinite alternate-reverse}
+.hang.a-alarm .swing{animation:alarm 2.6s ease-out}
+.hang.a-alarm .rays{opacity:1;animation:pulse .35s ease-in-out infinite alternate}
+.hang.a-knock .arm{opacity:1}
+.hang.a-knock .armR{animation:knock 1.6s ease-in-out}
+.hang.a-knock .swing{animation:lean 1.6s ease-in-out}
+.hang.a-knock .rip{transform-origin:50% 50%;animation:rip 1.6s linear}
+.hang.a-stamp .body{animation:stamp .7s ease-out}
+.hang.a-stamp .stampi{opacity:1;transform-origin:50% 50%;animation:thunk .5s .45s ease-out both}
+.hang.a-welcome .body{animation:welcome 2.4s ease-out}
+.hang.a-welcome .arm{opacity:1}
+.hang.a-welcome .armR{animation:knock .6s ease-in-out 3 .5s}
+.hang.a-wake .rig{animation:wake 1.6s ease-out}
+.hang.a-wake .body{animation:stamp .6s .5s ease-out}
+.hang.a-slip .rig{animation:slip 6.4s ease-in-out}
+.hang.a-slip .swing{animation:slipswing 6.4s ease-in-out}
+.hang.a-slip .arm{opacity:1}
+.hang.a-slip .armL{animation:flail 6.4s linear}
+.hang.a-slip .armR{animation:flail 6.4s linear reverse}
+.hang.a-slip .drop{animation:slipdrop 6.4s linear}
+.hang.a-slip .pup{animation:slipeyes 6.4s linear}
+.hang.a-coffee .mug{opacity:1;animation:sip 4s ease-in-out}
+.hang.q.a-coffee .rig{animation:coffee 4s ease-in-out}
+.hang.a-peek .rig{animation:peek 4.4s ease-in-out}
+.hang.a-peek .eyes{animation:look 4.4s ease-in-out}
+.hang.h-wall .plank,.hang.h-wall .arm{opacity:1}
+.hang.h-wall .armR{animation:wall 1s ease-in-out infinite}
+.hang.h-wall .brick:last-child{animation:brickin .35s ease-in}
+.hang.h-sweat .body{animation:sweat .12s linear infinite}
+.hang.h-sweat .drop{opacity:1;animation:drip 1s ease-in infinite}
+.hang.h-sleep .swing{animation:sleep 9s ease-in-out infinite}
+.hang.h-sleep .zz{opacity:1;animation:float 2.4s ease-in-out infinite}
+.hang.h-dots .dots{opacity:1}
+.hang.h-dots .dot{animation:dots calc(var(--ds,2) * 3s) linear infinite;opacity:0}
+.hang.h-dots .dot:nth-child(2){animation-delay:calc(var(--ds,2) * 1s)}
+.hang.h-dots .dot:nth-child(3){animation-delay:calc(var(--ds,2) * 2s)}
+.m-calm .hang .swing,.m-calm .hang .body,.m-calm .hang .rig,.m-calm .hang .arm,.m-calm .hang .drop,.m-calm .hang .zz,.m-calm .hang .dot,.m-calm .hang .brick,.m-calm .hang .rays,.m-calm .hang .mug,.m-calm .hang .stampi,.m-calm .hang .rip,.m-calm .hang .eyes,.m-calm .hang .pup{animation:none !important}
+.m-calm .hang .dots,.m-off .hang .dots{opacity:0 !important}
+.m-off *{animation:none !important}
+@keyframes sway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+@keyframes breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.03,.97)}}
+@keyframes blink{0%,93%,100%{transform:scaleY(var(--lid,0))}96%{transform:scaleY(1)}}
+@keyframes wink{50%{transform:scaleY(1)}}
+@keyframes alarm{0%{transform:rotate(0)}12%{transform:rotate(24deg)}28%{transform:rotate(-19deg)}44%{transform:rotate(14deg)}60%{transform:rotate(-9deg)}76%{transform:rotate(5deg)}90%{transform:rotate(-2deg)}100%{transform:rotate(0)}}
+@keyframes flailarm{from{transform:rotate(-50deg)}to{transform:rotate(40deg)}}
+@keyframes pulse{from{opacity:.35}to{opacity:1}}
+@keyframes knock{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-38deg)}40%,80%{transform:rotate(12deg)}}
+@keyframes lean{0%,100%{transform:rotate(0)}30%,70%{transform:rotate(-7deg)}}
+@keyframes rip{0%,38%{opacity:0;transform:scale(.2)}42%{opacity:1}60%{opacity:0;transform:scale(1.6)}78%{opacity:0;transform:scale(.2)}82%{opacity:1}100%{opacity:0;transform:scale(1.6)}}
+@keyframes stamp{0%{transform:scale(1,1)}25%{transform:scale(1.12,.8)}55%{transform:translateY(-16px) scale(.94,1.08)}80%{transform:scale(1.08,.9)}100%{transform:scale(1,1)}}
+@keyframes thunk{0%{transform:scale(2.4);opacity:0}70%{transform:scale(.92);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes welcome{0%{transform:scale(1,1)}12%{transform:scale(1.12,.8)}30%{transform:translateY(-16px) scale(.94,1.08)}48%{transform:scale(1.08,.9)}60%,100%{transform:scale(1,1)}}
+@keyframes wake{0%{transform:translateY(calc(var(--hide) * -1px))}55%{transform:translateY(10px)}72%{transform:translateY(-5px)}88%{transform:translateY(2px)}100%{transform:translateY(0)}}
+@keyframes slip{0%{transform:translate(0,0)}12%{transform:translate(calc(var(--sl) * -0.25px),0)}30%{transform:translate(calc(var(--sl) * 0.6px),0)}42%{transform:translate(calc(var(--sl) * -0.12px),0)}54%,64%{transform:translate(calc(var(--sl) * 1px + var(--dir) * 20px),0)}68%{transform:translate(calc(var(--sl) * 1px + var(--dir) * 20px),24px)}71%{transform:translate(calc(var(--sl) * 1px + var(--dir) * 20px),13px)}74%{transform:translate(calc(var(--sl) * 1px + var(--dir) * 20px),26px)}77%{transform:translate(calc(var(--sl) * 1px + var(--dir) * 20px),10px)}83%{transform:translate(calc(var(--sl) * 1px),0)}100%{transform:translate(0,0)}}
+@keyframes slipswing{0%{transform:rotate(0)}6%{transform:rotate(12deg)}12%{transform:rotate(-8deg)}21%{transform:rotate(-16deg)}30%{transform:rotate(10deg)}36%{transform:rotate(16deg)}42%{transform:rotate(-8deg)}50%{transform:rotate(-16deg)}55%,64%{transform:rotate(0)}68%{transform:rotate(-20deg)}71%{transform:rotate(12deg)}74%{transform:rotate(-20deg)}77%{transform:rotate(10deg)}83%{transform:rotate(8deg)}91%{transform:rotate(-4deg)}100%{transform:rotate(0)}}
+@keyframes flail{0%,65%{transform:rotate(0);opacity:0}66%{opacity:1;transform:rotate(-50deg)}69%{transform:rotate(40deg)}72%{transform:rotate(-50deg)}75%{transform:rotate(40deg)}78%{opacity:1;transform:rotate(-30deg)}81%,100%{opacity:0;transform:rotate(0)}}
+@keyframes slipdrop{0%,57%{opacity:0;transform:translateY(0)}59%{opacity:1}79%{opacity:1;transform:translateY(22px)}81%,100%{opacity:0}}
+@keyframes slipeyes{0%,55%{transform:translate(0,0)}58%,63%{transform:translateY(4px)}66%,79%{transform:translateY(-2px)}83%,100%{transform:translate(0,0)}}
+@keyframes sip{0%{opacity:0;transform:translate(10px,6px)}14%{opacity:1;transform:translate(0,0)}34%,58%{opacity:1;transform:translate(-16px,-14px) rotate(-22deg)}78%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(10px,6px)}}
+@keyframes coffee{0%,100%{transform:translateY(calc(var(--hide) * -1px))}16%,84%{transform:translateY(0)}}
+@keyframes peek{0%,100%{transform:translateY(calc(var(--hide) * -1px))}16%,84%{transform:translateY(calc(var(--pk) * -1px))}}
+@keyframes look{0%,34%{transform:translateX(0)}44%{transform:translateX(-4px)}60%{transform:translateX(4px)}72%,100%{transform:translateX(0)}}
+@keyframes wall{0%,100%{transform:rotate(0)}50%{transform:rotate(-30deg)}}
+@keyframes brickin{from{transform:translateY(-46px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes sweat{0%,100%{transform:translateX(-1.5px)}50%{transform:translateX(1.5px)}}
+@keyframes drip{0%{transform:translateY(0)}100%{transform:translateY(26px);opacity:0}}
+@keyframes sleep{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.2deg)}}
+@keyframes float{0%{transform:translateY(0);opacity:0}30%{opacity:1}100%{transform:translateY(-16px);opacity:0}}
+@keyframes dots{0%{transform:translateX(0);opacity:0}15%{opacity:1}100%{transform:translateX(40px);opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important}}
+</style></head>
+<body><div id="stage"><div id="cardbg" class="cardbg" style="display:none"></div><div id="tick" class="ticker" style="display:none"></div><div id="hang" class="hang" style="display:none"></div><div id="sliver"></div><div id="cmenu" class="cmenu" style="display:none">Close the lamp</div></div><div id="meas"></div>
+<script>
+var TICKER_W=300,TICKER_MAX=440,ROW_H=26,OPEN_ITEMS=6,HOVER_LINGER_MS=2000,DRAG_PX=6;
+var SWING_MAX=60,SWING_REST_MS=3000,TURN_WINDOW_MS=1500,FLAIL_MS=1500,GRAB_PX=4,VIEW_MS=4000,SWING_LINE_MS=2500,CARRY_MAX_MS=20000;
+var held=false,menuOpen=false,dragFrom=null,dragged=false;
+/* held is true while Glim is grabbed and until he rests. carrying is a drag
+   of the lamp (the lamp process moves the window), dragMon the monitor it
+   started on, carryDrop a drop that may show "view" once the saved monitor
+   differs. */
+var grab=null,swung=false,flailing=false,carrying=false,carryDrop=false,dragMon='',viewUntil=0,swingLine='',swingUntil=0;
+var tw=TICKER_W,padNow=0,pivot={x:0,y:0},ang=0,lastMeas='',measW=TICKER_W;
+var root=document.documentElement,cur=null,hover=false,linger=null,lastSize='',lastArea='',lastTick='',lastRig='',lastCls='',lastDs=null,motionNow='lively',svgCache={},seenSeq=0,actIdx=-1,actTimers=[],pokeT=null;
+window.lampFreeze=window.lampFreeze||false;
+function el(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function label(k,d){return cur&&cur.labels&&cur.labels[k]?cur.labels[k]:d;}
+function fmtRate(r){var n=Math.round(r||0);return n>=1000?Math.round(n/1000)+'k':String(n);}
+function isDark(t){return t==='dark'||(t!=='light'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches);}
+function glimSVG(st,theme,pose){
+  var m=pose||st.mood,bricks=m==='bored'?st.wall_bricks:0,key=m+'|'+bricks+'|'+theme;
+  if(svgCache[key]!==undefined)return svgCache[key];
+  svgCache[key]='';
+  lampGlim(m,bricks,theme).then(function(s){svgCache[key]=s;draw();}).catch(function(){delete svgCache[key];});
+  return '';
+}
+function openedHTML(st){
+  var first='<span class="bb"><b>'+esc(fmtRate(st.burn_rate))+' '+esc(label('tokens','tokens a minute'))+'</b></span>';
+  if(!st.cost_5min)return first;
+  var cost='$'+esc((st.cost_5min.usd||0).toFixed(2))+' '+esc(st.cost_5min.label)+' (5 min)';
+  return first+'<span class="bc" title="'+cost+'">'+cost+'</span>';
+}
+function rowHTML(r){
+  if(r.kind==='more')return '<div class="trow lrow more"><span class="ltitle" title="'+esc(r.title_full)+'">'+esc(r.title)+'</span></div>';
+  return '<div class="trow lrow" data-id="'+esc(r.id)+'"><span class="lword">'+esc(r.word)+'</span><span class="ltitle" title="'+esc(r.title_full)+'">'+esc(r.title)+'</span><span class="lwait" title="'+esc(r.wait_exact)+'">'+esc(r.wait)+'</span></div>';
+}
+function lineNow(p){
+  var L=p.act_lines||[],now=Date.now();
+  if(carrying&&p.carry_lines&&p.carry_lines.drag)return p.carry_lines.drag;
+  if(now<viewUntil&&p.carry_lines&&p.carry_lines.view)return p.carry_lines.view;
+  if(now<swingUntil&&swingLine)return swingLine;
+  if(p.act&&actIdx>=0&&L[actIdx])return L[actIdx];
+  return p.state.line||'';
+}
+function row1HTML(p){
+  var st=p.state,line=lineNow(p);
+  var h='<b class="head" title="'+esc(st.headline)+'">'+esc(st.headline)+'</b><span class="sub" title="'+esc(line)+'">'+esc(line)+'</span>';
+  if(st.wall_over)h+='<span class="w30">30+</span>';
+  if(st.demo)h+='<span class="demo">demo</span>';
+  return h;
+}
+function tickerHTML(p,open,rows){
+  var st=p.state;
+  var h='<div class="trow">'+row1HTML(p)+'</div>'+rows.map(rowHTML).join('');
+  if(open)h+='<div class="trow burn">'+openedHTML(st)+'</div>';
+  return h;
+}
+/* The ticker is as wide as row 1 needs: the hidden #meas holds row 1 at its
+   natural width, plus the border. Every other row takes the ticker's width. */
+function tickerWidth(p){
+  var r1=row1HTML(p);
+  if(r1!==lastMeas){lastMeas=r1;var m=el('meas');m.innerHTML=r1;measW=m.offsetWidth+2;}
+  return Math.min(TICKER_MAX,Math.max(TICKER_W,Math.ceil(measW)));
+}
+function startAct(p){
+  actTimers.forEach(clearTimeout);actTimers=[];actIdx=-1;
+  var L=p.act_lines||[];
+  if(p.act==='slip'&&L.length===3){
+    [[1300,0],[3700,1],[5300,2]].forEach(function(t){actTimers.push(setTimeout(function(){actIdx=t[1];draw();},t[0]));});
+  }else if(L.length>0){actIdx=0;}
+}
+function draw(){
+  if(!cur||!cur.state)return;
+  var p=cur,st=p.state,look=p.look||{},motion=look.motion||'lively';
+  if(!(look.size>=100&&look.size<=200))look.size=150;
+  var s=look.size/100;
+  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches)motion='off';
+  root.setAttribute('data-theme',look.theme||'system');
+  root.setAttribute('data-backdrop',look.backdrop==='card'?'card':'clear');
+  motionNow=motion;document.body.className='m-'+motion+(pokeT!==null?' poke':'');
+  var act=motion==='lively'?(p.act||''):'';
+  var hides=p.quiet&&look.quiet!=='stay';
+  var down=!hides||act==='peek'||act==='coffee'||act==='wake';
+  var open=hover||linger!==null;
+  var items=(st.rows||[]).filter(function(r){return r.kind!=='more';});
+  var w,h,tr,tickRows;
+  if(hides&&!down&&!open){
+    w=120;h=6;
+    el('tick').style.display='none';el('hang').style.display='none';el('cardbg').style.display='none';
+    menuOpen=false;el('cmenu').style.display='none';
+    var sv=el('sliver');sv.style.display='';
+    if(sv.className!=='sliver'+(st.mood==='off'?' off':'')){sv.className='sliver'+(st.mood==='off'?' off':'');}
+    if(lastSize!==w+'x'+h){lastSize=w+'x'+h;lampSize(w,h).catch(function(){});}
+    return;
+  }
+  el('sliver').style.display='none';
+  tickRows=open?(st.rows||[]).slice(0,OPEN_ITEMS):items.slice(0,Math.max((st.ticker_rows||1)-1,0));
+  tr=1+tickRows.length+(open?1:0);
+  var tH=ROW_H*tr,wallOn=st.mood==='bored'&&st.wall_bricks>0,uw=wallOn?211:132;
+  tw=tickerWidth(p);
+  var pad=Math.max(0,Math.ceil(tw/2-66*s+uw*s-tw));
+  if(act==='slip')pad=Math.max(pad,Math.ceil(90*s));
+  if(act==='alarm')pad=Math.max(pad,24);
+  if(held)pad=Math.max(pad,Math.ceil(0.9*132*s));
+  var gx=pad+tw/2-66*s,gy=tH-6*s,gw=uw*s,gh=132*s;
+  padNow=pad;pivot={x:gx+66*s,y:tH};
+  w=tw+2*pad;h=Math.round(tH+126*s+(act==='slip'?26*s:0));
+  var t=el('tick');t.style.display='';t.style.left=pad+'px';t.style.width=tw+'px';
+  var html=tickerHTML(p,open,tickRows);
+  if(html!==lastTick){lastTick=html;t.innerHTML=html;}
+  t.className='ticker'+(open?' open':'');
+  var cb=el('cardbg');
+  if(look.backdrop==='card'){cb.style.display='';cb.style.left=pad+'px';cb.style.width=tw+'px';cb.style.height=h+'px';}else{cb.style.display='none';}
+  var hg=el('hang');
+  if(!down){hg.style.display='none';}else{
+    hg.style.display='';
+    hg.style.left=gx+'px';hg.style.top=gy+'px';hg.style.width=gw+'px';hg.style.height=gh+'px';
+    hg.style.setProperty('--hide','112');hg.style.setProperty('--pk',String(74-14/s));
+    hg.style.setProperty('--sl',String(tw/2/s));hg.style.setProperty('--dir','1');hg.style.setProperty('--sy',String(-(56+13/s))+'px');
+    if(lastDs!==p.dot_seconds){lastDs=p.dot_seconds;hg.style.setProperty('--ds',String(p.dot_seconds||2));}
+    var svg=glimSVG(st,isDark(look.theme)?'dark':'light',p.pose);
+    if(svg&&svg!==lastRig){lastRig=svg;hg.innerHTML=svg;}
+    var cls='hang'+(hides?' q':'')+(act?' '+'a-'+act:'');
+    /* grab, carry and flail only in lively; Glim is awake for the coffee, so
+       the sleep state does not hold then */
+    if(motion==='lively')cls+=(grab&&grab.moved?' grab':'')+(carrying?' carry':'')+(flailing?' flail':'');
+    if(motion!=='off')(p.holds||[]).forEach(function(x){if(act==='coffee'&&x==='sleep')return;cls+=' '+'h-'+x;});
+    var key=cls+'|'+p.act_seq;
+    if(key!==lastCls){hg.className='';void hg.offsetWidth;hg.className=cls;lastCls=key;}
+  }
+  /* The ticker's area is the element's own rectangle, border included, so the
+     window region cannot cut a border; the menu is part of the area while open. */
+  var tb=el('tick').getBoundingClientRect(),mb=menuOpen?el('cmenu').getBoundingClientRect():null;
+  var area={ticker:{x:tb.left,y:tb.top,w:tb.width,h:tb.height},glim:down?{x:Math.round(gx),y:tH,w:Math.round(gw),h:Math.round(126*s)}:null,extra:(act==='alarm'||act==='slip'||wallOn||held)&&down?{x:0,y:0,w:w,h:h}:null,menu:mb?{x:mb.left,y:mb.top,w:mb.width,h:mb.height}:null};
+  var ak=JSON.stringify(area);
+  if(ak!==lastArea){lastArea=ak;lampArea(ak).catch(function(){});}
+  if(lastSize!==w+'x'+h){lastSize=w+'x'+h;lampSize(w,h).catch(function(){});}
+}
+window.lampRender=function(p){
+  /* the drop may happen outside the window, where no mouse event reaches the
+     page: a saved monitor that differs from the one the drag started on ends
+     the carry too, and a timeout ends it when the monitor is the same */
+  if(carrying&&p&&p.look&&p.look.monitor!==dragMon)carryEnd();
+  /* a drag was dropped and the saved monitor is another one: the view line shows once */
+  if(p&&p.look&&carryDrop&&p.look.monitor!==dragMon){
+    carryDrop=false;viewUntil=Date.now()+VIEW_MS;setTimeout(draw,VIEW_MS+50);
+  }
+  if(p&&p.act&&p.act_seq!==seenSeq){seenSeq=p.act_seq;startAct(p);}
+  else if(p&&!p.act&&actIdx!==-1){actTimers.forEach(clearTimeout);actTimers=[];actIdx=-1;}
+  cur=p;draw();
+};
+function poll(){
+  if(window.lampFreeze)return;
+  lampState().then(function(p){window.lampRender(p);}).catch(function(){});
+}
+function leaveHover(){
+  hover=false;
+  if(linger!==null)clearTimeout(linger);
+  linger=setTimeout(function(){linger=null;draw();},HOVER_LINGER_MS);
+  draw();
+}
+['tick','hang','sliver'].forEach(function(id){
+  el(id).addEventListener('mouseenter',function(){
+    hover=true;
+    if(linger!==null){clearTimeout(linger);linger=null;}
+    draw();
+  });
+  el(id).addEventListener('mouseleave',leaveHover);
+});
+/* The pupils look toward a point in window CSS pixels. The lamp process feeds
+   the pointer anywhere on any monitor through window.lampPointer 10 times a
+   second; a mousemove inside the window gives the same point. */
+function lookAt(cx,cy){
+  var eyes=document.querySelector('#hang .eyes');
+  if(!eyes||motionNow!=='lively')return;
+  var r=eyes.getBoundingClientRect(),dx=cx-(r.left+r.width/2),dy=cy-(r.top+r.height/2),d=Math.sqrt(dx*dx+dy*dy)||1,q=Math.min(3.5,d/40),hg=el('hang');
+  hg.style.setProperty('--px',(dx/d*q).toFixed(1)+'px');hg.style.setProperty('--py',(dy/d*q).toFixed(1)+'px');
+}
+window.lampPointer=function(x,y){
+  lookAt(x,y);
+  /* While the lamp is carried the pointer runs ahead of the window: Glim leans
+     against the direction of the move. */
+  if(carrying)el('hang').style.setProperty('--lean',Math.max(-14,Math.min(14,-(x-(padNow+tw/2))/8)).toFixed(1)+'deg');
+};
+function carryEnd(){
+  if(!carrying)return;
+  carrying=false;carryDrop=true;
+  setTimeout(function(){carryDrop=false;},3000);
+  draw();
+}
+document.addEventListener('mousemove',function(e){
+  lookAt(e.clientX,e.clientY);
+  if(carrying&&!(e.buttons&1))carryEnd();
+  /* A pointer down on the ticker that moves more than DRAG_PX is a drag: the
+     lamp process takes over and follows the pointer until the button is up. */
+  if(dragFrom&&!dragged&&(e.buttons&1)&&Math.abs(e.clientX-dragFrom.x)+Math.abs(e.clientY-dragFrom.y)>DRAG_PX){
+    dragged=true;dragFrom=null;
+    carrying=true;carryDrop=false;dragMon=cur&&cur.look?cur.look.monitor:'';
+    draw();
+    setTimeout(carryEnd,CARRY_MAX_MS);
+    lampDragStart().catch(function(){});
+  }
+});
+el('tick').addEventListener('mousedown',function(e){
+  if(e.button===0)dragFrom={x:e.clientX,y:e.clientY};
+});
+document.addEventListener('mouseup',function(){dragFrom=null;carryEnd();setTimeout(function(){dragged=false;},0);});
+/* Grab and swing: the pointer goes down on Glim and moves more than GRAB_PX.
+   He swings on his cord toward the pointer, at most SWING_MAX degrees. On
+   release he swings back and forth and rests within SWING_REST_MS. The loop
+   below runs only from the first move of a grab until he rests; the lamp
+   process decides the line and whether it was too hard (lampSwing). A press
+   without a move is a click, and in calm and off a press is only a click. */
+function grabStart(e){
+  swung=false;
+  if(e.button!==0||motionNow!=='lively'||held||carrying)return;
+  grab={x:e.clientX,y:e.clientY,id:e.pointerId,moved:false,up:false,px:e.clientX,py:e.clientY,lastX:e.clientX,dir:0,turns:[],maxDeg:0,asked:false,upAt:0,ang0:0};
+  try{el('hang').setPointerCapture(e.pointerId);}catch(x){}
+}
+function grabMove(e){
+  var g=grab;
+  if(!g||g.up||e.pointerId!==g.id)return;
+  if(!g.moved){
+    if(Math.abs(e.clientX-g.x)+Math.abs(e.clientY-g.y)<=GRAB_PX)return;
+    g.moved=true;swung=true;held=true;ang=0;
+    draw();swingLoop();
+  }
+  g.px=e.clientX;g.py=e.clientY;
+  var dx=e.clientX-g.lastX;
+  if(Math.abs(dx)>2){
+    var d=dx>0?1:-1;
+    if(g.dir&&d!==g.dir)g.turns.push(performance.now());
+    g.dir=d;g.lastX=e.clientX;
+  }
+}
+function grabEnd(e){
+  var g=grab;
+  if(!g||e.pointerId!==g.id)return;
+  if(!g.moved){grab=null;return;}
+  g.up=true;g.upAt=performance.now();g.ang0=ang;
+  if(!g.asked)askSwing(g);
+}
+function askSwing(g){
+  g.asked=true;
+  var now=performance.now();
+  g.turns=g.turns.filter(function(t){return now-t<=TURN_WINDOW_MS;});
+  lampSwing(g.maxDeg,g.turns.length).then(function(r){
+    if(!r)return;
+    if(r.hard)flail();
+    if(r.line){swingLine=r.line;swingUntil=Date.now()+SWING_LINE_MS;draw();setTimeout(draw,SWING_LINE_MS+50);}
+  }).catch(function(){});
+}
+function flail(){
+  flailing=true;draw();
+  setTimeout(function(){flailing=false;draw();},FLAIL_MS);
+}
+function swingLoop(){
+  var g=grab,now=performance.now();
+  if(!g||!g.moved){return;}
+  var hg=el('hang');
+  if(!g.up){
+    var a=Math.atan2(g.px-pivot.x,g.py-pivot.y)*180/Math.PI;
+    a=-Math.max(-SWING_MAX,Math.min(SWING_MAX,a));
+    ang+=(a-ang)*0.35;
+    g.maxDeg=Math.max(g.maxDeg,Math.abs(a));
+    g.turns=g.turns.filter(function(t){return now-t<=TURN_WINDOW_MS;});
+    /* ask the lamp process once, when the pull reaches the stop or the pointer
+       turns often enough; it applies the rule and answers hard or gentle */
+    if(!g.asked&&(g.maxDeg>=SWING_MAX||g.turns.length>=3))askSwing(g);
+    hg.style.setProperty('--ang',ang.toFixed(1)+'deg');
+    requestAnimationFrame(swingLoop);
+    return;
+  }
+  var t=now-g.upAt;
+  if(t>=SWING_REST_MS){held=false;grab=null;ang=0;draw();return;}
+  var k=t/1000;
+  ang=g.ang0*Math.exp(-1.6*k)*Math.cos(2*Math.PI*k/1.2);
+  hg.style.setProperty('--ang',ang.toFixed(1)+'deg');
+  requestAnimationFrame(swingLoop);
+}
+el('hang').addEventListener('pointerdown',grabStart);
+el('hang').addEventListener('pointermove',grabMove);
+el('hang').addEventListener('pointerup',grabEnd);
+el('hang').addEventListener('pointercancel',grabEnd);
+function closeMenu(){menuOpen=false;el('cmenu').style.display='none';draw();}
+/* Right-click on the ticker or on Glim: one item, "Close the lamp". It never
+   takes the keyboard focus and goes away when the pointer leaves it. */
+document.addEventListener('contextmenu',function(e){
+  e.preventDefault();
+  if(!e.target.closest||(!e.target.closest('#hang')&&!e.target.closest('#tick')))return;
+  var m=el('cmenu');m.style.display='';menuOpen=true;
+  m.style.left=Math.max(0,Math.min(e.clientX,window.innerWidth-m.offsetWidth))+'px';
+  m.style.top=Math.max(0,Math.min(e.clientY,window.innerHeight-m.offsetHeight))+'px';
+  draw();
+});
+el('cmenu').addEventListener('mouseleave',closeMenu);
+el('cmenu').addEventListener('click',function(){lampClose().catch(function(){});});
+document.addEventListener('click',function(e){
+  if(dragged||swung||!e.target.closest||!e.target.closest('#hang'))return;
+  lampNextLine().then(function(line){
+    if(cur&&cur.state)cur.state.line=line;
+    if(pokeT!==null)clearTimeout(pokeT);
+    pokeT=setTimeout(function(){pokeT=null;draw();},400);
+    draw();
+  }).catch(function(){});
+});
+document.addEventListener('dblclick',function(e){
+  if(!e.target.closest)return;
+  if(e.target.closest('#hang')||e.target.closest('.trow'))lampOpenDev().catch(function(){});
+});
+setInterval(poll,1000);
+poll();
+</script></body></html>

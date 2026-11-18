@@ -280,7 +280,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
    panel's right edge, so no scrollbar ever appears. renderHeatmap's own JS
    pass (below) still skips a label that would overlap the previous one. */
 .heatmonths{position:relative; height:10px; margin-top:3px; overflow:hidden}
-.heatmonth{position:absolute; top:0; font-size:8px; color:var(--dim); white-space:nowrap}
+/* line-height equals .heatmonths' own 10px: with the normal line height the label box is taller than
+   the clipping month line, and the whole-row pass (pctWhole) counts it as cut and hides it. */
+.heatmonth{position:absolute; top:0; font-size:8px; line-height:10px; color:var(--dim); white-space:nowrap}
 
 /* harness x minute heatmap, phase 3 */
 .heatrow{display:flex; align-items:center; gap:6px; margin-bottom:2px}
@@ -537,6 +539,16 @@ body.plain #mapOverlay{font-size:13.5px}
 #secSettings{max-height:calc(100vh - 80px); overflow-y:auto}
 #secSettings .setstation{display:flex; gap:14px; align-items:center}
 #secSettings .setbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
+/* One look for every gear input and select; color-scheme follows the theme so an open list is dark in the dark theme. */
+#secSettings .setin{background:var(--bg); color:inherit; border:1px solid var(--bd); font:inherit; color-scheme:dark}
+:root[data-theme="light"] #secSettings .setin{color-scheme:light}
+#secSettings select.setin{padding:2px 4px}
+#secSettings input[type=range].setin{padding:0; border:0; background:none; width:150px; vertical-align:middle}
+#secLamp .setslider{display:flex; flex-direction:column; gap:2px}
+#secLamp .setslider .slrow{display:flex; gap:8px; align-items:center}
+#secLamp .setslider .slwords{display:flex; justify-content:space-between; width:150px; color:var(--dim); font-size:10px}
+#secLamp .setmon{display:flex; gap:10px; align-items:center}
+#secLamp .setmon .setbtn{margin-left:auto}
 /* One table: name | Standard (tick + percent) | Plain (tick + percent). A section row is bold on a band, its panes and parts indented below it. */
 #secSizeGrid{border-collapse:collapse; width:100%}
 #secSizeGrid th{color:var(--dim); font-size:11px; font-weight:normal; text-align:left; padding:0 8px 4px}
@@ -737,6 +749,43 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     <div class="sechint">Needs Claude Code installed and signed in to the same account.</div>
     <div class="sechint">Reads cloud sessions you start in the Claude app on this computer. Sessions started from your phone, the browser or another computer are not read, and neither is subagent usage inside a cloud session.</div>
   </div>
+  <div id="secLamp">
+    <h4>Lamp</h4>
+    <label class="setrow"><input type="checkbox" id="secLampEnabled"> Show the lamp</label>
+    <div class="setrow">Position
+      <select id="secLampPosition" class="setin"><option value="top-center">top centre</option><option value="top-left">top left</option><option value="top-right">top right</option></select>
+    </div>
+    <div class="setrow">Language
+      <select id="secLampLanguage" class="setin"><option value="en">English</option><option value="nl">Nederlands</option></select>
+    </div>
+    <label class="setrow"><input type="checkbox" id="secLampLines"> One-liners</label>
+    <label class="setrow"><input type="checkbox" id="secLampForeman"> Include Foreman items</label>
+    <div class="setrow">Ticker rows
+      <select id="secLampRows" class="setin"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+    </div>
+    <div class="setrow setslider">
+      <div class="slrow">Glim size
+        <input type="range" id="secLampSize" class="setin" min="100" max="200" step="5" value="150" aria-label="Glim size, percent">
+        <span id="secLampSizeNum">150</span>%
+      </div>
+      <div class="slwords"><span>min</span><span>middle</span><span>max</span></div>
+    </div>
+    <div class="setrow">Theme
+      <select id="secLampTheme" class="setin"><option value="system">system</option><option value="light">light</option><option value="dark">dark</option></select>
+    </div>
+    <div class="setrow">Motion
+      <select id="secLampMotion" class="setin"><option value="lively">lively</option><option value="calm">calm</option><option value="off">off</option></select>
+    </div>
+    <div class="setrow">When nothing waits
+      <select id="secLampQuiet" class="setin"><option value="hide">Glim hides and peeks</option><option value="stay">Glim always hangs</option></select>
+    </div>
+    <div class="setrow">Backdrop
+      <select id="secLampBackdrop" class="setin"><option value="clear">clear</option><option value="card">card</option></select>
+    </div>
+    <div class="setrow setmon">Screen in use <span id="secLampMonitor">primary screen</span>
+      <button id="secLampMonitorBack" class="setbtn" type="button">Back to the primary screen</button>
+    </div>
+  </div>
   <div class="setrow setstation">Station starts as
     <label><input type="radio" name="secStationStart" value="space"> space</label>
     <label><input type="radio" name="secStationStart" value="site"> site</label>
@@ -746,21 +795,21 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     <div class="sechint" id="hist_keep"></div>
     <div class="histgrid">
       <label for="hist_days">Delete older than (days)</label>
-      <input id="hist_days" type="number" step="1" min="1" value="90" style="width:70px">
+      <input id="hist_days" class="setin" type="number" step="1" min="1" value="90" style="width:70px">
       <button id="hist_delete_older" class="histbtn del" type="button">Delete older than N days</button>
       <label for="hist_session">Session</label>
-      <input id="hist_session" type="text" placeholder="session id" style="width:160px">
+      <input id="hist_session" class="setin" type="text" placeholder="session id" style="width:160px">
       <button id="hist_delete_session" class="histbtn del" type="button">Delete one session</button>
       <span></span><span></span>
       <button id="hist_delete_all" class="histbtn del histend" type="button">Delete all history</button>
     </div>
     <div class="sechint" id="hist_delete_result"></div>
     <h4>Export history</h4>
-    <div class="histrow"><label>Folder (absolute path) <input id="hist_dir" type="text" style="width:260px"></label></div>
+    <div class="histrow"><label>Folder (absolute path) <input id="hist_dir" class="setin" type="text" style="width:260px"></label></div>
     <div class="histrow">
-      <label>Since <input id="hist_since" type="text" placeholder="YYYY-MM-DD" style="width:96px"></label>
-      <label>Until <input id="hist_until" type="text" placeholder="YYYY-MM-DD" style="width:96px"></label>
-      <label>Label <input id="hist_label" type="text" value="dev-1" style="width:70px"></label>
+      <label>Since <input id="hist_since" class="setin" type="text" placeholder="YYYY-MM-DD" style="width:96px"></label>
+      <label>Until <input id="hist_until" class="setin" type="text" placeholder="YYYY-MM-DD" style="width:96px"></label>
+      <label>Label <input id="hist_label" class="setin" type="text" value="dev-1" style="width:70px"></label>
     </div>
     <div class="histrow" id="hist_owners"></div>
     <div class="histgrid"><span></span><span></span><button id="hist_export" class="histbtn histend" type="button">Export</button></div>
@@ -3861,7 +3910,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     coding:'writing code', running:'running a command', thinking:'thinking', delegating:'handing work to a helper',
     waiting:'waiting for you', dormant:'idle', compacting:'tidying its memory'
   };
-  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
+  var secState = { plain:false, scrollbar:false, parts:{}, standard:{}, plainSet:{}, groups:[], stationTheme:'space', toast:true, lamp:{ enabled:false, position:'top-center', language:'en', lines:true, foreman_items:true, ticker_rows:1, size:150, monitor:'', theme:'system', motion:'lively', quiet:'hide', backdrop:'clear' }, sectionsPct:pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:pctDefaults(PCT_DEFAULT_PANES) };
   var secReading = { status:'missing', age_seconds:0 };
   // secLine is Go's sentence about the snapshot. The window opens before the
   // first payload, so it starts as the starting line; null means the last
@@ -4322,8 +4371,42 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     if(tg) tg.checked = !!secState.toast;
     var cp = document.getElementById('secCloudPull');
     if(cp) cp.checked = !!secState.cloudPull;
+    secRenderLamp();
     pctRenderSizes();
   }
+  // The Lamp group shows the saved lamp keys the payload carries.
+  var LAMP_GEAR = { secLampEnabled:['lamp_enabled','enabled'], secLampPosition:['lamp_position','position'],
+    secLampLanguage:['lamp_language','language'], secLampLines:['lamp_lines','lines'], secLampForeman:['lamp_foreman_items','foreman_items'],
+    secLampRows:['lamp_ticker_rows','ticker_rows'], secLampSize:['lamp_size','size'], secLampTheme:['lamp_theme','theme'],
+    secLampMotion:['lamp_motion','motion'], secLampQuiet:['lamp_quiet','quiet'], secLampBackdrop:['lamp_backdrop','backdrop'] };
+  function secRenderLamp(){
+    Object.keys(LAMP_GEAR).forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      var v = secState.lamp[LAMP_GEAR[id][1]];
+      // A slider that is being dragged keeps its place; a poll must not move it.
+      if(el.type === 'checkbox') el.checked = !!v; else if(id !== 'secLampSize' || document.activeElement !== el) el.value = v;
+    });
+    var sn = document.getElementById('secLampSizeNum');
+    if(sn && document.activeElement !== document.getElementById('secLampSize')) sn.textContent = secState.lamp.size;
+    var mon = document.getElementById('secLampMonitor'), back = document.getElementById('secLampMonitorBack');
+    if(mon) mon.textContent = secState.lamp.monitor ? secState.lamp.monitor : 'primary screen';
+    if(back) back.disabled = !secState.lamp.monitor;
+  }
+  // The number beside the slider follows it while it moves; the save is on release.
+  document.addEventListener('input', function(e){
+    if(e.target && e.target.id === 'secLampSize'){
+      var sn = document.getElementById('secLampSizeNum');
+      if(sn) sn.textContent = e.target.value;
+    }
+  });
+  // One button: the lamp goes back to the primary screen (an empty lamp_monitor).
+  // It listens on itself: the gear pane stops every click from bubbling up.
+  document.getElementById('secLampMonitorBack').addEventListener('click', function(){
+    if(typeof window.bdevSetLamp !== 'function') return;
+    Promise.resolve(window.bdevSetLamp('lamp_monitor', '')).then(function(){ secLastJSON = 'x'; return secPoll(); })
+      .catch(function(e2){ console.log('bdevSetLamp:', e2); });
+  });
   // A poll or a tick must never move a list the user scrolled. The scroll
   // position of each list in #secPanels, by its part (one list per part), so a
   // render's new list finds where the old one was.
@@ -4433,7 +4516,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
   function secApplyPayload(p){
     secState = { plain:!!p.plain_mode, scrollbar:p.overall_scrollbar !== false, parts:p.parts || {}, standard:p.parts_standard || {},
       plainSet:p.parts_plain || {}, groups:p.groups || [], stationTheme:p.station_theme === 'site' ? 'site' : 'space',
-      toast:p.toast_enabled !== false, cloudPull:!!p.cloud_pull, sectionsPct:p.sections_pct || pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:p.panes_pct || pctDefaults(PCT_DEFAULT_PANES) };
+      toast:p.toast_enabled !== false, cloudPull:!!p.cloud_pull, lamp:p.lamp || { enabled:false, position:'top-center', language:'en', lines:true, foreman_items:true, ticker_rows:1, size:150, monitor:'' }, sectionsPct:p.sections_pct || pctDefaults(PCT_DEFAULT_SECTIONS), panesPct:p.panes_pct || pctDefaults(PCT_DEFAULT_PANES) };
     if(p.panes && p.panes.length) PCT_PANES = p.panes;
     secReading = p.reading || { status:'missing', age_seconds:0 };
     secLine = p.snapshot_line || null;
@@ -4527,6 +4610,18 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
           });
       }
     }
+    else if(LAMP_GEAR[t.id]){
+      // Saved to burnmon-dev.json; BurnMon Dev starts or stops the lamp to match.
+      if(typeof window.bdevSetLamp === 'function'){
+        Promise.resolve(window.bdevSetLamp(LAMP_GEAR[t.id][0], t.type === 'checkbox' ? t.checked : (t.id === 'secLampRows' || t.id === 'secLampSize' ? Number(t.value) : t.value))).then(function(){ secLastJSON = 'x'; return secPoll(); })
+          .catch(function(e){
+            console.log('bdevSetLamp:', e);
+            secRenderLamp();
+            secLastJSON = 'x';
+            return secPoll();
+          });
+      }
+    }
     else if(t.name === 'secStationStart' && t.checked){
       // Saved for the next start only; the Station that is open keeps its theme.
       if(typeof window.bdevSetStationTheme === 'function'){
@@ -4560,7 +4655,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     var MODES = ['standard', 'plain'];
     var modeName = function(m){ return m === 'plain' ? 'Plain' : 'Standard'; };
     var box = function(kind, id, mode, label){
-      return '<span class="pctbox" data-pct-wrap="' + kind + ':' + id + ':' + mode + '"><input type="number" min="1" max="100" step="1" placeholder="auto" data-pct-kind="' + kind + '" data-pct-id="' + id +
+      return '<span class="pctbox" data-pct-wrap="' + kind + ':' + id + ':' + mode + '"><input type="number" class="setin" min="1" max="100" step="1" placeholder="auto" data-pct-kind="' + kind + '" data-pct-id="' + id +
         '" data-mode="' + mode + '" aria-label="' + esc(label) + ', ' + modeName(mode) + ', percent"></span>';
     };
     var tick = function(attr, id, mode, label){
