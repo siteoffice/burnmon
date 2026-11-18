@@ -61,4 +61,4 @@ On the tree before save 1: `go vet ./...` 0; `go test ./... -count=1` 50 package
 
 ## Turn log
 
-T1: done; commit fcce224 (Go side), the page and logs commit follows in this turn; measured: vet 0, test 50 packages ok, build 0, linux and darwin 0, uicheck-lamp 0 with no flake; open: nothing
+T1: done; commits fcce224 (Go side) and 61c58bb (page, README, logs); measured: vet 0, test 50 packages ok, build 0, linux and darwin 0, uicheck-lamp 0 with no flake; open: nothing
