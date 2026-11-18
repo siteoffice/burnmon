@@ -479,8 +479,8 @@ All keys are in `burnmon-dev.json`; the gear dialog group Lamp sets them. A bad 
 Glim's sentences are in `internal\lamp\lines.go`, in English and Dutch. Send a new one with the issue
 form Glim line (`.github\ISSUE_TEMPLATE\glim-line.yml`): pick the mood, write the English line (at most
 60 characters, no exclamation mark, no em dash), the Dutch line if you can, and the name for the credit.
-A line you send in is MIT and is credited in `internal\lamp\CREDITS.md`. The name Glim and its drawing
-are not part of that: see `LICENSE-ASSETS.md`.
+A line you send in is MIT and is credited in `internal\lamp\CREDITS.md`. The drawing of Glim
+is not part of that: see `LICENSE-ASSETS.md`.
 
 ### Next steps and backlog
 
