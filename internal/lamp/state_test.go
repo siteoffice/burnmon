@@ -110,7 +110,7 @@ func TestWallEdges(t *testing.T) {
 		bricks int
 		over   bool
 		bored  bool
-	}{{9, 0, false, false}, {10, 10, false, true}, {30, 30, false, true}, {31, 30, true, true}, {120, 30, true, true}} {
+	}{{9, 0, false, false}, {10, 10, false, true}, {29, 29, false, true}, {30, 30, true, true}, {31, 30, true, true}, {120, 30, true, true}} {
 		got := compute(snap([]waits.Item{blocked("b", c.min*60)}, nil, 0), def, nil)
 		if got.WallBricks != c.bricks || got.WallOver != c.over {
 			t.Errorf("%d min: bricks %d over %v, want %d %v", c.min, got.WallBricks, got.WallOver, c.bricks, c.over)
@@ -277,8 +277,8 @@ func TestRowOrderAndCap(t *testing.T) {
 }
 
 func TestRowTitleAndWord(t *testing.T) {
-	long := strings.Repeat("x", 41)
-	exact := strings.Repeat("y", 40)
+	long := strings.Repeat("x", 29)
+	exact := strings.Repeat("y", 28)
 	items := []waits.Item{
 		{Kind: waits.KindQuestion, Group: waits.GroupBlocked, ID: "q1", Title: long, AgeSeconds: 3},
 		{Kind: waits.KindQuestion, Group: waits.GroupBlocked, ID: "q2", Title: exact, AgeSeconds: 2},
@@ -289,11 +289,11 @@ func TestRowTitleAndWord(t *testing.T) {
 	for _, r := range got.Rows {
 		byID[r.ID] = r
 	}
-	if r := byID["q1"]; len([]rune(r.Title)) != 40 || !strings.HasSuffix(r.Title, "...") || r.TitleFull != long {
-		t.Errorf("41 runes: title %q full %q", r.Title, r.TitleFull)
+	if r := byID["q1"]; len([]rune(r.Title)) != 28 || !strings.HasSuffix(r.Title, "...") || r.TitleFull != long {
+		t.Errorf("29 runes: title %q full %q", r.Title, r.TitleFull)
 	}
 	if r := byID["q2"]; r.Title != exact || r.TitleFull != exact {
-		t.Errorf("40 runes: title %q", r.Title)
+		t.Errorf("28 runes: title %q", r.Title)
 	}
 	if r := byID["q3"]; r.Title != "a b c" {
 		t.Errorf("line breaks: title %q", r.Title)
@@ -407,5 +407,60 @@ func TestGoldenFullState(t *testing.T) {
 	}
 	if strings.ReplaceAll(string(want), "\r\n", "\n") != string(b) {
 		t.Errorf("state differs from golden.\ngot:\n%s", b)
+	}
+}
+
+func TestTickerRowsFormula(t *testing.T) {
+	working := []snapshot.Session{session("a", "coding", "")}
+	mk := func(n int) []waits.Item {
+		var it []waits.Item
+		for i := 0; i < n; i++ {
+			it = append(it, blocked("b"+string(rune('a'+i)), int64(10+i)))
+		}
+		return it
+	}
+	for _, c := range []struct{ rows, items, want int }{
+		{1, 0, 1}, {1, 1, 1}, {1, 5, 1},
+		{4, 0, 1}, {4, 1, 2}, {4, 5, 4},
+	} {
+		s := DefaultSettings()
+		s.TickerRows = c.rows
+		got := compute(snap(mk(c.items), working, 0), s, nil)
+		if got.TickerRows != c.want || got.Counted != c.items {
+			t.Errorf("rows %d items %d: ticker rows %d counted %d, want %d and %d", c.rows, c.items, got.TickerRows, got.Counted, c.want, c.items)
+		}
+		if len(got.CountedIDs) != c.items {
+			t.Errorf("rows %d items %d: %d counted ids", c.rows, c.items, len(got.CountedIDs))
+		}
+	}
+	// A quiet lamp and an off lamp show one row, whatever the setting.
+	s := DefaultSettings()
+	s.TickerRows = 4
+	if got := compute(snap(nil, working, 0), s, nil); got.TickerRows != 1 || got.Counted != 0 {
+		t.Errorf("quiet: ticker rows %d counted %d", got.TickerRows, got.Counted)
+	}
+	if got := compute(nil, s, nil); got.TickerRows != 1 {
+		t.Errorf("off: ticker rows %d", got.TickerRows)
+	}
+	// A your_turn item counts too; a done item does not.
+	if got := compute(snap([]waits.Item{turn("t", 5), done("d", 5)}, working, 0), s, nil); got.Counted != 1 || got.TickerRows != 2 {
+		t.Errorf("mixed: counted %d ticker rows %d", got.Counted, got.TickerRows)
+	}
+}
+
+func TestCountedIDsAreNotSentToThePage(t *testing.T) {
+	st := compute(snap([]waits.Item{blocked("MARKER-ID-1", 5)}, nil, 0), DefaultSettings(), nil)
+	if len(st.CountedIDs) != 1 || st.CountedIDs[0] != "MARKER-ID-1" {
+		t.Fatalf("counted ids %v", st.CountedIDs)
+	}
+	b, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "counted_ids") || strings.Contains(string(b), "CountedIDs") {
+		t.Errorf("counted ids reached the JSON: %s", b)
+	}
+	if !strings.Contains(string(b), `"ticker_rows"`) || !strings.Contains(string(b), `"counted"`) {
+		t.Errorf("ticker_rows or counted missing from the JSON: %s", b)
 	}
 }

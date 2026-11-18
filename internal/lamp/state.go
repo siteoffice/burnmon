@@ -27,7 +27,7 @@ const (
 	boredMinutes  = 10
 	maxBricks     = 30
 	maxRows       = 6
-	titleRunes    = 40
+	titleRunes    = 28
 	doneFreshSecs = 600
 	minSamples    = 120
 	sweatFactor   = 3.0
@@ -49,7 +49,7 @@ type Row struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
 	Word      string `json:"word"`       // the kind word, from waits.WordFor
-	Title     string `json:"title"`      // one line, at most 40 runes
+	Title     string `json:"title"`      // one line, at most 28 runes
 	TitleFull string `json:"title_full"` // one line, uncut, for the hover text
 	Wait      string `json:"wait"`       // timefmt.Short, for example "12 min"
 	WaitExact string `json:"wait_exact"` // timefmt.Exact, for the hover text
@@ -66,10 +66,13 @@ type State struct {
 	Agents         int          `json:"agents"`
 	LongestWaitMin int          `json:"longest_wait_min"`
 	WallBricks     int          `json:"wall_bricks"`
-	WallOver       bool         `json:"wall_over"` // more than 30 bricks: the wall shows "30+"
+	WallOver       bool         `json:"wall_over"` // 30 bricks or more: the plank is full and shows "30+"
 	BurnRate       float64      `json:"burn_rate"` // tokens a minute
 	Cost5          Cost         `json:"cost_5min"`
 	Demo           bool         `json:"demo"`
+	TickerRows     int          `json:"ticker_rows"` // 1 + min(counted, lamp_ticker_rows - 1)
+	Counted        int          `json:"counted"`     // blocked and your_turn items
+	CountedIDs     []string     `json:"-"`           // for the stamp act, never sent to the page
 }
 
 // Input is everything Compute joins.
@@ -90,7 +93,7 @@ func Load(path string, now time.Time) *snapshot.Snapshot {
 // Compute turns a snapshot into a lamp state. It takes group and counts from
 // the snapshot as they are and never works out a group itself.
 func Compute(in Input) State {
-	st := State{Rows: []Row{}, Demo: in.Demo, Cost5: Cost{Label: costLabel}}
+	st := State{Rows: []Row{}, Demo: in.Demo, Cost5: Cost{Label: costLabel}, TickerRows: 1}
 	snap := in.Snap
 	if snap == nil || snap.IsStale(in.Now) {
 		st.Mood = MoodOff
@@ -135,6 +138,11 @@ func Compute(in Input) State {
 		return a.ID < b.ID
 	})
 	st.Rows = rows(counted)
+	st.Counted = len(counted)
+	for _, it := range counted {
+		st.CountedIDs = append(st.CountedIDs, it.ID)
+	}
+	st.TickerRows = 1 + min(st.Counted, max(in.Settings.TickerRows, 1)-1)
 	st.LongestWaitMin = int(longest / 60)
 	for _, s := range snap.Sessions {
 		if s.ParentID == "" && s.State != "waiting" && s.State != "dormant" {
@@ -146,7 +154,7 @@ func Compute(in Input) State {
 	case st.LongestWaitMin >= boredMinutes:
 		st.Mood = MoodBored
 		st.WallBricks = min(st.LongestWaitMin, maxBricks)
-		st.WallOver = st.LongestWaitMin > maxBricks
+		st.WallOver = st.LongestWaitMin >= maxBricks
 	case hasGroup(counted, waits.GroupBlocked):
 		st.Mood = MoodBlocked
 	case hasGroup(counted, waits.GroupYourTurn):
@@ -222,7 +230,7 @@ func rows(counted []waits.Item) []Row {
 	return out
 }
 
-// cut keeps a title of up to 40 runes, and shortens a longer one to 40 runes
+// cut keeps a title of up to 28 runes, and shortens a longer one to 28 runes
 // ending in "...".
 func cut(s string) string {
 	r := []rune(s)

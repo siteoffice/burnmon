@@ -5,7 +5,7 @@ package lamp
 
 import "encoding/json"
 
-// Settings are the six lamp keys of burnmon-dev.json.
+// Settings are the twelve lamp keys of burnmon-dev.json.
 type Settings struct {
 	Enabled      bool   // lamp_enabled
 	Position     string // lamp_position: top-center, top-left or top-right
@@ -13,11 +13,38 @@ type Settings struct {
 	Lines        bool   // lamp_lines
 	ForemanItems bool   // lamp_foreman_items
 	BurnFloorTPM int    // lamp_burn_floor_tpm, a first guess tuned at the first look
+	TickerRows   int    // lamp_ticker_rows: 1 to 4
+	Size         string // lamp_size: small, medium or large
+	Theme        string // lamp_theme: system, light or dark
+	Motion       string // lamp_motion: lively, calm or off
+	Quiet        string // lamp_quiet: hide (sliver, Glim up) or stay (Glim hangs)
+	Backdrop     string // lamp_backdrop: clear or card
+}
+
+// SizeScale is Glim's size factor for a lamp_size value; a bad value is medium.
+func SizeScale(size string) float64 {
+	switch size {
+	case "small":
+		return 1.2
+	case "large":
+		return 1.9
+	}
+	return 1.5
+}
+
+func oneOf(v string, choices ...string) bool {
+	for _, c := range choices {
+		if v == c {
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultSettings is what a missing file or a bad value gives.
 func DefaultSettings() Settings {
-	return Settings{Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 20000}
+	return Settings{Position: "top-center", Language: "en", Lines: true, ForemanItems: true, BurnFloorTPM: 20000,
+		TickerRows: 1, Size: "medium", Theme: "system", Motion: "lively", Quiet: "hide", Backdrop: "clear"}
 }
 
 // ParseSettings reads the lamp keys from the bytes of burnmon-dev.json. A
@@ -54,6 +81,24 @@ func ParseSettings(b []byte) Settings {
 	}
 	if json.Unmarshal(raw["lamp_burn_floor_tpm"], &fv) == nil && fv >= 0 && fv == float64(int(fv)) {
 		s.BurnFloorTPM = int(fv)
+	}
+	if json.Unmarshal(raw["lamp_ticker_rows"], &fv) == nil && fv >= 1 && fv <= 4 && fv == float64(int(fv)) {
+		s.TickerRows = int(fv)
+	}
+	if json.Unmarshal(raw["lamp_size"], &sv) == nil && oneOf(sv, "small", "medium", "large") {
+		s.Size = sv
+	}
+	if json.Unmarshal(raw["lamp_theme"], &sv) == nil && oneOf(sv, "system", "light", "dark") {
+		s.Theme = sv
+	}
+	if json.Unmarshal(raw["lamp_motion"], &sv) == nil && oneOf(sv, "lively", "calm", "off") {
+		s.Motion = sv
+	}
+	if json.Unmarshal(raw["lamp_quiet"], &sv) == nil && oneOf(sv, "hide", "stay") {
+		s.Quiet = sv
+	}
+	if json.Unmarshal(raw["lamp_backdrop"], &sv) == nil && oneOf(sv, "clear", "card") {
+		s.Backdrop = sv
 	}
 	return s
 }

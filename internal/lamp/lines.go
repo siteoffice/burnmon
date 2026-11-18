@@ -51,6 +51,52 @@ var lineTable = []LineDef{
 // gateLine is used only when the top row is a Foreman gate.
 const gateLine = "A gate waits. Gates do not open themselves."
 
+// wallLine is used only up to 30 minutes: past that the plank is full.
+const wallLine = "Still your turn. The wall has {minutes} bricks."
+
+// singularTable holds the two lines used only when the count is exactly 1.
+// A line with {count} in lineTable is used only from 2. These join the pick
+// at count 1; the pick formula and the per-mood counts of lineTable stay.
+var singularTable = []LineDef{
+	{MoodWorking, "1 agent at work. Nothing for you.", "1 agent aan het werk. Niets voor jou."},
+	{MoodBlocked, "One thing is blocked. Guess whose turn.", "Een ding zit vast. Raad eens wie er aan zet is."},
+}
+
+// ActLine is the sentence of an act, or "" when the act has none. The parts:
+// slip has start, air and back; stamp has a and b (the page alternates them
+// by act_seq); welcome takes the count of waiting items; coffee takes the
+// local hour, 10 or 15.
+func ActLine(act, part, lang string, count, hour int) string {
+	en, nl := "", ""
+	switch {
+	case act == "slip" && part == "start":
+		en, nl = "I am not bored. I am testing the rail.", "Ik verveel me niet. Ik test de rail."
+	case act == "slip" && part == "air":
+		en, nl = "Whoa.", "Ho."
+	case act == "slip" && part == "back":
+		en, nl = "You saw nothing.", "Je hebt niets gezien."
+	case act == "stamp" && part == "a":
+		en, nl = "Stamped. Back to work.", "Gestempeld. Weer aan het werk."
+	case act == "stamp" && part == "b":
+		en, nl = "Answered. That was all it took.", "Beantwoord. Meer was het niet."
+	case act == "wake":
+		en, nl = "Somebody started something.", "Iemand is iets begonnen."
+	case act == "welcome" && count == 1:
+		en, nl = "Welcome back. One thing waited.", "Welkom terug. Er wachtte een ding."
+	case act == "welcome" && count >= 2:
+		n := strconv.Itoa(count)
+		en, nl = "Welcome back. "+n+" things waited.", "Welkom terug. Er wachtten "+n+" dingen."
+	case act == "coffee" && hour == 10:
+		en, nl = "Ten o'clock. Coffee.", "Tien uur. Koffie."
+	case act == "coffee" && hour == 15:
+		en, nl = "Three o'clock. Coffee. The agents get none.", "Drie uur. Koffie. De agents krijgen niets."
+	}
+	if lang == "nl" {
+		return nl
+	}
+	return en
+}
+
 // Lines returns a copy of the whole table.
 func Lines() []LineDef { return append([]LineDef(nil), lineTable...) }
 
@@ -82,12 +128,11 @@ func Line(st State, s Settings, now time.Time) string {
 	}
 	switch st.Mood {
 	case MoodWorking:
-		vals["{count}"] = strconv.Itoa(st.Agents)
-		if st.Agents < 1 {
-			delete(vals, "{count}")
+		if st.Agents >= 2 { // the singular rule: {count} only from 2
+			vals["{count}"] = strconv.Itoa(st.Agents)
 		}
 	case MoodBlocked:
-		if st.Counts.Blocked >= 1 {
+		if st.Counts.Blocked >= 2 {
 			vals["{count}"] = strconv.Itoa(st.Counts.Blocked)
 		}
 	}
@@ -111,6 +156,9 @@ func Line(st State, s Settings, now time.Time) string {
 		if st.Mood == MoodBlocked && (l.EN == gateLine) != (topKind == waits.KindGate) {
 			continue
 		}
+		if l.EN == wallLine && st.LongestWaitMin > maxBricks {
+			continue
+		}
 		ok := true
 		for _, p := range placeholders {
 			if strings.Contains(text, p) {
@@ -124,6 +172,17 @@ func Line(st State, s Settings, now time.Time) string {
 		}
 		if ok {
 			fit = append(fit, text)
+		}
+	}
+	if (st.Mood == MoodWorking && st.Agents == 1) || (st.Mood == MoodBlocked && st.Counts.Blocked == 1 && topKind != waits.KindGate) {
+		for _, l := range singularTable {
+			if l.Mood == st.Mood {
+				if s.Language == "nl" {
+					fit = append(fit, l.NL)
+				} else {
+					fit = append(fit, l.EN)
+				}
+			}
 		}
 	}
 	if len(fit) == 0 {
