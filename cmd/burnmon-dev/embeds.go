@@ -10,6 +10,12 @@ var pageHTML string
 //go:embed lamp.html
 var lampHTML string
 
+// The week card window of `lamp --card <folder> --card-window`: the story card
+// and one Save PNG button.
+//
+//go:embed lamp_card.html
+var lampCardHTML string
+
 // The Station (02_roadmap\2026-10-01_station_secret_screen.md): the two
 // atlases (space and construction site), the startup theme and the screen,
 // spliced into page.html at stationMarker by assemblePage before SetHtml.

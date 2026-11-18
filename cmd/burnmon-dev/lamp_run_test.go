@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"burnmon/internal/lamp"
 	"burnmon/internal/snapshot"
 	"burnmon/internal/waits"
+	"burnmon/internal/winbind"
 )
 
 func TestParseLampArgs(t *testing.T) {
@@ -29,7 +31,16 @@ func TestParseLampArgs(t *testing.T) {
 	if err != nil || o.poses != "somewhere" {
 		t.Fatalf("--poses: %+v %v", o, err)
 	}
-	for _, bad := range [][]string{{"--nope"}, {"--poses"}, {"--demo", "--poses", "x"}, {"extra"}} {
+	o, err = parseLampArgs([]string{"--card", "out", "--demo"})
+	if err != nil || o.card != "out" || !o.demo || o.cardWindow {
+		t.Fatalf("--card --demo: %+v %v", o, err)
+	}
+	o, err = parseLampArgs([]string{"--card", "out", "--card-window"})
+	if err != nil || !o.cardWindow {
+		t.Fatalf("--card --card-window: %+v %v", o, err)
+	}
+	for _, bad := range [][]string{{"--nope"}, {"--poses"}, {"--demo", "--poses", "x"}, {"extra"},
+		{"--card"}, {"--card-window"}, {"--card", "x", "--poses", "y"}} {
 		if _, err := parseLampArgs(bad); err == nil {
 			t.Errorf("parseLampArgs(%v) accepted", bad)
 		}
@@ -183,5 +194,117 @@ func TestLampUnsupportedSaysTheSentenceAndExits2(t *testing.T) {
 	}
 	if got := strings.TrimSpace(buf.String()); got != "The lamp runs on Windows only in this version." {
 		t.Fatalf("message %q", got)
+	}
+}
+
+func listFiles(dir string) []string {
+	var out []string
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			out = append(out, p)
+		}
+		return nil
+	})
+	return out
+}
+
+func TestCardDemoWritesTwoCardsAndNoLedger(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOME", home)
+	t.Setenv("LOCALAPPDATA", home)
+	t.Setenv(settingsDirEnv, "")
+	out := t.TempDir()
+	now := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
+	if code := runCardAt(lampOpts{card: out, demo: true}, now); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	files := listFiles(out)
+	if len(files) != 2 {
+		t.Fatalf("%v", files)
+	}
+	for _, f := range files {
+		b, _ := os.ReadFile(f)
+		if !strings.Contains(string(b), ">demo<") {
+			t.Errorf("%s has no demo mark", f)
+		}
+	}
+	if left := listFiles(home); len(left) != 0 {
+		t.Fatalf("the demo card wrote files outside its folder: %v", left)
+	}
+}
+
+func TestCardLiveReadsTheLedgerAndRefusesAMissingFolder(t *testing.T) {
+	setDir := t.TempDir()
+	t.Setenv(settingsDirEnv, setDir)
+	ledger := `{"version":1,"days":{"2026-03-04":{"agent_wait_seconds":3600,"longest_wait_seconds":300,"items":[1,2],"lamp_on_seconds":7200}}}`
+	if err := os.WriteFile(filepath.Join(setDir, lamp.LedgerFile), []byte(ledger), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(setDir, "burnmon-dev.json"), []byte(`{"lamp_language":"nl"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	now := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
+	if code := runCardAt(lampOpts{card: out}, now); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "glim-week-2026-W10-wide.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Mijn agents wachtten op mij.", ">1 h<", ">5 min<", ">2 h<"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("the card lacks %q", want)
+		}
+	}
+	if strings.Contains(string(b), "demo") {
+		t.Error("a live card says demo")
+	}
+	if code := runCardAt(lampOpts{card: filepath.Join(out, "missing")}, now); code == 0 {
+		t.Fatal("a missing folder was accepted")
+	}
+}
+
+func TestEngineLiveWritesTheLedgerAtExitAndDemoHasNone(t *testing.T) {
+	t.Setenv(settingsDirEnv, "")
+	now := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	e, setDir := liveFixture(t, now, 120, "")
+	path := filepath.Join(setDir, lamp.LedgerFile)
+	e.ledger = lamp.LoadLedger(path)
+	e.payload(now)
+	e.payload(now.Add(2 * time.Second))
+	e.ledger.Close(now.Add(2 * time.Second))
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("no ledger: %v", err)
+	}
+	if strings.Contains(string(b), "session:claude:fx1") || strings.Contains(string(b), "Pick one") {
+		t.Fatalf("the ledger holds an id or a title: %s", b)
+	}
+	if d := lamp.LoadLedger(path).Days()["2026-03-02"]; d.LampOnSeconds != 2 || len(d.Items) != 1 {
+		t.Fatalf("ledger day %+v", d)
+	}
+	if newLampEngine(true, "", "").ledger != nil {
+		t.Fatal("the demo engine has a ledger")
+	}
+}
+
+// The card page calls only the names lampCardBindingNames lists, holds no
+// outside resource and no em dash.
+func TestCardPageBindingsAndText(t *testing.T) {
+	called := winbind.PageCalls(lampCardHTML, "lamp")
+	want := append([]string(nil), lampCardBindingNames...)
+	sort.Strings(want)
+	if strings.Join(called, ",") != strings.Join(want, ",") {
+		t.Fatalf("page calls %v, lampCardBindingNames is %v", called, want)
+	}
+	for _, bad := range []string{string(rune(0x2014)), "http://", "https://", "src=\"//", "<script src", "focus()"} {
+		if strings.Contains(lampCardHTML, bad) {
+			t.Errorf("the card page holds %q", bad)
+		}
+	}
+	if !strings.Contains(lampCardHTML, "Save PNG") {
+		t.Error("the card page has no Save PNG button")
 	}
 }

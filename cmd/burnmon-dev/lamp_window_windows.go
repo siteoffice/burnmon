@@ -3,10 +3,13 @@
 package main
 
 import (
+	"encoding/base64"
+	"errors"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -14,6 +17,7 @@ import (
 	webview2 "github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 
+	"burnmon/internal/fsutil"
 	"burnmon/internal/instance"
 	"burnmon/internal/lamp"
 	"burnmon/internal/snapshot"
@@ -94,6 +98,12 @@ func runLampWindow(o lampOpts) int {
 	}
 
 	e := newLampEngine(o.demo, setDir, snapPath)
+	if !o.demo {
+		// The ledger of the waits (lane scope X2): written at most once a
+		// minute and when the window closes. The demo has none.
+		e.ledger = lamp.LoadLedger(filepath.Join(setDir, lamp.LedgerFile))
+		defer func() { e.ledger.Close(time.Now()) }()
+	}
 	pl := &lampPlacer{hwnd: hwnd, setDir: setDir, demo: o.demo, w: 320, h: 40}
 	pl.place()
 
@@ -225,4 +235,51 @@ func lampOpenDev() {
 		return
 	}
 	_ = cmd.Process.Release()
+}
+
+// runCardWindow shows the story card with one button, Save PNG, that writes
+// both cards as PNG into dir next to the SVG files (the page draws them on a
+// canvas). It is a plain window with its own browser profile under the temp
+// folder, so it leaves nothing in a BurnMon folder. Built, not seen.
+func runCardWindow(dir string, wk lamp.Week, lang string) int {
+	storyName, wideName := lamp.CardFileNames(wk)
+	cards := lampCards{
+		Story: lamp.CardStory(wk, lang), Wide: lamp.CardWide(wk, lang),
+		StoryPNG: strings.TrimSuffix(storyName, ".svg") + ".png",
+		WidePNG:  strings.TrimSuffix(wideName, ".svg") + ".png",
+	}
+	profile := filepath.Join(os.TempDir(), "burnmon-lamp-card")
+	_ = os.MkdirAll(profile, 0o755)
+	_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", profile)
+	w := webview2.NewWithOptions(webview2.WebViewOptions{
+		DataPath:      profile,
+		WindowOptions: webview2.WindowOptions{Title: "Glim week card", Width: 540, Height: 960, IconId: 1},
+	})
+	if w == nil {
+		log.Println("lamp: could not create the WebView2 window; the card window needs the WebView2 runtime")
+		return 1
+	}
+	defer w.Destroy()
+	if err := w.Bind("lampCardSvgs", func() lampCards { return cards }); err != nil {
+		log.Println("lamp: could not bind lampCardSvgs:", err)
+	}
+	if err := w.Bind("lampCardSavePNG", func(name, b64 string) error { return saveCardPNG(dir, cards, name, b64) }); err != nil {
+		log.Println("lamp: could not bind lampCardSavePNG:", err)
+	}
+	w.SetHtml(lampCardHTML)
+	w.Run()
+	return 0
+}
+
+// saveCardPNG writes one PNG the page made, but only under one of the two
+// names the cards have, so the page cannot write any other file.
+func saveCardPNG(dir string, c lampCards, name, b64 string) error {
+	if name != c.StoryPNG && name != c.WidePNG {
+		return errors.New("not a card file name")
+	}
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return err
+	}
+	return fsutil.WriteFileAtomic(filepath.Join(dir, name), raw, 0o644)
 }

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -34,8 +35,10 @@ const (
 )
 
 type lampOpts struct {
-	demo  bool
-	poses string
+	demo       bool
+	poses      string
+	card       string // a folder: write the two week cards there
+	cardWindow bool   // with card: also open the window that saves them as PNG
 }
 
 func parseLampArgs(args []string) (lampOpts, error) {
@@ -43,6 +46,8 @@ func parseLampArgs(args []string) (lampOpts, error) {
 	fs.SetOutput(io.Discard)
 	demo := fs.Bool("demo", false, "")
 	poses := fs.String("poses", "", "")
+	card := fs.String("card", "", "")
+	cardWindow := fs.Bool("card-window", false, "")
 	if err := fs.Parse(args); err != nil {
 		return lampOpts{}, err
 	}
@@ -52,10 +57,16 @@ func parseLampArgs(args []string) (lampOpts, error) {
 	if *demo && *poses != "" {
 		return lampOpts{}, errors.New("--demo and --poses cannot be used together")
 	}
-	return lampOpts{demo: *demo, poses: *poses}, nil
+	if *card != "" && *poses != "" {
+		return lampOpts{}, errors.New("--card and --poses cannot be used together")
+	}
+	if *cardWindow && *card == "" {
+		return lampOpts{}, errors.New("--card-window needs --card <folder>")
+	}
+	return lampOpts{demo: *demo, poses: *poses, card: *card, cardWindow: *cardWindow}, nil
 }
 
-const lampUsage = "usage: burnmon-dev lamp [--demo | --poses <folder>]"
+const lampUsage = "usage: burnmon-dev lamp [--demo | --poses <folder> | --card <folder> [--demo] [--card-window]]"
 
 // runLamp is the lamp subcommand. It returns the exit code.
 func runLamp(args []string) int {
@@ -73,7 +84,46 @@ func runLamp(args []string) int {
 		fmt.Println("wrote 10 files to", o.poses)
 		return 0
 	}
+	if o.card != "" {
+		return runCardAt(o, time.Now())
+	}
 	return runLampWindow(o)
+}
+
+// lampCardBindingNames are the names lamp_card.html calls.
+var lampCardBindingNames = []string{"lampCardSvgs", "lampCardSavePNG"}
+
+// lampCards is what the card window's binding lampCardSvgs returns.
+type lampCards struct {
+	Story    string `json:"story"`
+	Wide     string `json:"wide"`
+	StoryPNG string `json:"story_png"`
+	WidePNG  string `json:"wide_png"`
+}
+
+// runCardAt writes the two week cards of the ISO week that holds now into
+// o.card. A live card reads the ledger and the language of the settings; with
+// --demo it reads neither and writes nothing but the two cards. With
+// --card-window the Save PNG window opens after the cards are written.
+func runCardAt(o lampOpts, now time.Time) int {
+	wk, lang := lamp.DemoWeek(now), "en"
+	if !o.demo {
+		setDir := settingsDir()
+		wk = lamp.WeekOf(lamp.LoadLedger(filepath.Join(setDir, lamp.LedgerFile)).Days(), now)
+		if b, err := os.ReadFile(devConfigReadPath(setDir)); err == nil {
+			lang = lamp.ParseSettings(b).Language
+		}
+	}
+	names, err := lamp.WriteCards(o.card, wk, lang)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "lamp:", err)
+		return 1
+	}
+	fmt.Println("wrote", names[0], "and", names[1], "to", o.card)
+	if o.cardWindow {
+		return runCardWindow(o.card, wk, lang)
+	}
+	return 0
 }
 
 // lampPayload is what the binding lampState returns to the page.
@@ -109,6 +159,8 @@ type lampEngine struct {
 	tick     time.Duration
 	samples  []lampBurnSample
 	over     map[string]lampOverride
+
+	ledger *lamp.Ledger // the wait ledger of a live lamp; nil for the demo
 
 	lastSt   lamp.State
 	lastSet  lamp.Settings
@@ -159,6 +211,7 @@ func (e *lampEngine) payload(now time.Time) lampPayload {
 			rates = append(rates, s.rate)
 		}
 	}
+	e.ledger.Observe(now, e.snap, set)
 	st := lamp.Compute(lamp.Input{Snap: e.snap, Now: now, Settings: set, BurnSamples: rates})
 	if e.snap != nil && !e.snap.IsStale(now) && e.snap.WrittenAt != e.lastSeen {
 		e.lastSeen = e.snap.WrittenAt

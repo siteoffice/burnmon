@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Glim week card</title>
+<style>
+html,body{margin:0;height:100%;background:#14110a;color:#fff8e8;font-family:"Segoe UI",sans-serif;overflow:hidden}
+main{width:80vw;max-width:100%;margin:0 auto;height:100%;display:flex;flex-direction:column;align-items:center}
+@media (max-width:900px){main{width:100%}}
+#pic{flex:1 1 auto;min-height:0;max-width:100%;object-fit:contain;margin-top:12px}
+.bar{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:12px 0;width:100%}
+button{font:inherit;padding:6px 16px;border:1px solid #f5a623;background:#2a2008;color:#ffc766;border-radius:6px;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+#msg{color:#c9b995;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+<main>
+<img id="pic" alt="The week card of Glim">
+<div class="bar"><button id="save" type="button">Save PNG</button><span id="msg"></span></div>
+</main>
+<script>
+(function () {
+  var cards = null;
+  var pic = document.getElementById('pic');
+  var msg = document.getElementById('msg');
+  var btn = document.getElementById('save');
+
+  function dataUrl(svg) {
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  function load(svg) {
+    return new Promise(function (ok, fail) {
+      var img = new Image();
+      img.onload = function () { ok(img); };
+      img.onerror = function () { fail(new Error('the card did not load')); };
+      img.src = dataUrl(svg);
+    });
+  }
+
+  // draw the SVG on a canvas of its own size and return the PNG as base64
+  function png(svg, w, h) {
+    return load(svg).then(function (img) {
+      var c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      return c.toDataURL('image/png').split(',')[1];
+    });
+  }
+
+  function save() {
+    btn.disabled = true;
+    msg.textContent = 'Saving...';
+    var jobs = [
+      [cards.story_png, cards.story, 1080, 1920],
+      [cards.wide_png, cards.wide, 1200, 630]
+    ];
+    var chain = Promise.resolve();
+    jobs.forEach(function (j) {
+      chain = chain.then(function () {
+        return png(j[1], j[2], j[3]).then(function (b64) { return window.lampCardSavePNG(j[0], b64); });
+      });
+    });
+    chain.then(function () {
+      msg.textContent = 'Saved ' + cards.story_png + ' and ' + cards.wide_png;
+      msg.title = msg.textContent;
+    }, function (e) {
+      msg.textContent = 'Could not save: ' + e;
+    }).then(function () { btn.disabled = false; });
+  }
+
+  btn.addEventListener('click', save);
+  window.lampCardSvgs().then(function (c) {
+    cards = c;
+    pic.src = dataUrl(c.story);
+  }, function (e) {
+    msg.textContent = 'Could not load the card: ' + e;
+    btn.disabled = true;
+  });
+})();
+</script>
+</body>
+</html>
