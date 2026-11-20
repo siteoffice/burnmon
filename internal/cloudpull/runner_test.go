@@ -306,7 +306,7 @@ func TestPullOneFailureIsNotDisable(t *testing.T) {
 	}
 	st, _ := LoadState(r.StatePath)
 	e := st.Sessions["session_A"]
-	if st.Disabled != "" || e == nil || e.LastError == "" || !e.FailedAt.Equal(t0) || st.LastError == "" {
+	if st.Disabled != "" || e == nil || e.LastError == "" || !e.FailedAt.Equal(t0) || st.LastError != "" {
 		t.Fatalf("state = %+v, entry %+v", st, e)
 	}
 }

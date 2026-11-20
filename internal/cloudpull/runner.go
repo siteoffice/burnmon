@@ -26,6 +26,7 @@ const (
 	coldWindow   = 31 * 24 * time.Hour
 	coldEvery    = 24 * time.Hour
 	retryAfter   = 15 * time.Minute
+	retryMax     = 24 * time.Hour
 	tickEvery    = 30 * time.Second
 	orgEvery     = 15 * time.Minute
 	pullTimeout  = 120 * time.Second
@@ -47,7 +48,8 @@ type Entry struct {
 	LastUsage time.Time `json:"last_usage,omitempty"` // newest usage row; zero when it has none
 	LastError string    `json:"last_error,omitempty"`
 	FailedAt  time.Time `json:"failed_at,omitempty"`
-	Gone      bool      `json:"gone,omitempty"` // the CLI said "Session not found": never pulled again
+	Failures  int       `json:"failures,omitempty"` // failed pulls in a row; a good pull resets it
+	Gone      bool      `json:"gone,omitempty"`     // the CLI said "Session not found": never pulled again
 }
 
 // State is the runner's state file. Step 4 maps pull files to cloud ids with it.
@@ -199,10 +201,32 @@ func LastUsage(path string) (time.Time, error) {
 	return last.UTC(), sc.Err()
 }
 
+// retryDelay is how long an id waits after its n-th failure in a row: 15
+// minutes, doubling each time, at most one day.
+func retryDelay(failures int) time.Duration {
+	d := retryAfter
+	for i := 1; i < failures && d < retryMax; i++ {
+		d *= 2
+	}
+	if d > retryMax {
+		d = retryMax
+	}
+	return d
+}
+
+// sessionError marks a failure of one session's pull. It is not a runner-wide
+// error: Step does not record it as the state's last_error.
+type sessionError struct{ err error }
+
+func (s sessionError) Error() string { return s.err.Error() }
+func (s sessionError) Unwrap() error { return s.err }
+
 // Due returns the cloud ids to pull now, most urgent first: Hot (so an active
 // session never waits behind the first run), then never pulled (newest first
 // in list order), then Warm and Cold, each oldest pull first. A failed id
-// waits retryAfter. Gone and Archive sessions are never pulled again.
+// waits retryDelay and, once due, goes after every other id (oldest failure
+// first), so failing ids never hold back the re-pulls. Gone and Archive
+// sessions are never pulled again.
 func Due(now time.Time, list []string, st *State) []string {
 	type item struct {
 		id     string
@@ -216,7 +240,7 @@ func Due(now time.Time, list []string, st *State) []string {
 		if e != nil && e.Gone {
 			continue
 		}
-		if e != nil && !e.FailedAt.IsZero() && now.Sub(e.FailedAt) < retryAfter {
+		if e != nil && !e.FailedAt.IsZero() && now.Sub(e.FailedAt) < retryDelay(e.Failures) {
 			continue
 		}
 		if e == nil || e.Path == "" {
@@ -243,6 +267,11 @@ func Due(now time.Time, list []string, st *State) []string {
 			if since >= coldEvery {
 				items = append(items, item{id, 3, e.PulledAt, i})
 			}
+		}
+	}
+	for i := range items {
+		if e := st.Sessions[items[i].id]; e != nil && !e.FailedAt.IsZero() {
+			items[i].tier, items[i].pulled = 4, e.FailedAt
 		}
 	}
 	sort.SliceStable(items, func(a, b int) bool {
@@ -349,8 +378,13 @@ func (r *Runner) PullOne(ctx context.Context, cloudID string) error {
 		}
 		return perr
 	}
-	if perr == nil && runErr != nil {
+	if runErr != nil && !errors.Is(perr, ErrCost) {
+		// The CLI's own words (first line of its error stream) and its exit code,
+		// in place of an empty "no JSON result" (measured 2026-11-20).
 		perr = fmt.Errorf("cloudpull: the CLI exited with %v", runErr)
+		if o := firstLine(out); o != "" {
+			perr = fmt.Errorf("%w (output: %s)", perr, o)
+		}
 	}
 	e := st.Sessions[cloudID]
 	if e == nil {
@@ -361,17 +395,17 @@ func (r *Runner) PullOne(ctx context.Context, cloudID string) error {
 		e.Gone, e.LastError, e.FailedAt = true, "session not found", now
 		return st.Save(r.StatePath)
 	}
+	// A failing session is that session's state, not the runner's: st.LastError
+	// stays for errors that stop every pull (not signed in, no CLI).
 	if perr != nil {
-		e.LastError, e.FailedAt = perr.Error(), now
-		st.LastError = perr.Error()
-		return errors.Join(perr, st.Save(r.StatePath))
+		e.LastError, e.FailedAt, e.Failures = perr.Error(), now, e.Failures+1
+		return errors.Join(sessionError{perr}, st.Save(r.StatePath))
 	}
 	newPath := filepath.Join(r.ProjectDir, res.SessionID+".jsonl")
 	last, lerr := LastUsage(newPath)
 	if lerr != nil {
-		e.LastError, e.FailedAt = lerr.Error(), now
-		st.LastError = lerr.Error()
-		return errors.Join(lerr, st.Save(r.StatePath))
+		e.LastError, e.FailedAt, e.Failures = lerr.Error(), now, e.Failures+1
+		return errors.Join(sessionError{lerr}, st.Save(r.StatePath))
 	}
 	old := *e
 	*e = Entry{SessionID: res.SessionID, Path: newPath, PulledAt: now, LastUsage: last}
@@ -471,7 +505,8 @@ func (r *Runner) Step(ctx context.Context) error {
 	if err == nil {
 		_, err = r.Tick(ctx, list)
 	}
-	if err != nil && !errors.Is(err, ErrCost) && !errors.Is(err, ErrDisabled) {
+	var se sessionError
+	if err != nil && !errors.Is(err, ErrCost) && !errors.Is(err, ErrDisabled) && !errors.As(err, &se) {
 		recordError(r.StatePath, err)
 	}
 	return err
@@ -485,11 +520,15 @@ func recordError(statePath string, err error) {
 	}
 }
 
-// Status is what the screen shows about the pull: OK when the last pass was
-// good, otherwise the reason it is not measured.
+// Status is what the screen shows about the pull. OK means at least one
+// session is read and nothing stops the pull; otherwise Reason says why it is
+// not measured. Unread counts the sessions whose last pull failed (also those
+// with an older copy) and UnreadReason is the newest such failure.
 type Status struct {
-	OK     bool
-	Reason string
+	OK           bool
+	Reason       string
+	Unread       int
+	UnreadReason string
 }
 
 // ReadStatus reads the state file for the screen.
@@ -504,12 +543,33 @@ func ReadStatus(statePath string) Status {
 	if st.LastError != "" {
 		return Status{Reason: strings.TrimPrefix(st.LastError, "cloudpull: ")}
 	}
+	read, unread := 0, 0
+	var newest *Entry
 	for _, e := range st.Sessions {
-		if e != nil && e.Path != "" {
-			return Status{OK: true}
+		if e == nil {
+			continue
+		}
+		if e.Path != "" {
+			read++
+		}
+		if !e.Gone && !e.FailedAt.IsZero() {
+			unread++
+			if newest == nil || e.FailedAt.After(newest.FailedAt) {
+				newest = e
+			}
 		}
 	}
-	return Status{Reason: "no cloud session copied yet"}
+	reason := ""
+	if newest != nil {
+		reason = strings.TrimPrefix(newest.LastError, "cloudpull: ")
+	}
+	if read == 0 {
+		if reason == "" {
+			reason = "no cloud session copied yet"
+		}
+		return Status{Reason: reason}
+	}
+	return Status{OK: true, Unread: unread, UnreadReason: reason}
 }
 
 // ClearDisabled lifts a cost-guard stop and a runner-wide error, for when the

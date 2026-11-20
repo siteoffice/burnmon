@@ -52,10 +52,28 @@ type LaneIn struct {
 	Tag          string // newest version tag
 	TagAtHead    bool   // Tag peels to the head of D
 	SinceTag     int    // first-parent commits of D after Tag, -1 unknown
+	AtTag        string // with Detached: the tag HEAD sits on exactly, "" for none
+}
+
+// atTagClean is a checkout detached exactly at a tag with nothing changed: a
+// release checkout. Without a read status or with changed files it is not.
+func atTagClean(in LaneIn) bool {
+	return in.Detached && in.AtTag != "" && in.StatusRead && in.Dirty == 0 && in.Conflicts == 0
 }
 
 // LaneOf returns the six stages of one branch.
 func LaneOf(in LaneIn) []LaneStage {
+	if atTagClean(in) {
+		// A tag names a saved commit, so nothing is left to do on this checkout.
+		return []LaneStage{
+			stage(0, LaneDone, "at tag "+in.AtTag),
+			stage(1, LaneDone, "all saved"),
+			stage(2, LaneDone, ""),
+			stage(3, LaneDone, ""),
+			stage(4, LaneDone, ""),
+			stage(5, LaneDone, in.AtTag),
+		}
+	}
 	merged := mergedStage(in)
 	return []LaneStage{
 		changesStage(in),

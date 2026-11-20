@@ -110,6 +110,7 @@ tr.flag td:first-child{border-left:3px solid var(--sun)}
 label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--ink)}
 select,input[type=number],input[type=text]{padding:6px 9px;border:1px solid var(--merc);border-radius:6px;font:inherit;background:var(--pine);color:var(--ink)}
 .controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:14px}
+#sessions .controls select,#sessions .controls input[type=text]{height:32px}
 button.act{background:var(--sun);color:var(--accent-ink);border:none;padding:8px 14px;border-radius:6px;font:inherit;font-weight:600;cursor:pointer}
 button.act.ghost{background:var(--merc-l);color:var(--pine-l);border:1px solid var(--pine-40)}
 .scroll{overflow-x:auto;max-height:640px;overflow-y:auto}
@@ -154,22 +155,24 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   white-space:normal;overflow-wrap:anywhere;box-shadow:0 4px 14px rgba(0,0,0,.55);
   pointer-events:none}
 /* Sessions table: one row per line. Only the title truncates; hover shows it all. */
-#t_sessions{table-layout:fixed;min-width:1000px}
+#t_sessions{table-layout:fixed}
 #t_sessions th,#t_sessions td{white-space:nowrap;overflow:hidden;text-overflow:clip}
 #t_sessions th:nth-child(1),#t_sessions td:nth-child(1){width:132px;text-align:left}
 #t_sessions th:nth-child(2),#t_sessions td:nth-child(2){width:auto;text-align:left;
   overflow:hidden;text-overflow:ellipsis;cursor:help}
 #t_sessions td:nth-child(2){position:relative}
 #t_sessions th:nth-child(3),#t_sessions td:nth-child(3){width:96px;text-align:left}
-#t_sessions th:nth-child(4),#t_sessions td:nth-child(4){width:118px;text-align:left}
+#t_sessions th:nth-child(4),#t_sessions td:nth-child(4){width:150px;text-align:left}
 #t_sessions th:nth-child(5),#t_sessions td:nth-child(5){width:98px;text-align:right}
 #t_sessions th:nth-child(6),#t_sessions td:nth-child(6){width:70px}
 #t_sessions th:nth-child(7),#t_sessions td:nth-child(7){width:76px}
 #t_sessions th:nth-child(8),#t_sessions td:nth-child(8){width:86px}
-#t_sessions th:nth-child(9),#t_sessions td:nth-child(9){width:90px}
-#t_sessions th:nth-child(10),#t_sessions td:nth-child(10){width:190px}
+#t_sessions th:nth-child(9),#t_sessions td:nth-child(9){width:70px}
+#t_sessions th:nth-child(10),#t_sessions td:nth-child(10){width:70px}
+/* the 11th column is Findings: Owner and Client (9, 10) are hidden unless used */
+#t_sessions th:nth-child(11),#t_sessions td:nth-child(11){width:104px}
 #t_sessions td:nth-child(5) .pill{margin-left:5px}
-#t_sessions td:nth-child(4) .pill{margin-right:3px}
+#t_sessions td:nth-child(4) .pill{margin-right:3px;display:inline-block;max-width:60px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
 #t_sessions td.col-findings{cursor:pointer}
 #t_sessions tr.finding-row td{white-space:normal}
 /* Limits table in About's How it works section: everything right-aligned to match the headers */
@@ -626,7 +629,7 @@ en:{
   week_label:function(v){ return 'Week '+v.n+', '+v.y; },
   chart_cost_per_week:function(v){ return 'Cost per week ('+v.sym+')'; },
   chart_cost_label:'Cost',
-  tools_no_data_html:'No tool data yet. Tool counting starts with v0.5.0, so sessions parsed by an earlier version show nothing until the cache is rebuilt.',
+  tools_no_data_html:'No tool data yet. Tools are counted for Claude Code and Cowork sessions only. Sessions read before tool counting show nothing until the cache is rebuilt.',
   chart_tools_title:'Top connectors, plugins and skills by call count',
   chart_calls_label:'Calls',
   no_sessions_match:'No sessions match these filters.',
@@ -1082,7 +1085,10 @@ function renderSessions(){
   runWithConcurrency(ss, 8, function(s){
     return sessionInsight(s.session_id).then(function(findings){
       var cell = tb.querySelector('.col-findings[data-session="' + cssAttrEscape(s.session_id) + '"]');
-      if(cell) cell.innerHTML = findingsSummary(findings);
+      if(cell){
+        cell.innerHTML = findingsSummary(findings);
+        cell.title = cell.textContent;
+      }
     });
   });
 }

@@ -32,12 +32,15 @@ func newAppWindow(dataDir string) winbind.Window {
 	// The loader also reads this environment variable, which lives in the
 	// process environment, not in Go memory, so the folder is always wv2Dir.
 	_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", wv2Dir)
+	// The first window is limited to the work area of the screen: go-webview2
+	// centres on the whole screen and does not limit the size.
+	width, height := winbind.FirstWindowSize(1280, 860)
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath: wv2Dir,
 		WindowOptions: webview2.WindowOptions{
 			Title:  windowTitle,
-			Width:  1280,
-			Height: 860,
+			Width:  uint(width),
+			Height: uint(height),
 			Center: true,
 			IconId: 1, // matches the "#1" icon group winres/app.json embeds
 		},

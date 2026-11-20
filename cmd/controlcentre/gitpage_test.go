@@ -346,13 +346,14 @@ func TestPageGitHoverCells(t *testing.T) {
 // the most of the room that is left; the repo and branch names, which are
 // cut and shown in full on hover, take less.
 func TestPageGitStopsAtColumnIsWidest(t *testing.T) {
-	// compact drops the spaces: "flex:2.2 1 0" reads "flex:2.210".
-	if !strings.Contains(compact(ruleFor(t, ".gst")), "flex:2.210") {
-		t.Errorf(".gst is not flex:2.2 1 0: %s", compact(ruleFor(t, ".gst")))
+	// The grow factors decide who takes the room that is left; the basis and the shrink factor
+	// were added for D15 (TestGitRowKeepsRoomForItsTexts). compact drops the spaces.
+	if !strings.Contains(compact(ruleFor(t, ".gst")), "flex:2.2") {
+		t.Errorf(".gst does not grow by 2.2: %s", compact(ruleFor(t, ".gst")))
 	}
 	for _, sel := range []string{".g1", ".g2"} {
-		if !strings.Contains(compact(ruleFor(t, sel)), "flex:.810") {
-			t.Errorf("%s is not flex:.8 1 0: %s", sel, compact(ruleFor(t, sel)))
+		if !strings.Contains(compact(ruleFor(t, sel)), "flex:.8") {
+			t.Errorf("%s does not grow by .8: %s", sel, compact(ruleFor(t, sel)))
 		}
 	}
 }

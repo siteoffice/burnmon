@@ -444,7 +444,8 @@ body.plain .secpanel .secbody{font-size:13.5px}
    full map takes the Station's place (same layer): boxes in columns, lines
    between them, a panel with the evidence on the right. Nothing here
    animates, and the Station is closed while the map is open. */
-.mapopen{all:unset; box-sizing:border-box; display:flex; flex-direction:column; gap:3px; cursor:pointer; width:100%}
+.mapopen{all:unset; box-sizing:border-box; display:flex; flex-direction:column; flex-wrap:wrap; align-content:flex-start; overflow:hidden; gap:3px; cursor:pointer; width:100%; flex:1 1 auto; min-height:0}
+.mapopen > *{width:100%; box-sizing:border-box; flex:0 0 auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapopen:hover .sechint, .mapopen:focus-visible .sechint{color:var(--amber)}
 .mapopen:focus-visible{outline:1px solid var(--amber)}
 #mapOverlay{position:fixed; inset:0; z-index:1500; display:none; flex-direction:column; background:var(--bg); color:var(--txt); font-size:12px}
@@ -536,7 +537,14 @@ body.plain #mapOverlay{font-size:13.5px}
   border-top:3px solid var(--amber); border-radius:4px; padding:10px 14px; display:none; flex-direction:column; gap:8px; font-size:12px;
   box-shadow:0 2px 6px var(--scrim), 0 16px 48px var(--scrim)}
 #secSettings.open{display:flex}
-#secSettings{max-height:calc(100vh - 80px); overflow-y:auto}
+/* The pane is taller than a small window, so it scrolls inside the window; its scrollbar is the one of .ticker,
+   shown only when the content does not fit, and visible on macOS, which hides a default one. */
+#secSettings{max-height:calc(100vh - 80px); overflow-y:auto; overflow-x:hidden}
+#secSettings{scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
+#secSettings::-webkit-scrollbar{width:8px}
+#secSettings::-webkit-scrollbar-track{background:var(--panel2)}
+#secSettings::-webkit-scrollbar-thumb{background:var(--sb)}
+#secSettings::-webkit-scrollbar-thumb:hover{background:var(--sb-hover)}
 #secSettings .setstation{display:flex; gap:14px; align-items:center}
 #secSettings .setbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
 /* One look for every gear input and select; color-scheme follows the theme so an open list is dark in the dark theme. */
@@ -607,7 +615,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
   </div>
   <div class="hltotal" id="hlToday">-</div>
   <div class="hstat" id="hdrSessions">- sessions</div>
-  <div class="hstat">$<b id="hdrBurnRate">-</b>/min</div>
+  <div class="hstat"><b id="hdrBurnRate">-</b>/min</div>
   <div class="hstat"><b id="hdrTokMin">-</b> tok/min</div>
   <div class="hstat">CPU <b id="hdrCPU">-</b></div>
   <div class="hstat">RAM <b id="hdrRAM">-</b></div>
@@ -1199,7 +1207,11 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     if(n == null) return '-';
     return Math.round(n).toLocaleString('en-US');
   }
-  function fmtCost(c){ return '$' + (c || 0).toFixed(2); }
+  // Every cost on this page goes through fmtCost, in euro. BurnMon keeps its
+  // currency and rate in its own page storage, which this app cannot read,
+  // so the rate is BurnMon's default (rate() in internal\report\template.html).
+  var EUR_PER_USD = 0.92;
+  function fmtCost(usd){ return '€' + ((usd || 0) * EUR_PER_USD).toFixed(2); }
 
   function fmtBytes(bps){
     if(bps == null) return '-';
@@ -2326,7 +2338,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     var rateEl = document.getElementById('hdrBurnRate');
     if(rateEl){
       var cost = recent.reduce(function(sum, b){ return sum + (b.cost || 0); }, 0);
-      rateEl.textContent = (minutes > 0 ? cost / minutes : 0).toFixed(2);
+      rateEl.textContent = fmtCost(minutes > 0 ? cost / minutes : 0);
     }
 
     var tokMinEl = document.getElementById('hdrTokMin');
@@ -3949,7 +3961,6 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     var h = Math.floor(sec / 3600), mm = Math.floor((sec % 3600) / 60);
     return h + ' h' + (mm ? ' ' + mm + ' min' : '');
   }
-  function secEuro(c){ return '€' + ((c && c.eur) || 0).toFixed(2); }
   function secLabel(c){ return (c && c.label) || 'API price equivalent'; }
   function secWord(state){ return secState.plain ? (SEC_STATE_PLAIN[state] || state) : state; }
   function secStub(text){ return '<div class="secstub">' + esc(text) + '</div>'; }
@@ -4273,7 +4284,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
       esc(secState.plain ? 'tokens a minute' : 'tokens/min') + '</small></div>' +
       '<div class="dim">' + esc(fmtTokensFull(b.tokens_last_5min || 0)) + ' tokens in the last 5 minutes</div>' +
       '<div class="dim">Plan limits: not in the snapshot yet</div>' +
-      '<div>' + esc(secEuro(b.cost)) + ' <span class="dim">' + esc(secLabel(b.cost)) + ', last 5 minutes</span></div>';
+      '<div>' + esc(fmtCost(b.cost && b.cost.usd)) + ' <span class="dim">' + esc(secLabel(b.cost)) + ', last 5 minutes</span></div>';
     if(secState.plain) html += '<div class="sechint">' + esc('This is what the tokens would cost at list price. It is not a bill.') + '</div>';
     return html;
   }
@@ -4292,12 +4303,17 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     } else {
       var c = v.counts || {};
       function n(k, one, many){ return '<b>' + k + '</b> ' + esc(k === 1 ? one : many); }
-      html = '<div>' + n(c.sessions || 0, 'session', 'sessions') + ', ' + n(c.subagents || 0, plain ? 'helper' : 'subagent', plain ? 'helpers' : 'subagents') +
-        ', <b>' + (secReading.snapshot && secReading.snapshot.wait_counts ? secWaitCounts().blocked : (c.waiting || 0)) + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') +
-        (secReading.snapshot && secReading.snapshot.wait_counts && secWaitCounts().your_turn ? ' <span class="dim">' + secWaitCounts().your_turn + ' your turn</span>' : '') + '</div>';
+      var nWait = secReading.snapshot && secReading.snapshot.wait_counts ? secWaitCounts().blocked : (c.waiting || 0);
+      var nTurn = secReading.snapshot && secReading.snapshot.wait_counts ? secWaitCounts().your_turn : 0;
+      var totals = (c.sessions || 0) + ' ' + ((c.sessions || 0) === 1 ? 'session' : 'sessions') + ', ' + (c.subagents || 0) + ' ' +
+        ((c.subagents || 0) === 1 ? (plain ? 'helper' : 'subagent') : (plain ? 'helpers' : 'subagents')) + ', ' + nWait + ' ' +
+        (plain ? 'waiting for you' : 'waiting on you') + (nTurn ? ' ' + nTurn + ' your turn' : '');
+      html = '<div class="maptotals" title="' + esc(totals) + '">' + n(c.sessions || 0, 'session', 'sessions') + ', ' + n(c.subagents || 0, plain ? 'helper' : 'subagent', plain ? 'helpers' : 'subagents') +
+        ', <b>' + nWait + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') +
+        (nTurn ? ' <span class="dim">' + nTurn + ' your turn</span>' : '') + '</div>';
       var groups = v.groups || [];
       groups.slice(0, 3).forEach(function(g){
-        html += '<div class="secrow"><span><b>' + esc(g.label) + '</b>' + (g.status ? ' <span class="dim">' + esc(g.status) + '</span>' : '') + '</span>' +
+        html += '<div class="secrow" title="' + esc(g.label + (g.status ? ' ' + g.status : '') + ', ' + mapCardCount(g.cards) + (mapCardCount(g.cards) === 1 ? ' agent' : ' agents')) + '"><span><b>' + esc(g.label) + '</b>' + (g.status ? ' <span class="dim">' + esc(g.status) + '</span>' : '') + '</span>' +
           '<span>' + mapCardCount(g.cards) + (mapCardCount(g.cards) === 1 ? ' agent' : ' agents') + '</span></div>';
       });
       if(groups.length > 3) html += '<div class="dim">' + (groups.length - 3) + ' more</div>';
@@ -4329,7 +4345,7 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
       var cc = sessCtl(x);
       return '<tr' + (sub ? ' class="sesub"' : '') + '><td>' + esc(x.agent) + '</td><td>' + esc(secBase(x.project)) + '</td><td>' +
         esc(secWord(x.state)) + (x.cloud_age ? ' · ' + esc(x.cloud_age) : '') + '</td><td class="num">' + esc(fmtTokens(x.tokens)) + '</td><td class="num">' +
-        esc(secEuro(x.cost)) + '</td><td class="num">' + esc(secDur(x.age_seconds)) + '</td>' +
+        esc(fmtCost(x.cost && x.cost.usd)) + '</td><td class="num">' + esc(secDur(x.age_seconds)) + '</td>' +
         (withCtl ? '<td class="ctlcell">' + cc.chips + '</td>' : '') + '</tr>' +
         (cc.lines ? '<tr class="ctlrow"><td colspan="7">' + cc.lines + '</td></tr>' : '');
     }

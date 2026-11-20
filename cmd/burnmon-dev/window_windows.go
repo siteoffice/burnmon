@@ -42,7 +42,8 @@ func openDevWindow(setDir string) (winbind.Window, windowHooks, bool) {
 	// go-webview2's WebView interface having no "create hidden, then show"
 	// hook to avoid it.
 	savedState, hasSavedState := loadWindowState(setDir)
-	initialWidth, initialHeight := uint(1280), uint(860)
+	firstW, firstH := winbind.FirstWindowSize(1280, 860)
+	initialWidth, initialHeight := uint(firstW), uint(firstH)
 	if hasSavedState {
 		initialWidth, initialHeight = uint(savedState.Width), uint(savedState.Height)
 	}

@@ -93,6 +93,47 @@ func (s *GitScanner) releaseOf(gd string, reach *gitrefs.Reach, dSHA string) rel
 	return ri
 }
 
+// maxTagPeels bounds the tag objects read to find the tag HEAD sits on.
+const maxTagPeels = 500
+
+// tagAt returns the newest tag whose commit is sha, read from the loose refs
+// and packed-refs (no git command). A lightweight tag names the commit itself;
+// an annotated one is followed to its commit. "" when no tag sits there.
+func tagAt(gd string, reach *gitrefs.Reach, sha string) string {
+	if sha == "" {
+		return ""
+	}
+	tags, err := gitrefs.ListRefs(gd, "refs/tags/")
+	if err != nil {
+		return ""
+	}
+	names := make([]string, 0, len(tags))
+	for n := range tags {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var hit []string
+	peels := 0
+	for _, n := range names {
+		if tags[n] == sha {
+			hit = append(hit, n)
+			continue
+		}
+		if peels >= maxTagPeels {
+			continue
+		}
+		peels++
+		if c, ok := reach.Peel(tags[n]); ok && c == sha {
+			hit = append(hit, n)
+		}
+	}
+	if len(hit) == 0 {
+		return ""
+	}
+	SortTags(hit)
+	return hit[0]
+}
+
 // computeLanes fills the lane of the checkout, of every linked worktree and
 // every local branch, and the open branches. prsOn says the pull request data
 // of this repo was read.
@@ -145,6 +186,9 @@ func (s *GitScanner) computeLanes(rs *repoScan, prsOn bool) {
 			in.StatusRead, in.Dirty, in.Conflicts = w.statusRead, w.Dirty, w.conflicts
 			in.Upstream, in.Ahead, in.Behind = w.upstream, w.ahead, w.behind
 		}
+		if detached && w != nil {
+			in.AtTag = tagAt(gd, reach, w.headSHA)
+		}
 		if detached || tip == "" {
 			return in
 		}
@@ -196,7 +240,12 @@ func (s *GitScanner) computeLanes(rs *repoScan, prsOn bool) {
 	w0 := &rs.worktrees[0]
 	detached := w0.Detached || r.Detached
 	if detached {
-		r.Lane = LaneOf(build("", "", w0, true))
+		in := build("", "", w0, true)
+		r.Lane = LaneOf(in)
+		if atTagClean(in) {
+			r.AtTag, w0.AtTag = in.AtTag, in.AtTag
+			r.Attention = AttentionOf(*r) // a release checkout is not "detached"
+		}
 	} else if l, ok := rs.lanes[w0.Branch]; ok {
 		r.Lane = l
 	} else { // a branch without commits has no ref yet
@@ -206,7 +255,11 @@ func (s *GitScanner) computeLanes(rs *repoScan, prsOn bool) {
 	for i := 1; i < len(rs.worktrees); i++ {
 		w := &rs.worktrees[i]
 		if w.Detached {
-			w.Lane = LaneOf(build("", "", w, true))
+			in := build("", "", w, true)
+			w.Lane = LaneOf(in)
+			if atTagClean(in) {
+				w.AtTag = in.AtTag
+			}
 		} else if l, ok := rs.lanes[w.Branch]; ok {
 			w.Lane = l
 		} else {
@@ -248,7 +301,8 @@ func (s *GitScanner) computeLanes(rs *repoScan, prsOn bool) {
 		lane := rs.lanes[n]
 		_, _, pub := StopsAt(lane)
 		isD := n == d
-		if (isD && !onD && !pub && r.Lane[5].State == LaneTodo) || (!isD && LaneOpen(lane)) {
+		// A release checkout's lane is all done, but main is still not the checkout.
+		if (isD && !onD && !pub && (r.Lane[5].State == LaneTodo || r.AtTag != "")) || (!isD && LaneOpen(lane)) {
 			open = append(open, OpenBranch{Name: n, Kind: "branch", Lane: lane, Note: noteOf(lane)})
 		}
 	}

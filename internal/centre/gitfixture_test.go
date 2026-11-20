@@ -257,6 +257,12 @@ func buildGitFixtures() (string, string, error) {
 		func() error { return write(filepath.Join(proj, "wt-b", "x.txt"), "x\n") },
 		// detached and noupstream.
 		func() error { return run(filepath.Join(root, "detached"), "checkout", "-q", "--detach") },
+		// The clone fetched the two tags, which sit on this commit: without
+		// them it is detached at a commit with no tag, the red D18 case. A
+		// checkout at a tag has its own tests in attag_test.go.
+		func() error {
+			return run(filepath.Join(root, "detached"), "tag", "-d", "v0.4.0-beta.3", "v0.4.0-beta.10")
+		},
 		func() error { return os.MkdirAll(noup, 0o755) },
 		func() error { return run(noup, "init", "-q", "-b", "main") },
 		func() error { return write(filepath.Join(noup, "n.txt"), "n\n") },
