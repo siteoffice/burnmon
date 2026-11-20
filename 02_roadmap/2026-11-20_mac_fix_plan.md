@@ -54,3 +54,4 @@ was not changed).
 
 ## Turn log
 
+T1: done; commit 394bd2b; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off; open: nothing for D9 (built, not seen in a window; the retry and SetHtml fix is inferred from code, the 6 new tests in cmd\burnmon\warming_test.go failed first as a compile error)
