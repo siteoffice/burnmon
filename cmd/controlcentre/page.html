@@ -1913,7 +1913,7 @@ var api = {
       var nm = gitCell('g1', r.name + (r.open_branches.length ? ' +' + r.open_branches.length : ''), r.id +
         (r.open_branches.length ? ', and ' + r.open_branches.map(function(o) { return o.name; }).join(', ') : ''));
       b.appendChild(nm);
-      b.appendChild(h('span', 'g2', r.detached ? 'detached' : r.branch));
+      b.appendChild(h('span', 'g2', r.detached ? headWord(r) : r.branch));
       var ln = h('span', 'glane');
       ln.appendChild(laneEl(r.lane));
       b.appendChild(ln);
@@ -1928,12 +1928,19 @@ var api = {
     if (picked) picked.click();
   }
 
+  // headWord says what a detached HEAD is: "at tag <name>" for a clean checkout exactly at a tag (at_tag is
+  // set by the scan), else "detached" (long form "detached HEAD").
+  function headWord(x, long) {
+    if (x.at_tag) return 'at tag ' + x.at_tag;
+    return long ? 'detached HEAD' : 'detached';
+  }
+
   // gitRowDetail: one repo in the detail pane: its lane with the notes, what to do next, the other open
   // branches and worktrees, and Open repo.
   function gitRowDetail(r) {
     var chips = r.attention.map(function(a) { return [a, 'warn']; });
     if (!r.upstream && !r.status_error) chips.push(['no upstream', '']);
-    var list = ['Branch ' + (r.detached ? 'detached HEAD' : r.branch || 'not read') + (r.upstream ? ', upstream ' + r.upstream + ' ' + gitAB(r) : '')];
+    var list = ['Branch ' + (r.detached ? headWord(r, true) : r.branch || 'not read') + (r.upstream ? ', upstream ' + r.upstream + ' ' + gitAB(r) : '')];
     if (!r.status_error) list.push(r.dirty + (r.dirty === 1 ? ' changed file' : ' changed files') + ', ahead and behind ' + gitAB(r) + '.');
     if (r.last_sha) list.push('Last commit ' + r.last_sha + ', ' + r.last_age + ' ago: ' + r.last_subject);
     if (r.status_error) list.push('Dirty and ahead/behind unknown: ' + r.status_error);
@@ -1986,7 +1993,7 @@ var api = {
     var r = d.repo;
     pane.textContent = '';
     lead.textContent = '';
-    lead.appendChild(h('span', 'ell', r.name + ', ' + (r.detached ? 'detached HEAD' : 'on ' + r.branch) + '. ' +
+    lead.appendChild(h('span', 'ell', r.name + ', ' + (r.detached ? headWord(r, true) : 'on ' + r.branch) + '. ' +
       d.worktrees.length + (d.worktrees.length === 1 ? ' worktree, ' : ' worktrees, ') + d.branches.length + ' branches, ' +
       d.tags.length + ' tags. Overview only: nothing here changes the repo.'));
     gitRowDetail(r);
@@ -2000,14 +2007,14 @@ var api = {
         rowSel(b);
         detail({k: w.main ? 'Main worktree' : 'Linked worktree', t: w.name,
           chips: w.missing ? [['folder gone', 'warn']] : w.dirty ? [[w.dirty + ' dirty', 'warn']] : [],
-          list: ['Branch ' + (w.detached ? 'detached HEAD' : w.branch)].concat(
+          list: ['Branch ' + (w.detached ? headWord(w, true) : w.branch)].concat(
             w.sessions.length ? ['Sessions here (by folder name): ' + w.sessions.join(', ')] : ['No agent session works here now.'],
             w.status_error ? ['Dirty unknown: ' + w.status_error] : []),
           src: w.path});
       };
       var b = btn('rw' + (w.dirty || w.missing ? ' warn' : ''), null, pick);
       b.appendChild(gitCell('g1', w.name, w.path));
-      b.appendChild(h('span', 'g2', w.detached ? 'detached' : w.branch));
+      b.appendChild(h('span', 'g2', w.detached ? headWord(w) : w.branch));
       var wl = h('span', 'glane sm');
       wl.appendChild(laneEl(w.lane, true));
       b.appendChild(wl);

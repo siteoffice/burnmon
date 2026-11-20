@@ -163,6 +163,54 @@ message, the Station taller than `#pageScroll` on this screen). The groups after
 - Review (sonnet, fresh): no behaviour change outside D4 and D6, no test weakened; it named the Mac thread question and
   the DPI inference above, both left as written.
 
+## T3: D18, a checkout at a tag
+
+### Cause
+
+Read in `internal\centre\lane.go`: `changesStage` returned a bad stage "detached" for every detached HEAD, and the
+scan built the detached lane with no tip, so Saved and Shared read "?" and the repo always stopped at a stage. The
+page printed "detached" in five places (`cmd\controlcentre\page.html`: row, hover list, lead line, worktree hover list,
+worktree row).
+
+### Repair
+
+- `LaneIn.AtTag`, and `atTagClean` (detached, a tag found, status read, no changed files, no conflicts). For that case
+  `LaneOf` returns six done stages: Changes "at tag <name>", Saved "all saved", the next three empty, Released the tag.
+  So `StopsAt` says published, `LaneOpen` is false and `NextOf` says "Nothing open."
+- `tagAt` in `internal\centre\lanescan.go` reads `refs/tags/` through `gitrefs.ListRefs` (loose refs and `packed-refs`),
+  follows annotated tags with `Reach.Peel`, and picks the newest match with `SortTags`. No git command. `GitRepo.AtTag`
+  and `GitWorktree.AtTag` (json `at_tag`) carry it to the page; `GitWorktree.headSHA` holds a detached worktree's HEAD.
+- `AttentionOf` no longer adds "detached" when `AtTag` is set (recomputed after the lane when the case applies).
+- The page has one helper `headWord(x, long)`: "at tag <name>", else "detached" or "detached HEAD".
+- Detached with changed files, detached with status not read, and detached at a commit with no tag keep today's reading.
+
+### Tests
+
+New `internal\centre\attag_test.go` (pure lane cases, and scan cases with real git: lightweight tag, annotated tag,
+tag with a changed file, untagged commit, a linked worktree at a tag, and main past the tag) and
+`cmd\controlcentre\attag_page_test.go`. They failed first: the first build failed on the missing fields; the page test
+failed on the missing helper; the main-past-the-tag test failed with `Published true OpenBranches []` after review.
+Changed earlier test file: `internal\centre\gitfixture_test.go`, the `detached` clone deletes its two fetched tags
+(they sat on its commit), so it stays the "detached, no tag" case that `TestScanFixtureRealGit` pins.
+
+### Review (sonnet, fresh)
+
+Found: main stopped listing as an open branch when the checkout was a release checkout (its Released stage is no
+longer "todo"). Repaired with the test above (`lanescan.go`, `r.AtTag != ""` in the open-branch condition). Named, not
+repaired: `tagAt` has no cache and peels at most 500 tags in name order, so with over 500 tags an annotated tag on HEAD
+can be missed and the checkout then stays red (a safe wrong answer); a linked worktree at a clean tag now counts as not
+open, as the lane says.
+
+### uicheck
+
+`.\scripts\uicheck-centre.ps1` exit 0 (group gitpage OK; the 1600 and 2560 widths skipped, this screen is too small).
+The uicheck fixtures hold no checkout at a tag, so the new text is pinned by the Go and page tests, not seen (built, not seen).
+
+### Files changed
+
+`internal\centre\lane.go`, `git.go`, `lanescan.go`, `gitfixture_test.go`, `attag_test.go` (new);
+`cmd\controlcentre\page.html`, `attag_page_test.go` (new); this plan file. 8 files, inside the budget of 12.
+
 ## Turn log
 
 T1: done; commit 93bd7bc; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, uicheck.ps1 and uicheck-dev.ps1 exit 1 on w1 and station/d28, the same on aac8328's pages (A/B); open: the terra and luna price question for Wilco, BurnMon Dev cannot read BurnMon's currency choice (euro at 0.92), the Dev Markdown exports still print dollars, w1 and station/d28 fail on this screen before and after this turn (built, not seen in a window)

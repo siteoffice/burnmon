@@ -47,6 +47,7 @@ type GitRepo struct {
 	Unit        string   `json:"unit"` // nearest unit at or above the folder, "" for none
 	Branch      string   `json:"branch"`
 	Detached    bool     `json:"detached"`
+	AtTag       string   `json:"at_tag"`   // detached exactly at this tag with nothing changed, "" otherwise
 	Upstream    string   `json:"upstream"` // "" without an upstream
 	Ahead       int      `json:"ahead"`
 	Behind      int      `json:"behind"`
@@ -87,6 +88,7 @@ type GitWorktree struct {
 	Main        bool        `json:"main"`
 	Branch      string      `json:"branch"`
 	Detached    bool        `json:"detached"`
+	AtTag       string      `json:"at_tag"`  // detached exactly at this tag with nothing changed, "" otherwise
 	Missing     bool        `json:"missing"` // registered, but the folder is gone
 	Dirty       int         `json:"dirty"`
 	StatusError string      `json:"status_error"`
@@ -94,6 +96,7 @@ type GitWorktree struct {
 	Lane        []LaneStage `json:"lane"`
 
 	// What the status of this worktree said, for its lane.
+	headSHA    string // HEAD's object name when detached
 	statusRead bool
 	conflicts  int
 	upstream   string
@@ -234,6 +237,14 @@ func readHead(wtGitDir string) (branch, sha string, detached bool, err error) {
 	return "", v, true, nil
 }
 
+// detachedSHA is sha for a detached HEAD, "" for a branch.
+func detachedSHA(detached bool, sha string) string {
+	if !detached {
+		return ""
+	}
+	return sha
+}
+
 // RepoFiles is what the .git files say about a repo.
 type RepoFiles struct {
 	GitDir    string // common git dir
@@ -274,7 +285,7 @@ func ReadRepoFiles(dir string) (RepoFiles, error) {
 		rf.LastErr = errors.New("no commits")
 	}
 	rf.Stashes = countLines(filepath.Join(gd, "logs", "refs", "stash"))
-	rf.Worktrees = append([]GitWorktree{{Path: dir, Name: filepath.Base(dir), Main: true, Branch: rf.Branch, Detached: rf.Detached}},
+	rf.Worktrees = append([]GitWorktree{{Path: dir, Name: filepath.Base(dir), Main: true, Branch: rf.Branch, Detached: rf.Detached, headSHA: detachedSHA(rf.Detached, rf.HeadSHA)}},
 		linkedWorktrees(gd)...)
 	rf.Remotes = readRemotes(filepath.Join(gd, "config"))
 	return rf, nil
@@ -317,7 +328,9 @@ func linkedWorktrees(gd string) []GitWorktree {
 		}
 		p := filepath.Dir(filepath.Clean(dotGit))
 		w := GitWorktree{Path: p, Name: filepath.Base(p)}
-		w.Branch, _, w.Detached, _ = readHead(wd)
+		var sha string
+		w.Branch, sha, w.Detached, _ = readHead(wd)
+		w.headSHA = detachedSHA(w.Detached, sha)
 		if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 			w.Missing = true
 		}
@@ -415,7 +428,7 @@ func AttentionOf(r GitRepo) []string {
 	if r.Behind > 0 {
 		out = append(out, AttnBehind)
 	}
-	if r.Detached {
+	if r.Detached && r.AtTag == "" {
 		out = append(out, AttnDetached)
 	}
 	return out
