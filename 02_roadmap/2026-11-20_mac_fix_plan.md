@@ -96,7 +96,20 @@ Tests: `TestLampDarwinWindowFileSwapsNoClass` in `C:\ZND\50_projects\burnmon\cmd
 `TestMaccheckScriptShape` in `C:\ZND\50_projects\burnmon\internal\repocheck\maccheck_test.go` now expects
 `lamp-demo` among the steps and not among the window steps, because the lane moves it into CI mode.
 
+## T3: wordings and wrap-up
+
+No cause hunt, the strings were read in the lane file and found as named. Files changed:
+
+- D7: `C:\ZND\50_projects\burnmon\internal\controls\commands.go` holds `whyClaudeFor(goos)` (`claude.exe` on windows, `claude` elsewhere); `service.go` and `claudeArgv` use it with `runtime.GOOS`; the constant `whyClaude` is gone. Test: `internal\controls\claudewhy_test.go`. Changed test, named: `TestMissingDependenciesGiveReasons` in `service_test.go` now compares with `whyClaudeFor(runtime.GOOS)` (the literal failed off Windows). Windows-only pins of the old text (`cmd\burnmon-dev\controls_view_test.go`, `cmd\controlcentre\decide_test.go`, `tools\uicheck\group_waits.go`) are unchanged and still true on Windows. The agent view texts about `claude.exe` (`snapshotwriter`, `agentview_line.go`) are a different message and are not touched.
+- D13: `sessionsLabel(n)` in `cmd\burnmon-dev\page.html`, and `sessions_count` in `internal\report\template.html`. Tests for 0, 1 and 2 through node: `cmd\burnmon-dev\sessions_label_test.go`, `internal\report\sessions_count_test.go`. No golden file holds the template, none regenerated.
+- D16: `pasteKey(platform)` in `cmd\controlcentre\page.html` sets the placeholder from `navigator.platform` at load; the static HTML text keeps Ctrl+V as the fallback. Test: `cmd\controlcentre\pastekey_test.go`. Inferred, not seen: that WKWebView reports `MacIntel` on Apple silicon (it does on current Safari, not measured here).
+
+Each new test failed first (undefined function, missing function, `1 sessions`, missing function). L7: 10 files for the code and tests, plus the four wrap-up files the lane names (this file, STATUS, SESSION_LOG, the hub brief), 14 in all; the four wrap-up writes are the lane's own wrap-up, not extra work. Reviewer (sonnet, fresh): no behaviour change outside the three wordings, no test weakened, no JS bug.
+
+Checks of pull request 64, read with `gh pr checks 64`: one check, `macos`, pass on `a1e098b` (run 44768756092, 2m20s), with the lamp demo step in CI mode.
+
 ## Turn log
 
 T1: done; commit 394bd2b; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off; open: nothing for D9 (built, not seen in a window; the retry and SetHtml fix is inferred from code, the 6 new tests in cmd\burnmon\warming_test.go failed first as a compile error)
 T2: done; commit 51c6a9a; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, macos check red with the D1 NSRangeException on 7f55ca0 (run 44763572057) and green with lamp-demo ok on 51c6a9a (run 44764868390); open: nothing for D1 (ran for 6 seconds on a Mac runner, not seen; the log line that would say the borderless panel can still become key or main is not printed by CI on a pass, so the documented default is not measured)
+T3: done; commit a1e098b; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, macos check pass on a1e098b (run 44768756092); open: nothing (D7, D13, D16 each have a test that failed first; built, not seen in a window; the Mac paste key rests on WKWebView reporting MacIntel, inferred)
