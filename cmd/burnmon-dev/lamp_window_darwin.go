@@ -9,17 +9,6 @@ package main
 #import <WebKit/WebKit.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <QuartzCore/QuartzCore.h>
-#import <objc/runtime.h>
-
-static BOOL lampNever(id self, SEL _cmd) { return NO; }
-
-// BOOL is a signed char on Intel and a bool on arm64; the method type string
-// must say which.
-#if defined(__arm64__)
-#define LAMP_BOOL_METHOD "B@:"
-#else
-#define LAMP_BOOL_METHOD "c@:"
-#endif
 
 // lampFindWebView returns the WKWebView inside v (v itself or a subview).
 static WKWebView *lampFindWebView(NSView *v) {
@@ -44,18 +33,21 @@ static double lampIdleC(void) {
 // later), the page draws the ticker and Glim on it. clear is 0 for the card
 // backdrop: an opaque panel with its bottom corners rounded. It runs on the
 // main thread.
+//
+// The class of the window is never swapped: the web view already observes the
+// window (key-value observing) when this runs, a swapped class loses that
+// registration, and setStyleMask then ends the process with an
+// NSRangeException (D1 of the Mac test). "Never key, never main" comes from
+// the borderless style instead: AppKit documents that canBecomeKeyWindow and
+// canBecomeMainWindow are NO for a window without a title bar or resize bar.
+// If a later macOS says otherwise, the lamp log says so.
 static void lampStyle(void *win, int clear) {
 	NSWindow *w = (NSWindow *)win;
-	static Class cls = nil;
-	if (cls == nil) {
-		cls = objc_allocateClassPair([w class], "BurnMonLampPanel", 0);
-		class_addMethod(cls, @selector(canBecomeKeyWindow), (IMP)lampNever, LAMP_BOOL_METHOD);
-		class_addMethod(cls, @selector(canBecomeMainWindow), (IMP)lampNever, LAMP_BOOL_METHOD);
-		objc_registerClassPair(cls);
-	}
-	object_setClass(w, cls);
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 	[w setStyleMask:NSWindowStyleMaskBorderless];
+	if ([w canBecomeKeyWindow] || [w canBecomeMainWindow]) {
+		NSLog(@"lamp: the borderless panel can still become the key or main window");
+	}
 	[w setLevel:NSStatusWindowLevel];
 	[w setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces |
 		NSWindowCollectionBehaviorStationary | NSWindowCollectionBehaviorIgnoresCycle |

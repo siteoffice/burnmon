@@ -632,7 +632,7 @@ en:{
   no_sessions_match:'No sessions match these filters.',
   long_pill:'long',
   sessions_shown:function(v){ return v.shown+' of '+v.total+' sessions shown'; },
-  sessions_count:function(v){ return v.n+' sessions'; },
+  sessions_count:function(v){ return v.n+(v.n===1?' session':' sessions'); },
   basis_detail_none_html:'<i>No subscription figures configured, so only API list price is available.</i>',
   basis_detail_html:function(v){
     return '<b>How it is set up.</b> The organisation pays one monthly invoice for everyone\'s '

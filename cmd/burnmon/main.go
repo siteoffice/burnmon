@@ -8,7 +8,7 @@
 package main
 
 import (
-	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -225,15 +225,28 @@ func main() {
 		a.startSnapshotWriter(st)
 		a.startCloudPull()
 
-		if _, err := a.rebuild(true, progressReporter(w)); err != nil {
-			log.Println("initial collection failed:", err)
-			if !hadDashboard {
-				msg := startupFailureMessage(err)
-				blob, _ := json.Marshal(msg)
-				w.Dispatch(func() { w.Eval("window.ccWarmFail && ccWarmFail(" + string(blob) + ")") })
+		// Keep looking until a session folder exists. The failure goes in as a
+		// whole new page (SetHtml), not as an Eval into the page on screen: on
+		// macOS a first collection with no folder fails before that page has
+		// loaded, and the Eval was lost (D9 of the 2026-11-19 Mac test).
+		// Only the first try reports progress: a later one would write
+		// ccProgress text over the failure text still on the page.
+		tries := 0
+		_ = firstCollection(func() error {
+			progress := progressReporter(w)
+			if tries++; tries > 1 {
+				progress = nil
 			}
-			return
-		}
+			_, err := a.rebuild(true, progress)
+			if err != nil && !errors.Is(err, errRebuildBusy) {
+				log.Println("initial collection failed:", err)
+			}
+			return err
+		}, func(msg string) {
+			if !hadDashboard {
+				w.Dispatch(func() { w.SetHtml(warmingFailPageHTML(msg)) })
+			}
+		}, firstCollectionRetry, time.Sleep)
 		// The backfill above has now resolved the WSL roots (if any); add
 		// them to the watcher already running on native roots.
 		a.extendLiveWatchWSL(nativeClaudeRoots, nativeCodexRoots)

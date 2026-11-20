@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -100,7 +101,6 @@ const WhyElevated = "BurnMon Dev runs as administrator: controls are off"
 
 const (
 	whyOff    = "switched off in the gear"
-	whyClaude = "needs claude.exe: set claude_path in burnmon.json"
 	whyPython = "needs python.exe on PATH"
 
 	runStopTimeout  = 20 * time.Second
@@ -166,7 +166,7 @@ func (s *Service) unusable(c string) string {
 			if s.Env.ClaudeWhy != "" {
 				return s.Env.ClaudeWhy
 			}
-			return whyClaude
+			return whyClaudeFor(runtime.GOOS)
 		case !s.Env.AgentViewOn:
 			return "needs agent_view on in burnmon.json"
 		}
