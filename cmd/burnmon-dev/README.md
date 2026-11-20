@@ -2,7 +2,7 @@
 
 # BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-beta.4`) is the developer window of BurnMon. It shows what running AI
+`burnmon-dev.exe` (`v0.5.0-beta.1`) is the developer window of BurnMon. It shows what running AI
 agents burn, what the laptop does, and what waits on you, on one time axis.
 
 Parent index: `README.md`. Settings file `burnmon.json` and the transcript roots: `cmd\burnmon\README.md`.

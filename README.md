@@ -9,7 +9,7 @@ which goes online as you (`cmd\burnmon\README.md`, section Cowork (Cloud) sessio
 
 BurnMon is the successor of [claudecost](https://github.com/siteoffice/claudecost), renamed and extended
 from v0.2 onward. Repo: [siteoffice/burnmon](https://github.com/siteoffice/burnmon). Current release:
-`v0.4.0-beta.9`.
+`v0.5.0-beta.1`.
 
 ## Which app do I open?
 

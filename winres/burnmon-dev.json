@@ -2,16 +2,16 @@
   "RT_GROUP_ICON": { "#1": { "0000": [
     "icon-256.png","icon-128.png","icon-64.png","icon-48.png","icon-32.png","icon-24.png","icon-16.png" ] } },
   "RT_MANIFEST": { "#1": { "0409": {
-    "identity": { "name": "burnmon-dev", "version": "0.4.0.0" },
+    "identity": { "name": "burnmon-dev", "version": "0.5.0.0" },
     "description": "BurnMon Dev, AI agent burn and system monitor",
     "execution-level": "asInvoker" } } },
   "RT_VERSION": { "#1": { "0000": {
-    "fixed": { "file_version": "0.4.0.0", "product_version": "0.4.0.0" },
+    "fixed": { "file_version": "0.5.0.0", "product_version": "0.5.0.0" },
     "info": { "0409": {
       "FileDescription": "BurnMon Dev, AI agent burn and system monitor",
       "ProductName": "BurnMon Dev",
-      "ProductVersion": "0.4.0-beta.9",
-      "FileVersion": "0.4.0.0",
+      "ProductVersion": "0.5.0-beta.1",
+      "FileVersion": "0.5.0.0",
       "OriginalFilename": "burnmon-dev.exe",
       "InternalName": "burnmon-dev",
       "LegalCopyright": "Copyright (c) 2026 Wilco de Tree" } } } } }
