@@ -1,0 +1,71 @@
+name: package
+
+# Startable apps per system (Mac findings lane, T6, E3): one zip for macOS per
+# chip with BurnMon.app, BurnMon Dev.app and Control Centre.app (cgo, native
+# window, unsigned), and one zip for Windows with the four exes of build.ps1.
+# On a pull request the zips stay workflow artifacts and nothing is released;
+# release.yml calls this workflow with the tag and attaches the zips.
+on:
+  pull_request:
+  workflow_call:
+    inputs:
+      tag:
+        description: the release tag, used in the zip names
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Package
+        run: bash scripts/package.sh "${{ inputs.tag || format('pr{0}', github.event.pull_request.number) }}" ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-macos-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build with build.ps1 and zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\build.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tag = '${{ inputs.tag || format('pr{0}', github.event.pull_request.number) }}'
+          $name = "burnmon-$tag-windows-amd64"
+          $stage = Join-Path 'dist' $name
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item burnmon.exe, burnmon-dev.exe, controlcentre.exe, burnmon-cli.exe, burnmon.example.json $stage
+          Copy-Item packaging\windows\README-FIRST.txt $stage
+          Compress-Archive -Path $stage -DestinationPath "dist\$name.zip"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path "dist\$name.zip"))
+          $have = $zip.Entries | ForEach-Object { $_.Name }
+          $zip.Dispose()
+          $missing = 'burnmon.exe','burnmon-dev.exe','controlcentre.exe','burnmon-cli.exe','burnmon.example.json','README-FIRST.txt' | Where-Object { $have -notcontains $_ }
+          if ($missing) { Write-Error "missing in the zip: $($missing -join ', ')"; exit 1 }
+          $have
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-windows-amd64
+          path: dist/*.zip
+          if-no-files-found: error

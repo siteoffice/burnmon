@@ -45,7 +45,10 @@ func TestMacOSWorkflow(t *testing.T) {
 }
 
 func TestReleaseWorkflowUnchanged(t *testing.T) {
-	const want = "89c896754e5c65b79be379f47f94841d4c0b2af40d7128be79129473ba9a3f4c"
+	// The pin moved once, on purpose: release.yml calls package.yml for the
+	// startable zips and releases the bare files when packaging fails
+	// (TestReleaseCallsPackage reads what changed).
+	const want = "c98813e7ab61a676b5d753e2c3ddbb537d1a459bfe1dcd0b960ef6ed492341e8"
 	sum := sha256.Sum256([]byte(readLF(t, "../../.github/workflows/release.yml")))
 	if got := hex.EncodeToString(sum[:]); got != want {
 		t.Errorf("release.yml sha256 = %s, want %s", got, want)

@@ -3,8 +3,8 @@ name: release
 # B1 (02_roadmap/2026-09-23_v0.3_spec.md, section 2.4): builds burnmon and
 # burnmon-cli for darwin and linux, amd64 and arm64, CGO_ENABLED=0 (pure Go,
 # no WebView2: main_other.go's browser-mode entry point), and attaches them
-# to the pushed tag's GitHub release. Windows builds stay build.ps1's job
-# (go-winres icons, WebView2), not duplicated here.
+# to the pushed tag's GitHub release. The startable zips (macOS app bundles
+# with cgo, the Windows exes of build.ps1) come from package.yml, called below.
 on:
   push:
     tags:
@@ -39,8 +39,18 @@ jobs:
           name: burnmon-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
 
+  # The startable zips, one per system (package.yml): macOS with the three
+  # app bundles, Windows with the four exes of build.ps1.
+  package:
+    uses: ./.github/workflows/package.yml
+    with:
+      tag: ${{ github.ref_name }}
+
   release:
-    needs: build
+    needs: [build, package]
+    # A failed packaging job leaves its run red but does not hold back the
+    # eight bare files, which released on their own before the zips existed.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -36,8 +36,19 @@ Outcomes, controls). New screenshots are not made yet.
 
 ## Install and build
 
-Windows: `.\build.ps1` from `C:\ZND\50_projects\burnmon` builds all four exes. macOS and Linux: each tagged release
-attaches `burnmon` and `burnmon-cli`. Details are in each README, section 3.
+Each tagged release attaches one zip per system that you can start at once, plus the bare `burnmon` and
+`burnmon-cli` files for macOS and Linux (browser mode). Each zip holds a `README-FIRST.txt`.
+
+- macOS: `burnmon-<tag>-macos-arm64.zip` (Apple silicon) and `burnmon-<tag>-macos-amd64.zip` (Intel) hold
+  `BurnMon.app`, `BurnMon Dev.app`, `Control Centre.app`, `burnmon-cli` and `burnmon.example.json`. Unzip, run
+  `xattr -dr com.apple.quarantine` on the unzipped folder in Terminal, then double-click an app. The apps are
+  unsigned in this release; without the `xattr` line macOS blocks them. Signing follows.
+- Windows: `burnmon-<tag>-windows-amd64.zip` holds the four exes and `burnmon.example.json`. Unzip and
+  double-click. The exes are unsigned; what Windows shows for them on a fresh download is not tested.
+- Linux: no window app; the bare files run in browser mode.
+
+To build it yourself: `.\build.ps1` from `C:\ZND\50_projects\burnmon` builds the four Windows exes;
+`bash scripts/package.sh <tag>` on a Mac builds the macOS zip. Details are in each README, section 3.
 
 ## More
 
