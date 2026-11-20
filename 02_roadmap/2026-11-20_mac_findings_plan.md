@@ -211,6 +211,78 @@ The uicheck fixtures hold no checkout at a tag, so the new text is pinned by the
 `internal\centre\lane.go`, `git.go`, `lanescan.go`, `gitfixture_test.go`, `attag_test.go` (new);
 `cmd\controlcentre\page.html`, `attag_page_test.go` (new); this plan file. 8 files, inside the budget of 12.
 
+## T4: D8, D10, D11, D15, D17, the layout
+
+Nothing is seen in a window in this turn. Every size below is a rule read from the CSS and pinned by a test on the page
+text, not "measured at <width> x <height>"; the three uicheck scripts ran but hold no case for these cells.
+
+### Causes and repairs
+
+- D10, `internal\report\template.html`. The Sessions table has a fixed layout and its widths are set by column position.
+  The Owner and Client columns (9 and 10, hidden unless used) were added before Findings, so Findings is the 11th column
+  and had no width: it shared the free width with "What it was", which is why both were cut ("(untitl...", "FINDIN").
+  Column 10 carried a 190 px width meant for Findings. Now column 11 has 104 px, columns 9 and 10 have 90 px each, the
+  Models column is 150 px and its pills shorten with an ellipsis (60 px each, the cell title lists every model), and the
+  `min-width:1000px` of the table is gone: the table is 100 percent of the pane and the visible columns add up to 812 px,
+  so a 1024 px window leaves the title about 170 px and no horizontal scrollbar. The Findings cell gets its summary as a
+  hover title. Owner and Client are 70 px each (the review: 90 px made the fixed columns 992 px, more than the 984 px of the
+  pane); shown together the fixed columns add up to 952 px and the title keeps about 30 px; named, not repaired. BurnMon has no 60, 80 and 100 percent setting (that is the Control Centre and BurnMon Dev), its page is
+  `.wrap` with `max-width:1180px`, so the sizes named in the lane were not applicable there.
+- D11, same file: `#sessions .controls select,#sessions .controls input[type=text]{height:32px}` (scoped to the Sessions
+  filter row after the review; the first version hit every `.controls` row). The input and the selects had different
+  intrinsic heights with the same padding. 32 px is a chosen number; the real heights were not measured.
+- D8, `cmd\burnmon-dev\page.html`. The Status section body clips (`overflow:hidden`), so at 15 percent a line was cut
+  through. `.mapopen` now lays its lines out as a column that wraps (`flex-wrap:wrap`, `overflow:hidden`, each line
+  `width:100%`): a line that does not fit moves to a second column outside the card and is hidden whole, never cut
+  through. Each line is `nowrap` with an ellipsis, and the totals line has the class `maptotals` and its full text as a
+  title. Inferred, not measured: that Chromium sizes the wrapping column from the flex-resolved height of the button.
+  After the review each group row (`.secrow`) also carries its full text as a title. The cost is that at a very small height the lower lines (groups, the "Open the full map" hint) disappear whole.
+- D15, `cmd\controlcentre\page.html`. With the menu as icons and text the pane is narrow. `.g1` and `.g2` had a flex
+  basis of 0 and could shrink to nothing, so they gave way to everything else. Now `.g1` is `flex:.8 .3 96px`, `.g2`
+  `flex:.8 .3 80px`, `.gst` `flex:2.2 1 120px` (the "Stops at" text gives way first), `.glane` 112 px (was 150), and in the
+  strip `.lbig` is `flex:1 1 auto` (was 34 percent) and each stage button `flex:1 .3 58px` (was `1 1 0`), so "Changes" and
+  "Released" keep a width. `min-width:0` stays on all of them. Text still shortened shows in full on hover through
+  `HOVER_SEL` and the `data-title` cells (pinned by the new test). The header cells of the Git page had no title, so a header shortened at 112 px ("Changes to Released") had no hover;
+  they now carry their own text as a title. The lead line ("ar...") is an `.ell`, so it also shows
+  in full on hover.
+- D17, same file, `pagePlanning`: the no-plan line went to the header and the pane. It now goes to the pane only, as the
+  empty Waiting, Agents and Git pages do (`h('p', 'muted', ...)`); the header stays empty for that case.
+
+### Tests (all failed first)
+
+- `internal\report\sessions_layout_test.go`: `TestSessionsTableColumnsAllHaveAWidth` (failed: no rule for column 11),
+  `TestSessionsTableTextsShowInFullOnHover`, `TestFilterRowFieldsShareOneHeight`.
+- `cmd\burnmon-dev\agents_card_page_test.go`: `TestAgentsCardNeverCutsALine`.
+- `cmd\controlcentre\layout_findings_test.go`: `TestGitRowKeepsRoomForItsTexts`, `TestPlanningNoPlanFileLineOnce`.
+- Changed earlier test, named: `TestPageGitStopsAtColumnIsWidest` in `cmd\controlcentre\gitpage_test.go` pinned
+  `.gst` to exactly `flex:2.2 1 0` and `.g1`, `.g2` to `flex:.8 1 0`. The fix needs a basis and a shrink factor, so it now pins the
+  grow factors only (2.2 against .8), which is what its comment says it is about (the "Stops at" cell takes the most
+  room). `TestPageGitNoHorizontalScroll` (min-width:0 on every flexible cell) passes unchanged. No golden file changed.
+
+### Review (sonnet, fresh)
+
+No behaviour change outside the five findings except what it named, all taken: the global `.controls` height (scoped), the
+pill and Owner/Client widths (narrowed), `.secrow` lines with no hover (title added), Git header cells with no hover (title
+added). Not taken: `TestPageGitStopsAtColumnIsWidest` now matches by substring (`flex:2.2` would also match 2.25); the grow
+factors are pinned in full by `TestGitRowKeepsRoomForItsTexts`. Not measurable by the reviewer or by this turn: whether the
+repo name and "Stops at" show in full at 1024 px with the menu as icons and text. The flex bases add up to 596 px plus
+padding, so under about 650 px "Stops at" is still shortened and only its hover shows it. Open.
+
+### uicheck
+
+`.\scripts\uicheck.ps1` exit 1: `w1` red, the same as on `aac8328` and in T1; the Control Centre group ran inside it
+(exit 0). `.\scripts\uicheck-dev.ps1` exit 1 on `station/d28` as in T1 and T2; `layout pct panes map waits shell` run by
+name: all pass. `.\scripts\uicheck-centre.ps1` exit 0 (`gitpage` ok, 1600 and 2560 px skipped, this screen is too small).
+Its width case reports "1280x800: 3 Stops at note(s) cut, hover shows them", so the check for hover on cut text holds.
+The fixtures hold no case for the Sessions table, the Agents card at 15 percent or the no-plan Planning page, so those
+are built, not seen.
+
+### Files changed
+
+`internal\report\template.html`, `internal\report\sessions_layout_test.go` (new), `cmd\burnmon-dev\page.html`,
+`cmd\burnmon-dev\agents_card_page_test.go` (new), `cmd\controlcentre\page.html`, `cmd\controlcentre\gitpage_test.go`,
+`cmd\controlcentre\layout_findings_test.go` (new); this plan file. 8 files, inside the budget of 12.
+
 ## Turn log
 
 T1: done; commit 93bd7bc; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, uicheck.ps1 and uicheck-dev.ps1 exit 1 on w1 and station/d28, the same on aac8328's pages (A/B); open: the terra and luna price question for Wilco, BurnMon Dev cannot read BurnMon's currency choice (euro at 0.92), the Dev Markdown exports still print dollars, w1 and station/d28 fail on this screen before and after this turn (built, not seen in a window)

@@ -444,7 +444,8 @@ body.plain .secpanel .secbody{font-size:13.5px}
    full map takes the Station's place (same layer): boxes in columns, lines
    between them, a panel with the evidence on the right. Nothing here
    animates, and the Station is closed while the map is open. */
-.mapopen{all:unset; box-sizing:border-box; display:flex; flex-direction:column; gap:3px; cursor:pointer; width:100%}
+.mapopen{all:unset; box-sizing:border-box; display:flex; flex-direction:column; flex-wrap:wrap; align-content:flex-start; overflow:hidden; gap:3px; cursor:pointer; width:100%; flex:1 1 auto; min-height:0}
+.mapopen > *{width:100%; box-sizing:border-box; flex:0 0 auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .mapopen:hover .sechint, .mapopen:focus-visible .sechint{color:var(--amber)}
 .mapopen:focus-visible{outline:1px solid var(--amber)}
 #mapOverlay{position:fixed; inset:0; z-index:1500; display:none; flex-direction:column; background:var(--bg); color:var(--txt); font-size:12px}
@@ -4302,12 +4303,17 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     } else {
       var c = v.counts || {};
       function n(k, one, many){ return '<b>' + k + '</b> ' + esc(k === 1 ? one : many); }
-      html = '<div>' + n(c.sessions || 0, 'session', 'sessions') + ', ' + n(c.subagents || 0, plain ? 'helper' : 'subagent', plain ? 'helpers' : 'subagents') +
-        ', <b>' + (secReading.snapshot && secReading.snapshot.wait_counts ? secWaitCounts().blocked : (c.waiting || 0)) + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') +
-        (secReading.snapshot && secReading.snapshot.wait_counts && secWaitCounts().your_turn ? ' <span class="dim">' + secWaitCounts().your_turn + ' your turn</span>' : '') + '</div>';
+      var nWait = secReading.snapshot && secReading.snapshot.wait_counts ? secWaitCounts().blocked : (c.waiting || 0);
+      var nTurn = secReading.snapshot && secReading.snapshot.wait_counts ? secWaitCounts().your_turn : 0;
+      var totals = (c.sessions || 0) + ' ' + ((c.sessions || 0) === 1 ? 'session' : 'sessions') + ', ' + (c.subagents || 0) + ' ' +
+        ((c.subagents || 0) === 1 ? (plain ? 'helper' : 'subagent') : (plain ? 'helpers' : 'subagents')) + ', ' + nWait + ' ' +
+        (plain ? 'waiting for you' : 'waiting on you') + (nTurn ? ' ' + nTurn + ' your turn' : '');
+      html = '<div class="maptotals" title="' + esc(totals) + '">' + n(c.sessions || 0, 'session', 'sessions') + ', ' + n(c.subagents || 0, plain ? 'helper' : 'subagent', plain ? 'helpers' : 'subagents') +
+        ', <b>' + nWait + '</b> ' + esc(plain ? 'waiting for you' : 'waiting on you') +
+        (nTurn ? ' <span class="dim">' + nTurn + ' your turn</span>' : '') + '</div>';
       var groups = v.groups || [];
       groups.slice(0, 3).forEach(function(g){
-        html += '<div class="secrow"><span><b>' + esc(g.label) + '</b>' + (g.status ? ' <span class="dim">' + esc(g.status) + '</span>' : '') + '</span>' +
+        html += '<div class="secrow" title="' + esc(g.label + (g.status ? ' ' + g.status : '') + ', ' + mapCardCount(g.cards) + (mapCardCount(g.cards) === 1 ? ' agent' : ' agents')) + '"><span><b>' + esc(g.label) + '</b>' + (g.status ? ' <span class="dim">' + esc(g.status) + '</span>' : '') + '</span>' +
           '<span>' + mapCardCount(g.cards) + (mapCardCount(g.cards) === 1 ? ' agent' : ' agents') + '</span></div>';
       });
       if(groups.length > 3) html += '<div class="dim">' + (groups.length - 3) + ' more</div>';

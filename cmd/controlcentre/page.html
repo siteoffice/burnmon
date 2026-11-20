@@ -175,8 +175,8 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 .ctlsw label{display:flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer}
 
 /* Git page: one dense row per repo, a unit line before each unit's first row */
-.g1{flex:.8 1 0;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.g2{flex:.8 1 0;min-width:0;font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g1{flex:.8 .3 96px;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g2{flex:.8 .3 80px;min-width:0;font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gn{flex:0 0 34px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden}
 .gab{flex:0 0 50px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden}
 .gl{flex:0 0 104px;font-family:var(--mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -188,9 +188,9 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 .loadbar i{position:absolute;top:0;bottom:0;left:0;width:30%;background:var(--accent);animation:loadmove 1.1s ease-in-out infinite}
 @keyframes loadmove{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
 @media (prefers-reduced-motion: reduce){.loadbar i{animation:none;width:100%;opacity:.5}}
-.glane{flex:0 0 150px;min-width:0}
+.glane{flex:0 0 112px;min-width:0}
 .glane.sm{flex:0 0 96px}
-.gst{flex:2.2 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)}
+.gst{flex:2.2 1 120px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)}
 .gst.open{color:var(--amber);font-weight:600}
 .gst.bad{color:var(--red);font-weight:600}
 .lane{display:flex;align-items:center;min-width:0}
@@ -205,11 +205,11 @@ path.edge.rel{stroke:var(--accent);stroke-width:2;opacity:1}
 .dot.bad{background:var(--red);border-color:var(--red)}
 .dot.off{border-style:dashed}
 .lstrip{flex:none;display:flex;min-width:0;margin-bottom:8px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.lbig{flex:0 0 34%;min-width:0;box-sizing:border-box;padding:6px 12px;border-right:1px solid var(--line-soft)}
+.lbig{flex:1 1 auto;min-width:0;box-sizing:border-box;padding:6px 12px;border-right:1px solid var(--line-soft)}
 .lbig b{display:block;font-size:15px;line-height:1.2;color:var(--amber);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lbig b.ok{color:var(--accent)}
 .lbig span{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lstrip button.lst{flex:1 1 0;min-width:0;box-sizing:border-box;border:0;border-right:1px solid var(--line-soft);border-radius:0;background:none;padding:6px 6px;text-align:left;color:var(--text)}
+.lstrip button.lst{flex:1 .3 58px;min-width:0;box-sizing:border-box;border:0;border-right:1px solid var(--line-soft);border-radius:0;background:none;padding:6px 6px;text-align:left;color:var(--text)}
 .lstrip button.lst:last-child{border-right:0}
 .lstrip button.lst:hover{background:var(--surface2)}
 .lstrip button.lst[aria-pressed="true"]{background:var(--accent-fill);color:var(--accent)}
@@ -1334,7 +1334,6 @@ var api = {
       state.problems.forEach(function(p) {
         if (p.path === state.plan_path) line = 'The plan file ' + srcPath(state.plan_path) + ' was not read: ' + p.message;
       });
-      lead.appendChild(h('span', 'ell', line));
       pane.appendChild(h('p', 'muted', line));
       rootDetail('');
       return;
@@ -1890,7 +1889,7 @@ var api = {
     if (gv.read_at) pane.appendChild(gitStrip(sm));
     var hd = h('div', 'rw hd');
     [['Repo', 'g1'], ['Branch', 'g2'], ['Changes to Released', 'glane'], ['Stops at', 'gst'], ['Last', 'gl']].forEach(function(x) {
-      hd.appendChild(gitCell(x[1], x[0], x[2]));
+      hd.appendChild(gitCell(x[1], x[0], x[2] || x[0]));
     });
     pane.appendChild(hd);
     if (!n) {
