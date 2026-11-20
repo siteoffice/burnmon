@@ -154,6 +154,20 @@ func TestLampDarwinWindowFileFinishLane(t *testing.T) {
 	}
 }
 
+// D1 of the Mac test of 2026-11-19: the lamp crashed at start with an
+// NSRangeException because lampStyle swapped the class of a window the web
+// view already observed (key-value observing), and setStyleMask then made
+// WebKit remove an observer the new class did not know. The window class is
+// not swapped any more: a borderless window can become neither key nor main.
+func TestLampDarwinWindowFileSwapsNoClass(t *testing.T) {
+	s := readText(t, "lamp_window_darwin.go")
+	for _, banned := range []string{"object_setClass", "objc_allocateClassPair", "class_addMethod", "class_replaceMethod", "method_setImplementation"} {
+		if strings.Contains(s, banned) {
+			t.Errorf("lamp_window_darwin.go contains %q", banned)
+		}
+	}
+}
+
 // lamp_run.go is shared with Windows, so it holds no platform call.
 func TestLampRunHoldsNoSyscall(t *testing.T) {
 	if strings.Contains(readText(t, "lamp_run.go"), "syscall") {
