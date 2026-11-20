@@ -9,6 +9,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -143,12 +144,17 @@ func main() {
 	startCopilotVSCPoll(a, st)
 	a.startSnapshotWriter(st)
 
-	if _, err := a.rebuild(true, nil); err != nil {
-		log.Println("initial collection failed:", err)
-		bridge.setStartErr(startupFailureMessage(err))
-	} else {
-		a.extendLiveWatchWSL(nativeClaudeRoots, nativeCodexRoots)
-	}
+	// Keep looking until a session folder exists: the open page shows the
+	// failure text from /api/built and reloads once dashboard.html is written.
+	_ = firstCollection(func() error {
+		_, err := a.rebuild(true, nil)
+		if err != nil && !errors.Is(err, errRebuildBusy) {
+			log.Println("initial collection failed:", err)
+		}
+		return err
+	}, bridge.setStartErr, firstCollectionRetry, time.Sleep)
+	bridge.setStartErr("")
+	a.extendLiveWatchWSL(nativeClaudeRoots, nativeCodexRoots)
 
 	// Re-collect on -interval; the open page notices the rewritten
 	// dashboard.html (bridgeScript polls /api/built) and reloads itself. No

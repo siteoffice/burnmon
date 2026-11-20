@@ -30,7 +30,7 @@ import (
 // Distinct errors Collect can return. Callers map each to their own message
 // and exit code.
 var (
-	ErrNoSources  = errors.New("no source folders found")
+	ErrNoSources  = errors.New("no session folders found for Claude Code, Cowork, Codex or the other supported tools")
 	ErrNoFiles    = errors.New("no transcript files found")
 	ErrNoSessions = errors.New("no sessions inside the reporting window")
 )

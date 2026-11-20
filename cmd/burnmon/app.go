@@ -421,7 +421,7 @@ color:#eee;display:grid;place-items:center;height:100vh;margin:0;overflow:hidden
  <div style="margin:14px auto 0;width:320px;height:8px;background:#334455;border-radius:4px;overflow:hidden">
   <div id="cc_warm_fill" style="width:0%;height:100%;background:#FFDD32;transition:width .2s"></div>
  </div>
- <div id="cc_warm_text" style="margin-top:8px;font-size:13px;color:#9fb4bd">Starting&hellip;</div>
+ <div id="cc_warm_text" style="white-space:pre-line;margin-top:8px;font-size:13px;color:#9fb4bd">Starting&hellip;</div>
  <div style="margin-top:22px;font-size:11px;color:#5b6b74">BurnMon vAPP_VERSION</div>
 </div>
 <script>
@@ -725,7 +725,7 @@ func toFileURL(path string) string {
 func startupFailureMessage(err error) string {
 	switch {
 	case errors.Is(err, dataset.ErrNoSources):
-		return "No Claude transcript folders were found on this machine. Cowork sessions that run in Anthropic's cloud leave no local transcript, so there may be nothing local to read yet."
+		return "No session folders were found on this machine: BurnMon has nothing to read yet. Cowork sessions that run in Anthropic's cloud leave no local transcript. BurnMon keeps looking and shows your sessions once a folder appears." + "\n" + sourceFoldersLine(runtime.GOOS)
 	case errors.Is(err, dataset.ErrNoFiles):
 		return "Claude's folders exist but contain no transcript files. Cloud Cowork sessions and claude.ai browser chats leave no local transcript."
 	case errors.Is(err, dataset.ErrNoSessions):
