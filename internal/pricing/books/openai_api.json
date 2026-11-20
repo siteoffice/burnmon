@@ -5,6 +5,8 @@
     "gpt-6-astra": {"label": "GPT-6 Astra", "in": 10.00, "cached_in": 1.00, "out": 50.00},
     "gpt-6-sol": {"label": "GPT-6 Sol", "in": 2.00, "cached_in": 0.20, "out": 10.00},
     "gpt-6-luna": {"label": "GPT-6 Luna", "in": 0.10, "cached_in": 0.01, "out": 0.50},
-    "gpt-5.6-sol": {"label": "GPT-5.6 Sol", "in": 4.00, "cached_in": 0.40, "out": 20.00}
+    "gpt-5.6-sol": {"label": "GPT-5.6 Sol", "in": 4.00, "cached_in": 0.40, "out": 20.00},
+    "gpt-5.6-terra": {"label": "GPT-5.6 Terra", "in": 2.00, "cached_in": 0.20, "out": 12.00, "source": "https://developers.openai.com/api/docs/models/gpt-5.6-terra", "date": "2026-11-20"},
+    "gpt-5.6-luna": {"label": "GPT-5.6 Luna", "in": 0.20, "cached_in": 0.02, "out": 1.20, "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna", "date": "2026-11-20"}
   }
 }

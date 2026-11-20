@@ -45,6 +45,11 @@ type OpenAIModelRate struct {
 	In       float64 `json:"in"`
 	CachedIn float64 `json:"cached_in"`
 	Out      float64 `json:"out"`
+	// Source and Date are set only for a model whose rate comes from a page
+	// other than the book's own source (OpenAI's model page); empty means
+	// the book's Source and Date hold.
+	Source string `json:"source,omitempty"`
+	Date   string `json:"date,omitempty"`
 }
 
 // OpenAIAPIBook is the OpenAI API list-price book, for vendor "openai".

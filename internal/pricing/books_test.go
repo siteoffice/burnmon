@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -83,5 +84,29 @@ func TestSubscriptionConfiguredFalseForDefaults(t *testing.T) {
 	cfg := Defaults()
 	if cfg.SubscriptionConfigured() {
 		t.Fatal("Defaults' illustrative example calibration must not count as configured")
+	}
+}
+
+// TestOpenAIBookPricesTerraAndLuna pins the rates OpenAI publishes on its own
+// model pages for gpt-5.6-terra and gpt-5.6-luna (USD per million tokens,
+// read 2026-11-20), and the book says where and when for these two.
+func TestOpenAIBookPricesTerraAndLuna(t *testing.T) {
+	cfg := Defaults()
+	want := map[string]OpenAIModelRate{
+		"gpt-5.6-terra": {Label: "GPT-5.6 Terra", In: 2.00, CachedIn: 0.20, Out: 12.00},
+		"gpt-5.6-luna":  {Label: "GPT-5.6 Luna", In: 0.20, CachedIn: 0.02, Out: 1.20},
+	}
+	for id, w := range want {
+		got, ok := cfg.OpenAIBook.Models[id]
+		if !ok {
+			t.Errorf("%s: not in the OpenAI book", id)
+			continue
+		}
+		if got.In != w.In || got.CachedIn != w.CachedIn || got.Out != w.Out {
+			t.Errorf("%s: rate = %+v, want %+v", id, got, w)
+		}
+		if !strings.Contains(got.Source, "developers.openai.com/api/docs/models/"+id) || got.Date != "2026-11-20" {
+			t.Errorf("%s: source %q date %q, want its model page and 2026-11-20", id, got.Source, got.Date)
+		}
 	}
 }

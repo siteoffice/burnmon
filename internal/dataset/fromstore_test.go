@@ -117,8 +117,7 @@ func TestSessionsFromEventsDailyBucketsLocalDST(t *testing.T) {
 
 // TestSessionsFromEventsPricesOpenAIEvents prices a Codex turn at the OpenAI
 // price book's list rate, the book History reads too. The model is one the
-// book carries (gpt-5.6-terra is not in it, so it is "no price" here as in
-// History).
+// book carries.
 func TestSessionsFromEventsPricesOpenAIEvents(t *testing.T) {
 	cfg := pricing.Defaults()
 	events := []schema.Event{
