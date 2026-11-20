@@ -2,7 +2,8 @@
 set -euo pipefail
 # B9 scripted Mac run. Full mode (rental day, real Mac with a screen):
 #   bash scripts/maccheck.sh
-# CI mode (macos-latest, no display): build, vet and test only.
+# CI mode (macos-latest): build, vet, test and the lamp demo; the other window
+# steps are skipped.
 #   bash scripts/maccheck.sh --ci
 # Writes maccheck-out/report.md plus one log per step. Installs nothing.
 
@@ -88,6 +89,8 @@ step() {
   else
     row "$name" "FAILED (see $log)"
     FAILED=1
+    # CI keeps no files, so the end of the log goes to the job output.
+    if [ "$MODE" = ci ]; then tail -n 40 "$log"; fi
   fi
 }
 
@@ -195,7 +198,9 @@ window_step start-burnmon-dev start_burnmon_dev
 for c in $DOM_CASES; do window_step "uicheck-$c" run_uicheck "$c"; done
 window_step screenshot-burnmon-dev screencapture -x "$OUT/burnmon-dev.png"
 window_step stop-burnmon-dev stop_burnmon_dev
-window_step lamp-demo lamp_demo
+# The lamp demo also runs in CI mode (Mac fix lane T2, D1): the hosted runner
+# has a window server, so a lamp that crashes at start turns the check red.
+step lamp-demo lamp_demo
 
 {
   printf '\n'

@@ -90,12 +90,12 @@ func TestMaccheckScriptShape(t *testing.T) {
 			windowSteps = append(windowSteps, m[1])
 		}
 	}
-	wantSteps := []string{"build-burnmon", "build-burnmon-dev", "build-burnmon-cli", "build-controlcentre", "build-uicheck", "vet", "test"}
+	wantSteps := []string{"build-burnmon", "build-burnmon-dev", "build-burnmon-cli", "build-controlcentre", "build-uicheck", "vet", "test", "lamp-demo"}
 	if !reflect.DeepEqual(steps, wantSteps) {
 		t.Errorf("step names = %v, want %v", steps, wantSteps)
 	}
 	wantWin := []string{"start-burnmon", "probe-burnmon", "screenshot-burnmon", "stop-burnmon",
-		"start-burnmon-dev", "uicheck-$c", "screenshot-burnmon-dev", "stop-burnmon-dev", "lamp-demo"}
+		"start-burnmon-dev", "uicheck-$c", "screenshot-burnmon-dev", "stop-burnmon-dev"}
 	if !reflect.DeepEqual(windowSteps, wantWin) {
 		t.Errorf("window_step names = %v, want %v", windowSteps, wantWin)
 	}
