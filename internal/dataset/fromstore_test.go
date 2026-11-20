@@ -115,12 +115,16 @@ func TestSessionsFromEventsDailyBucketsLocalDST(t *testing.T) {
 	}
 }
 
+// TestSessionsFromEventsPricesOpenAIEvents prices a Codex turn at the OpenAI
+// price book's list rate, the book History reads too. The model is one the
+// book carries (gpt-5.6-terra is not in it, so it is "no price" here as in
+// History).
 func TestSessionsFromEventsPricesOpenAIEvents(t *testing.T) {
 	cfg := pricing.Defaults()
 	events := []schema.Event{
 		{
 			Vendor: "openai", Agent: "codex", SessionID: "codex-sess", RequestID: "codex-sess:1",
-			Model: "gpt-5.6-terra", Surface: "cli",
+			Model: "gpt-5.6-sol", Surface: "cli",
 			At:        time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC),
 			Input:     1000, // fresh, already input-minus-cached per the codex adapter
 			CacheRead: ptr(int64(500)),
@@ -132,9 +136,9 @@ func TestSessionsFromEventsPricesOpenAIEvents(t *testing.T) {
 		t.Fatalf("got %d sessions, want 1", len(sessions))
 	}
 	s := sessions[0]
-	want := (1000*2.00 + 500*0.20 + 100*12.00) / 1e6
+	want := (1000*4.00 + 500*0.40 + 100*20.00) / 1e6
 	if diff := s.Cost - want; diff > 1e-9 || diff < -1e-9 {
-		t.Fatalf("Cost = %v, want %v (gpt-5.6-terra list price)", s.Cost, want)
+		t.Fatalf("Cost = %v, want %v (gpt-5.6-sol list price)", s.Cost, want)
 	}
 	if s.CostSub != s.Cost {
 		t.Fatalf("CostSub = %v, want equal to Cost (no OpenAI subscription calibration in v0.1)", s.CostSub)
@@ -142,8 +146,8 @@ func TestSessionsFromEventsPricesOpenAIEvents(t *testing.T) {
 	if s.Unpriced != 0 {
 		t.Fatalf("Unpriced = %d, want 0 for a priced model", s.Unpriced)
 	}
-	if _, ok := s.Models["GPT-5.6 Terra"]; !ok {
-		t.Fatalf("Models keys = %v, want a GPT-5.6 Terra entry", s.Models)
+	if _, ok := s.Models["GPT-5.6 Sol"]; !ok {
+		t.Fatalf("Models keys = %v, want a GPT-5.6 Sol entry", s.Models)
 	}
 }
 

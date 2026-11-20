@@ -141,22 +141,17 @@ func isTurn(e schema.Event) bool {
 	return !(e.Model == "" && e.Input == 0 && e.Output == 0)
 }
 
-// turnCostUSD mirrors internal/live's own unexported turnCost: openai
-// vendor uses its own calibrated call cost, everything else uses the
-// subscription-share cost for its model family. Kept as a small
-// duplication rather than an export from live, the same tradeoff
-// pressure_windows.go's own doc comment makes for its PDH counters.
+// turnCostUSD gives one turn's cost: an openai turn at the OpenAI price
+// book's list rate through pricing.Config.EventCost (the book History,
+// Sessions and live read, so a Codex turn has one price everywhere),
+// everything else at the subscription-share cost for its model family.
 func turnCostUSD(e schema.Event, cfg *pricing.Config) float64 {
 	if cfg == nil {
 		return 0
 	}
 	if e.Vendor == "openai" {
-		var cr int64
-		if e.CacheRead != nil {
-			cr = *e.CacheRead
-		}
-		c, _ := cfg.OpenAICallCostUSD(e.Model, e.Input, cr, e.Output)
-		return c
+		_, sub, _, _ := cfg.EventCost(e)
+		return sub
 	}
 	fam := cfg.ModelFamily(e.Model)
 	return cfg.CallCostSubUSD(fam, e.Input, e.Output)

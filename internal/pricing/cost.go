@@ -201,21 +201,30 @@ func (c *Config) anthropicSubscriptionCostUSD(events []schema.Event) float64 {
 	return total
 }
 
-// openAIAPICostUSD prices every openai-vendor event at its exact model's
-// OpenAIBook rate. A model with no entry (unconfirmed at the live check, or
-// never seen locally) prices at 0.
+// openAIEventCostUSD prices one openai-vendor event at its exact model's
+// OpenAIBook rate. ok is false when the model has no book entry (unconfirmed
+// at the live check, or no longer on OpenAI's pricing page), in which case
+// usd is 0 and label is the old OpenAIPrices display label, or the raw id.
+func (c *Config) openAIEventCostUSD(e schema.Event) (usd float64, label string, ok bool) {
+	rate, ok := c.OpenAIBook.Models[e.Model]
+	if !ok {
+		return 0, c.OpenAILabel(e.Model), false
+	}
+	_, cr := cacheTokens(e.CacheWrite, e.CacheRead)
+	usd = (float64(e.Input)*rate.In + float64(cr)*rate.CachedIn + float64(e.Output)*rate.Out) / 1e6
+	return usd, rate.Label, true
+}
+
+// openAIAPICostUSD sums openAIEventCostUSD across every openai-vendor event
+// in events.
 func (c *Config) openAIAPICostUSD(events []schema.Event) float64 {
 	var total float64
 	for _, e := range events {
 		if e.Vendor != "openai" {
 			continue
 		}
-		rate, ok := c.OpenAIBook.Models[e.Model]
-		if !ok {
-			continue
-		}
-		_, cr := cacheTokens(e.CacheWrite, e.CacheRead)
-		total += (float64(e.Input)*rate.In + float64(cr)*rate.CachedIn + float64(e.Output)*rate.Out) / 1e6
+		usd, _, _ := c.openAIEventCostUSD(e)
+		total += usd
 	}
 	return total
 }
@@ -271,10 +280,12 @@ func (c *Config) EventCost(e schema.Event) (usd, sub float64, label string, unpr
 		sub = c.anthropicEventSubCostUSD(e)
 		return usd, sub, label, !ok
 	case "openai":
-		_, cr := cacheTokens(e.CacheWrite, e.CacheRead)
-		var unpricedCall bool
-		usd, unpricedCall = c.OpenAICallCostUSD(e.Model, e.Input, cr, e.Output)
-		return usd, usd, c.OpenAILabel(e.Model), unpricedCall
+		// The OpenAIBook, as in CostForEvents: the old OpenAIPrices table
+		// still priced models the book leaves out, so Sessions and BurnMon
+		// Dev showed more than History for the same Codex session.
+		var ok bool
+		usd, label, ok = c.openAIEventCostUSD(e)
+		return usd, usd, label, !ok
 	case "github":
 		var ok bool
 		usd, label, ok = c.copilotEventCostUSD(e)
