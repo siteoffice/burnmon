@@ -536,7 +536,14 @@ body.plain #mapOverlay{font-size:13.5px}
   border-top:3px solid var(--amber); border-radius:4px; padding:10px 14px; display:none; flex-direction:column; gap:8px; font-size:12px;
   box-shadow:0 2px 6px var(--scrim), 0 16px 48px var(--scrim)}
 #secSettings.open{display:flex}
-#secSettings{max-height:calc(100vh - 80px); overflow-y:auto}
+/* The pane is taller than a small window, so it scrolls inside the window; its scrollbar is the one of .ticker,
+   shown only when the content does not fit, and visible on macOS, which hides a default one. */
+#secSettings{max-height:calc(100vh - 80px); overflow-y:auto; overflow-x:hidden}
+#secSettings{scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
+#secSettings::-webkit-scrollbar{width:8px}
+#secSettings::-webkit-scrollbar-track{background:var(--panel2)}
+#secSettings::-webkit-scrollbar-thumb{background:var(--sb)}
+#secSettings::-webkit-scrollbar-thumb:hover{background:var(--sb-hover)}
 #secSettings .setstation{display:flex; gap:14px; align-items:center}
 #secSettings .setbtn{background:none; border:1px solid var(--bd); color:var(--blu); font:inherit; padding:3px 8px; cursor:pointer}
 /* One look for every gear input and select; color-scheme follows the theme so an open list is dark in the dark theme. */

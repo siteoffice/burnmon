@@ -17,6 +17,8 @@ func newAppWindow(dataDir string) winbind.Window {
 		return nil
 	}
 	w.SetTitle(windowTitle)
-	w.SetSize(1280, 860, webview.HintNone)
+	// The first window is limited to the visible area of the main screen.
+	width, height := winbind.FirstWindowSize(1280, 860)
+	w.SetSize(width, height, webview.HintNone)
 	return w
 }

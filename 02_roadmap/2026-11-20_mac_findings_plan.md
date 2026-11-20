@@ -100,6 +100,69 @@ caused by this turn. Both were rerun once on this turn's build and failed again.
 - Review (sonnet, fresh): found the header `$` of the burn rate (repaired with a failing test first) and the dollar
   `fmtCost` of the Go exports (named above, not changed). No test made weaker; the terra-to-sol move is named above.
 
+## T2: D4 and D6, the first window and the gear view
+
+### D4, the first window
+
+Read: the three `window_darwin.go` files called `SetSize` with a fixed 1280 x 860 (BurnMon, BurnMon Dev) or 1536 x 864
+(Control Centre). On Windows `go-webview2` (`webview.go`, `CreateWithOptions`) centres on `SM_CXSCREEN` and
+`SM_CYSCREEN` and never limits the size (for a screen smaller than the window the centring even underflows, it is an
+unsigned subtraction), so the gap D4 is also there on Windows for a small screen; no app limited it. The BurnMon Dev
+restore clamp (`cmd\burnmon-dev\windowstate.go`) only covers a saved window.
+
+Repair: `winbind.FitFirstWindow(wantW, wantH, visW, visH)` in `C:\ZND\50_projects\burnmon\internal\winbind\firstwindow.go`
+returns the wanted size limited to the visible area minus `FirstWindowMargin` (64 px per axis: title bar and a gap). A
+visible size of 0, or one that cannot hold the margin, returns the wanted size. `winbind.FirstWindowSize` reads the visible
+area through `VisibleSize`: `visible_windows.go` (`SPI_GETWORKAREA`, work area of the primary monitor),
+`visible_darwin.go` (cgo, `[NSScreen mainScreen].visibleFrame`, in points like `SetSize`), `visible_other.go` (0, 0).
+The three `window_darwin.go` files and the three `window_windows.go` files use it. The saved window of BurnMon Dev is
+unchanged: a saved size still wins.
+
+Tests, first, seen failing (build failed on the missing function): `TestFitFirstWindow` in
+`internal\winbind\firstwindow_test.go`, for 1024 x 768, 1470 x 956 and 1920 x 1080 with 1280 x 860 and 1536 x 864, plus
+the two fallbacks. Results: 1024 x 768 gives 960 x 704 for both; 1470 x 956 gives 1280 x 860 and 1406 x 864; 1920 x 1080
+changes nothing.
+
+Not measured: a window on a Mac or on a small Windows screen (built, not seen). `visible_darwin.go` cannot be compiled
+on this laptop; the `macos` check on the pull request is its first compile. The reviewer notes that `NSScreen` is
+read from the Go main goroutine, not guaranteed thread 0; a read-only query, untested. DPI: the `.syso` manifests of the
+exes carry a DPI awareness entry (found by grep, not decoded), so the work area and the window size should both be in
+physical pixels; inferred, not measured at 125 or 150 percent.
+
+### D6, the gear view
+
+Measured on this laptop at the real window (1264 x 821 CSS px, scale 1), through the dev eval channel with a temp settings
+folder: the gear pane `#secSettings` has `scrollHeight` 1488, `clientHeight` 737, `max-height` 741 px
+(`calc(100vh - 80px)`) and `overflow-y:auto`. At a 1024 x 768 screen the window is at most 704 px outer, so the pane
+cap is about 585 to 600 px: it does not fit. The pane already scrolled, but with the default scrollbar, which macOS hides
+until a scroll. Repair: `#secSettings` gets `overflow-x:hidden` and the scrollbar rules of `.ticker`
+(`scrollbar-width:thin`, 8 px `::-webkit-scrollbar` with the same track and thumb colours), which keeps it visible; no
+other pane is touched. Test first, seen failing: `TestGearPaneHasTheHouseScrollbar` in
+`cmd\burnmon-dev\gear_scrollbar_page_test.go`. Not measured: the scrollbar in a window at 1024 x 768 (built, not seen).
+
+### Files changed
+
+`internal\winbind\firstwindow.go`, `firstwindow_test.go`, `visible_windows.go`, `visible_darwin.go`, `visible_other.go`;
+`cmd\burnmon\window_darwin.go`, `window_windows.go`; `cmd\burnmon-dev\window_darwin.go`, `window_windows.go`, `page.html`,
+`gear_scrollbar_page_test.go`; `cmd\controlcentre\window_darwin.go`, `window_windows.go`; this plan file. That is 14 files
+against the budget of 12 (L7); the new files are the steps themselves, nothing was left out.
+
+### uicheck
+
+`.\scripts\uicheck-dev.ps1`: `fit` and `charts` ok, `station` red on `station/d28` as on `aac8328` (the baseline, same
+message, the Station taller than `#pageScroll` on this screen). The groups after it never run when one is red, so
+`layout pct panes map waits shell` were run by name: all pass. `layout/d43` failed once with "the gear did not open"
+(a real mouse click on `#secGear`), and passed in two reruns and in the full run. `uicheck.ps1` and
+`uicheck-centre.ps1` were not run: no page of BurnMon or the Control Centre changed, only their window code.
+
+### Choices made unattended
+
+- Margin 64 px per axis, one number for all three apps (the hub named none).
+- Windows limited too, with the same function (step 3 found the gap).
+- The gear scrollbar is the `.ticker` style on the pane itself, not on an inner element.
+- Review (sonnet, fresh): no behaviour change outside D4 and D6, no test weakened; it named the Mac thread question and
+  the DPI inference above, both left as written.
+
 ## Turn log
 
 T1: done; commit 93bd7bc; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, uicheck.ps1 and uicheck-dev.ps1 exit 1 on w1 and station/d28, the same on aac8328's pages (A/B); open: the terra and luna price question for Wilco, BurnMon Dev cannot read BurnMon's currency choice (euro at 0.92), the Dev Markdown exports still print dollars, w1 and station/d28 fail on this screen before and after this turn (built, not seen in a window)
