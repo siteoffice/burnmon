@@ -89,8 +89,9 @@ step() {
   else
     row "$name" "FAILED (see $log)"
     FAILED=1
-    # CI keeps no files, so the end of the log goes to the job output.
-    if [ "$MODE" = ci ]; then tail -n 40 "$log"; fi
+    # CI keeps no files, so the log goes to the job output: its head holds a
+    # crash reason, its end the last lines.
+    if [ "$MODE" = ci ]; then head -n 30 "$log"; printf '...\n'; tail -n 15 "$log"; fi
   fi
 }
 
