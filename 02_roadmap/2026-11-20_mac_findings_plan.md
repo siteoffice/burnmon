@@ -395,8 +395,16 @@ The first `package` run (commit `e353632`) failed in `macos (amd64)` after 1 min
 `internal\winbind\visible_darwin.go` from T2: "could not determine what C.burnmonVisibleSize refers to", clang read
 `#import <Cocoa/Cocoa.h>` as C (28798 errors). T2 noted that file is compiled only on a Mac. The cause is not the chip:
 the preamble lacked `#cgo CFLAGS: -x objective-c`, which `cmd\burnmon-dev\lamp_window_darwin.go` has. Added that one
-line. Inferred: the `macos` check and `package (arm64)` would fail the same way; both were still queued when the fix
-was pushed. No Go test can show it on Windows; the Mac runners are the test.
+line. Measured with `gh run view`: on `e353632` the `macos` check, `macos (arm64)` and `macos (amd64)` failed; on
+`567b3ba` all four checks of pull request 65 pass (`macos` 1m30s, `macos (amd64)` 1m20s, `macos (arm64)` 1m17s,
+`windows` 1m19s). So the `macos` check was red since T2 and T2's commit was never compiled on a Mac before this run.
+
+### Packaging result (pull request 65, run 44800685500)
+
+Artifacts: `package-macos-arm64` (17.5 MB), `package-macos-amd64` (18.2 MB), `package-windows-amd64` (19.1 MB). The job
+logs list per macOS zip the three bundles with `Contents/MacOS/<exe>` and `Info.plist`, checked for the chip by `lipo`;
+the Windows zip lists the four exes, `burnmon.example.json` and `README-FIRST.txt`. amd64 builds with cgo on the Apple
+silicon runner, so both chips ship. Built on a runner, not started.
 
 ### Files changed
 
@@ -417,3 +425,5 @@ T3: done; commit fca0c37; measured: go vet 0, go test 50 packages ok and 0 FAIL,
 T4: done; commit 07525ec; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, uicheck.ps1 w1 red as on aac8328, uicheck-dev station/d28 red as before and layout pct panes map waits shell pass (one earlier run exited 1 with its output not read, the rerun exit 0), uicheck-centre.ps1 exit 0; open: Sessions table, Agents card at 15 percent and the no-plan Planning page have no uicheck case so they are built, not seen; the Git row at 1024 px with icons and text is not measured (Stops at may still be shortened, hover shows it); Owner and Client shown together leave the title about 30 px; one earlier test edited (TestPageGitStopsAtColumnIsWidest, named above)
 
 T5: done; commit 07ca443; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, no uicheck (no page file changed); open: tests failed first by not compiling, the starvation test was not run on the old Due, an id that left the session list keeps FailedAt and holds the row at partial, an old runner-wide last_error clears at the next good pull, one earlier assertion flipped (TestPullOneFailureIsNotDisable, named in the plan), no real CLI call and no window (built, not seen)
+
+T6: done; commit e353632 and 567b3ba; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, gh pr checks 65 all four pass on 567b3ba (macos, package macos arm64 and amd64, windows), red on e353632 from the T2 cgo preamble, repaired; open: the new repocheck tests were written after the files (not seen failing first), the release.yml pin moved, the apps are built on a runner and not started, the Windows warning and xattr -dr on a folder are not tested, 13 files against 12
