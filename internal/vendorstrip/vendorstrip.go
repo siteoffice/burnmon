@@ -6,6 +6,7 @@
 package vendorstrip
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -63,9 +64,10 @@ var cloudPullStatus = func() cloudpull.Status { return cloudpull.ReadStatus(clou
 // The values of Payload.CloudPull: the Settings switch "Read Cowork (Cloud)
 // sessions" and, when it is on, whether the last pull pass was good.
 const (
-	CloudPullOff    = "off"
-	CloudPullOK     = "ok"
-	CloudPullFailed = "failed"
+	CloudPullOff     = "off"
+	CloudPullOK      = "ok"
+	CloudPullPartial = "partial" // some sessions are read, others fail
+	CloudPullFailed  = "failed"
 )
 
 // cloudNote classifies one period of the Cowork (Cloud) row against the last
@@ -153,10 +155,14 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 
 	// With the cloud pull on, the old drop rows no longer decide the marker:
 	// a good pull means plain numbers, a failing one means not measured.
-	pull, reason := CloudPullOff, ""
+	pull, reason, unread := CloudPullOff, "", 0
 	if cfg != nil && cfg.CloudPull {
 		if s := cloudPullStatus(); s.OK {
 			pull = CloudPullOK
+			if s.Unread > 0 {
+				// An unread session may belong to any period: no cell is a plain number.
+				pull, reason, unread = CloudPullPartial, s.UnreadReason, s.Unread
+			}
 		} else {
 			pull, reason = CloudPullFailed, s.Reason
 		}
@@ -172,6 +178,10 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 		r := Row{Agent: t.Agent, AgentLabel: label, Today: t.Today, Week: t.Week, Month: t.Month}
 		if pull == CloudPullFailed && t.Agent == "cowork-cloud" {
 			r.TodayNote, r.WeekNote, r.MonthNote = NoteNotMeasured, NoteNotMeasured, NoteNotMeasured
+		}
+		if pull == CloudPullPartial && t.Agent == "cowork-cloud" {
+			r.TodayNote, r.WeekNote, r.MonthNote = NotePartial, NotePartial, NotePartial
+			total.TodayNote, total.WeekNote, total.MonthNote = NotePartial, NotePartial, NotePartial
 		}
 		if pull == CloudPullOff && haveLast && t.Agent == "cowork-cloud" {
 			r.TodayNote = cloudNote(dayStart(now), last)
@@ -207,6 +217,12 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 		p.CloudMeasuredUntil = last.In(time.Local).Format("2006-01-02 15:04")
 	}
 	switch {
+	case pull == CloudPullPartial:
+		noun, verb := "sessions", "are"
+		if unread == 1 {
+			noun, verb = "session", "is"
+		}
+		p.CloudTip = fmt.Sprintf("Cowork (Cloud): %d %s %s not read. Newest failure: %s", unread, noun, verb, reason)
 	case pull == CloudPullFailed:
 		p.CloudTip = "Cowork (Cloud) not measured: " + reason
 	case pull == CloudPullOff && haveLast:

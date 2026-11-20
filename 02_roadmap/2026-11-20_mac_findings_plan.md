@@ -283,6 +283,57 @@ are built, not seen.
 `cmd\burnmon-dev\agents_card_page_test.go` (new), `cmd\controlcentre\page.html`, `cmd\controlcentre\gitpage_test.go`,
 `cmd\controlcentre\layout_findings_test.go` (new); this plan file. 8 files, inside the budget of 12.
 
+## T5: the Cowork (Cloud) pull
+
+### What was changed, and why
+
+- Reason, `internal\cloudpull\runner.go` `PullOne`: when the CLI exits non-zero the error is now "cloudpull: the CLI exited
+  with <exit status and first line of the error stream>", plus the first line of its output when there is one. Before, an
+  empty output gave "no JSON result from the CLI:" with nothing after the colon. Test: `TestPullOneKeepsTheCLIReason`
+  (the measured text of CP), `TestPullOneFailureReachesReadStatus`.
+- Queue, `Due`: `Entry.Failures` counts failures in a row (a good pull replaces the entry, so it resets). `retryDelay`
+  is 15 minutes, doubling, at most 24 hours. A failed id that is due again gets tier 4: after every other id, oldest
+  failure first. Never-pulled ids that fail now wait their delay and then go last too. "Session not found" is untouched.
+  Tests: `TestRetryDelayDoublesToOneDay`, `TestFailuresCountInARowAndReset`, `TestDueRetriesOfFailedIDsGoLast` (31 failing
+  ids), `TestRepullsGetTheirTurnWithManyFailingIDs` (120 ticks of 30 s, five due re-pulls all pulled).
+- Runner-wide error: a failing session no longer writes the state's `last_error`; `Step` does not record a
+  `sessionError` either. That field now means what stops every pull (not signed in, no CLI). This is why the strip
+  stopped flipping with the last pull. Test: `TestStepKeepsSessionFailureOffTheRunner`.
+- Strip, `internal\vendorstrip\vendorstrip.go` and `cloudpull.ReadStatus`: `Status` gains `Unread` (sessions whose last
+  pull failed, gone ones excluded, also those with an older copy) and `UnreadReason` (newest failure). With at least one
+  session read and Unread above 0, `cloud_pull` is the new value "partial", every cell of the Cowork (Cloud) row and of the
+  Total row carries the partial mark (today's 0 included) and the tip reads "Cowork (Cloud): N sessions are not read.
+  Newest failure: <reason>". "not measured" stays for: no session read (the reason is then the newest failure), CLI missing
+  or signed out, cost guard. Tests: `TestCloudPullPartialMarksEveryCell`, `TestCloudPullNothingReadStaysNotMeasured`,
+  `TestReadStatusPartialAndAllFailing`.
+- BurnMon's own view and BurnMon Dev read the same payload (`notes` and `cloud_tip`), so neither page needed an edit.
+  `cmd\burnmon-dev\page.html` and `internal\report\template.html` are unchanged.
+
+### Earlier test changed, named
+
+`TestPullOneFailureIsNotDisable` in `internal\cloudpull\runner_test.go` expected `st.LastError != ""` after one failing
+session. It now expects it empty, because that is the repair. Its other assertions are unchanged.
+
+### Review (sonnet, fresh)
+
+Taken: the non-empty output case (the reason is kept now), a test through `PullOne` into `ReadStatus`. Not taken, open:
+(1) `errors.Join(sessionError, saveErr)` hides a failed save from `Step`; (2) a state file written before this turn may
+hold the old runner-wide `last_error` ("no JSON result from the CLI:"); the strip shows "not measured" until one pull
+succeeds, which clears it, and the re-pulls now get their turn; (3) an id that left the session list and is not gone keeps
+its `FailedAt`, counts as unread and holds the row at partial, nothing retries it; (4) the new `cloud_pull` value
+"partial" is a new member of the strip payload; no page switches on it; (5) in partial the Total row is marked only when a
+Cowork (Cloud) row exists, as with the other notes.
+
+### Not measured
+
+Tests failed first by not compiling (new fields and functions missing), not by a failing assertion; the starvation test was
+not run against the old `Due`. No real CLI call, no window: the strip text is built, not seen. No uicheck: no page file
+changed. Unread counts only ids with a state entry; a listed id never tried is not counted.
+
+### Files changed
+
+`internal\cloudpull\runner.go`, `internal\cloudpull\runner_test.go`, `internal\cloudpull\queue_test.go` (new),
+`internal\vendorstrip\vendorstrip.go`, `internal\vendorstrip\cloudpull_partial_test.go` (new); this plan file. 6 files.
 ## Turn log
 
 T1: done; commit 93bd7bc; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, uicheck.ps1 and uicheck-dev.ps1 exit 1 on w1 and station/d28, the same on aac8328's pages (A/B); open: the terra and luna price question for Wilco, BurnMon Dev cannot read BurnMon's currency choice (euro at 0.92), the Dev Markdown exports still print dollars, w1 and station/d28 fail on this screen before and after this turn (built, not seen in a window)
