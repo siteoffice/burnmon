@@ -2313,9 +2313,11 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     return chart.slice(-n);
   }
 
+  function sessionsLabel(n){ return n + (n === 1 ? ' session' : ' sessions'); }
+
   function renderHeaderBurn(snap){
     var sessionsEl = document.getElementById('hdrSessions');
-    if(sessionsEl) sessionsEl.textContent = (snap.sessions || []).length + ' sessions';
+    if(sessionsEl) sessionsEl.textContent = sessionsLabel((snap.sessions || []).length);
     var chart = snap.chart || [];
     var bucketSeconds = snap.bucket_seconds || 60;
     var recent = recentBuckets(chart, 300, bucketSeconds);

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -763,7 +764,7 @@ func TestMissingDependenciesGiveReasons(t *testing.T) {
 	r.env.ForemanRoot = ""
 	r.rebuild()
 	a := r.svc.Availability()
-	if a.Why[Stop] != "needs claude.exe: set claude_path in burnmon.json" || a.Why[Approve] != "needs python.exe on PATH" {
+	if a.Why[Stop] != whyClaudeFor(runtime.GOOS) || a.Why[Approve] != "needs python.exe on PATH" {
 		t.Fatalf("%+v", a)
 	}
 	r.env.ClaudePath = svcClaude

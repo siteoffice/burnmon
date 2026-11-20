@@ -3,6 +3,7 @@ package controls
 import (
 	"errors"
 	"regexp"
+	"runtime"
 )
 
 // Control ids. Reply is not built: Claude Code documents no shell command
@@ -29,9 +30,19 @@ func ValidAgentID(id string) bool {
 	return agentIDRe.MatchString(id)
 }
 
+// whyClaudeFor is the refusal for a missing claude. It names the binary of the
+// operating system: claude.exe on Windows, claude on macOS and Linux.
+func whyClaudeFor(goos string) string {
+	name := "claude"
+	if goos == "windows" {
+		name = "claude.exe"
+	}
+	return "needs " + name + ": set claude_path in burnmon.json"
+}
+
 func claudeArgv(claudePath, verb, id string) ([]string, error) {
 	if claudePath == "" {
-		return nil, errors.New("needs claude.exe: set claude_path in burnmon.json")
+		return nil, errors.New(whyClaudeFor(runtime.GOOS))
 	}
 	if !ValidAgentID(id) {
 		return nil, errors.New("not a valid session id")
