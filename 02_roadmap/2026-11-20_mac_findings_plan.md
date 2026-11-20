@@ -334,6 +334,78 @@ changed. Unread counts only ids with a state entry; a listed id never tried is n
 
 `internal\cloudpull\runner.go`, `internal\cloudpull\runner_test.go`, `internal\cloudpull\queue_test.go` (new),
 `internal\vendorstrip\vendorstrip.go`, `internal\vendorstrip\cloudpull_partial_test.go` (new); this plan file. 6 files.
+## T6: startable apps in the release, and the wrap-up
+
+### What was built
+
+- `scripts\package.sh` (bash, ASCII, runs on a Mac): `bash scripts/package.sh <tag> [arm64|amd64]` builds `burnmon`,
+  `burnmon-dev` and `controlcentre` with `CGO_ENABLED=1` for the asked chip, puts each in an app bundle (`BurnMon.app`,
+  `BurnMon Dev.app`, `Control Centre.app`) with an `Info.plist` (name, bundle id `dev.zerononsense.burnmon`,
+  `dev.zerononsense.burnmon-dev`, `dev.zerononsense.controlcentre`, icon, `CFBundleShortVersionString` the tag without
+  its `v`, `CFBundleVersion` the numbers before the first dash), adds `burnmon-cli`, `burnmon.example.json` and
+  `README-FIRST.txt`, zips with `ditto` as `dist\burnmon-<tag>-macos-<arch>.zip`, then lists the zip and fails when a
+  part is missing or an exe is not built for the chip (`lipo -archs`).
+- Icons: Control Centre uses the existing `winres\controlcentre.icns`. BurnMon and BurnMon Dev share one icns that the
+  script makes with `iconutil` from `winres\icon-*.png` (the Windows icon); the 512 px slot is scaled up from 256 px.
+- `.github\workflows\package.yml` (new): on `pull_request` and as a reusable workflow. A `macos` job on `macos-latest`
+  with the matrix arm64 and amd64 runs the script; a `windows` job on `windows-latest` runs `.\build.ps1` and zips the
+  four exes, `burnmon.example.json` and `packaging\windows\README-FIRST.txt` as `burnmon-<tag>-windows-amd64.zip` and
+  checks the entries. On a pull request the tag in the names is `pr<number>` and the zips stay workflow artifacts.
+- `.github\workflows\release.yml`: a `package` job calls `package.yml` with the tag; the `release` job needs `build` and
+  `package` and attaches everything in `dist`, so the zips go beside the eight bare files. After the review the
+  `release` job also runs when packaging fails and `build` succeeded, so a red packaging job does not hold back the
+  eight files that released on their own before.
+- Texts: `packaging\macos\README-FIRST.txt`, `packaging\windows\README-FIRST.txt`, README section "Install and build".
+  Mac: unzip, `xattr -dr com.apple.quarantine` on the folder, double-click; unsigned, signing follows. Windows: unzip,
+  double-click; the warning for an unsigned program is "not tested".
+
+### Choices made unattended
+
+- The two README-FIRST texts live in a new folder `packaging\` (one per system), beside no other file; the lane named
+  the texts but not their place.
+- One reusable workflow instead of the packaging written twice: `release.yml` calls `package.yml`, so the pull request
+  runs the same steps the release runs.
+- `xattr -dr` (recursive, on the folder) where the Mac test measured `xattr -d` on one file. Inferred, not measured: the
+  recursive form clears the mark on every file in the folder.
+- The release no longer waits for packaging to succeed (review finding 1, taken).
+
+### Earlier test changed, named
+
+`TestReleaseWorkflowUnchanged` in `internal\repocheck\macos_ci_test.go` pins `release.yml` by sha256. The lane changes
+`release.yml`, so the pin moved to the new file. `TestReleaseCallsPackage` (new) reads what changed and what must stay:
+the eight bare builds with CGO off, the tag trigger, `contents: write`, `merge-multiple`, `files: dist/*`.
+
+### Tests
+
+New in `internal\repocheck\package_ci_test.go`: `TestPackageWorkflow`, `TestReleaseCallsPackage`, `TestPackageScript`
+(also ASCII only), `TestReadmeFirstTexts` (no em dash). They read files as text. They were written after the files, so
+they were not seen failing first (L6 not met for them); the packaging itself is proved only by the `package` jobs on the
+pull request.
+
+### Review (sonnet, fresh)
+
+Taken: release not held back by packaging (1); more of `release.yml` pinned by substring (2); "refuses" softened to
+"blocks" (Sequoia lets a user allow it in System Settings); the Cloud pull named beside "no network call of its own";
+the Windows settings line now says only `burnmon.exe` reads a `burnmon.json` next to it. Not taken: the rerun message of
+the script (a reused `dist` stops it, by design); `CFBundleVersion` is `pr<number>` on a pull request (no release).
+
+### Repair of a T2 file, found by the packaging job
+
+The first `package` run (commit `e353632`) failed in `macos (amd64)` after 1 minute 7 seconds, in
+`internal\winbind\visible_darwin.go` from T2: "could not determine what C.burnmonVisibleSize refers to", clang read
+`#import <Cocoa/Cocoa.h>` as C (28798 errors). T2 noted that file is compiled only on a Mac. The cause is not the chip:
+the preamble lacked `#cgo CFLAGS: -x objective-c`, which `cmd\burnmon-dev\lamp_window_darwin.go` has. Added that one
+line. Inferred: the `macos` check and `package (arm64)` would fail the same way; both were still queued when the fix
+was pushed. No Go test can show it on Windows; the Mac runners are the test.
+
+### Files changed
+
+`internal\winbind\visible_darwin.go` (one line, the repair above), `scripts\package.sh`, `packaging\macos\README-FIRST.txt`, `packaging\windows\README-FIRST.txt` (new),
+`.github\workflows\package.yml` (new), `.github\workflows\release.yml`, `README.md`,
+`internal\repocheck\macos_ci_test.go`, `internal\repocheck\package_ci_test.go` (new); this plan file, `STATUS.md`,
+`SESSION_LOG.md`, and the hub brief in `04_assets` (local only). 13 files against the budget of 12: the repair of the
+T2 file and the brief went over, both named here.
+
 ## Turn log
 
 T1: done; commit 93bd7bc; measured: go vet 0, go test 50 packages ok and 0 FAIL, build.ps1 0, linux and darwin build and vet 0 with CGO off, uicheck.ps1 and uicheck-dev.ps1 exit 1 on w1 and station/d28, the same on aac8328's pages (A/B); open: the terra and luna price question for Wilco, BurnMon Dev cannot read BurnMon's currency choice (euro at 0.92), the Dev Markdown exports still print dollars, w1 and station/d28 fail on this screen before and after this turn (built, not seen in a window)

@@ -3,6 +3,7 @@
 package winbind
 
 /*
+#cgo CFLAGS: -x objective-c
 #cgo darwin LDFLAGS: -framework Cocoa
 #import <Cocoa/Cocoa.h>
 
