@@ -226,6 +226,23 @@ func lampRegionRects(area string, scale float64) []lampRect {
 	return out
 }
 
+// lampPointIn reports whether the point (x, y), in window coordinates with the
+// origin top left, is inside any rectangle. A rectangle is half open: its left
+// and top edge are inside, its right and bottom edge are not. No rectangle at
+// all means the whole window takes clicks. The Mac lamp uses it to let clicks
+// through outside the page's rectangles.
+func lampPointIn(rects []lampRect, x, y int) bool {
+	if len(rects) == 0 {
+		return true
+	}
+	for _, r := range rects {
+		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+			return true
+		}
+	}
+	return false
+}
+
 // lampBackdropEnv is the process variable of the clear backdrop: the WebView2
 // default background, fully transparent. The card backdrop sets none.
 func lampBackdropEnv(backdrop string) (key, value string, ok bool) {

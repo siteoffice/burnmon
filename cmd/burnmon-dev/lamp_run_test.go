@@ -1034,3 +1034,54 @@ func TestPointerReachesNoFile(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// L2: the Mac lamp lets clicks through outside the page's rectangles. This is
+// the pure part: is a pointer point (window coordinates, origin top left)
+// inside any rectangle. A rectangle is half open: left and top edge inside,
+// right and bottom edge outside. No rectangle at all means the whole window
+// takes clicks, as before.
+func TestLampPointIn(t *testing.T) {
+	r := []lampRect{{10, 20, 100, 50}}
+	for _, c := range []struct {
+		x, y int
+		want bool
+		name string
+	}{
+		{10, 20, true, "top left corner"},
+		{109, 69, true, "last inside pixel"},
+		{9, 30, false, "left of the left edge"},
+		{50, 19, false, "above the top edge"},
+		{110, 30, false, "on the right edge"},
+		{50, 70, false, "on the bottom edge"},
+		{50, 40, true, "middle"},
+	} {
+		if got := lampPointIn(r, c.x, c.y); got != c.want {
+			t.Errorf("%s: lampPointIn(%d,%d) = %v, want %v", c.name, c.x, c.y, got, c.want)
+		}
+	}
+	for _, empty := range [][]lampRect{nil, {}} {
+		if !lampPointIn(empty, 500, 500) {
+			t.Error("an empty list must let the whole window take clicks")
+		}
+	}
+}
+
+func TestLampPointInTickerAndGlim(t *testing.T) {
+	area := `{"ticker":{"x":0,"y":0,"w":300,"h":30},"glim":{"x":100,"y":60,"w":90,"h":90}}`
+	rects := lampRegionRects(area, 1)
+	if len(rects) != 2 {
+		t.Fatalf("rects = %v, want 2", rects)
+	}
+	if !lampPointIn(rects, 150, 10) {
+		t.Error("a point on the ticker must take clicks")
+	}
+	if !lampPointIn(rects, 140, 100) {
+		t.Error("a point on Glim's box must take clicks")
+	}
+	if lampPointIn(rects, 140, 45) {
+		t.Error("a point in the gap between ticker and Glim must let clicks through")
+	}
+	if lampPointIn(rects, 250, 100) {
+		t.Error("a point beside Glim's box must let clicks through")
+	}
+}
