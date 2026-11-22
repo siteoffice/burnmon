@@ -84,7 +84,7 @@ These rows come from the pages named, read on 2026-11-15. The tools change; chec
 
 ## 3. Install
 
-Windows: build from source. The release workflow does not attach Windows files.
+Windows: the release attaches `burnmon-<tag>-windows-amd64.zip`; what Windows shows for it on a fresh download is not tested. To build from source:
 
 ```powershell
 # runs in: PowerShell, cwd C:\ZND\50_projects\burnmon
@@ -345,8 +345,11 @@ you point it at. It comes with no warranty (see `LICENSE`).
   minutes in one measurement on 2026-11-02. A long tool run writes no usage at all until the next model request, so a busy
   cloud session can show as idle. The session only counts when `~/.burnmon` is connected to it.
 - **Prices are API-price equivalents**, not your bill. On a subscription seat you pay the seat.
-- **macOS and Linux have no app window.** The dashboard opens in your browser, served by a local web server. Linux is
-  untested on real hardware.
+- **Linux has no app window, and neither has the bare `burnmon` file on macOS.** The dashboard opens in your browser,
+  served by a local web server. Linux is untested on real hardware. `BurnMon.app` in the macOS zip has its own window:
+  seen in the Mac check of 2026-11-22 on macOS 27.2.1, Apple silicon, with the arm64 zip, where it started and fit the
+  1024x768 screen. Not tested: the amd64 zip, signing and notarizing. Open: how the apps scale on a larger screen (D5),
+  not judged because the test Mac had no screen above 1024x768.
 - **History is slow on a large store.** Every filter change re-reads the whole store, about 3 seconds at roughly 55,000
   events.
 - **Time bounds compare text.** A stored timestamp in the first second of a range can be wrongly excluded or included,
@@ -366,8 +369,9 @@ The full list, with measurements, is in `STATUS.md`.
 
 Priority order lives in `02_roadmap\roadmap.md`; this is the short public version, as of 2026-11-15.
 
-- **Now**: `v0.4.0-beta.4` is tagged (2026-11-15). The rented Mac test day of 2026-11-16 runs the Mac checklist; findings
-  go into `v0.4.0-beta.5`.
+- **Now**: `v0.5.0-beta.2` is tagged. The Mac check of 2026-11-22 ran its arm64 zip on macOS 27.2.1 (Apple silicon):
+  the three apps start from the zip and fit the screen. On the source at the tag, 1532 tests pass, 0 fail, 60 skip. What
+  stays open is in section 6 and in the BurnMon Dev and Control Centre READMEs.
 - **Next**: make Waits on you and the agent view correct and fast against real sessions; test and fix macOS and Linux
   with help from real users; a plan-limits panel (how much of a seat or allowance is left), briefed but not started.
 - **Later, undecided**: a local OTLP receiver, signed Windows builds, a native window off Windows. A decision on whether
