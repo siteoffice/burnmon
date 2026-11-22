@@ -112,6 +112,37 @@ Files (at most 8): `internal\centre\settings.go` and its test, the `cmd\controlc
 page files that draw the no-folder state, their page tests, the Control Centre README.
 Tests first: `ResolveRoot("", "", cwd)` is ""; a relative flag still joins cwd; a saved root wins.
 
+Done in T4 (read in code and measured on Windows by tests; not seen on a Mac):
+- Root rule: `ResolveRoot` in `internal\centre\settings.go` returns "" when there is no flag and no saved
+  root, whatever the current folder is. A relative flag or saved root still joins the current folder; a
+  saved root still wins over the current folder. `Build("")` in `internal\centreuild.go` returns an
+  empty state at once (`filepath.Abs("")` is the current folder, so the guard sits before it).
+- Bindings: with an empty root `ccFile`, `ccBoard` and `ccComment` refuse ("no folder is chosen yet; choose
+  one in Settings"), `ccGit` returns an empty view with a line, `ccGitRepo` an empty detail. `ccRoot` and
+  `ccRootSet` need no change: the Root row starts empty and Save points every page at the folder.
+- Page (`page.html`): a state with an empty root opens on Settings once (`rootAsked`); Settings leads with
+  "No folder is chosen yet: pick the folder to show with Browse, or type it, then Save."; every other page
+  draws `pageNoRoot`: one muted line "No folder is chosen yet." and an "Open Settings" button, in the place
+  the empty pages use. The crumb reads "No folder chosen".
+- The white window, cause inferred, not measured on a Mac: the page drew its shell (menu, theme) with an
+  empty pane and an empty lead until the first `ccState` returned, and `ccState` walked the whole disk from
+  `/` (about 45 s, per the retest). So the first paint happened and was white. With no root the walk does
+  not run. Added: `start()` sets the lead to "Reading the folder." right after the shell is drawn, so a
+  slow first state on a big folder is no longer a blank window. Whether webview_go runs a binding on the
+  window thread is not read; the Mac pinned run checks the window.
+- Tests first, each seen failing: `TestResolveRoot` (changed, see below), `TestBuildEmptyRootScansNothing`
+  (in `settings_test.go`), `TestNoRootBindingsReadNothing`, `TestNoRootSaveThenPagesWork`, `TestPageNoRoot`
+  (new `cmd\controlcentre
+oroot_test.go`). Changed earlier test, with the reason: `TestResolveRoot`
+  expected the current folder for no flag and no saved root; the lane decides it is empty. Its other cases
+  are unchanged; the relative-cwd case now uses a relative flag.
+- Measured on Windows: `uicheck-centre.ps1` exit 0 (gitpage group). Its fixture has a root, so no uicheck
+  case draws the no-root page; the page tests read the page text only. Not seen in a window.
+- Choice on an ambiguity: the lane says "scans nothing". The folder picker still opens at the current root;
+  with no root `rootBrowse` passes an empty start to the picker (the picker's own default folder).
+- Note for the close-out: a Windows user who started the Control Centre in a folder with no saved root now
+  chooses the folder once in Settings.
+
 ## T5, D10: the Sessions table at 960 px
 
 Cause, read: `C:\ZND\50_projects\burnmon\internal\report\template.html` lines 158 to 173 give every

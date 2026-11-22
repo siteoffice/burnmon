@@ -32,7 +32,7 @@ func init() {
 }
 
 func main() {
-	rootFlag := flag.String("root", "", "the folder to show; default the settings root, else the current folder")
+	rootFlag := flag.String("root", "", "the folder to show; default the settings root, else none (Settings asks for one)")
 	flag.Parse()
 
 	dataDir := centre.AppDataDir(os.Getenv("LOCALAPPDATA"), os.UserConfigDir)

@@ -125,16 +125,19 @@ func AppDataDir(localAppData string, userConfigDir func() (string, error)) strin
 	return store.DataDirFrom(localAppData, userConfigDir)
 }
 
-// ResolveRoot is flagRoot, else settingRoot, else cwd. A relative root is
-// taken from cwd. The result is absolute and cleaned.
+// ResolveRoot is flagRoot, else settingRoot, else "" (no root: the Control
+// Centre scans nothing and asks for a folder; the current folder is no
+// fallback because a double-clicked Mac app starts in "/"). A relative root
+// is taken from cwd. A root is absolute and cleaned.
 func ResolveRoot(flagRoot, settingRoot, cwd string) string {
 	r := flagRoot
 	if r == "" {
 		r = settingRoot
 	}
 	if r == "" {
-		r = cwd
-	} else if !filepath.IsAbs(r) {
+		return ""
+	}
+	if !filepath.IsAbs(r) {
 		r = filepath.Join(cwd, r)
 	}
 	if abs, err := filepath.Abs(r); err == nil {

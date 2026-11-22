@@ -4,6 +4,7 @@ package main
 
 import (
 	"crypto/rand"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -75,7 +76,7 @@ func bindAll(e bindEnv) {
 		return centre.Build(e.rootNow(), centre.Options{Now: e.clock(), Weeks: e.settings.get().Weeks, Rows: req.Rows})
 	})
 	bind("ccFile", func(path string) (centre.FileText, error) {
-		return centre.ReadUnitFile(e.rootNow(), path)
+		return filePage(e, path)
 	})
 	bind("ccBoard", func(path string) (centre.BoardPage, error) {
 		return boardPage(e, path)
@@ -147,12 +148,30 @@ func runBinding(e bindEnv, token string) (RunView, error) {
 	return v, err
 }
 
+// errNoRoot is the refusal of a read or write below the root while no folder is
+// chosen: an empty root must never read the current folder instead.
+var errNoRoot = errors.New("no folder is chosen yet; choose one in Settings")
+
+// filePage is the ccFile handler.
+func filePage(e bindEnv, path string) (centre.FileText, error) {
+	if e.rootNow() == "" {
+		return centre.FileText{}, errNoRoot
+	}
+	return centre.ReadUnitFile(e.rootNow(), path)
+}
+
 // commentWrite is the ccComment handler.
 func commentWrite(e bindEnv, req centre.CommentRequest) (centre.CommentResult, error) {
+	if e.rootNow() == "" {
+		return centre.CommentResult{}, errNoRoot
+	}
 	return centre.WriteComment(e.rootNow(), e.clock(), rand.Reader, req)
 }
 
 // boardPage is the ccBoard handler.
 func boardPage(e bindEnv, path string) (centre.BoardPage, error) {
+	if e.rootNow() == "" {
+		return centre.BoardPage{}, errNoRoot
+	}
 	return centre.ReadBoard(e.rootNow(), path)
 }
