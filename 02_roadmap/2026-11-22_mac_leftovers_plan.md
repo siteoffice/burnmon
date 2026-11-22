@@ -142,3 +142,5 @@ T3 files in all: 5 of the 12 allowed (6 with `tools\uicheck\groups.go` if the ca
 
 ## Turn log
 
+T1: done; commit c449bb4; measured: vet 0, test 50 packages ok, 1849 passed, 12 skipped, 0 failed, build 0, linux and darwin build and vet without cgo 0, uicheck default exit 1 (w1 blank window, not this lane's), w0 and w2 to w9 exit 0; pull request 68 opened; changed tests: TestLampUnsupportedSaysTheSentenceAndExits2 and the TestReadmeLampSection pin now hold the new sentence (both failed first); reviewer: no behaviour change outside L1 and L5, no test weaker; open: w1 red keeps success criterion 5 open, the Mac card-window stub prints the new sentence (T4 flag)
+
