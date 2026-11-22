@@ -426,7 +426,7 @@ not seen.
   picture at the top of this file (`glim-demo.svg`) into an existing folder; `assets\glim\` holds that
   output. `burnmon-dev.exe lamp --card <folder>` writes the card of the running week as two SVG files
   (add `--demo` for made-up numbers, `--card-window` for a window with a Save PNG button).
-- **Clicks through the empty part (Mac).** On a Mac the open lamp lets clicks through outside its visible parts (the ticker, Glim, the menu): a short poll turns the panel's mouse handling off while the pointer is outside them, and keeps it while a mouse button is down. Judged from a screenshot in the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip): after a click on an empty corner of the open lamp, the menu bar showed Finder and the window buttons of the app that was in front before were grey. The robot's own check of that row could not decide.
+- **Clicks through the empty part (Mac).** On a Mac the open lamp lets clicks through outside its visible parts (the ticker, Glim, the menu): a short poll turns the panel's mouse handling off while the pointer is outside them, and keeps it while a mouse button is down. Judged from a screenshot in the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip): after a click on an empty corner of the open lamp, the menu bar showed Finder and the window buttons of Calculator's window were grey (not active). The robot's own check of that row could not decide.
 - **A clear window.** With `lamp_backdrop` `clear` the lamp window shows only the ticker and Glim, and
   other windows show through around them; clicks outside the ticker and Glim go to the windows below. This
   is built from the WebView2 and DWM documentation and is built, not seen. If you see a black or stale
