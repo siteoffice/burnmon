@@ -81,6 +81,24 @@ text (the darwin file does not build on Windows), `lamp.html` only if the backdr
 Named, not repaired: with the clear backdrop the open panel keeps its whole 300 x 241 rectangle for
 clicks (macOS has no window region, comment at line 197), so the invisible part takes clicks.
 
+Done in T3 (read in code, not run on a Mac): `lampStyle`, clear branch, now sets `drawsBackground` to
+NO through `setValue:forKey:` only when `[wk respondsToSelector:@selector(_setDrawsBackground:)]`
+(the private selector behind the key; an unguarded `setValue:forKey:` on an unknown key throws), and
+logs `lamp: the web view does not answer to drawsBackground ...; set lamp_backdrop to card`
+otherwise. `underPageBackgroundColor` stays clear; the card branch is untouched. The comment says the
+key is not documented, that wry takes the same route and what the log line means. New test file
+`cmd\burnmon-dev\lamp_window_darwin_src_test.go` (no build tag, reads the darwin source and
+`lamp.html` as text, so it runs on Windows): the guard, the key, the log line, the card branch
+untouched, the clear default and `lamp_backdrop card` still selecting the card. Seen failing first.
+Changed earlier test, with the reason: `TestLampDarwinWindowFileFinishLane` in `buildtags_test.go`
+banned the strings `drawsBackground`, `_setDrawsBackground` and `setValue:` in the darwin file ("no
+undocumented API"). The lane decides this one exception, so the ban becomes: exactly one key-value
+write (`forKey:@`), exactly one `_setDrawsBackground`, and no `numberWithBool:YES`. Not weaker for any
+other private call. `lamp.html` and `lamp_run.go` are unchanged, so no uicheck run (no page touched).
+Choice on an ambiguity: the lane offers `respondsToSelector` or a guarded `setValue:forKey:`; T3 uses
+the `respondsToSelector` guard because Objective-C has no try for a missing key in plain C code.
+Built on the macos runner, not started; the look is not seen.
+
 ## T4, N1: the Control Centre with no root
 
 Cause, read: `C:\ZND\50_projects\burnmon\cmd\controlcentre\main.go` line 44 and 45 pass the current
