@@ -297,3 +297,16 @@ func TestLampLicenceCreditsAndIssueForm(t *testing.T) {
 		}
 	}
 }
+
+// TestReadmesSayTheMacCheckRan guards the Mac check of 2026-11-22: no README of
+// the four apps says that nothing ran on a Mac. flat joins wrapped lines.
+func TestReadmesSayTheMacCheckRan(t *testing.T) {
+	for _, f := range readmeFiles[:4] {
+		doc := flat(readDoc(t, f))
+		for _, gone := range []string{"nothing has run on a Mac", "Not yet run on a Mac", "Not run on a Mac", "there is no macOS bundle"} {
+			if strings.Contains(doc, gone) {
+				t.Errorf("%s still says %q", f, gone)
+			}
+		}
+	}
+}
