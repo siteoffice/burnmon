@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	version     = "0.5.0-beta.1"
+	version     = "0.5.0-beta.2"
 	windowTitle = "BurnMon Dev"
 	mutexName   = `Local\burnmon-dev-app`
 )
