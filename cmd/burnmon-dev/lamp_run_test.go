@@ -231,8 +231,14 @@ func TestLampUnsupportedSaysTheSentenceAndExits2(t *testing.T) {
 	if code := lampUnsupported(&buf); code != 2 {
 		t.Fatalf("exit %d, want 2", code)
 	}
-	if got := strings.TrimSpace(buf.String()); got != "The lamp runs on Windows only in this version." {
-		t.Fatalf("message %q", got)
+	// The Mac app (the cgo build) has a lamp, so the sentence names the builds
+	// that have one and never says "Windows only".
+	want := "This build has no lamp window. The lamp runs in the Windows build and in the Mac app (the build with cgo)."
+	if got := strings.TrimSpace(buf.String()); got != want {
+		t.Fatalf("message %q, want %q", got, want)
+	}
+	if strings.Contains(buf.String(), "Windows only") {
+		t.Fatalf("message %q still says Windows only", buf.String())
 	}
 }
 

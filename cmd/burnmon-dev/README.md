@@ -486,8 +486,8 @@ is not part of that: see `LICENSE-ASSETS.md`.
 
 Limits: it runs on Windows and on macOS (the macOS build needs cgo; BurnMon Dev starts the lamp as its
 child on both, and the lamp ends when BurnMon Dev is gone; the macOS lamp is built, not seen, and the
-parent check there is read, not run; on macOS without cgo and on Linux the lamp prints "The lamp runs on
-Windows only in this version." and exits); it needs BurnMon or BurnMon Dev running to have a snapshot to read; it has no control (no
+parent check there is read, not run; on macOS without cgo and on Linux the lamp prints "This build has no
+lamp window. The lamp runs in the Windows build and in the Mac app (the build with cgo)." and exits); it needs BurnMon or BurnMon Dev running to have a snapshot to read; it has no control (no
 approve, no stop, no answer to an agent). Every window, backdrop, animation and position of the lamp is
 built, not seen: nothing of it was looked at in a window in the build run.
 
