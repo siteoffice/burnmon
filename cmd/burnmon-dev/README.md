@@ -424,6 +424,7 @@ not seen.
   picture at the top of this file (`glim-demo.svg`) into an existing folder; `assets\glim\` holds that
   output. `burnmon-dev.exe lamp --card <folder>` writes the card of the running week as two SVG files
   (add `--demo` for made-up numbers, `--card-window` for a window with a Save PNG button).
+- **Clicks through the empty part (Mac).** On a Mac the open lamp lets clicks through outside its visible parts (the ticker, Glim, the menu): a short poll turns the panel's mouse handling off while the pointer is outside them, and keeps it while a mouse button is down. Built on the macos runner, not started.
 - **A clear window.** With `lamp_backdrop` `clear` the lamp window shows only the ticker and Glim, and
   other windows show through around them; clicks outside the ticker and Glim go to the windows below. This
   is built from the WebView2 and DWM documentation and is built, not seen. If you see a black or stale
@@ -486,8 +487,8 @@ is not part of that: see `LICENSE-ASSETS.md`.
 
 Limits: it runs on Windows and on macOS (the macOS build needs cgo; BurnMon Dev starts the lamp as its
 child on both, and the lamp ends when BurnMon Dev is gone; the macOS lamp is built, not seen, and the
-parent check there is read, not run; on macOS without cgo and on Linux the lamp prints "The lamp runs on
-Windows only in this version." and exits); it needs BurnMon or BurnMon Dev running to have a snapshot to read; it has no control (no
+parent check there is read, not run; on macOS without cgo and on Linux the lamp prints "This build has no
+lamp window. The lamp runs in the Windows build and in the Mac app (the build with cgo)." and exits); it needs BurnMon or BurnMon Dev running to have a snapshot to read; it has no control (no
 approve, no stop, no answer to an agent). Every window, backdrop, animation and position of the lamp is
 built, not seen: nothing of it was looked at in a window in the build run.
 

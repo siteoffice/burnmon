@@ -15,7 +15,7 @@ html[data-backdrop="clear"],html[data-backdrop="clear"] body{background:transpar
 .ticker{position:absolute;top:0;width:300px;max-width:440px;background:var(--panel);border:1px solid var(--bd);border-top:0;border-radius:0 0 8px 8px;box-sizing:border-box;overflow:hidden;z-index:2}
 .trow{height:26px;display:flex;align-items:center;gap:6px;padding:0 8px;box-sizing:border-box;white-space:nowrap}
 .trow+.trow{border-top:1px solid var(--bd)}
-.head{flex:none;max-width:48%;font-weight:600;font-size:12px;color:var(--accent);overflow:hidden;text-overflow:ellipsis}
+.head{flex:0 1 auto;min-width:0;max-width:100%;font-weight:600;font-size:12px;color:var(--accent);overflow:hidden;text-overflow:ellipsis}
 .sub{flex:1;min-width:0;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
 .demo,.w30{flex:none;font-size:11px;font-weight:600;color:var(--demo);border:1px solid var(--demo);border-radius:3px;padding:0 3px}
 .lword{flex:none;width:58px;color:var(--accent);overflow:hidden;text-overflow:ellipsis}
@@ -166,7 +166,9 @@ function lineNow(p){
 }
 function row1HTML(p){
   var st=p.state,line=lineNow(p);
-  var h='<b class="head" title="'+esc(st.headline)+'">'+esc(st.headline)+'</b><span class="sub" title="'+esc(line)+'">'+esc(line)+'</span>';
+  var h='<b class="head" title="'+esc(st.headline)+'">'+esc(st.headline)+'</b>';
+  /* The same sentence as the headline (BurnMon is stopped) shows once. */
+  if(line&&line!==st.headline)h+='<span class="sub" title="'+esc(line)+'">'+esc(line)+'</span>';
   if(st.wall_over)h+='<span class="w30">30+</span>';
   if(st.demo)h+='<span class="demo">demo</span>';
   return h;

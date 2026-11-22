@@ -5,7 +5,7 @@
 # via Win32 (PrintWindow, SendInput); only DOM reads/evals go through the
 # BURNMON_UICHECK channel, since only burnmon.exe itself can run JS in its
 # own page. Run from the repo root in PowerShell:
-#   .\scripts\uicheck.ps1                 # w0 to w8, then the seven d groups
+#   .\scripts\uicheck.ps1                 # w0 to w9, then the seven d groups
 #   .\scripts\uicheck.ps1 dev             # the seven d groups only
 #   .\scripts\uicheck.ps1 reverse         # as no args, d groups and their cases backwards
 #   .\scripts\uicheck.ps1 w0 w1           # runs only the named checks
@@ -53,7 +53,7 @@ if ($targetChecks.Count -eq 0) {
     }
     # Two separate launches; the d groups run even when a w check failed, and
     # the run fails when either did.
-    & $PSCommandPath w0 w1 w2 w3 w4 w5 w6 w7 w8
+    & $PSCommandPath w0 w1 w2 w3 w4 w5 w6 w7 w8 w9
     $wExit = $LASTEXITCODE
     & "$PSScriptRoot\uicheck-dev.ps1" @devGroups @devPass
     $dExit = $LASTEXITCODE

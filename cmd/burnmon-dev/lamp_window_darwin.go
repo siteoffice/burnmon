@@ -101,12 +101,31 @@ static void lampPlace(void *win, double w, double h, int pos) {
 	[win_ setFrame:NSMakeRect(x, y, w, h) display:YES];
 	[win_ orderFrontRegardless];
 }
+// lampPointer gives the pointer position in window coordinates (points, origin
+// top left, the way the page counts) and returns 1 while any mouse button is
+// down. It reads and stores nothing. It runs on the main thread.
+static int lampPointer(void *win, double *x, double *y) {
+	NSWindow *w = (NSWindow *)win;
+	NSPoint m = [NSEvent mouseLocation];
+	NSRect f = [w frame];
+	*x = m.x - f.origin.x;
+	*y = f.size.height - (m.y - f.origin.y);
+	return [NSEvent pressedMouseButtons] != 0 ? 1 : 0;
+}
+
+// lampIgnoreClicks makes the panel let mouse events through (1) or take them
+// (0). setIgnoresMouseEvents: is documented on NSWindow. It runs on the main
+// thread.
+static void lampIgnoreClicks(void *win, int ignore) {
+	[(NSWindow *)win setIgnoresMouseEvents:ignore ? YES : NO];
+}
 */
 import "C"
 
 import (
 	"errors"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -207,9 +226,12 @@ func runLampWindow(o lampOpts) int {
 	bind("lampGlim", func(mood string, bricks int, theme string) string { return lamp.Glim(mood, bricks, theme) })
 	bind("lampNextLine", func() string { return e.nextLine() })
 	bind("lampOpenDev", func() { lampOpenDev() })
-	// macOS has no window region: the page still reports its area, the panel
-	// keeps its whole rectangle and clicks on the clear part reach the panel.
-	bind("lampArea", func(string) {})
+	// macOS has no window region. The page reports its area; the panel keeps its
+	// whole rectangle but lets clicks through while the pointer is outside every
+	// rectangle (clickThrough below), so the empty part of the open lamp does not
+	// take the clicks meant for the windows behind it.
+	ct := &lampClickThrough{win: w.Window()}
+	bind("lampArea", func(area string) { ct.setRects(lampRegionRects(area, 1)) })
 	// The drag to another monitor is built for Windows only (fix lane T2): the
 	// binding exists so the page runs, and does nothing here. Built, not seen.
 	bind("lampDragStart", func() {})
@@ -230,9 +252,24 @@ func runLampWindow(o lampOpts) int {
 	})
 	bind("lampSize", func(cssW, cssH int) {
 		pl.setSize(cssW, cssH)
+		if cssH <= 6 {
+			// The quiet sliver sends a size but no new area: the old rectangles
+			// no longer fit, so the whole (thin) window takes clicks again.
+			ct.setRects(nil)
+		}
 		w.Dispatch(pl.place)
 	})
 	w.SetHtml(lampHTML)
+
+	// Click-through poll: at most every 100 ms, on the main thread. Only for the
+	// clear backdrop; the card backdrop is an opaque panel and takes all clicks.
+	if glass {
+		go func() {
+			for range time.Tick(100 * time.Millisecond) {
+				w.Dispatch(ct.poll)
+			}
+		}()
+	}
 
 	// A change of lamp_position in the gear dialog moves the lamp within 2 s.
 	// The lamp also ends when the BurnMon Dev that started it is gone. A lamp
@@ -311,6 +348,49 @@ func (p *lampMacPlacer) place() {
 	w, h := p.w, p.h
 	p.mu.Unlock()
 	C.lampPlace(p.win, C.double(w), C.double(h), C.int(p.position()))
+}
+
+// lampClickThrough lets clicks through the panel outside the rectangles the
+// page reports. rects come from the page's lampArea (any thread); poll runs on
+// the main thread and calls setIgnoresMouseEvents: only when the answer
+// changes. While a mouse button is down poll changes nothing, so a drag of the
+// ticker or of Glim goes on when the pointer leaves the rectangles, and a press
+// that started outside is not taken over mid-way. No rectangles: the whole
+// window takes clicks. Built on the macos runner, not started.
+type lampClickThrough struct {
+	win unsafe.Pointer
+
+	mu    sync.Mutex
+	rects []lampRect
+
+	ignoring bool // main thread only
+}
+
+func (c *lampClickThrough) setRects(r []lampRect) {
+	c.mu.Lock()
+	c.rects = r
+	c.mu.Unlock()
+}
+
+func (c *lampClickThrough) poll() {
+	var x, y C.double
+	if C.lampPointer(c.win, &x, &y) != 0 {
+		return
+	}
+	c.mu.Lock()
+	r := c.rects
+	c.mu.Unlock()
+	// Floor, not truncation: a pointer at -0.5 is outside the window.
+	ignore := !lampPointIn(r, int(math.Floor(float64(x))), int(math.Floor(float64(y))))
+	if ignore == c.ignoring {
+		return
+	}
+	c.ignoring = ignore
+	if ignore {
+		C.lampIgnoreClicks(c.win, 1)
+	} else {
+		C.lampIgnoreClicks(c.win, 0)
+	}
 }
 
 // lampChildAttr is the Windows first-show focus try; the Mac has none.

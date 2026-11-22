@@ -253,6 +253,49 @@ func TestLampPageHoverTitles(t *testing.T) {
 	}
 }
 
+// L3 of the Mac leftovers lane: when BurnMon is not running the headline and the line are the same
+// sentence. Row 1 shows it once, with the full text as its title; when they differ the head keeps
+// its own width and the line shortens first.
+func TestLampPageRow1ShowsAnEqualHeadlineOnce(t *testing.T) {
+	i := strings.Index(lampHTML, "function row1HTML(p){")
+	if i < 0 {
+		t.Fatal("lamp.html has no row1HTML")
+	}
+	j := strings.Index(lampHTML[i:], "\nfunction tickerHTML")
+	fn := lampHTML[i : i+j]
+	if !strings.Contains(fn, `class="head" title="'+esc(st.headline)`) {
+		t.Error("the head has no title with the full text")
+	}
+	if !strings.Contains(fn, "line!==st.headline") {
+		t.Error("the sub span is not left out when the line equals the headline")
+	}
+}
+
+func TestLampPageRow1HeadKeepsItsWidth(t *testing.T) {
+	// The rules start a line; "#meas .head{" and "#meas .sub{" come first in the file and differ.
+	body := func(sel string) string {
+		i := strings.Index(lampHTML, "\n"+sel+"{")
+		if i < 0 {
+			t.Fatalf("lamp.html has no %s rule at the start of a line", sel)
+		}
+		i++
+		return lampHTML[i+len(sel)+1 : i+strings.Index(lampHTML[i:], "}")]
+	}
+	head := body(".head")
+	// The head has its natural width, and shrinks only when it alone is wider than the row; the
+	// .sub has a zero basis, so it gives way first. max-width:100% keeps a long head inside the row.
+	if !strings.Contains(head, "flex:0 1 auto") || !strings.Contains(head, "min-width:0") || !strings.Contains(head, "max-width:100%") {
+		t.Errorf(".head does not keep its width up to the row: %q", head)
+	}
+	if strings.Contains(head, "max-width:48%") {
+		t.Errorf(".head is cut at 48 percent of the ticker: %q", head)
+	}
+	sub := body(".sub")
+	if !strings.Contains(sub, "min-width:0") || !strings.Contains(sub, "text-overflow:ellipsis") {
+		t.Errorf(".sub does not shorten first: %q", sub)
+	}
+}
+
 // The opened ticker shows tokens a minute first, then the 5 minute cost with its label.
 func TestLampPageTokensBeforeCost(t *testing.T) {
 	s := strings.Index(lampHTML, "function openedHTML(")

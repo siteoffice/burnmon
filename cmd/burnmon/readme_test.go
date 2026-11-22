@@ -233,7 +233,8 @@ func TestReadmeLampSection(t *testing.T) {
 	sec = flat(sec)
 	for _, want := range []string{
 		"burnmon-dev.exe lamp --demo", "lamp_enabled", "Do this, Glim does that",
-		"Windows only", "needs BurnMon or BurnMon Dev running", "no control",
+		"This build has no lamp window. The lamp runs in the Windows build and in the Mac app (the build with cgo).",
+		"needs BurnMon or BurnMon Dev running", "no control",
 		"### Suggest a line", "glim-line.yml", "internal\\lamp\\CREDITS.md",
 		"lamp --poses", "lamp --card", "lamp-waits.json",
 		"### Goal", "### Where it fits", "### Install", "### Use", "### Settings", "### Next steps and backlog",

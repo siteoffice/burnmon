@@ -62,6 +62,39 @@ func TestLampDarwinDrawsBackgroundCommentSaysWhy(t *testing.T) {
 	}
 }
 
+// L2: the open lamp lets clicks through outside the page's rectangles. The
+// panel keeps the clicks while a mouse button is down (a drag), and the poll is
+// no faster than 100 ms. Source text only: nothing runs on a Mac here.
+func TestLampDarwinClickThroughOutsideRects(t *testing.T) {
+	src := readLampSource(t, "lamp_window_darwin.go")
+	for _, want := range []string{
+		"setIgnoresMouseEvents:",
+		"[NSEvent mouseLocation]",
+		"[NSEvent pressedMouseButtons]",
+		"lampPointIn(",
+		"lampRegionRects(",
+		"100 * time.Millisecond",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("lamp_window_darwin.go lacks %q for the click-through", want)
+		}
+	}
+	// The poll runs for the clear backdrop only (the card is opaque), and the
+	// pointer is floored, not truncated.
+	if !strings.Contains(src, "if glass {\n\t\tgo func() {\n\t\t\tfor range time.Tick(100 * time.Millisecond)") {
+		t.Error("the click-through poll must start only when glass (the clear backdrop)")
+	}
+	if !strings.Contains(src, "math.Floor(float64(x))") || !strings.Contains(src, "math.Floor(float64(y))") {
+		t.Error("the pointer must be floored, not truncated")
+	}
+	if strings.Contains(src, `bind("lampArea", func(string) {})`) {
+		t.Error("lampArea must keep the rectangles, not do nothing")
+	}
+	if strings.Contains(src, "macOS has no window region: the page still reports its area, the panel\n\t// keeps its whole rectangle") {
+		t.Error("the lampArea comment still says the panel keeps its whole rectangle")
+	}
+}
+
 // The clear backdrop is the default and the Mac keeps it; lamp_backdrop card
 // still selects the card.
 func TestLampDarwinBackdropDefaultIsClearAndCardSelectsCard(t *testing.T) {
