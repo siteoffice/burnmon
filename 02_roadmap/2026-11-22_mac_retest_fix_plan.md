@@ -108,3 +108,4 @@ test command, one uicheck case under `tools\uicheck\`.
 
 ## Turn log
 
+T1: done; commit 255f8f9 (pull request 67 opened); measured: vet 0, test 0 (50 packages ok, 1838 pass, 12 skip, 0 fail), build 0, linux and darwin build and vet 0 with CGO off; open: nothing for N3. Note: the branch also carries 6a4023e "Roadmap item 21" (Wilco, 02_roadmap\roadmap.md only), which was on local main and not on origin when start ran; raw git to drop it is denied, so it rides in pull request 67
