@@ -41,7 +41,7 @@ as you; the switch and what it reads are in `cmd\burnmon\README.md`, section Cow
 
 ## 3. Install
 
-On Windows, build from source. The release workflow does not attach Windows files.
+On Windows, the release attaches a Windows amd64 zip; its first start is not tested. To build from source:
 
 ```powershell
 # runs in: PowerShell, cwd C:\ZND\50_projects\burnmon
@@ -52,8 +52,10 @@ Set-Location C:\ZND\50_projects\burnmon
 `.\build.ps1` builds `burnmon-dev.exe` next to the other exes. It is one portable file: copy it
 anywhere. The first run needs internet access (it fetches `go-winres` for the icons). If a
 `build.local.ps1` exists next to `build.ps1` (gitignored, machine-local), it runs afterward.
-macOS has a native window in progress, built with cgo in `.github\workflows\macos.yml`; nothing has run on
-a Mac yet.
+macOS has a native window, built with cgo in `.github\workflows\macos.yml` and shipped in the macOS zips as one
+of three apps, unsigned (see the `xattr` line in `README.md`). Seen in the Mac check of 2026-11-22 on macOS
+27.2.1, Apple silicon, with the arm64 zip: it starts from the zip and fits the 1024x768 screen. Not tested: the
+amd64 zip, signing and notarizing.
 
 ## 4. Use
 
@@ -424,7 +426,7 @@ not seen.
   picture at the top of this file (`glim-demo.svg`) into an existing folder; `assets\glim\` holds that
   output. `burnmon-dev.exe lamp --card <folder>` writes the card of the running week as two SVG files
   (add `--demo` for made-up numbers, `--card-window` for a window with a Save PNG button).
-- **Clicks through the empty part (Mac).** On a Mac the open lamp lets clicks through outside its visible parts (the ticker, Glim, the menu): a short poll turns the panel's mouse handling off while the pointer is outside them, and keeps it while a mouse button is down. Built on the macos runner, not started.
+- **Clicks through the empty part (Mac).** On a Mac the open lamp lets clicks through outside its visible parts (the ticker, Glim, the menu): a short poll turns the panel's mouse handling off while the pointer is outside them, and keeps it while a mouse button is down. Judged from a screenshot in the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip): after a click on an empty corner of the open lamp, the menu bar showed Finder and the window buttons of the app that was in front before were grey. The robot's own check of that row could not decide.
 - **A clear window.** With `lamp_backdrop` `clear` the lamp window shows only the ticker and Glim, and
   other windows show through around them; clicks outside the ticker and Glim go to the windows below. This
   is built from the WebView2 and DWM documentation and is built, not seen. If you see a black or stale
@@ -486,7 +488,7 @@ is not part of that: see `LICENSE-ASSETS.md`.
 ### Next steps and backlog
 
 Limits: it runs on Windows and on macOS (the macOS build needs cgo; BurnMon Dev starts the lamp as its
-child on both, and the lamp ends when BurnMon Dev is gone; the macOS lamp is built, not seen, and the
+child on both, and the lamp ends when BurnMon Dev is gone; the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip) saw the macOS lamp start as a child of BurnMon Dev, show no white box and open BurnMon Dev on a double-click, and its first row show one sentence twice (N6, open); the
 parent check there is read, not run; on macOS without cgo and on Linux the lamp prints "This build has no
 lamp window. The lamp runs in the Windows build and in the Mac app (the build with cgo)." and exits); it needs BurnMon or BurnMon Dev running to have a snapshot to read; it has no control (no
 approve, no stop, no answer to an agent). Every window, backdrop, animation and position of the lamp is
