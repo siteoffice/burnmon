@@ -155,6 +155,45 @@ column is meant to show only when a real client is set. T5 reads and decides.
 Files (at most 4): `template.html`, `internal\report\sessions_layout_test.go`, golden files by their
 test command, one uicheck case under `tools\uicheck\`.
 
+Done in T5 (measured at 960 x 611 and 1280 x 860 on Windows (WebView2); not seen on a Mac):
+- Why "unassigned" showed the Client column, read: `hasClient` counted any non-empty client, and the
+  merge and pricing code give every unmapped session the client "unassigned". Repaired: the column and
+  its filter show only for a client other than "unassigned". Choice on an ambiguity: Owner was left
+  alone (its default is empty here), the lane names Client only.
+- The 200 px was not reachable by the Client repair alone: the eight fixed columns of the usual table
+  add up to 812 px and the pane at 960 px is 905 px (920 less the 15 px vertical scrollbar), so "What
+  it was" kept 93 px. Choice (the lane lists three ways): narrower columns plus tighter cell padding
+  (`7px 6px`, was `7px 9px`), one model pill with a count (was two), and Owner and Client hidden at a
+  window width of 1100 px or less. Fixed columns now add up to 698 px (116, 88, 108, 84, 62, 74, 70,
+  96), so "What it was" keeps 206 px at 960 and 440 px at 1280. With Owner and Client shown it keeps
+  300 px at 1280. Reason for hiding Owner and Client below 1100 px: with both shown the table needs
+  842 px, which leaves less than 200 px in any window under about 1100 px.
+- No information is lost without a hover title: the Harness cell's title now ends with " / Owner: <owner>"
+  and " / Client: <client>" when set (so a hidden column keeps its values), the Owner and Client cells
+  carry their value as a title, the model cell's title still lists every model, and the Findings cell
+  title is set by the page as before.
+- Tests first, seen failing: in `internal\report\sessions_layout_test.go`
+  `TestSessionsWhatItWasKeepsRoomAtANarrowWindow` (108 px free before) and
+  `TestSessionsClientColumnShowsOnlyForARealClient`; `TestSessionsUICheckHookExists`. The existing CSS
+  tests stay unchanged. New uicheck check `w9` (`tools\uicheck\check_w9.go`, run with
+  `.\scripts\uicheck.ps1 w9`): four cases (960 and 1280, with the Codex-like fixture and with a real owner
+  and client) measure "What it was" at least 200 px, no cut header, last column inside the pane, no
+  horizontal scroll, and a title on every cut cell. It is not in the default list of
+  `scripts\uicheck.ps1` (outside T5's file list). The check was seen green only: its red state against the
+  old CSS was not captured, because the page needed the hook first (the page keeps `D` private); the
+  first run against the old exe failed with "D is not defined", and a run against the new exe with the
+  first widths failed at 188 px for "What it was" and for two untitled Owner and Client cells, then went
+  green after the widths and titles changed.
+- The page got one hook, `window.__bmSetSessions(list, insights)` (like `__bmTurnResolve`), because the
+  check cannot reach `D`. A fixture of one session; `null` puts the real sessions back.
+- Golden files: none changed. uicheck: `w0` to `w9` green, `w1` green.
+- Review (L5, one fresh reviewer): no test weakened. Named, not repaired: (a) the Client filter now also
+  disappears when every session is "unassigned", so "unassigned" can no longer be filtered on (same
+  `hasClient` drives both); (b) the number cells (Calls, Tokens, Per call, Cost) have no hover title and
+  clip with `text-overflow:clip`; the fixture holds only 123.4M tokens and 12.34 USD, so a value such as
+  "$1,234.56" at 70 px is not measured; (c) margins are thin (206 and 208 px). One fix taken: the w9 case
+  field `wantOwnerCol` is renamed `wantClientCol` (it tests Client).
+
 ## Turn log
 
 T1: done; commit 255f8f9 (pull request 67 opened); measured: vet 0, test 0 (50 packages ok, 1838 pass, 12 skip, 0 fail), build 0, linux and darwin build and vet 0 with CGO off; open: nothing for N3. Note: the branch also carries 6a4023e "Roadmap item 21" (Wilco, 02_roadmap\roadmap.md only), which was on local main and not on origin when start ran; raw git to drop it is denied, so it rides in pull request 67

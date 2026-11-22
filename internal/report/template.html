@@ -157,22 +157,26 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 /* Sessions table: one row per line. Only the title truncates; hover shows it all. */
 #t_sessions{table-layout:fixed}
 #t_sessions th,#t_sessions td{white-space:nowrap;overflow:hidden;text-overflow:clip}
-#t_sessions th:nth-child(1),#t_sessions td:nth-child(1){width:132px;text-align:left}
+#t_sessions th,#t_sessions td{padding:7px 6px}
+#t_sessions th:nth-child(1),#t_sessions td:nth-child(1){width:116px;text-align:left}
 #t_sessions th:nth-child(2),#t_sessions td:nth-child(2){width:auto;text-align:left;
   overflow:hidden;text-overflow:ellipsis;cursor:help}
 #t_sessions td:nth-child(2){position:relative}
-#t_sessions th:nth-child(3),#t_sessions td:nth-child(3){width:96px;text-align:left}
-#t_sessions th:nth-child(4),#t_sessions td:nth-child(4){width:150px;text-align:left}
-#t_sessions th:nth-child(5),#t_sessions td:nth-child(5){width:98px;text-align:right}
-#t_sessions th:nth-child(6),#t_sessions td:nth-child(6){width:70px}
-#t_sessions th:nth-child(7),#t_sessions td:nth-child(7){width:76px}
-#t_sessions th:nth-child(8),#t_sessions td:nth-child(8){width:86px}
+#t_sessions th:nth-child(3),#t_sessions td:nth-child(3){width:88px;text-align:left}
+#t_sessions th:nth-child(4),#t_sessions td:nth-child(4){width:108px;text-align:left}
+#t_sessions th:nth-child(5),#t_sessions td:nth-child(5){width:84px;text-align:right}
+#t_sessions th:nth-child(6),#t_sessions td:nth-child(6){width:62px}
+#t_sessions th:nth-child(7),#t_sessions td:nth-child(7){width:74px}
+#t_sessions th:nth-child(8),#t_sessions td:nth-child(8){width:70px}
 #t_sessions th:nth-child(9),#t_sessions td:nth-child(9){width:70px}
 #t_sessions th:nth-child(10),#t_sessions td:nth-child(10){width:70px}
+/* D10: with Owner and Client shown the fixed columns leave "What it was" too little below this
+   window width, so both hide; their values stay in the Harness cell's title. */
+@media(max-width:1100px){#t_sessions .col-owner,#t_sessions .col-client{display:none}}
 /* the 11th column is Findings: Owner and Client (9, 10) are hidden unless used */
-#t_sessions th:nth-child(11),#t_sessions td:nth-child(11){width:104px}
+#t_sessions th:nth-child(11),#t_sessions td:nth-child(11){width:96px}
 #t_sessions td:nth-child(5) .pill{margin-left:5px}
-#t_sessions td:nth-child(4) .pill{margin-right:3px;display:inline-block;max-width:60px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+#t_sessions td:nth-child(4) .pill{margin-right:3px;display:inline-block;max-width:64px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
 #t_sessions td.col-findings{cursor:pointer}
 #t_sessions tr.finding-row td{white-space:normal}
 /* Limits table in About's How it works section: everything right-aligned to match the headers */
@@ -1044,22 +1048,22 @@ function renderSessions(){
   ss.forEach(function(s){
     tc += pick(s); tt += s.tokens; tcalls += s.calls;
     var mkeys = Object.keys(s.models||{});
-    var models = mkeys.slice(0,2).map(function(m){
+    var models = mkeys.slice(0,1).map(function(m){
       return '<span class="pill'+(m.indexOf('Fable')!==-1?' sun':(m.indexOf('Opus')!==-1?' lav':''))+'">'+esc(m)+'</span>'; }).join('');
-    if(mkeys.length > 2) models += '<span class="pill">+'+(mkeys.length-2)+'</span>';
+    if(mkeys.length > 1) models += '<span class="pill">+'+(mkeys.length-1)+'</span>';
     var tr = document.createElement('tr');
     if(s.long) tr.className = 'flag';
     var noPrice = !(s.cost||0) && (s.unpriced_tokens||0) > 0;
     tr.innerHTML = '<td title="UTC '+esc(s.start.slice(0,16).replace('T',' '))+'">'+esc(localStamp(s.start))+'</td>'
       + '<td data-full="'+esc(s.title)+'">'+esc(s.title)+'</td>'
-      + '<td title="Surface: '+esc(SL[s.surface]||s.surface)+'">'+esc(AL[s.agent]||s.agent||'Unknown')+'</td>'
+      + '<td title="Surface: '+esc(SL[s.surface]||s.surface)+(s.owner ? ' / Owner: '+esc(s.owner) : '')+(s.client ? ' / Client: '+esc(s.client) : '')+'">'+esc(AL[s.agent]||s.agent||'Unknown')+'</td>'
       + '<td title="'+esc(mkeys.join(', '))+'">'+models+'</td>'
       + '<td>'+n(s.calls)+(s.long?' <span class="pill sun">'+t('long_pill')+'</span>':'')+'</td>'
       + '<td>'+tok(s.tokens)+'</td>'
       + '<td>'+(noPrice ? '<span class="small">no price</span>' : money(pickCall(s),3))+'</td>'
       + '<td>'+(noPrice ? '<span class="small">no price</span>' : '<b>'+money(pick(s),2)+'</b>')+'</td>'
-      + '<td class="col-owner hidden">'+esc(s.owner||'')+'</td>'
-      + '<td class="col-client hidden">'+esc(s.client||'')+'</td>'
+      + '<td class="col-owner hidden" title="'+esc(s.owner||'')+'">'+esc(s.owner||'')+'</td>'
+      + '<td class="col-client hidden" title="'+esc(s.client||'')+'">'+esc(s.client||'')+'</td>'
       + '<td class="col-findings" data-session="'+esc(s.session_id)+'"><span class="small">&hellip;</span></td>';
     tb.appendChild(tr);
 
@@ -1092,6 +1096,19 @@ function renderSessions(){
     });
   });
 }
+
+// __bmSetSessions is the uicheck hook of the Sessions table (tools\uicheck\check_w9.go): it shows
+// the given sessions, with the given findings per session id, and null puts the real ones back.
+// D is private to this script, so a check cannot reach it any other way (like __bmTurnResolve).
+window.__bmSetSessions = function(list, insights){
+  if(!window.__bmSessionsPrev) window.__bmSessionsPrev = {list: D.sessions};
+  if(list === null){ D.sessions = window.__bmSessionsPrev.list; window.__bmSessionsPrev = null; }
+  else {
+    D.sessions = list;
+    Object.keys(insights||{}).forEach(function(k){ SESSION_INSIGHT_CACHE[k] = Promise.resolve(insights[k]); });
+  }
+  renderSessions();
+};
 
 // runWithConcurrency runs worker(item) for every item in items, at most
 // limit at a time, waiting for one to finish before starting the next.
@@ -1243,7 +1260,8 @@ function applyOwnerColumnVisibility(){
   document.getElementById('f_owner_wrap').classList.toggle('hidden', !hasOwner);
   // K3: the client column and filter follow the same "hidden while no rule
   // exists" convention as owner, above.
-  var hasClient = (D.sessions||[]).some(function(s){ return !!s.client; });
+  // "unassigned" is what every session gets when no rule names a client, so it is no client (D10).
+  var hasClient = (D.sessions||[]).some(function(s){ return !!s.client && s.client !== 'unassigned'; });
   document.querySelectorAll('#t_sessions .col-client').forEach(function(el){
     el.classList.toggle('hidden', !hasClient);
   });
