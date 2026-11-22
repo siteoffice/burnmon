@@ -115,7 +115,7 @@ Tests first: `ResolveRoot("", "", cwd)` is ""; a relative flag still joins cwd; 
 Done in T4 (read in code and measured on Windows by tests; not seen on a Mac):
 - Root rule: `ResolveRoot` in `internal\centre\settings.go` returns "" when there is no flag and no saved
   root, whatever the current folder is. A relative flag or saved root still joins the current folder; a
-  saved root still wins over the current folder. `Build("")` in `internal\centreuild.go` returns an
+  saved root still wins over the current folder. `Build("")` in `internal\centre\build.go` returns an
   empty state at once (`filepath.Abs("")` is the current folder, so the guard sits before it).
 - Bindings: with an empty root `ccFile`, `ccBoard` and `ccComment` refuse ("no folder is chosen yet; choose
   one in Settings"), `ccGit` returns an empty view with a line, `ccGitRepo` an empty detail. `ccRoot` and
@@ -132,8 +132,7 @@ Done in T4 (read in code and measured on Windows by tests; not seen on a Mac):
   window thread is not read; the Mac pinned run checks the window.
 - Tests first, each seen failing: `TestResolveRoot` (changed, see below), `TestBuildEmptyRootScansNothing`
   (in `settings_test.go`), `TestNoRootBindingsReadNothing`, `TestNoRootSaveThenPagesWork`, `TestPageNoRoot`
-  (new `cmd\controlcentre
-oroot_test.go`). Changed earlier test, with the reason: `TestResolveRoot`
+  (new `cmd\controlcentre\noroot_test.go`). Changed earlier test, with the reason: `TestResolveRoot`
   expected the current folder for no flag and no saved root; the lane decides it is empty. Its other cases
   are unchanged; the relative-cwd case now uses a relative flag.
 - Measured on Windows: `uicheck-centre.ps1` exit 0 (gitpage group). Its fixture has a root, so no uicheck
@@ -193,6 +192,51 @@ Done in T5 (measured at 960 x 611 and 1280 x 860 on Windows (WebView2); not seen
   clip with `text-overflow:clip`; the fixture holds only 123.4M tokens and 12.34 USD, so a value such as
   "$1,234.56" at 70 px is not measured; (c) margins are thin (206 and 208 px). One fix taken: the w9 case
   field `wantOwnerCol` is renamed `wantClientCol` (it tests Client).
+
+## T6, verify against the success criteria
+
+Measured in T6 on Windows, on HEAD `734992d` (the T5 log commit), before any T6 edit: `go vet ./...`
+exit 0; `go test ./... -count=1` exit 0, 50 packages ok, 1849 tests passed, 12 skipped, 0 failed
+(baseline on `6a4023e`: 1837 passed, 11 skipped); `.\build.ps1` exit 0; with CGO_ENABLED=0 the linux
+and darwin build and vet exit 0; `tools\uicheck` vet and build exit 0; `.\scripts\uicheck.ps1 w9` exit
+0. `gh pr checks 67` on `734992d`: `macos`, `macos (amd64)`, `macos (arm64)` and `windows` pass.
+
+1. N3: met. `TestMigrateRealV01Store` copies through `VACUUM INTO` on a read-only connection and skips
+   with a reason (`notV01Reason`) on a store that is not v0.1; on this laptop it skips ("it already has
+   schema version 9"). `TestMigrateV01StoreHeldOpenInWAL` builds the Mac's case and passes. Cause in the
+   T1 section. Not run on a Mac.
+2. N2: partly met. Met: `lampChildSupported` says yes for `windows` and `darwin`, no for `linux`, and
+   `newLampChild` uses it (`lamp_child.go` line 56 and 61); the darwin parent check is named in the T2
+   section (read, not run). Not met: `C:\ZND\50_projects\burnmon\cmd\burnmon-dev\lamp_unsupported.go`
+   line 13 still prints "The lamp runs on Windows only in this version." on Linux and on a Mac build
+   without cgo, and the README Limits paragraph quotes that line. It is no longer the message a Mac user
+   with the released build sees, but it is still a text that says the lamp is Windows only. Kept by T2
+   because `cmd\burnmon\readme_test.go` line 236 pins "Windows only"; outside every turn's file list, so
+   T6 does not change it (L1). HAND in the Close-out.
+3. N4: met in code, not seen. `lampStyle` sets `drawsBackground` to NO through `setValue:forKey:` only
+   when `respondsToSelector:@selector(_setDrawsBackground:)` holds, and logs one line otherwise
+   (`lamp_window_darwin.go` line 72 to 75); the card branch is unchanged; the click area is named in the
+   T3 section. Built on the macos runner (`macos` pass), not started.
+4. N1: met in code and page tests, not seen in a window. `ResolveRoot("", "", cwd)` returns "" (settings.go
+   line 137); `Build("")` scans nothing (`TestBuildEmptyRootScansNothing`); Settings leads with the folder
+   question and other pages draw "No folder is chosen yet." (`page.html` line 744 and 1432); tests for both
+   states in `cmd\controlcentre\noroot_test.go`. The white-window cause is named in the T4 section, inferred,
+   not measured on a Mac.
+5. D10: met, measured at 960 x 611 and 1280 x 860 on Windows (WebView2), again in T6: "What it was" 206 px
+   at 960 (both fixtures), 440 px at 1280 without Owner and Client and 300 px with them; cut headers none;
+   last column right 925 = pane right 925 at 960 and 1210 = 1210 at 1280; box scroll width equals client
+   width (no horizontal scroll); cut cells without a title none. Not seen on a Mac.
+6. Met: vet, test and build exit 0, linux and darwin build and vet without cgo exit 0, `macos` check pass
+   (read with `gh pr checks 67`). This T6 commit gets its own checks, read after propose (Turn log).
+7. Met with three changes named: `TestLampDarwinWindowFileFinishLane` (T3), `TestResolveRoot` (T4), and the
+   N3 restructure of `store_test.go` (T1, `copyFile` gone, assertions kept). Each is in the turn log with
+   its reason. No other earlier test changed (`git diff main...HEAD` on `*_test.go`: 7 files, 4 of them new
+   or new tests only).
+8. Met: pull request 67 open on `work/wilco-de-tree/mac-retest-fixes`; nothing landed, nothing tagged.
+
+Repaired in T6, in this plan only: two paths in the T4 section had lost a backslash in an earlier turn's
+write (`internal\centre\build.go` held a backspace byte, `cmd\controlcentre\noroot_test.go` held a line
+break). The other 19 files of the lane were scanned: no control byte, tab or carriage return.
 
 ## Turn log
 
