@@ -66,6 +66,13 @@ Priority order lives here and only here.
     at 55,000 events), the Station CPU climb (cause not found), minimized RAM 297 MB against
     250 MB, uicheck w1 red.
 20. Decision 2026-12-19.
+21. PROPOSAL 2026-11-21, no date, after the release lane: an optional focus-and-break rhythm in Glim
+    or BurnMon Dev (for example, Glim dims after a set focus block while agents keep running).
+    Evidence: HBR and BCG 2026 survey of 1,488 full-time US workers, about 14 percent of AI users
+    reported brain fry, heavy users overseeing several agents most at risk; Bainbridge 1983,
+    "Ironies of Automation". Input for the 2026-12-19 scoring, not a feature. Source:
+    `C:\ZND\10_holding\04_assets\2026-11-21_external_scan_herdbell_security_audit_reader_test.md`
+    sections 2a item 6, 3 and 6, rec 3.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.
 Architecture (decided): `..\04_assets\2026-09-22_token_monitor_architecture.md`.
