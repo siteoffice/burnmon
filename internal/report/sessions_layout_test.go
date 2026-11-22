@@ -53,6 +53,23 @@ func TestSessionsTableTextsShowInFullOnHover(t *testing.T) {
 	}
 }
 
+// TestSessionsNumberCellsCarryTheirFullValue pins L4 of the Mac leftovers lane: the cells Calls,
+// Tokens, Per call and Cost show a shortened number (tok, money with 2 or 3 decimals), so each
+// carries the full value as a hover title (UI standard rule 12). The title is unrounded where the
+// cell rounds, so the hover says more than the cell.
+func TestSessionsNumberCellsCarryTheirFullValue(t *testing.T) {
+	for _, want := range []string{
+		`'<td title="'+n(s.calls)+'">'+n(s.calls)`,
+		`'<td title="'+n(s.tokens)+' tokens">'+tok(s.tokens)`,
+		`'<td'+(noPrice ? '' : ' title="'+money(pickCall(s),6)+'"')+'>'`,
+		`'<td'+(noPrice ? '' : ' title="'+money(pick(s),4)+'"')+'>'`,
+	} {
+		if !strings.Contains(tpl, want) {
+			t.Errorf("the Sessions row has no number cell written as %s", want)
+		}
+	}
+}
+
 // TestFilterRowFieldsShareOneHeight pins D11: the "Search title" input was taller than the
 // selects next to it.
 func TestFilterRowFieldsShareOneHeight(t *testing.T) {

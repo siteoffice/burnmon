@@ -39,7 +39,7 @@ func init() {
   var tbl = document.getElementById('t_sessions');
   var box = tbl.parentNode;
   var r = {innerWidth: window.innerWidth, wrapClient: box.clientWidth, boxScroll: box.scrollWidth,
-    docScroll: document.documentElement.scrollWidth, cutHeaders: [], cutNoTitle: [], what: 0, lastRight: 0, boxRight: 0, shown: []};
+    docScroll: document.documentElement.scrollWidth, cutHeaders: [], cutNoTitle: [], numNoTitle: [], what: 0, lastRight: 0, boxRight: 0, shown: []};
   var ths = Array.prototype.filter.call(tbl.querySelectorAll('thead th'), function(th){ return th.offsetParent !== null; });
   var boxRect = box.getBoundingClientRect();
   r.boxRight = boxRect.right;
@@ -56,6 +56,9 @@ func init() {
     Array.prototype.forEach.call(td.children, function(c){ if(c.scrollWidth > c.clientWidth) inner = true; });
     if(inner && !td.getAttribute('title') && !td.getAttribute('data-full')) r.cutNoTitle.push(td.textContent);
   });
+  Array.prototype.forEach.call(tbl.querySelectorAll('tbody tr:not(.finding-row)'), function(tr){
+    [4,5,6,7].forEach(function(i){ var td = tr.children[i]; if(td && !td.getAttribute('title')) r.numNoTitle.push(td.textContent); });
+  });
   return r;
 })()`
 		type result struct {
@@ -65,6 +68,7 @@ func init() {
 			DocScroll  int      `json:"docScroll"`
 			CutHeaders []string `json:"cutHeaders"`
 			CutNoTitle []string `json:"cutNoTitle"`
+			NumNoTitle []string `json:"numNoTitle"`
 			What       float64  `json:"what"`
 			LastRight  float64  `json:"lastRight"`
 			BoxRight   float64  `json:"boxRight"`
@@ -78,11 +82,13 @@ func init() {
 			owner        string
 			client       string
 			wantClientCol bool
+			large        bool // large values: 1,234,567 calls and 9,876.54 EUR (L4)
 		}{
-			{"960 no client", 960, 611, "", "unassigned", false},
-			{"1280 no client", 1280, 860, "", "unassigned", false},
-			{"960 owner and client", 960, 611, "acme-team", "acme-client", false},
-			{"1280 owner and client", 1280, 860, "acme-team", "acme-client", true},
+			{"960 no client", 960, 611, "", "unassigned", false, false},
+			{"1280 no client", 1280, 860, "", "unassigned", false, false},
+			{"960 owner and client", 960, 611, "acme-team", "acme-client", false, false},
+			{"1280 owner and client", 1280, 860, "acme-team", "acme-client", true, false},
+			{"960 large values", 960, 611, "", "unassigned", false, true},
 		}
 		for _, c := range cases {
 			if err := ensureWindowSizeWH(hwnd, c.w, c.h); err != nil {
@@ -90,7 +96,8 @@ func init() {
 			}
 			time.Sleep(600 * time.Millisecond)
 			put := fmt.Sprintf(`(function(){ var s = JSON.parse(JSON.stringify(window.__w9Fixture)); s.owner=%q; s.client=%q;
-  window.__bmSetSessions([s], {'w9-codex-0001': [{Kind:'context-runway'}]}); return true; })()`, c.owner, c.client)
+  if(%t){ s.calls=1234567; s.tokens=9876543210; s.cost=9876.54; s.cost_sub=9876.54; }
+  window.__bmSetSessions([s], {'w9-codex-0001': [{Kind:'context-runway'}]}); return true; })()`, c.owner, c.client, c.large)
 			if _, err := evalRaw(put); err != nil {
 				return fmt.Errorf("%s: set fixture: %w", c.name, err)
 			}
@@ -118,6 +125,9 @@ func init() {
 			}
 			if r.BoxScroll > r.WrapClient || r.DocScroll > r.InnerWidth {
 				failures = append(failures, fmt.Sprintf("%s: horizontal scroll (box %d > %d, page %d > %d)", c.name, r.BoxScroll, r.WrapClient, r.DocScroll, r.InnerWidth))
+			}
+			if len(r.NumNoTitle) > 0 {
+				failures = append(failures, fmt.Sprintf("%s: number cells with no hover title: %v", c.name, r.NumNoTitle))
 			}
 			if len(r.CutNoTitle) > 0 {
 				failures = append(failures, fmt.Sprintf("%s: cut cells with no hover title: %v", c.name, r.CutNoTitle))
