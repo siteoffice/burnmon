@@ -4,7 +4,7 @@
 below one root folder, their files, the flow and sprint boards, a plan, every git repo and what
 waits on you. It records gate decisions, Stop and comments.
 
-Parent index: `README.md`. Built, and accepted by Wilco as it stands on 2026-11-15. Not yet run on a Mac.
+Parent index: `README.md`. Built, and accepted by Wilco as it stands on 2026-11-15. Seen on a Mac in the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip); what it saw is in section 6.
 
 ## 1. What it is
 
@@ -40,8 +40,9 @@ Set-Location C:\ZND\50_projects\burnmon
 ```
 
 On macOS it builds with cgo, like `burnmon-dev`, in `.github\workflows\macos.yml` and
-`scripts\maccheck.sh`. The release workflow does not attach Windows files or a Control Centre
-bundle yet; there is no macOS bundle.
+`scripts\maccheck.sh`. The release has one zip per system (macOS arm64, macOS amd64, Windows amd64).
+The macOS arm64 zip holds three apps, the Control Centre among them, unsigned (see the `xattr` line
+in `README.md`).
 
 ```bash
 # runs in: bash on a Mac, cwd = your clone of siteoffice/burnmon
@@ -148,7 +149,11 @@ The window has its own icon: the tree. A `controlcentre.icns` exists for a futur
 
 ## 6. Limits and known issues
 
-- Not run on a Mac. `controlcentre` builds there in CI and in `scripts\maccheck.sh`, and nothing more.
+- Seen on a Mac once, in the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip): started with
+  `open`, with no root saved, it opened on Settings, said "No folder chosen" and asked for a folder, with no
+  Desktop folder question; its window fit the 1024x768 screen. Open: the lead line there is cut at the pane
+  edge ("Settings. No folder is chosen yet: pic..."; N7). Not tried on a Mac: the amd64 zip, signing and
+  notarizing. The report does not say whether Browse, the Git page or decisions were tried.
 - The one exception to "no port": a dev-only eval channel on `127.0.0.1:9335` that opens only when
   `CONTROLCENTRE_UICHECK` is set. Release builds and this README never set it. It exists for
   `.\scripts\uicheck.ps1 centre`, which runs the `gitpage` group (loading bar, strip against rows,
@@ -164,8 +169,8 @@ The window has its own icon: the tree. A `controlcentre.icns` exists for a futur
 
 ## 7. Next steps and backlog
 
-The Mac test day of 2026-11-16 covers the root picker and the Git page on a real Mac. Findings go into
-`v0.4.0-beta.5`. Priority order lives in `02_roadmap\roadmap.md`.
+The Mac check of 2026-11-22 is what was seen on a Mac; what it saw and what stays open is in section 6.
+Priority order lives in `02_roadmap\roadmap.md`.
 
 ## 8. Feedback, licence, contact
 
