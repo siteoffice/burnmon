@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -181,6 +182,20 @@ func TestLampChildUnsupportedPlatformStartsNothing(t *testing.T) {
 	r.child.Sync(true)
 	if len(r.procs) != 0 {
 		t.Fatal("an unsupported platform started a child")
+	}
+}
+
+// The lamp child runs on Windows and on macOS (the darwin file builds with cgo
+// only, so a darwin build that has this code has a lamp). Linux has none.
+func TestLampChildSupported(t *testing.T) {
+	for goos, want := range map[string]bool{"windows": true, "darwin": true, "linux": false, "freebsd": false} {
+		if got := lampChildSupported(goos); got != want {
+			t.Errorf("lampChildSupported(%q) = %v, want %v", goos, got, want)
+		}
+	}
+	r := newLampChild("x", nil, time.Now, func(string, ...any) {})
+	if r.supported != lampChildSupported(runtime.GOOS) {
+		t.Errorf("newLampChild supported = %v, want the function's answer for %s", r.supported, runtime.GOOS)
 	}
 }
 

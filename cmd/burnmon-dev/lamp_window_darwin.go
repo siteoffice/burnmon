@@ -62,6 +62,18 @@ static void lampStyle(void *win, int clear) {
 			if (@available(macOS 12.0, *)) {
 				wk.underPageBackgroundColor = [NSColor clearColor];
 			}
+			// underPageBackgroundColor alone left an opaque white box (N4 of the
+			// retest). The web view still paints its own background, and the key
+			// that stops it, drawsBackground, is not documented. wry (the web view
+			// of Tauri) sets it through key-value coding the same way. It is set
+			// only when the web view answers to the selector behind the key, because
+			// setValue:forKey: on an unknown key throws. When it does not answer, the
+			// panel stays white and this log line says why: use lamp_backdrop card.
+			if ([wk respondsToSelector:@selector(_setDrawsBackground:)]) {
+				[wk setValue:[NSNumber numberWithBool:NO] forKey:@"drawsBackground"];
+			} else {
+				NSLog(@"lamp: the web view does not answer to drawsBackground, the clear backdrop may show a white box; set lamp_backdrop to card");
+			}
 		}
 		return;
 	}
@@ -158,7 +170,8 @@ func runLampWindow(o lampOpts) int {
 	}
 	// The clear backdrop and the card backdrop: the Windows environment variable
 	// is not used here, only the choice. Built, not seen: if the web view still
-	// paints an opaque square, lamp_backdrop card is the look that works.
+	// paints an opaque square (lampStyle logs when it cannot stop the web view's
+	// own background), lamp_backdrop card is the look that works.
 	_, _, glass := lampBackdropEnv(set.Backdrop)
 	startW, startH := lampWindowSize(set)
 

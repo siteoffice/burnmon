@@ -351,6 +351,8 @@ var api = {
   var PANEL_PX = {narrow: 256, normal: 320, wide: 400}, PANEL_MIN = 220, PANEL_MAX = 640;
   // rootSaved: the line the Root row shows once after a Save, then the check line again.
   var rootSaved = '';
+  // rootAsked: set once the first state with no root has sent the user to Settings, so later page changes stay.
+  var rootAsked = false;
   var view = {page: 'overview', arg: null};
   var target = {kind: '', unit_id: '', path: '', block: 0, label: ''};
   var resizeTimer = 0;
@@ -421,6 +423,7 @@ var api = {
 
   function rootName() {
     if (!state) return '';
+    if (state.root === '') return 'No folder chosen';
     var u = unitById('.');
     if (u) return u.display_name;
     return String(state.root);
@@ -449,6 +452,11 @@ var api = {
   function loadState() {
     return Promise.resolve(api.state({rows: rowsFit()})).then(function(s) {
       state = s;
+      if (state.root === '' && !rootAsked) {
+        rootAsked = true;
+        view = {page: 'settings', arg: null};
+        sub = {tab: 'Structure', page: 0, more: '', sel: ''};
+      }
       render();
     }, function(e) { fail('Could not read the state', e); });
   }
@@ -724,9 +732,20 @@ var api = {
     drawSeq++;
     lead.textContent = '';
     pane.textContent = '';
+    if (state.root === '' && view.page !== 'settings') { pageNoRoot(); return; }
     var pages = {overview: pageOverview, unit: pageUnit, file: pageFile, board: pageBoard, waiting: pageWaiting,
       planning: pagePlanning, settings: pageSettings, agents: pageAgents, git: pageGit, gitrepo: pageGitRepo};
     (pages[view.page] || pageOverview)(view.arg);
+  }
+
+  // pageNoRoot: every page but Settings while no folder is chosen (no --root, no saved root). Nothing is read.
+  function pageNoRoot() {
+    lead.textContent = 'Choose a folder to start.';
+    pane.appendChild(h('p', 'muted', 'No folder is chosen yet.'));
+    var a = h('div', 'acts');
+    a.appendChild(btn('primary', 'Open Settings', function() { go('settings'); }));
+    pane.appendChild(a);
+    detail({k: 'Folder', t: 'No folder chosen', d: 'The Control Centre reads nothing until you choose the folder to show. Settings has Browse and Save.'});
   }
 
   function rootDetail(note) {
@@ -1410,7 +1429,8 @@ var api = {
   }
 
   function pageSettings() {
-    lead.textContent = 'Settings. Every setting of the app lives on this page.';
+    lead.textContent = state.root === '' ? 'Settings. No folder is chosen yet: pick the folder to show with Browse, or type it, then Save.' :
+      'Settings. Every setting of the app lives on this page.';
     function row(label, help, opts, cur, fn) {
       var r = h('div', 'setrow'), lb = h('span', 'lb', label);
       lb.appendChild(h('span', 'hp', help));
@@ -2085,6 +2105,8 @@ var api = {
     });
     panelEdge();
     render();
+    // The shell is drawn here; the first state can take a while on a big folder, so say what is running.
+    lead.textContent = 'Reading the folder.';
     Promise.resolve(api.settingsGet()).then(function(s) {
       applySettings(s);
       return loadState();

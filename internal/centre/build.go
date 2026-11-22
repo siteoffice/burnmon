@@ -20,7 +20,9 @@ func Build(root string, opt Options) State {
 	if rows < 1 {
 		rows = 12
 	}
-	if abs, err := filepath.Abs(root); err == nil {
+	// An empty root is "no folder chosen": filepath.Abs("") is the current folder,
+	// which must never be scanned instead.
+	if abs, err := filepath.Abs(root); err == nil && root != "" {
 		root = abs
 	}
 
@@ -41,6 +43,10 @@ func Build(root string, opt Options) State {
 	}
 	monday := MondayOf(now)
 
+	if root == "" {
+		st.Planning = PlanningGrid(monday, weeks, now, nil)
+		return st
+	}
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
 		st.Problems = append(st.Problems, Problem{Path: ".", Message: "root folder not found"})
 		st.Planning = PlanningGrid(monday, weeks, now, nil)

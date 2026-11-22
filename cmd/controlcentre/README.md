@@ -50,12 +50,14 @@ bundle yet; there is no macOS bundle.
 
 ## 4. Use
 
-Start `controlcentre.exe`. With no root set it shows the current folder, so the first ten minutes
-are: open Settings, press Browse, pick the folder that holds your units, press Save. Every page
-reloads at once, no restart.
+Start `controlcentre.exe`. With no `--root` and no saved root it reads nothing and opens on Settings,
+asking for the folder to show, on Windows and on a Mac alike (it never falls back to the current folder:
+a double-clicked Mac app starts in `/`). Every other page then says that no folder is chosen yet and
+offers to open Settings. The first ten minutes are: press Browse, pick the folder that holds your units,
+press Save. Every page reloads at once, no restart.
 
 - **Root**: `--root` names the folder to show; without it, the `root` in `controlcentre.json`;
-  without that, the current folder. On the Settings page the Root field has a Browse button (the
+  without that, no folder (the page asks for one). On the Settings page the Root field has a Browse button (the
   native folder picker on Windows and macOS) and Save. Typing or picking checks that the folder exists
   and is readable and shows how many units it holds before you save. Saving writes `root` and reloads
   every page. `--root` still wins: the field then shows "set by --root" and is read only.
@@ -126,7 +128,7 @@ An overview of every git repo below the root, in the side menu after Agents. It 
 
 | Key | Values | Default |
 |---|---|---|
-| `root` | a folder | empty (the current folder) |
+| `root` | a folder | empty (no folder; Settings asks for one) |
 | `width` | 60, 80 or 100 percent | 80 |
 | `menu` | text or icons | text |
 | `weeks` | 2 or 4 | 2 |

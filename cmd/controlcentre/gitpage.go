@@ -127,6 +127,9 @@ type GitRequest struct {
 // gitView is the ccGit handler. The reading runs in the background; the
 // page asks again while Loading is true.
 func gitView(e bindEnv, req GitRequest) centre.GitView {
+	if e.rootNow() == "" {
+		return centre.GitView{Line: "There is no folder chosen yet, so there is no repo to show. Choose a folder in Settings.", Repos: []centre.GitRepo{}, Pages: []centre.Span{}}
+	}
 	if e.git == nil {
 		return centre.GitView{Root: e.rootNow(), Line: "The Git page is not available in this build.", Repos: []centre.GitRepo{}, Pages: []centre.Span{}}
 	}
@@ -135,7 +138,7 @@ func gitView(e bindEnv, req GitRequest) centre.GitView {
 
 // gitRepo is the ccGitRepo handler.
 func gitRepo(e bindEnv, id string) centre.GitDetailView {
-	if e.git == nil {
+	if e.git == nil || e.rootNow() == "" {
 		return centre.GitDetailView{}
 	}
 	return e.git.Detail(e.rootNow(), id)

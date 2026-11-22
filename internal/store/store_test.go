@@ -2,14 +2,16 @@ package store
 
 import (
 	"database/sql"
-	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"burnmon/internal/schema"
+	"burnmon/internal/store/migrations"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -432,21 +434,52 @@ func TestToolCallsForTurn(t *testing.T) {
 	}
 }
 
-// copyFile is a plain byte copy, used to snapshot a real store file into a
-// temp dir without touching the original.
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
+// snapshotStore writes a consistent copy of the store at src to dst with
+// SQLite's own VACUUM INTO, through a read-only connection, so rows that still
+// sit in src's -wal file (a running app, no checkpoint yet) are in the copy and
+// src is never written. A byte copy of the main file alone misses them.
+func snapshotStore(src, dst string) error {
+	p := filepath.ToSlash(src)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p // a Windows drive path: file:///C:/...
+	}
+	dsn := (&url.URL{Scheme: "file", Path: p}).String() + "?mode=ro"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return err
 	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
+	defer db.Close()
+	_, err = db.Exec(`VACUUM INTO ?`, dst)
 	return err
+}
+
+// notV01Reason says why the store at path is not a v0.1 store, or "" when it
+// is one: a v0.1 store has an events table and no schema_version table.
+func notV01Reason(t *testing.T, path string) string {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw %s: %v", path, err)
+	}
+	defer db.Close()
+	has := func(table string) bool {
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil {
+			t.Fatalf("read the tables of %s: %v", path, err)
+		}
+		return n > 0
+	}
+	if !has("events") {
+		return "no events table"
+	}
+	if has("schema_version") {
+		var v int
+		if err := db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&v); err != nil && err != sql.ErrNoRows {
+			t.Fatalf("read schema_version of %s: %v", path, err)
+		}
+		return "it already has schema version " + strconv.Itoa(v)
+	}
+	return ""
 }
 
 // rawEventKeys opens path with a bare sqlite connection (not Open, which
@@ -478,15 +511,16 @@ func rawEventKeys(t *testing.T, path string) (map[string]bool, int) {
 	return keys, len(keys)
 }
 
-// TestMigrateRealV01Store is S1's own acceptance test: copy a real v0.1
-// store from this laptop (DefaultPath, a database created before this
-// session's migrations existed, so it has no schema_version table and no
-// owner column) into a temp dir, run it to head through Open, and check
-// every one of its events survived with identical (vendor, session_id,
-// request_id) ids and that schema_version now reads 2. Skips (does not
-// fail) when this laptop has no such store, or when it is locked by a
-// running burnmon/burnmon-cli process, since neither says anything about
-// whether the migration code is correct.
+// TestMigrateRealV01Store is S1's own acceptance test: snapshot the real store
+// of this machine (DefaultPath) into a temp dir, and when it is a v0.1 store
+// (an events table and no schema_version table) run it to head through Open
+// and check every one of its events survived with identical (vendor,
+// session_id, request_id) ids and that schema_version reads the head version.
+// The snapshot goes through SQLite (snapshotStore), so rows still in the -wal
+// file of a running app are in it. Skips (does not fail) when the machine has
+// no store, when it cannot be read, or when it is not a v0.1 store (any store
+// made by v0.2 or later), since none of these says anything about whether the
+// migration code is correct.
 func TestMigrateRealV01Store(t *testing.T) {
 	real, err := DefaultPath()
 	if err != nil {
@@ -495,11 +529,115 @@ func TestMigrateRealV01Store(t *testing.T) {
 	if _, err := os.Stat(real); err != nil {
 		t.Skipf("no real store at %s to migrate: %v", real, err)
 	}
+	checkV01Migration(t, real, false)
+}
 
+// TestMigrateV01StoreHeldOpenInWAL makes a v0.1 store the way a running app
+// leaves one: WAL mode, a connection still open and no checkpoint, so its
+// tables sit in the -wal file and the main file holds only its first page.
+// checkV01Migration must still find every event. This is N3 of the Mac retest
+// of 2026-11-22, where a plain copy of the main file read "no such table:
+// events".
+func TestMigrateV01StoreHeldOpenInWAL(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "burnmon.db")
+	db, err := sql.Open("sqlite", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	db.SetMaxOpenConns(1)
+	for _, p := range []string{`PRAGMA journal_mode=WAL`, `PRAGMA wal_autocheckpoint=0`} {
+		if _, err := db.Exec(p); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrations.All[0].Up(tx); err != nil {
+		t.Fatalf("v0.1 schema: %v", err)
+	}
+	for _, r := range []string{"r1", "r2"} {
+		if _, err := tx.Exec(`INSERT INTO events (vendor, agent, surface, session_id, request_id, at, model, input, output)
+VALUES ('anthropic', 'claude-code', 'cli', 's1', ?, '2026-09-01T10:00:00Z', 'claude-sonnet-5', 10, 1)`, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	checkV01Migration(t, src, true)
+}
+
+// TestNotV01Reason pins when the real-store check skips: a file with no events
+// table (a store that is new or not read whole), and a store that already has
+// schema_version (made by v0.2 or later), are not v0.1 stores.
+func TestNotV01Reason(t *testing.T) {
+	dir := t.TempDir()
+	empty := filepath.Join(dir, "empty.db")
+	edb, err := sql.Open("sqlite", empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := edb.Exec(`PRAGMA journal_mode=WAL`); err != nil {
+		t.Fatal(err)
+	}
+	edb.Close()
+	if why := notV01Reason(t, empty); !strings.Contains(why, "no events table") {
+		t.Fatalf("empty file: reason %q, want it to name the missing events table", why)
+	}
+
+	head := filepath.Join(dir, "head.db")
+	st, err := Open(head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	want := "schema version " + strconv.Itoa(migrations.All[len(migrations.All)-1].Version)
+	if why := notV01Reason(t, head); !strings.Contains(why, want) {
+		t.Fatalf("store at head: reason %q, want it to contain %q", why, want)
+	}
+
+	v01 := filepath.Join(dir, "v01.db")
+	vdb, err := sql.Open("sqlite", v01)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := vdb.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrations.All[0].Up(tx); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	vdb.Close()
+	if why := notV01Reason(t, v01); why != "" {
+		t.Fatalf("v0.1 store: reason %q, want none", why)
+	}
+}
+
+// checkV01Migration snapshots the store at src into a temp dir, runs the copy
+// to head through Open, and checks every event survived with the same ids.
+// With mustRun a failed snapshot or a store that is not v0.1 fails the test:
+// t.Skipf ends the test at once, so a caller cannot turn a skip into a failure
+// after the call.
+func checkV01Migration(t *testing.T, src string, mustRun bool) {
+	t.Helper()
+	stop := t.Skipf
+	if mustRun {
+		stop = t.Fatalf
+	}
 	dir := t.TempDir()
 	dst := filepath.Join(dir, "burnmon.db")
-	if err := copyFile(real, dst); err != nil {
-		t.Skipf("could not copy the real store at %s (likely locked by a running app): %v", real, err)
+	if err := snapshotStore(src, dst); err != nil {
+		stop("could not snapshot the store at %s (likely locked by a running app): %v", src, err)
+	}
+	if why := notV01Reason(t, dst); why != "" {
+		stop("the store at %s is not a v0.1 store: %s", src, why)
 	}
 
 	wantKeys, wantCount := rawEventKeys(t, dst)

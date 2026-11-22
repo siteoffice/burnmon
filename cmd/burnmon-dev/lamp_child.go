@@ -38,7 +38,7 @@ type lampChild struct {
 	start     lampStarter
 	now       func() time.Time
 	logf      func(string, ...any)
-	supported bool        // the lamp runs on Windows only in this version
+	supported bool        // false only where the lamp has no window (lampChildSupported)
 	savedOff  func() bool // true only when the file was read and says lamp_enabled false; an unreadable file is not off. Tick uses it when set
 	enabled   func() bool // lamp_enabled as the file says now; nil means on. A lamp closed from its menu saved false before it ended
 
@@ -49,8 +49,16 @@ type lampChild struct {
 	restarts []time.Time
 }
 
+// lampChildSupported says whether BurnMon Dev keeps a lamp child on goos. This
+// file only builds for Windows and for macOS with cgo, the two systems that
+// have a lamp window; on Linux and on macOS without cgo the lamp subcommand
+// prints a sentence and exits, so no child is started there.
+func lampChildSupported(goos string) bool {
+	return goos == "windows" || goos == "darwin"
+}
+
 func newLampChild(exe string, start lampStarter, now func() time.Time, logf func(string, ...any)) *lampChild {
-	return &lampChild{exe: exe, start: start, now: now, logf: logf, supported: runtime.GOOS == "windows"}
+	return &lampChild{exe: exe, start: start, now: now, logf: logf, supported: lampChildSupported(runtime.GOOS)}
 }
 
 // Sync makes the child match the switch: on starts one (once), off stops it.

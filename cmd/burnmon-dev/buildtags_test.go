@@ -146,11 +146,21 @@ func TestLampDarwinWindowFileFinishLane(t *testing.T) {
 			t.Errorf("lamp_window_darwin.go lacks %q", want)
 		}
 	}
-	// Documented API only (AGENTS.md: no undocumented endpoints).
-	for _, banned := range []string{"drawsBackground", "_setDrawsBackground", "setValue:"} {
+	// Documented API only, with one exception that the Mac retest fix lane (N4)
+	// chose: the web view's drawsBackground key, which is not documented, set
+	// only behind a respondsToSelector guard and with a log line otherwise.
+	// TestLampDarwinClearBackdropStopsWebViewBackground pins that exception; any
+	// other key-value write or private selector still fails here.
+	for _, banned := range []string{"numberWithBool:YES", "@YES", "forKeyPath", "setValuesForKeysWithDictionary"} {
 		if strings.Contains(s, banned) {
-			t.Errorf("lamp_window_darwin.go contains %q", banned)
+			t.Errorf("lamp_window_darwin.go contains %q; only drawsBackground NO is allowed", banned)
 		}
+	}
+	if n := strings.Count(s, "forKey:@"); n != 1 {
+		t.Errorf("lamp_window_darwin.go has %d key-value writes, want exactly the one for drawsBackground", n)
+	}
+	if n := strings.Count(s, "_setDrawsBackground"); n != 1 {
+		t.Errorf("lamp_window_darwin.go has %d _setDrawsBackground uses, want exactly the one guard", n)
 	}
 }
 

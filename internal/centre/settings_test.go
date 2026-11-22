@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestDefaultSettings(t *testing.T) {
@@ -144,13 +145,31 @@ func TestResolveRoot(t *testing.T) {
 	if got := ResolveRoot("", set, cwd); got != set {
 		t.Errorf("setting: %q", got)
 	}
-	if got := ResolveRoot("", "", cwd); got != cwd {
-		t.Errorf("cwd: %q", got)
+	// No flag and no saved root: the root is empty, whatever the current folder is. The
+	// Control Centre then scans nothing and asks for a folder (a double-clicked Mac app
+	// starts in "/", so a cwd fallback scanned the whole disk).
+	if got := ResolveRoot("", "", cwd); got != "" {
+		t.Errorf("no root: %q, want empty", got)
+	}
+	if got := ResolveRoot("", "", "."); got != "" {
+		t.Errorf("no root, relative cwd: %q, want empty", got)
 	}
 	if got := ResolveRoot("", "rel/./sub", cwd); got != filepath.Join(cwd, "rel", "sub") {
 		t.Errorf("relative setting: %q", got)
 	}
-	if got := ResolveRoot("", "", "."); !filepath.IsAbs(got) {
-		t.Errorf("relative cwd gave %q, want absolute", got)
+	if got := ResolveRoot("rel", "", "."); !filepath.IsAbs(got) {
+		t.Errorf("relative flag with relative cwd gave %q, want absolute", got)
+	}
+}
+
+// TestBuildEmptyRootScansNothing: Build("") must not fall back to the current folder
+// (filepath.Abs("") is the current folder).
+func TestBuildEmptyRootScansNothing(t *testing.T) {
+	cwd := t.TempDir()
+	writeFile(t, cwd, "siteoffice.json", `{"name":"here"}`)
+	t.Chdir(cwd)
+	st := Build("", Options{Now: time.Date(2026, 11, 22, 9, 0, 0, 0, time.UTC)})
+	if st.Root != "" || len(st.Units) != 0 || len(st.Problems) != 0 || st.Counts.Units != 0 {
+		t.Errorf("empty root scanned: root %q, %d units, %d problems", st.Root, len(st.Units), len(st.Problems))
 	}
 }
