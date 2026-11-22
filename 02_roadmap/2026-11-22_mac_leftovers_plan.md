@@ -140,6 +140,47 @@ T3 files in all: 5 of the 12 allowed (6 with `tools\uicheck\groups.go` if the ca
 - L1 and L5 had no new test file: the existing sentence test and the README pin changed instead
   (named in the turn log). The lane's "one test for the sentence" is that changed test.
 
+## T4, grading of the success criteria
+
+Measured in T4 on Windows on `d413651` (the T3 head; T4 changed only documents): `go vet ./...` 0;
+`go test ./... -count=1` 0, 50 packages ok, 1855 passed, 12 skipped, 0 failed (1849 at the
+baseline plus the tests of T2 and T3); `.\build.ps1` 0; linux and darwin build and vet without cgo
+0; `tools\uicheck` vet and build 0; `.\scripts\uicheck-lamp.ps1` 0; `.\scripts\uicheck.ps1 w9` 0;
+`.\scripts\uicheck.ps1` with the default list 1 (`w1` blank window); checks of pull request 68 on
+`d413651`: `macos`, `macos (amd64)`, `macos (arm64)`, `windows` pass.
+
+1. L1, met. `cmd\burnmon-dev\lamp_unsupported.go` prints "This build has no lamp window. The lamp
+   runs in the Windows build and in the Mac app (the build with cgo)."; no "Windows only". The
+   README Limits paragraph and the pin in `cmd\burnmon\readme_test.go` changed in the same commit
+   `c449bb4`; `TestLampUnsupportedSaysTheSentenceAndExits2` pins the sentence.
+2. L2, met in code and tests, behaviour not measurable. `lampPointIn` has `TestLampPointIn` and
+   `TestLampPointInTickerAndGlim`; the darwin file keeps the rectangles, polls every 100 ms and calls
+   `setIgnoresMouseEvents:` only on a change, keeps the clicks while a button is down (source tests
+   in `lamp_window_darwin_src_test.go`). Built on the macos runner (checks pass), not started:
+   whether clicks really pass through on a Mac is not measured.
+3. L3, met. Equal headline and line show once with the full text as title (page tests of T3);
+   `uicheck-lamp.ps1` exit 0 in T3 and again in T4. Row 1 on a Mac: not seen.
+4. L4, met. Every number cell carries its full value as a title (`sessions_layout_test.go`); `w9`
+   large values (1,234,567 calls, 9,876.54 EUR) measured at 960 x 611 on Windows (WebView2): What it
+   was 206 px, box scroll 905 = client 905 (no horizontal scrollbar), no cut header, no cut cell
+   without a title.
+5. L5, not met. `w9` is in the default list (line 8 and line 56 of `scripts\uicheck.ps1`), but the
+   default run exits 1: the burnmon.exe pass stops at `w1` ("window looked blank/unpainted 1.5s after
+   launch"), so `w2` to `w9` do not run in it. `w1` is red since the baselines of 2026-11-16 and
+   2026-11-17 (STATUS); no burnmon.exe code changed in this lane. Not repaired here: outside the
+   lane's items and file lists. `w9` alone exits 0.
+6. Met. vet, test and build 0, linux and darwin without cgo 0, every check of pull request 68 green
+   on `d413651`; the checks on the T4 commits are read after propose (turn log).
+7. Met. Two earlier tests changed, both named in the T1 turn log with the reason (the old
+   sentence): `TestLampUnsupportedSaysTheSentenceAndExits2` and the pin in `TestReadmeLampSection`.
+   No golden file changed.
+8. Met. Pull request 68 is open on `work/wilco-de-tree/mac-leftovers`; nothing landed; no tag on
+   origin points at or contains a lane commit (`git ls-remote --tags origin`, newest
+   `v0.5.0-beta.1`).
+
+Choice in T4: no reviewer subagent, because the T4 diff holds only documents (STATUS, SESSION_LOG,
+this plan); no behaviour or test can change through it.
+
 ## Turn log
 
 T1: done; commit c449bb4; measured: vet 0, test 50 packages ok, 1849 passed, 12 skipped, 0 failed, build 0, linux and darwin build and vet without cgo 0, uicheck default exit 1 (w1 blank window, not this lane's), w0 and w2 to w9 exit 0; pull request 68 opened; changed tests: TestLampUnsupportedSaysTheSentenceAndExits2 and the TestReadmeLampSection pin now hold the new sentence (both failed first); reviewer: no behaviour change outside L1 and L5, no test weaker; open: w1 red keeps success criterion 5 open, the Mac card-window stub prints the new sentence (T4 flag)
