@@ -43,7 +43,7 @@ func TestCloudPullUnreadAndOldCopyIsNotMeasuredPerPeriod(t *testing.T) {
 	// Now in the fixture is 2026-11-17 09:00 UTC (a Tuesday); the newest copy is from Sunday the 15th.
 	p := pullStripFixture(t, &pricing.Config{CloudPull: true}, cloudpull.Status{
 		OK: true, Unread: 86, UnreadReason: "x",
-		LastPulledAt: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC),
+		LastMeasured: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC),
 	})
 	c := rowOf(p, "cowork-cloud")
 	if c.TodayNote != NoteNotMeasured || c.WeekNote != NoteNotMeasured || c.MonthNote != NotePartial {
@@ -54,6 +54,27 @@ func TestCloudPullUnreadAndOldCopyIsNotMeasuredPerPeriod(t *testing.T) {
 	}
 	if p.CloudPull != CloudPullPartial || p.CloudTip == "" {
 		t.Fatalf("cloud_pull %q, tip %q", p.CloudPull, p.CloudTip)
+	}
+}
+
+// 2026-11-23: a fresh re-copy of an August session was written today, so "the period holds the
+// newest copy" made today and this week read "0+". The notes follow the newest real usage in the
+// copies instead (LastMeasured, 17 Nov), so today and this week read "not measured" and November,
+// which holds that usage, keeps "N+". The Total keeps its "+" in every period: measured numbers
+// plus a cloud part that is unknown.
+func TestCloudPullNotesFollowTheNewestRealUsageNotTheCopyTime(t *testing.T) {
+	now := time.Date(2026, 11, 23, 21, 30, 0, 0, time.UTC) // a Monday
+	p := pullStripFixtureAt(t, &pricing.Config{CloudPull: true}, cloudpull.Status{
+		OK: true, Unread: 94,
+		LastPulledAt: time.Date(2026, 11, 23, 17, 40, 2, 0, time.UTC), // the re-copy of an August session
+		LastMeasured: time.Date(2026, 11, 17, 16, 1, 0, 0, time.UTC),
+	}, now)
+	c := rowOf(p, "cowork-cloud")
+	if c.TodayNote != NoteNotMeasured || c.WeekNote != NoteNotMeasured || c.MonthNote != NotePartial {
+		t.Fatalf("notes %q %q %q, want not_measured, not_measured, partial", c.TodayNote, c.WeekNote, c.MonthNote)
+	}
+	if p.Total.TodayNote != NotePartial || p.Total.WeekNote != NotePartial || p.Total.MonthNote != NotePartial {
+		t.Fatalf("total notes %+v, want partial on all", p.Total)
 	}
 }
 
