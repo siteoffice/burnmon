@@ -378,7 +378,9 @@ func TestLampOffCaseCarriesTheRealHeadlineAndLine(t *testing.T) {
 }
 
 func TestLampOffRow1ShowsTheSentenceOnce(t *testing.T) {
+	// Opened, the off lamp draws its ticker; closed it is only the sliver (see below).
 	c := caseOf("off", 1, 0)
+	c.Open = true
 	r := goodLampRead(c)
 	if p := lampProblems(c, r); len(p) != 0 {
 		t.Fatalf("a good off read has problems: %v", p)
@@ -392,6 +394,13 @@ func TestLampOffRow1ShowsTheSentenceOnce(t *testing.T) {
 	empty.Row1Head = ""
 	if p := lampProblems(c, empty); len(p) == 0 {
 		t.Error("an off state with no headline in row 1 was not reported")
+	}
+	// Closed, the ticker is hidden and keeps the previous case's row: a stale read must not fail.
+	closed := caseOf("off", 1, 0)
+	cr := goodLampRead(closed)
+	cr.Row1Head, cr.Row1Subs = "1 blocked", 1
+	if p := lampProblems(closed, cr); len(p) != 0 {
+		t.Errorf("a stale hidden ticker of the closed off lamp was reported: %v", p)
 	}
 	// Other moods keep their line as a second span on purpose.
 	y := caseOf("your_turn", 1, 1)

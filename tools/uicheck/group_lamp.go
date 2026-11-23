@@ -346,8 +346,10 @@ func lampProblems(c lampCase, r lampRead) []string {
 		}
 	}
 	// N6: the same sentence as the headline shows once, so row 1 holds no second span.
-	if c.Mood == "off" {
-		if r.Row1Head != "BurnMon is not running" {
+	// A closed off lamp shows only the sliver and does not redraw the hidden ticker, so
+	// its row 1 is the previous case's: the check reads the ticker only where it is drawn.
+	if c.Mood == "off" && !lampSliverOnly(c) {
+		if r.Row1Head !="BurnMon is not running" {
 			p = append(p, fmt.Sprintf("%s: row 1 headline reads %q, want %q", where, r.Row1Head, "BurnMon is not running"))
 		}
 		if r.Row1Subs != 0 {

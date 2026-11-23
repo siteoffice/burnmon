@@ -35,7 +35,10 @@ func centreNoRootProblems(r centreNoRootRead) []string {
 
 const centreNoRootJS = `(function(){
   var lead = document.getElementById('lead');
-  var hp = document.querySelector('.setrow .lb .hp');
+  var hp = null;
+  Array.prototype.forEach.call(document.querySelectorAll('.setrow .lb'), function(lb){
+    if(!hp && lb.firstChild && lb.firstChild.textContent === 'Root') hp = lb.querySelector('.hp');
+  });
   return {lead: lead ? lead.textContent : '', leadW: lead ? lead.clientWidth : 0, leadFull: lead ? lead.scrollWidth : 0,
     rootHelp: hp ? hp.textContent : '', innerW: window.innerWidth};
 })()`
