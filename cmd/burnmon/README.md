@@ -250,6 +250,15 @@ in `burnmon-dev.exe`. It is off by default, and without it the Cowork (Cloud) ro
 - What it reads: cloud sessions you start in the Claude app on this computer, inside or outside a Project. Sessions
   started from your phone, the browser or another computer are not read, and neither is subagent usage inside a cloud
   session. With it on, a working pull shows plain numbers; a failing one shows not measured with the reason.
+- What the Cowork (Cloud) cell says: a plain number when every session is copied; a number with `+` (for
+  example `2743.2M+`) when some sessions could not be copied but the period holds the newest good copy; `not
+  measured` when some could not be copied and the period starts after the newest good copy, because its 0 would
+  mean unknown. While any session is unread, BurnMon Dev prints one line under the vendor strip with the count and
+  the newest reason, and the same text is the hover on the cells.
+- When copies fail: a result that is an error at no cost (for example "Prompt is too long", a session too big for
+  the rename turn) is a failed copy of that session, not a cost stop. A session that needs a checkout of its
+  repo ("Run claude --teleport <id> from a checkout of <repo>") is retried once a day. When 5 different sessions in
+  a row fail with the same error, the pull pauses for 6 hours and the line under the strip says so.
 
 ### Cowork in the cloud
 

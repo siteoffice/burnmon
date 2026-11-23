@@ -164,11 +164,17 @@ function lineNow(p){
   if(p.act&&actIdx>=0&&L[actIdx])return L[actIdx];
   return p.state.line||'';
 }
+/* Two lines are the same sentence when only case, spaces and end marks differ: the
+   headline has no full stop and the line has one. */
+function sameSentence(a,b){
+  function norm(s){return String(s||'').toLowerCase().replace(/[.!?\s]+$/,'').trim();}
+  return norm(a)===norm(b);
+}
 function row1HTML(p){
   var st=p.state,line=lineNow(p);
   var h='<b class="head" title="'+esc(st.headline)+'">'+esc(st.headline)+'</b>';
   /* The same sentence as the headline (BurnMon is stopped) shows once. */
-  if(line&&line!==st.headline)h+='<span class="sub" title="'+esc(line)+'">'+esc(line)+'</span>';
+  if(line&&!sameSentence(line,st.headline))h+='<span class="sub" title="'+esc(line)+'">'+esc(line)+'</span>';
   if(st.wall_over)h+='<span class="w30">30+</span>';
   if(st.demo)h+='<span class="demo">demo</span>';
   return h;

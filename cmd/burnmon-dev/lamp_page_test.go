@@ -266,8 +266,21 @@ func TestLampPageRow1ShowsAnEqualHeadlineOnce(t *testing.T) {
 	if !strings.Contains(fn, `class="head" title="'+esc(st.headline)`) {
 		t.Error("the head has no title with the full text")
 	}
-	if !strings.Contains(fn, "line!==st.headline") {
+	// N6 (Mac check 2026-11-22): the Go headline has no full stop and the line has one
+	// ("BurnMon is not running" and "BurnMon is not running."), so an exact match
+	// printed the sentence twice. The match ignores case, spaces and end marks.
+	if !strings.Contains(fn, "!sameSentence(line,st.headline)") {
 		t.Error("the sub span is not left out when the line equals the headline")
+	}
+	s := strings.Index(lampHTML, "function sameSentence(")
+	if s < 0 {
+		t.Fatal("lamp.html has no sameSentence")
+	}
+	same := lampHTML[s : s+strings.Index(lampHTML[s:], "\n}")]
+	for _, want := range []string{"toLowerCase()", `[.!?\s]+$`} {
+		if !strings.Contains(same, want) {
+			t.Errorf("sameSentence lacks %q", want)
+		}
 	}
 }
 

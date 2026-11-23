@@ -72,6 +72,27 @@ func TestNoRootSaveThenPagesWork(t *testing.T) {
 	}
 }
 
+// TestSettingsLeadWithNoRootFitsTheHeader (N7, Mac check 2026-11-22): the lead is one
+// nowrap line cut at the pane edge, so the sentence with the instructions was cut
+// ("... pic..."). The lead says only that no folder is chosen; the how-to is the
+// Root row's own help.
+func TestSettingsLeadWithNoRootFitsTheHeader(t *testing.T) {
+	body := pageFunc(t, "pageSettings")
+	i := strings.Index(body, "lead.textContent = state.root === ''")
+	if i < 0 {
+		t.Fatal("pageSettings does not set the lead from state.root")
+	}
+	line := body[i : i+strings.Index(body[i:], ";")]
+	q := strings.Index(line, "? '") + 3
+	noRoot := line[q : q+strings.Index(line[q:], "'")]
+	if n := len([]rune(noRoot)); n > 40 {
+		t.Errorf("the no-root lead is %d characters (%q), want at most 40", n, noRoot)
+	}
+	if !strings.Contains(pageFunc(t, "rootRow"), "Browse, or type it, then Save") {
+		t.Error("the Root row does not carry the how-to when no folder is chosen")
+	}
+}
+
 // TestPageNoRoot: the page asks for a folder, on Settings first, and every other page says so.
 func TestPageNoRoot(t *testing.T) {
 	body := pageFunc(t, "pageNoRoot")

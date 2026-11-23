@@ -58,6 +58,7 @@ type agentPoll struct {
 	err     error
 	entries []waits.AgentEntry
 	seen    map[string]time.Time
+	idle    map[string]bool // keys that were idle on the previous poll
 }
 
 func (gr *GraphReaders) clock() time.Time {
@@ -86,11 +87,18 @@ func (gr *GraphReaders) runAgentView(ctx context.Context) {
 	defer p.mu.Unlock()
 	p.running, p.done, p.at, p.err = false, true, at, err
 	if err != nil {
-		p.entries, p.seen = nil, nil
+		p.entries, p.seen, p.idle = nil, nil, nil
 		return
 	}
+	entries = waits.WithoutDir(entries, gr.IgnoreDir)
 	seen := map[string]time.Time{}
+	idle := map[string]bool{}
 	for i := range entries {
+		if entries[i].YourTurn() { // JustIdle is still false here: the poller sets it below
+			k := entries[i].Key()
+			idle[k] = true
+			entries[i].JustIdle = !p.idle[k]
+		}
 		if !entries[i].Waiting() {
 			continue
 		}
@@ -102,7 +110,7 @@ func (gr *GraphReaders) runAgentView(ctx context.Context) {
 		seen[k] = first
 		entries[i].Since = first
 	}
-	p.entries, p.seen = entries, seen
+	p.entries, p.seen, p.idle = entries, seen, idle
 }
 
 // PollAgentViewNow runs one poll synchronously and stores its result. It does

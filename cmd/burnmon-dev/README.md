@@ -488,7 +488,7 @@ is not part of that: see `LICENSE-ASSETS.md`.
 ### Next steps and backlog
 
 Limits: it runs on Windows and on macOS (the macOS build needs cgo; BurnMon Dev starts the lamp as its
-child on both, and the lamp ends when BurnMon Dev is gone; the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip) saw the macOS lamp start as a child of BurnMon Dev, show no white box and open BurnMon Dev on a double-click, and its first row show one sentence twice (N6, open); the
+child on both, and the lamp ends when BurnMon Dev is gone; the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip) saw the macOS lamp start as a child of BurnMon Dev, show no white box and open BurnMon Dev on a double-click, and its first row show one sentence twice (N6, fixed in the lane of 2026-11-23, not seen on a Mac since); the
 parent check there is read, not run; on macOS without cgo and on Linux the lamp prints "This build has no
 lamp window. The lamp runs in the Windows build and in the Mac app (the build with cgo)." and exits); it needs BurnMon or BurnMon Dev running to have a snapshot to read; it has no control (no
 approve, no stop, no answer to an agent). Every window, backdrop, animation and position of the lamp is
@@ -527,9 +527,9 @@ built, not seen: nothing of it was looked at in a window in the build run.
 
 ## 7. Next steps and backlog
 
-The Mac check of 2026-11-22 ran `v0.5.0-beta.2` on macOS 27.2.1. Next is one small lane for N6 (the first open lamp
-row shows one sentence twice), N7 (a cut line in the Control Centre) and a second look at the scale (D5). Next after
-that: make Waits on you and the agent view correct and fast against real sessions, and find the cause of the Station
+The Mac check of 2026-11-22 ran `v0.5.0-beta.2` on macOS 27.2.1. The lane of 2026-11-23 fixed N6 (the first open
+lamp row showed one sentence twice) and N7 (a cut line in the Control Centre), both built and tested, not yet looked
+at on a Mac. The scale (D5) stays accepted as it is. Next after that: make Waits on you and the agent view correct and fast against real sessions, and find the cause of the Station
 CPU climb. A decision on whether and how to continue past
 2026-12-19 is open. Priority order lives in `02_roadmap\roadmap.md`.
 

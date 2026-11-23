@@ -1429,7 +1429,7 @@ var api = {
   }
 
   function pageSettings() {
-    lead.textContent = state.root === '' ? 'Settings. No folder is chosen yet: pick the folder to show with Browse, or type it, then Save.' :
+    lead.textContent = state.root === '' ? 'Settings. No folder is chosen yet.' :
       'Settings. Every setting of the app lives on this page.';
     function row(label, help, opts, cur, fn) {
       var r = h('div', 'setrow'), lb = h('span', 'lb', label);
@@ -1507,7 +1507,7 @@ var api = {
   function rootRow() {
     var seq = drawSeq, cur = '', n = 0, timer = 0;
     var r = h('div', 'setrow'), lb = h('span', 'lb', 'Root');
-    lb.appendChild(h('span', 'hp', 'The folder every page reads.'));
+    lb.appendChild(h('span', 'hp', state.root === '' ? 'Pick the folder to show with Browse, or type it, then Save.' : 'The folder every page reads.'));
     r.appendChild(lb);
     var f = h('div', 'rootf'), inp = h('input');
     inp.type = 'text';
