@@ -55,5 +55,5 @@ Remove-Item -Recurse -LiteralPath "C:\Users\WilcoDeTree\.claude\projects\C--User
 ## Result (2026-11-23, about 21:34 UTC)
 
 E1 (2.1.330) and E2 (npx 2.1.326) both exit 1 with "Couldn't load the history"; both logs show the same
-`teleport-events` request and "Session <id> not found (page 0)". Row three of the table: service side. Brief:
+`teleport-events` request and "Session <id> not found (page 0)". Row three of the table: service side. E3 (2026-11-24): 2.1.331 fails the same way. Brief:
 `04_assets\hub_agent_update_2026-11-23_cloud_pull_fix_spike.md`.
