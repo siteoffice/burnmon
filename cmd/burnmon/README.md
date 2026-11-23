@@ -402,5 +402,5 @@ We want to hear what broke and what you expected instead.
 4. **After two weeks**: attach a Burn Report if you are willing to share it (BurnMon Dev, gear dialog, Export history,
    Burn Report button; project names are redacted unless you tick "show project names"; see `cmd\burnmon-dev\README.md`).
 
-We read every issue within two working days. Security problems: do not open a public issue; mail info@zerononsense.dev.
+I read every issue within two working days. Security problems: do not open a public issue; mail info@zerononsense.dev.
 Licence: see `LICENSE`. Repo: https://github.com/siteoffice/burnmon.

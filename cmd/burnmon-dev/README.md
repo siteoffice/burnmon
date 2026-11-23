@@ -527,9 +527,10 @@ built, not seen: nothing of it was looked at in a window in the build run.
 
 ## 7. Next steps and backlog
 
-The Mac test day of 2026-11-16 covers the BurnMon Dev window, the percent settings and the notification on a real
-Mac. Findings go into `v0.4.0-beta.5`. Next after that: make Waits on you and the agent view correct and fast
-against real sessions, and find the cause of the Station CPU climb. A decision on whether and how to continue past
+The Mac check of 2026-11-22 ran `v0.5.0-beta.2` on macOS 27.2.1. Next is one small lane for N6 (the first open lamp
+row shows one sentence twice), N7 (a cut line in the Control Centre) and a second look at the scale (D5). Next after
+that: make Waits on you and the agent view correct and fast against real sessions, and find the cause of the Station
+CPU climb. A decision on whether and how to continue past
 2026-12-19 is open. Priority order lives in `02_roadmap\roadmap.md`.
 
 ## 8. Feedback, licence, contact
