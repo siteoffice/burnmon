@@ -159,8 +159,13 @@ Commits, tags and pushes stay Wilco's step. Hub brief into `C:\ZND\50_projects\b
 ## Close-out
 
 - DO done: both by-hand pulls, state file read, code read for sections 1 to 4.
-- ASK deferred to the gate: D1, D2, and step 4 of section 1 (clone a private repo for the checkout test).
-- HAND, Wilco: open the session URL in the browser (section 1, step 1) and say whether it loads.
-- HAND, Wilco: my by-hand pull of `session_01AbHCJ1k9V9uEkMguVJ2HPH` left the copy
-  `C:\Users\WilcoDeTree\.claude\projects\C--Users-WilcoDeTree--burnmon-cloud-pull\81ac3b9c-5783-4435-a76e-2a9d17b950d7.jsonl`
-  (12 MB, not in the state file). Deleting is yours under the Groundwork guard.
+- ASK answered: D1 (the breaker) and D2 (the visible reason line) -> both yes, Wilco, 2026-11-23
+- DROP dropped: step 4 of section 1 (clone a private repo for the checkout test) because Wilco ruled it out
+- HAND handed: open the session URL in the browser (section 1, step 1), verified by Wilco's reply that the page loads
+- HAND parked: delete the 12 MB copy my by-hand pull of `session_01AbHCJ1k9V9uEkMguVJ2HPH` left (not in the state file); deleting is Wilco's under the Groundwork guard
+
+```powershell
+# runs in: PowerShell, cwd C:\ZND\50_projects\burnmon
+Set-Location C:\ZND\50_projects\burnmon
+Remove-Item -LiteralPath "C:\Users\WilcoDeTree\.claude\projects\C--Users-WilcoDeTree--burnmon-cloud-pull\81ac3b9c-5783-4435-a76e-2a9d17b950d7.jsonl"
+```
