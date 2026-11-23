@@ -13,6 +13,7 @@ import (
 	"burnmon/internal/adapter/copilotcli"
 	"burnmon/internal/adapter/copilotvsc"
 	"burnmon/internal/adapter/hermes"
+	"burnmon/internal/cloudpull"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
 	"burnmon/internal/snapshotwriter"
@@ -133,6 +134,7 @@ func NewSnapshotWriter(st *store.Store, path string, cfgFn func() pricing.Config
 		w.Graph = snapshotwriter.NewGraphReaders(home, cfg.ForemanRoot)
 		w.Graph.Rows = ps.Procs
 		w.Graph.ConfigPath = loadedCfg
+		w.Graph.IgnoreDir = cloudpull.PullDir() // the pull's own claude runs are not sessions
 		if cfg.AgentView {
 			w.Graph.EnableAgentViewWith(cfg.ClaudePath, exec.LookPath)
 		}

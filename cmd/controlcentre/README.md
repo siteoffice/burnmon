@@ -151,8 +151,9 @@ The window has its own icon: the tree. A `controlcentre.icns` exists for a futur
 
 - Seen on a Mac once, in the Mac check of 2026-11-22 (macOS 27.2.1, Apple silicon, arm64 zip): started with
   `open`, with no root saved, it opened on Settings, said "No folder chosen" and asked for a folder, with no
-  Desktop folder question; its window fit the 1024x768 screen. Open: the lead line there is cut at the pane
-  edge ("Settings. No folder is chosen yet: pic..."; N7). Not tried on a Mac: the amd64 zip, signing and
+  Desktop folder question; its window fit the 1024x768 screen. The lead line there was cut at the pane
+  edge ("Settings. No folder is chosen yet: pic..."; N7); it now says only "Settings. No folder is chosen yet." and
+  the Root row carries the how-to (built and tested, not seen on a Mac since). Not tried on a Mac: the amd64 zip, signing and
   notarizing. Not known yet: Browse, the Git page and decisions.
 - The one exception to "no port": a dev-only eval channel on `127.0.0.1:9335` that opens only when
   `CONTROLCENTRE_UICHECK` is set. Release builds and this README never set it. It exists for

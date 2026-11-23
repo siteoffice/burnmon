@@ -156,12 +156,13 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 	// With the cloud pull on, the old drop rows no longer decide the marker:
 	// a good pull means plain numbers, a failing one means not measured.
 	pull, reason, unread := CloudPullOff, "", 0
+	var copied time.Time // newest good copy; zero when the status does not say
 	if cfg != nil && cfg.CloudPull {
 		if s := cloudPullStatus(); s.OK {
 			pull = CloudPullOK
 			if s.Unread > 0 {
 				// An unread session may belong to any period: no cell is a plain number.
-				pull, reason, unread = CloudPullPartial, s.UnreadReason, s.Unread
+				pull, reason, unread, copied = CloudPullPartial, s.UnreadReason, s.Unread, s.LastPulledAt
 			}
 		} else {
 			pull, reason = CloudPullFailed, s.Reason
@@ -182,6 +183,13 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 		if pull == CloudPullPartial && t.Agent == "cowork-cloud" {
 			r.TodayNote, r.WeekNote, r.MonthNote = NotePartial, NotePartial, NotePartial
 			total.TodayNote, total.WeekNote, total.MonthNote = NotePartial, NotePartial, NotePartial
+			if !copied.IsZero() {
+				// A period that starts after the newest good copy holds no measured
+				// cloud usage: its 0 means unknown, the same rule as the drop rows.
+				r.TodayNote = cloudNote(dayStart(now), copied)
+				r.WeekNote = cloudNote(weekStart(now), copied)
+				r.MonthNote = cloudNote(monthStart(now), copied)
+			}
 		}
 		if pull == CloudPullOff && haveLast && t.Agent == "cowork-cloud" {
 			r.TodayNote = cloudNote(dayStart(now), last)

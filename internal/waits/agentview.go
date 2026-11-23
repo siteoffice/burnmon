@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,10 @@ type AgentEntry struct {
 	PID                                                 int
 	StartedAt                                           int64     // Unix ms
 	Since                                               time.Time // set by the poller: first poll that saw it waiting; zero means Now
+	// JustIdle is set by the poller on the first poll that saw the entry idle. The CLI
+	// can report idle for a moment between prompts and while a hook runs, so one idle
+	// poll is not yet your turn.
+	JustIdle bool
 }
 
 // Key is the item id: the graph's session node id when the entry names its
@@ -36,8 +41,31 @@ func (e AgentEntry) Waiting() bool {
 }
 
 // YourTurn reports whether the entry is idle: its turn ended and it does
-// not wait on a prompt.
-func (e AgentEntry) YourTurn() bool { return e.Status == "idle" && !e.Waiting() }
+// not wait on a prompt, and it was already idle on the poll before.
+func (e AgentEntry) YourTurn() bool { return e.isIdle() && !e.JustIdle }
+
+// isIdle is the raw idle test, before the two-poll rule.
+func (e AgentEntry) isIdle() bool { return e.Status == "idle" && !e.Waiting() }
+
+// WithoutDir drops the entries whose working folder is dir (case-insensitive,
+// either slash). BurnMon's own cloud pull starts claude there; those runs are
+// not sessions of the person.
+func WithoutDir(entries []AgentEntry, dir string) []AgentEntry {
+	norm := func(p string) string {
+		return strings.ToLower(strings.TrimRight(strings.ReplaceAll(p, "/", `\`), `\`))
+	}
+	d := norm(dir)
+	if d == "" {
+		return entries
+	}
+	out := entries[:0:0]
+	for _, e := range entries {
+		if norm(e.Cwd) != d {
+			out = append(out, e)
+		}
+	}
+	return out
+}
 
 // ParseAgentView parses the output of `claude agents --json`. Anything that
 // is not a JSON array (a warning line before it, nothing, an object) is an

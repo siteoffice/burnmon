@@ -54,6 +54,10 @@ type GraphReaders struct {
 	// ConfigPath is the config file the app loaded at start ("" for none),
 	// copied into the off and refused agent view statuses.
 	ConfigPath string
+	// IgnoreDir is a working folder whose agent view entries are not sessions of
+	// the person: the app sets it to its cloud pull folder, where its own pull
+	// starts claude. Set by the caller so this package needs no import of it.
+	IgnoreDir string
 
 	agentViewRefused error // why EnableAgentViewFor started no poller
 

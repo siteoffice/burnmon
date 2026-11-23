@@ -39,3 +39,27 @@ func TestPageVendorStripShowsCloudNote(t *testing.T) {
 		}
 	}
 }
+
+// The reason is on screen, not only in a hover: one dim line under the strip
+// says it while the pull is partial or failed, cut with an ellipsis and
+// carrying the full text as its title.
+func TestPageVendorStripShowsCloudReasonLine(t *testing.T) {
+	i := strings.Index(pageHTML, `id="vendorStripNote"`)
+	if i < 0 {
+		t.Fatal("page.html has no vendorStripNote line")
+	}
+	line := pageHTML[i : i+strings.Index(pageHTML[i:], "</div>")]
+	for _, want := range []string{"text-overflow:ellipsis", "white-space:nowrap", "hidden"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("vendorStripNote lacks %q", want)
+		}
+	}
+	r := strings.Index(pageHTML, "function renderVendorStrip(")
+	render := pageHTML[r:]
+	render = render[:strings.Index(render, "function renderHeadline(")]
+	for _, want := range []string{"getElementById('vendorStripNote')", "cloud_pull === 'partial'", "cloud_pull === 'failed'", "note.title"} {
+		if !strings.Contains(render, want) {
+			t.Errorf("renderVendorStrip lacks %q", want)
+		}
+	}
+}

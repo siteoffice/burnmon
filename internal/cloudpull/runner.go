@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -50,13 +51,73 @@ type Entry struct {
 	FailedAt  time.Time `json:"failed_at,omitempty"`
 	Failures  int       `json:"failures,omitempty"` // failed pulls in a row; a good pull resets it
 	Gone      bool      `json:"gone,omitempty"`     // the CLI said "Session not found": never pulled again
+	// NeedsCheckout marks a session the CLI will only load from a checkout of its
+	// repo. That is the session's own state, retried once a day, and it does not
+	// feed the circuit breaker.
+	NeedsCheckout bool `json:"needs_checkout,omitempty"`
 }
 
 // State is the runner's state file. Step 4 maps pull files to cloud ids with it.
 type State struct {
-	Disabled  string            `json:"disabled,omitempty"`
-	LastError string            `json:"last_error,omitempty"`
-	Sessions  map[string]*Entry `json:"sessions"`
+	Disabled  string `json:"disabled,omitempty"`
+	LastError string `json:"last_error,omitempty"`
+	// PausedUntil and PauseReason are the circuit breaker: breakerSessions
+	// different sessions in a row failed with the same error, so nothing is
+	// pulled until PausedUntil. Streak is the run being counted.
+	PausedUntil time.Time         `json:"paused_until,omitempty"`
+	PauseReason string            `json:"pause_reason,omitempty"`
+	Streak      *Streak           `json:"streak,omitempty"`
+	Sessions    map[string]*Entry `json:"sessions"`
+}
+
+// Streak is a run of failures with one error text (session id removed) from
+// different sessions.
+type Streak struct {
+	Error string   `json:"error"`
+	IDs   []string `json:"ids"`
+}
+
+const (
+	breakerSessions = 5
+	breakerPause    = 6 * time.Hour
+	checkoutRetry   = 24 * time.Hour
+)
+
+// statusNow is the clock ReadStatus uses; a var so tests can fix it.
+var statusNow = time.Now
+
+// errCLIReported marks a result the CLI itself flagged as an error, at no cost.
+var errCLIReported = errors.New("cloudpull: the CLI reported an error")
+
+var checkoutRe = regexp.MustCompile(`from a checkout of (\S+?)\.?$`)
+
+// checkoutRepo returns the repo a failure says the session needs a checkout of.
+func checkoutRepo(msg string) (string, bool) {
+	if m := checkoutRe.FindStringSubmatch(strings.TrimSpace(msg)); m != nil {
+		return m[1], true
+	}
+	return "", false
+}
+
+// noteFailure counts one failed pull of id toward the breaker. The same error
+// text (session id removed) from breakerSessions different sessions in a row
+// pauses pulling; a different error restarts the count.
+func (s *State) noteFailure(id, msg string, now time.Time) {
+	norm := strings.ReplaceAll(msg, id, "<id>")
+	if s.Streak == nil || s.Streak.Error != norm {
+		s.Streak = &Streak{Error: norm}
+	}
+	for _, x := range s.Streak.IDs {
+		if x == id {
+			return
+		}
+	}
+	s.Streak.IDs = append(s.Streak.IDs, id)
+	if len(s.Streak.IDs) >= breakerSessions {
+		s.PausedUntil = now.Add(breakerPause)
+		s.PauseReason = strings.TrimPrefix(norm, "cloudpull: ")
+		s.Streak = nil
+	}
 }
 
 // LoadState reads the state file; a missing file is an empty state.
@@ -109,20 +170,27 @@ type Result struct {
 	NumTurns     int     `json:"num_turns"`
 	TotalCostUSD float64 `json:"total_cost_usd"`
 	SessionID    string  `json:"session_id"`
+	Result       string  `json:"result"`
 }
 
-// ParseResult checks one pull's JSON result. A model turn or any cost is
-// ErrCost; anything else that is not a clean result is a plain failure.
+// ParseResult checks one pull's JSON result. A model turn that is not an
+// error, or any cost, is ErrCost; anything else that is not a clean result is a
+// plain failure. An error result at no cost is a plain failure that keeps the
+// CLI's words: a session too long for the rename turn ("Prompt is too long")
+// reports one turn and cost 0 (measured 2026-11-23), and nothing was spent.
 func ParseResult(out []byte) (Result, error) {
 	var r Result
 	if err := json.Unmarshal(out, &r); err != nil {
 		return r, fmt.Errorf("cloudpull: no JSON result from the CLI: %s", firstLine(out))
 	}
-	if r.NumTurns > 0 || r.TotalCostUSD > 0 {
+	if r.TotalCostUSD > 0 || (r.NumTurns > 0 && !r.IsError) {
 		return r, fmt.Errorf("%w: num_turns %d, total_cost_usd %g", ErrCost, r.NumTurns, r.TotalCostUSD)
 	}
 	if r.IsError {
-		return r, errors.New("cloudpull: the CLI reported an error")
+		if r.Result != "" {
+			return r, fmt.Errorf("%w: %s", errCLIReported, firstLine([]byte(r.Result)))
+		}
+		return r, errCLIReported
 	}
 	if r.SessionID == "" {
 		return r, errors.New("cloudpull: the CLI result names no session")
@@ -240,8 +308,14 @@ func Due(now time.Time, list []string, st *State) []string {
 		if e != nil && e.Gone {
 			continue
 		}
-		if e != nil && !e.FailedAt.IsZero() && now.Sub(e.FailedAt) < retryDelay(e.Failures) {
-			continue
+		if e != nil && !e.FailedAt.IsZero() {
+			wait := retryDelay(e.Failures)
+			if e.NeedsCheckout {
+				wait = checkoutRetry
+			}
+			if now.Sub(e.FailedAt) < wait {
+				continue
+			}
 		}
 		if e == nil || e.Path == "" {
 			items = append(items, item{id: id, tier: 1, pos: -i})
@@ -378,7 +452,7 @@ func (r *Runner) PullOne(ctx context.Context, cloudID string) error {
 		}
 		return perr
 	}
-	if runErr != nil && !errors.Is(perr, ErrCost) {
+	if runErr != nil && !errors.Is(perr, ErrCost) && !errors.Is(perr, errCLIReported) {
 		// The CLI's own words (first line of its error stream) and its exit code,
 		// in place of an empty "no JSON result" (measured 2026-11-20).
 		perr = fmt.Errorf("cloudpull: the CLI exited with %v", runErr)
@@ -399,8 +473,16 @@ func (r *Runner) PullOne(ctx context.Context, cloudID string) error {
 	// stays for errors that stop every pull (not signed in, no CLI).
 	if perr != nil {
 		e.LastError, e.FailedAt, e.Failures = perr.Error(), now, e.Failures+1
+		if repo, ok := checkoutRepo(perr.Error()); ok {
+			// The session's own state: its own words, a daily retry, no breaker.
+			e.LastError, e.NeedsCheckout = "cloudpull: needs a checkout of "+repo, true
+		} else {
+			e.NeedsCheckout = false
+			st.noteFailure(cloudID, perr.Error(), now)
+		}
 		return errors.Join(sessionError{perr}, st.Save(r.StatePath))
 	}
+	st.Streak = nil
 	newPath := filepath.Join(r.ProjectDir, res.SessionID+".jsonl")
 	last, lerr := LastUsage(newPath)
 	if lerr != nil {
@@ -453,7 +535,11 @@ func (r *Runner) Tick(ctx context.Context, list []string) (string, error) {
 	if st.Disabled != "" {
 		return "", ErrDisabled
 	}
-	due := Due(r.Now().UTC(), list, st)
+	now := r.Now().UTC()
+	if now.Before(st.PausedUntil) {
+		return "", nil // the breaker is open; the screen says why
+	}
+	due := Due(now, list, st)
 	if len(due) == 0 {
 		return "", nil
 	}
@@ -529,6 +615,9 @@ type Status struct {
 	Reason       string
 	Unread       int
 	UnreadReason string
+	// LastPulledAt is the newest good copy of any session. A period that starts
+	// after it holds no measured cloud usage, whatever its number says.
+	LastPulledAt time.Time
 }
 
 // ReadStatus reads the state file for the screen.
@@ -545,12 +634,16 @@ func ReadStatus(statePath string) Status {
 	}
 	read, unread := 0, 0
 	var newest *Entry
+	var lastPulled time.Time
 	for _, e := range st.Sessions {
 		if e == nil {
 			continue
 		}
 		if e.Path != "" {
 			read++
+			if e.PulledAt.After(lastPulled) {
+				lastPulled = e.PulledAt
+			}
 		}
 		if !e.Gone && !e.FailedAt.IsZero() {
 			unread++
@@ -563,13 +656,16 @@ func ReadStatus(statePath string) Status {
 	if newest != nil {
 		reason = strings.TrimPrefix(newest.LastError, "cloudpull: ")
 	}
+	if statusNow().Before(st.PausedUntil) {
+		reason = "pulling paused until " + st.PausedUntil.In(time.Local).Format("15:04") + ": " + st.PauseReason
+	}
 	if read == 0 {
 		if reason == "" {
 			reason = "no cloud session copied yet"
 		}
 		return Status{Reason: reason}
 	}
-	return Status{OK: true, Unread: unread, UnreadReason: reason}
+	return Status{OK: true, Unread: unread, UnreadReason: reason, LastPulledAt: lastPulled}
 }
 
 // ClearDisabled lifts a cost-guard stop and a runner-wide error, for when the
