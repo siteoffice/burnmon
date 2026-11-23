@@ -25,6 +25,12 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 }
 $targetChecks = @($args)
 if ($targetChecks.Count -eq 0) { $targetChecks = @("gitpage") }
+# centre/noroot needs the exe started with no folder, the gitpage checks need the fixture root:
+# two launches, so they cannot share one call.
+if (($targetChecks -contains "centre/noroot") -and $targetChecks.Count -gt 1) {
+    Write-Host "uicheck: centre/noroot starts the exe with no folder; run it on its own, apart from the gitpage checks."
+    exit 1
+}
 
 $realSettings = Join-Path $env:LOCALAPPDATA "burnmon\controlcentre.json"
 function Get-RealHash {
@@ -108,7 +114,12 @@ $env:LOCALAPPDATA = $appdata
 $env:CONTROLCENTRE_UICHECK = "1"
 $proc = $null
 try {
-    $proc = Start-Process -FilePath $exe -ArgumentList @("--root", $root) -PassThru
+    if ($targetChecks -contains "centre/noroot") {
+        # No --root and the empty temp settings folder: a first run with no folder chosen (N7).
+        $proc = Start-Process -FilePath $exe -PassThru
+    } else {
+        $proc = Start-Process -FilePath $exe -ArgumentList @("--root", $root) -PassThru
+    }
 } finally {
     # Only the exe gets the temp settings folder; go run below needs the real cache.
     $env:LOCALAPPDATA = $realLocalAppData

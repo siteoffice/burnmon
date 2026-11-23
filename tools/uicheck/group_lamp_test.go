@@ -15,6 +15,9 @@ func goodLampRead(c lampCase) lampRead {
 		InnerW: w, InnerH: h, DocW: w, DocH: h,
 		Colors: []lampColor{{Name: "head", FG: "rgb(250, 199, 117)", BG: "rgb(20, 17, 13)"}},
 	}
+	if c.Mood == "off" {
+		r.Row1Head = "BurnMon is not running"
+	}
 	if lampSliverOnly(c) {
 		r.Sliver = true
 		return r
@@ -352,5 +355,49 @@ func TestLampTextWidthAndCoffeePose(t *testing.T) {
 	r.HangClass = "glim mood-asleep"
 	if p := lampProblems(c, r); len(p) == 0 {
 		t.Error("Glim asleep at the coffee was not reported")
+	}
+}
+
+// N6 (Mac check 2026-11-22): when BurnMon is not running the Go headline has no
+// full stop and the Go line has one, and row 1 printed the sentence twice. The
+// off case carries both real strings, and the read fails when row 1 shows a
+// second span or no headline at all (an empty read would pass vacuously).
+func TestLampOffCaseCarriesTheRealHeadlineAndLine(t *testing.T) {
+	var p struct {
+		State struct {
+			Headline string `json:"headline"`
+			Line     string `json:"line"`
+		} `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(lampPayload(caseOf("off", 1, 0), 1)), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.State.Headline != "BurnMon is not running" || p.State.Line != "BurnMon is not running." {
+		t.Fatalf("off payload headline %q, line %q; want the strings internal\\lamp sends", p.State.Headline, p.State.Line)
+	}
+}
+
+func TestLampOffRow1ShowsTheSentenceOnce(t *testing.T) {
+	c := caseOf("off", 1, 0)
+	r := goodLampRead(c)
+	if p := lampProblems(c, r); len(p) != 0 {
+		t.Fatalf("a good off read has problems: %v", p)
+	}
+	twice := r
+	twice.Row1Subs = 1
+	if p := lampProblems(c, twice); len(p) == 0 {
+		t.Error("a second span in row 1 of the off state was not reported")
+	}
+	empty := r
+	empty.Row1Head = ""
+	if p := lampProblems(c, empty); len(p) == 0 {
+		t.Error("an off state with no headline in row 1 was not reported")
+	}
+	// Other moods keep their line as a second span on purpose.
+	y := caseOf("your_turn", 1, 1)
+	yr := goodLampRead(y)
+	yr.Row1Subs = 1
+	if p := lampProblems(y, yr); len(p) != 0 {
+		t.Errorf("a your_turn row 1 with its line was reported: %v", p)
 	}
 }
