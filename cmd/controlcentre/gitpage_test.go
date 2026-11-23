@@ -4,9 +4,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -355,6 +357,46 @@ func TestPageGitStopsAtColumnIsWidest(t *testing.T) {
 		if !strings.Contains(compact(ruleFor(t, sel)), "flex:.8") {
 			t.Errorf("%s does not grow by .8: %s", sel, compact(ruleFor(t, sel)))
 		}
+	}
+}
+
+// TestPageGitRowFitsTheNarrowPane (Wilco, 2026-11-23): the "Changes to Released" header wrapped
+// onto two lines in its 112 px cell and the "Stops at" text was cut ("Changes: 1 ..." at about
+// 79 px at 1280 wide). The lane is now a fixed 124 px, which holds the header on one line, and
+// the room comes from Repo and Branch, whose short names left most of their cell empty (their
+// names are still cut with a hover). The five bases add up to 468 px, which is what a row has at
+// 1280 wide: 80 percent of 1280, less the 176 px menu, the 320 px panel, the 28 px pane padding
+// and four 8 px gaps. So at 1280 nothing has to shrink and "Stops at" keeps its 120 px; wider,
+// it grows by 2.2 of the 3.8 shared, the most of the free room. Equal halves of the lane and
+// "Stops at" were tried first and left "Stops at" narrower than before, so they were dropped.
+func TestPageGitRowFitsTheNarrowPane(t *testing.T) {
+	flex := func(sel string) (grow, shrink, basis float64) {
+		m := regexp.MustCompile(`flex:([\d.]+)\s+([\d.]+)\s+([\d.]+)px`).FindStringSubmatch(ruleFor(t, sel))
+		if m == nil {
+			t.Fatalf("%s has no flex: grow shrink basis: %s", sel, ruleFor(t, sel))
+		}
+		fmt.Sscan(m[1], &grow)
+		fmt.Sscan(m[2], &shrink)
+		fmt.Sscan(m[3], &basis)
+		return
+	}
+	_, _, b1 := flex(".g1")
+	_, _, b2 := flex(".g2")
+	lg, ls, lb := flex(".glane")
+	sg, _, sb := flex(".gst")
+	_, _, bl := flex(".gl")
+	if lg != 0 || ls != 0 || lb < 124 {
+		t.Errorf("the lane is grow %v shrink %v basis %v, want a fixed cell of at least 124 px for its header", lg, ls, lb)
+	}
+	if sum := b1 + b2 + lb + sb + bl; sum > 468 {
+		t.Errorf("the five bases add up to %v px, more than the 468 px of a row at 1280 wide, so Stops at would shrink", sum)
+	}
+	if sg < 2.2 || sb < 120 {
+		t.Errorf("Stops at is grow %v basis %v, want at least 2.2 and 120 px: it takes the most of the room", sg, sb)
+	}
+	// The small lane of the worktree rows keeps its fixed 96 px.
+	if !strings.Contains(compact(ruleFor(t, ".glane.sm")), compact("flex:0 0 96px")) {
+		t.Errorf(".glane.sm = %s, want flex:0 0 96px", compact(ruleFor(t, ".glane.sm")))
 	}
 }
 

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -49,10 +50,20 @@ func TestPageVendorStripShowsCloudReasonLine(t *testing.T) {
 		t.Fatal("page.html has no vendorStripNote line")
 	}
 	line := pageHTML[i : i+strings.Index(pageHTML[i:], "</div>")]
-	for _, want := range []string{"text-overflow:ellipsis", "white-space:nowrap", "hidden"} {
+	// The text and the link are read in full: the line wraps (a long address too) instead of
+	// being cut, and it sits right below the panel, outside the panel's height clamp.
+	for _, want := range []string{"white-space:normal", "overflow-wrap:anywhere", "hidden"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("vendorStripNote lacks %q", want)
 		}
+	}
+	for _, bad := range []string{"nowrap", "text-overflow", "overflow:hidden"} {
+		if strings.Contains(line, bad) {
+			t.Errorf("vendorStripNote still has %q, so it cuts the text", bad)
+		}
+	}
+	if !regexp.MustCompile(`</table>\s*</div>\s*<div[^>]*id="vendorStripNote"`).MatchString(pageHTML) {
+		t.Error("vendorStripNote is not right below the closed vendor strip panel")
 	}
 	r := strings.Index(pageHTML, "function renderVendorStrip(")
 	render := pageHTML[r:]

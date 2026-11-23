@@ -57,6 +57,35 @@ func TestCloudPullUnreadAndOldCopyIsNotMeasuredPerPeriod(t *testing.T) {
 	}
 }
 
+// With the reasons counted, the tip says how many sessions fail for each, in
+// plain words, and for sessions the service does not find it gives a page to
+// open in the browser to compare (2026-11-23: the page loaded, the CLI said not
+// found). Without reasons the old "Newest failure" tip stays.
+func TestCloudPullTipCountsEachReason(t *testing.T) {
+	p := pullStripFixture(t, &pricing.Config{CloudPull: true}, cloudpull.Status{
+		OK: true, Unread: 88, UnreadReason: "ignored when reasons are present",
+		Reasons: []cloudpull.Reason{
+			{Kind: cloudpull.ReasonNotFound, N: 83, Example: "session_0131Y29YQutk7UuzNFk8CJJS"},
+			{Kind: cloudpull.ReasonCheckout, N: 3, Example: "session_B"},
+			{Kind: cloudpull.ReasonOther, N: 2, Example: "session_C", Text: "network down"},
+		},
+	})
+	want := "Cowork (Cloud): 88 sessions are not read: 83 are not found by the Claude Code service for your login, " +
+		"3 need a checkout of their repo, 2 failed: network down. " +
+		"Open one in the browser to compare: https://claude.ai/code/session_0131Y29YQutk7UuzNFk8CJJS"
+	if p.CloudTip != want {
+		t.Fatalf("tip = %q\nwant  %q", p.CloudTip, want)
+	}
+	// No page link when the biggest reason is not "not found".
+	q := pullStripFixture(t, &pricing.Config{CloudPull: true}, cloudpull.Status{
+		OK: true, Unread: 1,
+		Reasons: []cloudpull.Reason{{Kind: cloudpull.ReasonCheckout, N: 1, Example: "session_B"}},
+	})
+	if want := "Cowork (Cloud): 1 session is not read: 1 needs a checkout of their repo."; q.CloudTip != want {
+		t.Fatalf("tip = %q, want %q", q.CloudTip, want)
+	}
+}
+
 // Nothing read: the row stays "not measured" with the CLI's reason.
 func TestCloudPullNothingReadStaysNotMeasured(t *testing.T) {
 	p := pullStripFixture(t, &pricing.Config{CloudPull: true}, cloudpull.Status{Reason: "Couldn't load the history"})

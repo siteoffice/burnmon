@@ -55,7 +55,13 @@ type Entry struct {
 	// repo. That is the session's own state, retried once a day, and it does not
 	// feed the circuit breaker.
 	NeedsCheckout bool `json:"needs_checkout,omitempty"`
+	// Unloadable marks a session the API does not find for this login ("Couldn't
+	// load the history of cloud session ..."). Retried once a day, outside the breaker.
+	Unloadable bool `json:"unloadable,omitempty"`
 }
+
+// notFoundMsg is the CLI's stderr when the teleport-events call answers not found.
+const notFoundMsg = "Couldn't load the history of cloud session"
 
 // State is the runner's state file. Step 4 maps pull files to cloud ids with it.
 type State struct {
@@ -258,8 +264,15 @@ func LastUsage(path string) (time.Time, error) {
 		}
 		var row struct {
 			Timestamp time.Time `json:"timestamp"`
+			Message   struct {
+				Model string `json:"model"`
+			} `json:"message"`
 		}
 		if json.Unmarshal(line, &row) != nil {
+			continue
+		}
+		// The CLI's own synthetic rows (a failed rename turn, zero tokens) carry the pull time.
+		if row.Message.Model == "<synthetic>" {
 			continue
 		}
 		if row.Timestamp.After(last) {
@@ -310,7 +323,7 @@ func Due(now time.Time, list []string, st *State) []string {
 		}
 		if e != nil && !e.FailedAt.IsZero() {
 			wait := retryDelay(e.Failures)
-			if e.NeedsCheckout {
+			if e.NeedsCheckout || e.Unloadable {
 				wait = checkoutRetry
 			}
 			if now.Sub(e.FailedAt) < wait {
@@ -452,7 +465,16 @@ func (r *Runner) PullOne(ctx context.Context, cloudID string) error {
 		}
 		return perr
 	}
-	if runErr != nil && !errors.Is(perr, ErrCost) && !errors.Is(perr, errCLIReported) {
+	// The CLI writes the whole copy before its rename turn. When that turn fails at no
+	// cost ("Prompt is too long" for a big history, measured 2026-11-23: 258 rows
+	// on disk, 86 with usage), the copy is still good and counts.
+	copied := false
+	if errors.Is(perr, errCLIReported) && res.SessionID != "" {
+		if fi, err := os.Stat(filepath.Join(r.ProjectDir, res.SessionID+".jsonl")); err == nil && fi.Size() > 0 {
+			copied, perr = true, nil
+		}
+	}
+	if !copied && runErr != nil && !errors.Is(perr, ErrCost) && !errors.Is(perr, errCLIReported) {
 		// The CLI's own words (first line of its error stream) and its exit code,
 		// in place of an empty "no JSON result" (measured 2026-11-20).
 		perr = fmt.Errorf("cloudpull: the CLI exited with %v", runErr)
@@ -475,9 +497,14 @@ func (r *Runner) PullOne(ctx context.Context, cloudID string) error {
 		e.LastError, e.FailedAt, e.Failures = perr.Error(), now, e.Failures+1
 		if repo, ok := checkoutRepo(perr.Error()); ok {
 			// The session's own state: its own words, a daily retry, no breaker.
-			e.LastError, e.NeedsCheckout = "cloudpull: needs a checkout of "+repo, true
+			e.LastError, e.NeedsCheckout, e.Unloadable = "cloudpull: needs a checkout of "+repo, true, false
+		} else if strings.Contains(perr.Error(), notFoundMsg) {
+			// The API says not found for this session under this login (the browser may
+			// still open it). That is the session's own state, not a runner fault: a
+			// daily retry, and no breaker, which would starve the sessions that load.
+			e.NeedsCheckout, e.Unloadable = false, true
 		} else {
-			e.NeedsCheckout = false
+			e.NeedsCheckout, e.Unloadable = false, false
 			st.noteFailure(cloudID, perr.Error(), now)
 		}
 		return errors.Join(sessionError{perr}, st.Save(r.StatePath))
@@ -618,6 +645,64 @@ type Status struct {
 	// LastPulledAt is the newest good copy of any session. A period that starts
 	// after it holds no measured cloud usage, whatever its number says.
 	LastPulledAt time.Time
+	// Reasons counts the unread sessions per reason, largest first. Example is the
+	// newest failed session of that reason.
+	Reasons []Reason
+}
+
+// The kinds of Reason.
+const (
+	ReasonNotFound = "not_found" // the API does not find the session for this login
+	ReasonCheckout = "checkout"  // the CLI wants a checkout of the session's repo
+	ReasonTooLong  = "too_long"  // the history is too long for the CLI to open, and no copy was written
+	ReasonOther    = "other"
+)
+
+// Reason is how many unread sessions failed for one reason.
+type Reason struct {
+	Kind    string
+	N       int
+	Example string // the newest failed session id of this kind
+	Text    string // the error text, for ReasonOther only
+}
+
+// Plain is the reason in plain words, with its count: "5 are not found by ...".
+func (r Reason) Plain() string {
+	one := r.N == 1
+	pick := func(a, b string) string {
+		if one {
+			return a
+		}
+		return b
+	}
+	n := fmt.Sprintf("%d ", r.N)
+	switch r.Kind {
+	case ReasonNotFound:
+		return n + pick("is", "are") + " not found by the Claude Code service for your login"
+	case ReasonCheckout:
+		return n + pick("needs", "need") + " a checkout of their repo"
+	case ReasonTooLong:
+		return n + pick("is", "are") + " too long for the CLI to open"
+	}
+	return n + "failed: " + r.Text
+}
+
+// reasonOf classifies one unread session by what its last pull said.
+func reasonOf(e *Entry) (kind, text string) {
+	msg := strings.TrimPrefix(e.LastError, "cloudpull: ")
+	switch {
+	case e.NeedsCheckout:
+		return ReasonCheckout, ""
+	case e.Unloadable || strings.Contains(msg, notFoundMsg):
+		return ReasonNotFound, ""
+	case strings.Contains(msg, "Prompt is too long"):
+		return ReasonTooLong, ""
+	}
+	msg = strings.TrimPrefix(msg, "the CLI exited with ")
+	if r := []rune(msg); len(r) > 90 {
+		msg = string(r[:90])
+	}
+	return ReasonOther, msg
 }
 
 // ReadStatus reads the state file for the screen.
@@ -635,7 +720,9 @@ func ReadStatus(statePath string) Status {
 	read, unread := 0, 0
 	var newest *Entry
 	var lastPulled time.Time
-	for _, e := range st.Sessions {
+	byKind := map[string]*Reason{}
+	newestOf := map[string]time.Time{}
+	for id, e := range st.Sessions {
 		if e == nil {
 			continue
 		}
@@ -647,6 +734,16 @@ func ReadStatus(statePath string) Status {
 		}
 		if !e.Gone && !e.FailedAt.IsZero() {
 			unread++
+			kind, text := reasonOf(e)
+			br := byKind[kind]
+			if br == nil {
+				br = &Reason{Kind: kind}
+				byKind[kind] = br
+			}
+			br.N++
+			if e.FailedAt.After(newestOf[kind]) {
+				newestOf[kind], br.Example, br.Text = e.FailedAt, id, text
+			}
 			if newest == nil || e.FailedAt.After(newest.FailedAt) {
 				newest = e
 			}
@@ -665,7 +762,17 @@ func ReadStatus(statePath string) Status {
 		}
 		return Status{Reason: reason}
 	}
-	return Status{OK: true, Unread: unread, UnreadReason: reason, LastPulledAt: lastPulled}
+	var reasons []Reason
+	for _, br := range byKind {
+		reasons = append(reasons, *br)
+	}
+	sort.Slice(reasons, func(i, j int) bool {
+		if reasons[i].N != reasons[j].N {
+			return reasons[i].N > reasons[j].N
+		}
+		return reasons[i].Kind < reasons[j].Kind
+	})
+	return Status{OK: true, Unread: unread, UnreadReason: reason, LastPulledAt: lastPulled, Reasons: reasons}
 }
 
 // ClearDisabled lifts a cost-guard stop and a runner-wide error, for when the

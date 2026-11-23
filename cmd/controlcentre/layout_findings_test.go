@@ -16,9 +16,9 @@ import (
 // Text that is still shortened shows in full on hover (HOVER_SEL and the data-title cells).
 func TestGitRowKeepsRoomForItsTexts(t *testing.T) {
 	for sel, want := range map[string]string{
-		".g1":                "flex:.8 .3 96px",
-		".g2":                "flex:.8 .3 80px",
-		".glane":             "flex:0 0 112px",
+		".g1":                "flex:.8 .3 64px",
+		".g2":                "flex:.8 .3 56px",
+		".glane":             "flex:0 0 124px",
 		".lstrip button.lst": "flex:1 .3 58px",
 		".lbig":              "flex:1 1 auto",
 		".gst":               "flex:2.2 1 120px",
