@@ -68,4 +68,12 @@ read against the state file. Say what was measured and what only inferred. Commi
 ## Close-out
 
 - DO done: state file and code read, this spec.
-- HAND, Wilco: approve or change this spec; the lane runs in a Claude Code session on a work branch from `main`.
+- ASK answered: approve or change this spec -> approved, "approve the spec, build it", Wilco, 2026-11-23
+- DO done: built on `work/wilco-de-tree/cloud-strip-honesty`, landed as pull request 75 (merge `c8007cd`), CI passed on all four jobs
+- HAND parked: restart BurnMon Dev on the build of `c8007cd` and compare the line under the strip with the text in `04_assets\hub_agent_update_2026-11-23_cloud_strip_honesty.md`
+
+```powershell
+# runs in: PowerShell, cwd C:\ZND\50_projects\burnmon
+Set-Location C:\ZND\50_projects\burnmon
+Start-Process -FilePath .\burnmon-dev.exe
+```

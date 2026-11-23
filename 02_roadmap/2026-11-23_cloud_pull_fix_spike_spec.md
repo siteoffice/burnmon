@@ -42,9 +42,15 @@ No undocumented endpoint, no private repo checkout, no change to BurnMon code. B
 
 ## Close-out
 
-- HAND, Wilco: run the E1 and E2 snippet; afterwards delete the folder under `%TEMP%` and the copies under
-  `C:\Users\WilcoDeTree\.claude\projects\` whose name ends in `bm-teleport-test`.
-- DO, Claude: read the logs and write `04_assets\hub_agent_update_2026-11-23_cloud_pull_fix_spike.md`.
+- HAND handed: run the E1 and E2 snippet, verified by the Result section below and the findings brief
+- DO done: read the logs and wrote `04_assets\hub_agent_update_2026-11-23_cloud_pull_fix_spike.md`
+- HAND parked: delete the test folder under `%TEMP%` and the copies under `C:\Users\WilcoDeTree\.claude\projects\` whose name ends in `bm-teleport-test`
+
+```powershell
+# runs in: PowerShell, any folder (absolute paths)
+Remove-Item -Recurse -LiteralPath "$env:TEMP\bm-teleport-test"
+Remove-Item -Recurse -LiteralPath "C:\Users\WilcoDeTree\.claude\projects\C--Users-WilcoDeTree-AppData-Local-Temp-bm-teleport-test"
+```
 
 ## Result (2026-11-23, about 21:34 UTC)
 
