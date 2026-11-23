@@ -255,10 +255,15 @@ in `burnmon-dev.exe`. It is off by default, and without it the Cowork (Cloud) ro
   measured` when some could not be copied and the period starts after the newest good copy, because its 0 would
   mean unknown. While any session is unread, BurnMon Dev prints one line under the vendor strip with the count and
   the newest reason, and the same text is the hover on the cells.
-- When copies fail: a result that is an error at no cost (for example "Prompt is too long", a session too big for
-  the rename turn) is a failed copy of that session, not a cost stop. A session that needs a checkout of its
-  repo ("Run claude --teleport <id> from a checkout of <repo>") is retried once a day. When 5 different sessions in
-  a row fail with the same error, the pull pauses for 6 hours and the line under the strip says so.
+- When copies fail: the line under the strip counts the unread sessions per reason, in plain words. A result that
+  is an error at no cost is never a cost stop. "Prompt is too long" (a history too big for the rename turn) still
+  counts as a copy when the CLI wrote the transcript first, which it does. "Couldn't load the history of cloud
+  session <id>" means the Claude Code service answers not found for that session under your login; the session page
+  can still open in the browser, and the line gives one page to compare. Measured 2026-11-23: same account and org as
+  the Claude app, and of six sessions tried, the oldest (August) loaded and a session from that morning did not, so
+  it is not age and not a login mismatch. BurnMon cannot fix it; it retries such a session once a day, as it does a
+  session that needs a checkout of its repo ("Run claude --teleport <id> from a checkout of <repo>"). When 5
+  different sessions in a row fail with any other error, the pull pauses for 6 hours and the line says so.
 
 ### Cowork in the cloud
 

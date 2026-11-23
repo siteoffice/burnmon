@@ -8,6 +8,7 @@ package vendorstrip
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"burnmon/internal/cloudpull"
@@ -157,12 +158,13 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 	// a good pull means plain numbers, a failing one means not measured.
 	pull, reason, unread := CloudPullOff, "", 0
 	var copied time.Time // newest good copy; zero when the status does not say
+	var reasons []cloudpull.Reason
 	if cfg != nil && cfg.CloudPull {
 		if s := cloudPullStatus(); s.OK {
 			pull = CloudPullOK
 			if s.Unread > 0 {
 				// An unread session may belong to any period: no cell is a plain number.
-				pull, reason, unread, copied = CloudPullPartial, s.UnreadReason, s.Unread, s.LastPulledAt
+				pull, reason, unread, copied, reasons = CloudPullPartial, s.UnreadReason, s.Unread, s.LastPulledAt, s.Reasons
 			}
 		} else {
 			pull, reason = CloudPullFailed, s.Reason
@@ -230,7 +232,19 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 		if unread == 1 {
 			noun, verb = "session", "is"
 		}
-		p.CloudTip = fmt.Sprintf("Cowork (Cloud): %d %s %s not read. Newest failure: %s", unread, noun, verb, reason)
+		if len(reasons) == 0 {
+			p.CloudTip = fmt.Sprintf("Cowork (Cloud): %d %s %s not read. Newest failure: %s", unread, noun, verb, reason)
+			break
+		}
+		parts := make([]string, len(reasons))
+		for i, r := range reasons {
+			parts[i] = r.Plain()
+		}
+		p.CloudTip = fmt.Sprintf("Cowork (Cloud): %d %s %s not read: %s.", unread, noun, verb, strings.Join(parts, ", "))
+		if top := reasons[0]; top.Kind == cloudpull.ReasonNotFound && top.Example != "" {
+			// The CLI said not found; the page may still open, so give it to compare.
+			p.CloudTip += " Open one in the browser to compare: https://claude.ai/code/" + top.Example
+		}
 	case pull == CloudPullFailed:
 		p.CloudTip = "Cowork (Cloud) not measured: " + reason
 	case pull == CloudPullOff && haveLast:

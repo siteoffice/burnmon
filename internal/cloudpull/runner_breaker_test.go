@@ -57,7 +57,7 @@ func TestBreakerPausesAfterFiveDifferentSessionsFailTheSameWay(t *testing.T) {
 	r, f := newTestRunner(t)
 	r.Run = func(_ context.Context, _, _ string, args ...string) ([]byte, error) {
 		f.calls = append(f.calls, args[1])
-		return nil, couldNotLoad(args[1])
+		return nil, boom(args[1])
 	}
 	ctx := context.Background()
 	for i := 1; i <= 4; i++ {
@@ -73,7 +73,7 @@ func TestBreakerPausesAfterFiveDifferentSessionsFailTheSameWay(t *testing.T) {
 	if want := t0.Add(6 * time.Hour); !st.PausedUntil.Equal(want) {
 		t.Fatalf("PausedUntil = %v, want %v", st.PausedUntil, want)
 	}
-	if !strings.Contains(st.PauseReason, "Couldn't load the history") || strings.Contains(st.PauseReason, "session_5") {
+	if !strings.Contains(st.PauseReason, "boom for") || strings.Contains(st.PauseReason, "session_5") {
 		t.Errorf("PauseReason = %q, want the error without the session id", st.PauseReason)
 	}
 	n := len(f.calls)
@@ -92,7 +92,7 @@ func TestBreakerStreakEndsOnAGoodPull(t *testing.T) {
 	ctx := context.Background()
 	fail := func(id string) {
 		inner := r.Run
-		r.Run = func(context.Context, string, string, ...string) ([]byte, error) { return nil, couldNotLoad(id) }
+		r.Run = func(context.Context, string, string, ...string) ([]byte, error) { return nil, boom(id) }
 		r.PullOne(ctx, id)
 		r.Run = inner
 	}
