@@ -45,3 +45,9 @@ No undocumented endpoint, no private repo checkout, no change to BurnMon code. B
 - HAND, Wilco: run the E1 and E2 snippet; afterwards delete the folder under `%TEMP%` and the copies under
   `C:\Users\WilcoDeTree\.claude\projects\` whose name ends in `bm-teleport-test`.
 - DO, Claude: read the logs and write `04_assets\hub_agent_update_2026-11-23_cloud_pull_fix_spike.md`.
+
+## Result (2026-11-23, about 21:34 UTC)
+
+E1 (2.1.330) and E2 (npx 2.1.326) both exit 1 with "Couldn't load the history"; both logs show the same
+`teleport-events` request and "Session <id> not found (page 0)". Row three of the table: service side. Brief:
+`04_assets\hub_agent_update_2026-11-23_cloud_pull_fix_spike.md`.

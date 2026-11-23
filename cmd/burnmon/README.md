@@ -251,10 +251,12 @@ in `burnmon-dev.exe`. It is off by default, and without it the Cowork (Cloud) ro
   started from your phone, the browser or another computer are not read, and neither is subagent usage inside a cloud
   session. With it on, a working pull shows plain numbers; a failing one shows not measured with the reason.
 - What the Cowork (Cloud) cell says: a plain number when every session is copied; a number with `+` (for
-  example `2743.2M+`) when some sessions could not be copied but the period holds the newest good copy; `not
-  measured` when some could not be copied and the period starts after the newest good copy, because its 0 would
-  mean unknown. While any session is unread, BurnMon Dev prints one line under the vendor strip with the count and
-  the newest reason, and the same text is the hover on the cells.
+  example `2743.2M+`) when some sessions could not be copied but the period holds the newest cloud usage that was
+  copied; `not measured` when some could not be copied and the period starts after that usage, because its 0 would
+  mean unknown. The time that counts is the newest usage inside the copies, not the time a copy was written: a fresh
+  copy of an old session does not make today measured. While any session is unread, BurnMon Dev prints one line under
+  the vendor strip with the count and the reasons, and the same text is the hover on the cells. A repo, an
+  organisation or a session id never appears in a reason; the one session page given to compare is your own.
 - When copies fail: the line under the strip counts the unread sessions per reason, in plain words. A result that
   is an error at no cost is never a cost stop. "Prompt is too long" (a history too big for the rename turn) still
   counts as a copy when the CLI wrote the transcript first, which it does. "Couldn't load the history of cloud

@@ -97,6 +97,13 @@ var errCLIReported = errors.New("cloudpull: the CLI reported an error")
 
 var checkoutRe = regexp.MustCompile(`from a checkout of (\S+?)\.?$`)
 
+// checkoutNameRe finds the repo after "from a checkout of", wherever it sits in a text;
+// sessionTokenRe finds a cloud session id.
+var (
+	checkoutNameRe = regexp.MustCompile(`from a checkout of [^\s,;]+`)
+	sessionTokenRe = regexp.MustCompile(`session_[A-Za-z0-9]+`)
+)
+
 // checkoutRepo returns the repo a failure says the session needs a checkout of.
 func checkoutRepo(msg string) (string, bool) {
 	if m := checkoutRe.FindStringSubmatch(strings.TrimSpace(msg)); m != nil {
@@ -645,6 +652,11 @@ type Status struct {
 	// LastPulledAt is the newest good copy of any session. A period that starts
 	// after it holds no measured cloud usage, whatever its number says.
 	LastPulledAt time.Time
+	// LastMeasured is the newest session activity inside the copies (the newest LastUsage of a
+	// session with a copy), not the time a copy was written: a fresh re-copy of an August
+	// session carries August's usage. A period that starts after it holds no measured cloud
+	// usage. Zero when no copy holds usage.
+	LastMeasured time.Time
 	// Reasons counts the unread sessions per reason, largest first. Example is the
 	// newest failed session of that reason.
 	Reasons []Reason
@@ -690,8 +702,10 @@ func (r Reason) Plain() string {
 // reasonOf classifies one unread session by what its last pull said.
 func reasonOf(e *Entry) (kind, text string) {
 	msg := strings.TrimPrefix(e.LastError, "cloudpull: ")
+	_, askedForCheckout := checkoutRepo(msg)
 	switch {
-	case e.NeedsCheckout:
+	case e.NeedsCheckout || askedForCheckout:
+		// By the flag, or by the CLI's words: entries an older runner wrote have only the words.
 		return ReasonCheckout, ""
 	case e.Unloadable || strings.Contains(msg, notFoundMsg):
 		return ReasonNotFound, ""
@@ -699,6 +713,10 @@ func reasonOf(e *Entry) (kind, text string) {
 		return ReasonTooLong, ""
 	}
 	msg = strings.TrimPrefix(msg, "the CLI exited with ")
+	// The words stay; a repo, an organisation or a session id never reaches the screen, and the
+	// names go before the cut so it cannot land inside one.
+	msg = checkoutNameRe.ReplaceAllString(msg, "from a checkout")
+	msg = sessionTokenRe.ReplaceAllString(msg, "a session")
 	if r := []rune(msg); len(r) > 90 {
 		msg = string(r[:90])
 	}
@@ -719,7 +737,7 @@ func ReadStatus(statePath string) Status {
 	}
 	read, unread := 0, 0
 	var newest *Entry
-	var lastPulled time.Time
+	var lastPulled, lastMeasured time.Time
 	byKind := map[string]*Reason{}
 	newestOf := map[string]time.Time{}
 	for id, e := range st.Sessions {
@@ -730,6 +748,9 @@ func ReadStatus(statePath string) Status {
 			read++
 			if e.PulledAt.After(lastPulled) {
 				lastPulled = e.PulledAt
+			}
+			if e.LastUsage.After(lastMeasured) {
+				lastMeasured = e.LastUsage
 			}
 		}
 		if !e.Gone && !e.FailedAt.IsZero() {
@@ -772,7 +793,7 @@ func ReadStatus(statePath string) Status {
 		}
 		return reasons[i].Kind < reasons[j].Kind
 	})
-	return Status{OK: true, Unread: unread, UnreadReason: reason, LastPulledAt: lastPulled, Reasons: reasons}
+	return Status{OK: true, Unread: unread, UnreadReason: reason, LastPulledAt: lastPulled, LastMeasured: lastMeasured, Reasons: reasons}
 }
 
 // ClearDisabled lifts a cost-guard stop and a runner-wide error, for when the

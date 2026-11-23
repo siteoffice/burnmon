@@ -13,6 +13,12 @@ import (
 
 func pullStripFixture(t *testing.T, cfg *pricing.Config, status cloudpull.Status) Payload {
 	t.Helper()
+	return pullStripFixtureAt(t, cfg, status, time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC))
+}
+
+// pullStripFixtureAt is pullStripFixture on another day: one cloud row of 17 Nov, 700 tokens.
+func pullStripFixtureAt(t *testing.T, cfg *pricing.Config, status cloudpull.Status, now time.Time) Payload {
+	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "burnmon.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +33,7 @@ func pullStripFixture(t *testing.T, cfg *pricing.Config, status cloudpull.Status
 	if err := st.UpsertEvents(ev); err != nil {
 		t.Fatal(err)
 	}
-	p, err := Build(st, cfg, time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC))
+	p, err := Build(st, cfg, now)
 	if err != nil {
 		t.Fatal(err)
 	}

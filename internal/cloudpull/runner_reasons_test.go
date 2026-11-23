@@ -76,6 +76,90 @@ func TestLastUsageIgnoresSyntheticRows(t *testing.T) {
 	}
 }
 
+// Entries written by an older runner carry only the words, not the flags (2026-11-23: three
+// "from a checkout of" entries sat in "other" and the cut at 90 characters ended inside the repo
+// name, "checkout of w"). The reason follows the words, and no repo name reaches the screen.
+func TestReasonOfClassifiesCheckoutByTheWords(t *testing.T) {
+	e := &Entry{LastError: "cloudpull: the CLI exited with exit status 1: Run claude --teleport session_01G9gfXpysDJkVjFMxWRDJAA from a checkout of wilcodetree/znd-skills.", FailedAt: t0, Failures: 1}
+	kind, _ := reasonOf(e)
+	if kind != ReasonCheckout {
+		t.Fatalf("kind = %q, want %q", kind, ReasonCheckout)
+	}
+	plain := Reason{Kind: kind, N: 3}.Plain()
+	if plain != "3 need a checkout of their repo" || strings.Contains(plain, "wilcodetree") || strings.Contains(plain, "/") {
+		t.Errorf("plain = %q, want no repo or organisation name", plain)
+	}
+}
+
+// An "other" reason keeps the CLI's words but no repo, organisation or session id.
+func TestOtherReasonCarriesNoRepoOrSessionID(t *testing.T) {
+	e := &Entry{LastError: "cloudpull: the CLI exited with exit status 1: session_0131Y29YQutk7UuzNFk8CJJS stopped while reading from a checkout of org/repo, then the network went away", FailedAt: t0, Failures: 1}
+	kind, text := reasonOf(e)
+	if kind != ReasonOther {
+		t.Fatalf("kind = %q, want other", kind)
+	}
+	for _, bad := range []string{"session_", "org/repo", "0131Y29"} {
+		if strings.Contains(text, bad) {
+			t.Errorf("text %q still holds %q", text, bad)
+		}
+	}
+	if !strings.Contains(text, "network went away") || !strings.Contains(text, "exit status 1") {
+		t.Errorf("text %q lost the CLI's own words", text)
+	}
+}
+
+// LastMeasured is the newest session activity inside the copies, not the time a copy was
+// written. A fresh re-copy of an August session writes rows stamped today, but its usage is
+// August's (2026-11-23: LastPulledAt 17:40 UTC, newest real usage 17 Nov).
+func TestStatusLastMeasuredIsTheNewestRealUsage(t *testing.T) {
+	r, _ := newTestRunner(t)
+	aug := time.Date(2026, 8, 5, 8, 40, 24, 0, time.UTC)
+	nov := time.Date(2026, 11, 17, 16, 1, 0, 0, time.UTC)
+	st := &State{Sessions: map[string]*Entry{
+		"session_aug":    {SessionID: "a", Path: "p", PulledAt: t0, LastUsage: aug},
+		"session_nov":    {SessionID: "b", Path: "q", PulledAt: t0.Add(-72 * time.Hour), LastUsage: nov},
+		"session_nousag": {SessionID: "c", Path: "r", PulledAt: t0},
+		"session_fail":   {LastError: "cloudpull: the CLI exited with exit status 1: " + notFoundMsg + " x", FailedAt: t0, Failures: 1, LastUsage: t0},
+	}}
+	if err := st.Save(r.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	s := ReadStatus(r.StatePath)
+	if !s.LastMeasured.Equal(nov) {
+		t.Errorf("LastMeasured = %v, want %v", s.LastMeasured, nov)
+	}
+	if !s.LastPulledAt.Equal(t0) {
+		t.Errorf("LastPulledAt = %v, want %v (the runner still needs it)", s.LastPulledAt, t0)
+	}
+}
+
+// The state of the screenshot of 2026-11-23: 88 not found, 3 old checkout entries. The line says
+// "3 need a checkout of their repo", not "checkout of w".
+func TestStatusOfTheScreenshotState(t *testing.T) {
+	r, _ := newTestRunner(t)
+	st := &State{Sessions: map[string]*Entry{"session_ok": {SessionID: "a", Path: "p", PulledAt: t0, LastUsage: t0}}}
+	for i := 0; i < 88; i++ {
+		id := fmt.Sprintf("session_nf%02d", i)
+		st.Sessions[id] = &Entry{LastError: "cloudpull: the CLI exited with exit status 1: Couldn't load the history of cloud session " + id + ". Check it at https://claude.ai/code/" + id + "?from=cli", FailedAt: t0, Failures: 1}
+	}
+	for _, repo := range []string{"zero-nonsense-dev/burnrate-private", "wilcodetree/znd-skills", "someorg/their-repo"} {
+		id := "session_co_" + strings.ReplaceAll(repo, "/", "_")
+		st.Sessions[id] = &Entry{LastError: "cloudpull: the CLI exited with exit status 1: Run claude --teleport " + id + " from a checkout of " + repo + ".", FailedAt: t0, Failures: 1}
+	}
+	if err := st.Save(r.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	s := ReadStatus(r.StatePath)
+	var plain []string
+	for _, rs := range s.Reasons {
+		plain = append(plain, rs.Plain())
+	}
+	got := strings.Join(plain, "; ")
+	if got != "88 are not found by the Claude Code service for your login; 3 need a checkout of their repo" {
+		t.Fatalf("reasons = %q", got)
+	}
+}
+
 func boom(id string) error { return fmt.Errorf("exit status 1: boom for %s", id) }
 
 // "Couldn't load the history" is the API saying not found for this session
