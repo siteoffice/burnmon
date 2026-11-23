@@ -198,6 +198,8 @@ func lampPayload(c lampCase, seq int) string {
 		"blocked":   "Blocked. Nobody moves until you do, not even me.",
 		"bored":     "I built a wall while I waited for you to come back.",
 		"working":   "All quiet. Go and get yourself a coffee, you are free.",
+		// The line internal\lamp sends when BurnMon is stopped: the headline plus a full stop (N6).
+		"off": "BurnMon is not running.",
 	}
 	words := []string{"gate", "prompt", "ready", "gate", "prompt"}
 	titles := []string{
@@ -279,6 +281,10 @@ type lampRead struct {
 	Rows       []lampRowBox `json:"rows"`
 	HangClass  string       `json:"hangClass"`
 	Colors     []lampColor  `json:"colors"`
+	// Row1Head and Row1Subs are the first ticker row's headline text and its count of
+	// second spans, read even while the ticker is hidden behind the sliver.
+	Row1Head string `json:"row1Head"`
+	Row1Subs int    `json:"row1Subs"`
 }
 
 var lampRGB = regexp.MustCompile(`^rgb\((\d+), (\d+), (\d+)\)$`)
@@ -337,6 +343,17 @@ func lampProblems(c lampCase, r lampRead) []string {
 		}
 		if r.DocH > r.InnerH+1 {
 			p = append(p, fmt.Sprintf("%s: the page is %.0f px high in a %.0f px window (a vertical scrollbar)", where, r.DocH, r.InnerH))
+		}
+	}
+	// N6: the same sentence as the headline shows once, so row 1 holds no second span.
+	// A closed off lamp shows only the sliver and does not redraw the hidden ticker, so
+	// its row 1 is the previous case's: the check reads the ticker only where it is drawn.
+	if c.Mood == "off" && !lampSliverOnly(c) {
+		if r.Row1Head !="BurnMon is not running" {
+			p = append(p, fmt.Sprintf("%s: row 1 headline reads %q, want %q", where, r.Row1Head, "BurnMon is not running"))
+		}
+		if r.Row1Subs != 0 {
+			p = append(p, fmt.Sprintf("%s: row 1 shows the stopped sentence twice (%d second span)", where, r.Row1Subs))
 		}
 	}
 	if lampSliverOnly(c) {
@@ -423,10 +440,12 @@ const lampReadJS = `(function(){
   var de = document.documentElement;
   var rows = vis(tk) ? [].map.call(tk.querySelectorAll('.trow'), function(e){ var b = e.getBoundingClientRect(); return {l: b.left - tr.left, w: b.width}; }) : [];
   var hs = hg ? hg.querySelector('svg') : null;
+  var r1 = document.querySelector('#tick .trow'), r1h = r1 ? r1.querySelector('.head') : null;
   return {innerW: window.innerWidth, innerH: window.innerHeight, docW: de.scrollWidth, docH: de.scrollHeight,
     sliver: vis(sl), tickW: tr ? tr.width : 0, tickH: tr ? tr.height : 0, tickRows: vis(tk) ? tk.querySelectorAll('.trow').length : 0,
     hangShown: !!hr, hangW: hr ? hr.width : 0, hangH: hr ? hr.height : 0, hangTop: hr ? hr.top : 0,
-anims: anims, cutNoTitle: cut, colors: colors, rows: rows, hangClass: hs ? (hs.getAttribute('class') || '') : ''};
+anims: anims, cutNoTitle: cut, colors: colors, rows: rows, hangClass: hs ? (hs.getAttribute('class') || '') : '',
+    row1Head: r1h ? r1h.textContent : '', row1Subs: r1 ? r1.querySelectorAll('.sub').length : 0};
 })()`
 
 // lampFreezeJS pauses every animation of Glim at the middle of its act.

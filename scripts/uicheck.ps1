@@ -31,7 +31,7 @@ $devGroups = @("fit", "charts", "station", "layout", "pct", "panes", "map", "wai
 # The Control Centre group (controlcentre.exe, port 9335): tools\uicheck\group_gitpage.go.
 $centreGroups = @("gitpage")
 function Test-CentreCheck([string]$name) {
-    return ($centreGroups -contains $name) -or ($name -match '^gitpage/')
+    return ($centreGroups -contains $name) -or ($name -match '^gitpage/') -or ($name -eq 'centre/noroot')
 }
 function Test-DevCheck([string]$name) {
     if (Test-CentreCheck $name) { return $false }
@@ -59,10 +59,14 @@ if ($targetChecks.Count -eq 0) {
     $dExit = $LASTEXITCODE
     & "$PSScriptRoot\uicheck-centre.ps1" @centreGroups
     $cExit = $LASTEXITCODE
-    Write-Host "uicheck: burnmon.exe checks exit $wExit, burnmon-dev.exe groups exit $dExit, controlcentre.exe groups exit $cExit"
+    # The no-folder start is its own launch of controlcentre.exe.
+    & "$PSScriptRoot\uicheck-centre.ps1" centre/noroot
+    $nExit = $LASTEXITCODE
+    Write-Host "uicheck: burnmon.exe checks exit $wExit, burnmon-dev.exe groups exit $dExit, controlcentre.exe groups exit $cExit, no-folder start exit $nExit"
     if ($wExit -ne 0) { exit $wExit }
     if ($dExit -ne 0) { exit $dExit }
-    exit $cExit
+    if ($cExit -ne 0) { exit $cExit }
+    exit $nExit
 }
 
 $centreChecks = @($targetChecks | Where-Object { Test-CentreCheck $_ })
