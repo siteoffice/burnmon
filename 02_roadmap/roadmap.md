@@ -73,6 +73,11 @@ Priority order lives here and only here.
     "Ironies of Automation". Input for the 2026-12-19 scoring, not a feature. Source:
     `C:\ZND\10_holding\04_assets\2026-11-21_external_scan_herdbell_security_audit_reader_test.md`
     sections 2a item 6, 3 and 6, rec 3.
+22. Cowork (Cloud), decided 2026-11-23 and 2026-11-24 (Wilco). First the honesty lane: the strip says "not measured"
+    on copied usage, checkout reasons in plain words, no repo names (`2026-11-23_cloud_strip_honesty_lane_spec.md`,
+    approved). Then `burnmon-cloud` 2.0.0, a cloud-only usage mod that waits on Anthropic opening a person's mods in
+    cloud sessions (`2026-11-24_cloud_mod_route_plan.md`, approved). The teleport fault is service side, reported as
+    anthropics/claude-code #111387. Grill: `..\04_assets\2026-11-23_cloud_usage_route_architecture.md`.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.
 Architecture (decided): `..\04_assets\2026-09-22_token_monitor_architecture.md`.
