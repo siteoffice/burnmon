@@ -362,7 +362,7 @@ that calls Foreman's own gate command. All of them use documented commands, no u
 
 ## 6. Limits and known issues
 
-This is a beta, built and used daily by one person. It runs on your own machine and changes nothing outside the folders
+This is v0.5.0, built and used daily by one person. It runs on your own machine and changes nothing outside the folders
 you point it at. It comes with no warranty (see `LICENSE`).
 
 - **Cloud Cowork sessions arrive late.** Read Cowork (Cloud) sessions copies on its own timer, and the `burnmon-cloud`
@@ -393,9 +393,11 @@ The full list, with measurements, is in `STATUS.md`.
 
 Priority order lives in `02_roadmap\roadmap.md`; this is the short public version, as of 2026-11-15.
 
-- **Now**: `v0.5.0-beta.2` is tagged. The Mac check of 2026-11-22 ran its arm64 zip on macOS 27.2.1 (Apple silicon):
-  the three apps start from the zip and fit the screen. On the source at the tag, 1532 tests pass, 0 fail, 60 skip. What
-  stays open is in section 6 and in the BurnMon Dev and Control Centre READMEs.
+- **Now**: `v0.5.0` is tagged. The Mac check of 2026-11-22 ran on `v0.5.0-beta.2`, its arm64 zip on macOS 27.2.1
+  (Apple silicon): the three apps start from the zip and fit the screen. What stays open is in section 6 and in the
+  BurnMon Dev and Control Centre READMEs. Cowork (Cloud) is not measured while the teleport fault lasts
+  (anthropics/claude-code #111387). The `burnmon-cloud` mod is dormant until Anthropic loads a person's mods in cloud
+  sessions. Mac signing (OF26) is open.
 - **Next**: make Waits on you and the agent view correct and fast against real sessions; test and fix macOS and Linux
   with help from real users; a plan-limits panel (how much of a seat or allowance is left), briefed but not started.
 - **Later, undecided**: a local OTLP receiver, signed Windows builds, a native window off Windows. A decision on whether
