@@ -40,7 +40,9 @@ In:
 - BurnMon: the scan of `~\.burnmon\cloud` reads `mod-*.jsonl` with the existing parser; a de-duplication rule so a
   request stored from a pulled transcript and from a mod row counts once (exact key set by lane step 1); the reason
   line under the strip adds "cloud mod: no delivery yet" or "cloud mod: newest delivery <local date time>", from the
-  newest `mod-*.jsonl` (decision 3).
+  newest `mod-*.jsonl` (decision 3). Placement (Wilco, 2026-11-24): "no delivery yet" is appended only while the
+  reason line already shows (pull partial or failed); "newest delivery" shows on its own too, so the first delivery
+  is seen with the pull on, off or working.
 - README: "Cowork in the cloud" rewritten (the plugin returns as a mod, what it needs, that it waits on Anthropic);
   `_archive\burnmon-cloud` keeps 1.1.4 with one line pointing to 2.0.0.
 
@@ -64,6 +66,30 @@ the web; publishing the plugin anywhere (Wilco's step); the organization's plugi
 
 Caveat: the open-ended row depends on Anthropic. Nothing in this plan can bring it forward.
 
+### 4a. Lane step 1 result: the de-duplication key (measured 2026-11-24)
+
+Measured on the laptop, Claude Code 2.1.331, with a throwaway probe mod hot-loaded in an interactive session.
+`claude -p --plugin-dir` loads no mods on this laptop today: every mod logs "not loaded: this session has not read
+your organization's managed settings" (debug log, 2026-11-24 00:36 UTC), so the probe ran interactively instead.
+
+- `turn.step` carries no request or message id. Its input has `turnId`, `index`, `model`, `effort`, `messageCount`
+  and `agentId`; its result has `turnId`, `index`, `answer`, `toolUses`, `stopReason`, `usage`.
+- Once `next(e)` settles, `$.session.messages({ last: 2 })` (for a subagent `{ agentId, last: 2 }`) returns the
+  step's own transcript row as the newest assistant message, with its `uuid`.
+- `$.session.info().transcriptPath` names the transcript; a subagent's is `<transcript without .jsonl>/subagents/
+  agent-<agentId>.jsonl`. The row with that `uuid` carries `requestId` and `message.id`.
+- Result: 11 of 11 main-loop steps and 2 of 2 subagent steps resolved to a distinct `requestId`, each with the same
+  output tokens as the step's `usage`. Subagent rows are on disk when the step settles; main-loop rows are written
+  later, and the turn's final step was not on disk even at `turn.complete` (found on the next read).
+
+**Key:** a mod row's `request_id` is the transcript's `requestId` for the step's newest assistant `uuid`, and
+`message_id` its `message.id`. That is the key the Claude parser and the pull already store, so the existing store
+rule (a pulled `session_...` row is the one copy of its request id, other copies are removed or skipped) counts the
+request once; no new store rule. A row not yet resolved keeps empty ids and is retried on every later write and once
+on a short timer after `turn.complete`. A row still unresolved when the file is written carries `step_key`
+`turn-<turnId>-<index>`, which the reader uses as the key so the usage still counts; the residual risk is a double
+count of that one request if the pull also reads the session.
+
 ## 5. Terms
 
 No price. Ships with BurnMon under the repo's licence, free, local. Ending: if Anthropic documents that a person's
@@ -86,7 +112,8 @@ mods will not run in cloud sessions, the mod is retired again and this plan clos
 |---|---|---|---|
 | A person's mods will load in Cowork (Cloud) one day | none | The first delivered file | ASSUMED |
 | `turn.step` carries usage per request with the model | Mods docs; laptop probe 2026-11-23 | Probe file | CONFIRMED |
-| `turn.step` carries a request or message id | Not seen | Lane step 1 | ASSUMED |
+| `turn.step` carries a request or message id | Not seen | Lane step 1 | KILLED 2026-11-24: no id; the key comes from the transcript row (section 4a) |
+| The step's transcript row can be found by `uuid` through `transcriptPath` | Laptop probe 2026-11-24 | Section 4a | CONFIRMED on the laptop; ASSUMED in the cloud |
 | `CLAUDE_CODE_ENTRYPOINT` is `remote_cowork` in every Cowork (Cloud) session | One session measured | Read in each new cloud session the mod runs in | ASSUMED |
 | `$.fs.write` creates `/mnt/user-data/outputs` files in the cloud | Laptop run created the path | First cloud run | ASSUMED |
 | `device_commit_files` works from a mod without a prompt | Old plugin used a hook, not a mod | First cloud run | ASSUMED |
