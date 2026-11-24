@@ -19,6 +19,8 @@ cannot be written, nothing runs.
 - `answer`: spec gates only. The accept gate stays with the owner.
 - `git`: the five recipes of snip.py v0.7.0. Flags: `--message`, `--body`, `--co-author`,
   `--files <f>...`, `--tag`, `--subject`, `--expect`, `--runs-in`, `--needs`.
+  The block is the snip.py text. The dry run adds `# runs N of M:` lines with the exact
+  argv that `--yes` runs (for `land`, the resolved python path, not `py -3`).
 - `update-mods`: `--from` is a local folder holding `herdr-app\mods.json` (mod names and
   a SHA-256 per file) and one folder per mod. `--to` is the mod folder of the app.
   A file you edited moves to `znd-kept\<UTC stamp>\<mod>\`. The old folder moves to

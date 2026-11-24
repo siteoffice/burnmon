@@ -205,3 +205,26 @@ func TestGitFlagValues(t *testing.T) {
 		t.Errorf("commit argv %s", got)
 	}
 }
+
+// TestGitDryRunShowsRunLines: the block copies snip.py, so the exact argv that
+// --yes runs is printed after it, one line per step.
+func TestGitDryRunShowsRunLines(t *testing.T) {
+	r := newGitRig(t)
+	code, out, errs := r.run("sync", "--cwd", r.cwd, "--dry-run")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	i := strings.LastIndex(out, "```")
+	if i < 0 {
+		t.Fatalf("no block end: %q", out)
+	}
+	tail := out[i:]
+	for n, want := range []string{"# runs 1 of 3: ", "# runs 2 of 3: ", "# runs 3 of 3: "} {
+		if !strings.Contains(tail, want) {
+			t.Errorf("line %d missing after the block: %q", n+1, tail)
+		}
+	}
+	if !strings.Contains(tail, "merge --ff-only @{u}") {
+		t.Errorf("argv text missing: %q", tail)
+	}
+}

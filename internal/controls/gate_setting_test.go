@@ -124,17 +124,16 @@ func TestForemanReadNeverOverrulesSnapshot(t *testing.T) {
 
 // foreman_read_gates_only
 func TestForemanReadGatesOnly(t *testing.T) {
-	r := newRig(t)
-	r.env.GateWithoutSnapshot = GateForemanRead
-	r.staleSnap(snapshot.StatusStale)
-	r.env.Merged = func(string, string) (bool, bool) { return true, true }
-	r.rebuild()
-	for _, c := range []string{Stop, Attach, CloseSprint} {
-		// The rig has no sprint script, so Close refuses for its own need first;
-		// either way it must not preview.
-		_, err := r.preview(c, "ab12")
-		if err == nil || (err.Error() != refuseStale && c != CloseSprint) {
-			t.Errorf("%s: err = %v", c, err)
+	// The close rig has the sprint script and a good sprint, so Close passes its
+	// own needs and only the stale snapshot can refuse it.
+	c := newCloseRig(t)
+	c.env.GateWithoutSnapshot = GateForemanRead
+	c.staleSnap(snapshot.StatusStale)
+	c.rebuild()
+	for _, ctl := range []struct{ name, target string }{{Stop, "ab12"}, {Attach, "ab12"}, {CloseSprint, closeItemID}} {
+		_, err := c.preview(ctl.name, ctl.target)
+		if err == nil || err.Error() != refuseStale {
+			t.Errorf("%s: err = %v, want %q", ctl.name, err, refuseStale)
 		}
 	}
 }

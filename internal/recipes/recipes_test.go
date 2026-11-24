@@ -76,6 +76,24 @@ func TestRecipesMatchSnip(t *testing.T) {
 			t.Errorf("command text %q not found in snip.py", lit)
 		}
 	}
+	// The refusal rules that Build repeats. A change in snip.py fails here.
+	for _, lit := range []string{
+		`if f in (".", "*", "-A", "--all"):`,
+		`"--files names %s: list each file"`,
+		`f.startswith("/") or f.startswith("~/") or re.match(r"^[A-Za-z]:\\", f)`,
+		`"--files must be relative to the cwd: %s"`,
+		`if len(message) > 72:`,
+		`"--message is longer than 72 characters"`,
+		`if message.endswith("."):`,
+		`"--message ends with a period"`,
+		`re.match(r"` + coAuthorRe.String() + `", co)`,
+		`"--co-author must look like: Name <email>"`,
+		`"Co-Authored-By: "`,
+	} {
+		if !strings.Contains(src, lit) {
+			t.Errorf("refusal rule %s not found in snip.py", lit)
+		}
+	}
 	for _, lit := range []string{`" land --apply --repo "`, `"py -3 "`, `"python3 "`, `"Set-Location -LiteralPath "`, `'cd -- "$HOME/'`} {
 		if !strings.Contains(src, lit) {
 			t.Errorf("text %s not found in snip.py", lit)

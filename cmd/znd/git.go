@@ -96,6 +96,10 @@ func runGit(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	fmt.Fprint(stdout, plan.Block)
 	if dry {
+		// The block copies snip.py; --yes runs the resolved paths below, so show them.
+		for i, a := range plan.Argv {
+			fmt.Fprintf(stdout, "# runs %d of %d: %s\n", i+1, len(plan.Argv), strings.Join(a, " "))
+		}
 		return exitOK
 	}
 
