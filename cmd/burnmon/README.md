@@ -269,14 +269,22 @@ in `burnmon-dev.exe`. It is off by default, and without it the Cowork (Cloud) ro
 
 ### Cowork in the cloud
 
-The `burnmon-cloud` plugin is retired (2026-11-17). Cloud containers no longer hold a transcript for the plugin to read:
-its last delivery was on 2026-11-12. Use Read Cowork (Cloud) sessions above, which copies the same sessions through your
-own Claude Code CLI for free.
+The `burnmon-cloud` plugin returns as a mod, version 2.0.0, in `plugins\burnmon-cloud`. Today it delivers nothing: a
+person's mods do not load in Cowork (Cloud) sessions yet (measured 2026-11-23). It is built so it works the day
+Anthropic opens mods there, and until then the line under the vendor strip says "cloud mod: no delivery yet" while it
+shows a pull reason. Once a file has landed, the line says "cloud mod: newest delivery" with its local date and time.
 
-BurnMon no longer creates `~\.burnmon\cloud`, and no longer asks you to install the plugin. If that folder exists from
-before, BurnMon still reads it, so the cloud usage it delivered from 2026-10-12 to 2026-11-12 stays in your totals, and
-the Cowork (Cloud) row says "measured until" that date while the pull is off. The plugin source is kept in
-`_archive\burnmon-cloud`.
+- What it does: only inside a Cowork (Cloud) session, it keeps one row per model request, main and subagent: time,
+  session and request ids, model and token counts. No prompts, no answers, no tool input, no paths. At the end of each
+  turn the Claude app copies that file to `~\.burnmon\cloud\mod-<session>.jsonl` on this computer. Anywhere else, for
+  example in Claude Code on your laptop, it does nothing.
+- What it needs: add it as a personal plugin, and connect the folder `~\.burnmon` to the cloud sessions you want counted
+  (in a Cowork Project, add it once to the Project's folders). Create the folder yourself if it is not there.
+- Counted once: a request read both from the mod's file and by Read Cowork (Cloud) sessions counts once, because both
+  carry the request id of the session's own transcript.
+
+If `~\.burnmon\cloud` holds files of the retired 1.x plugin, BurnMon still reads them, so the cloud usage it delivered
+from 2026-10-12 to 2026-11-12 stays in your totals. The 1.x source is kept in `_archive\burnmon-cloud`.
 
 ### WSL
 
@@ -330,7 +338,7 @@ Default transcript roots, by OS:
 | Codex | `%USERPROFILE%\.codex\sessions` (or `$CODEX_HOME`) | `~/.codex/sessions` | `~/.codex/sessions` |
 | Hermes | `%HERMES_HOME%\state.db`, else `%LOCALAPPDATA%\Hermes\state.db` | `$HERMES_HOME/state.db`, else `~/.hermes/state.db` | `$HERMES_HOME/state.db`, else `~/.hermes/state.db` |
 | GitHub Copilot CLI | `%COPILOT_HOME%\session-store.db`, else `~/.copilot/session-store.db` | `~/.copilot/session-store.db` | `~/.copilot/session-store.db` |
-| Cowork in the cloud | `~\.burnmon\cloud` and `.burnmon\cloud` next to `burnmon.exe`, read only if they exist (no longer created; the `burnmon-cloud` plugin is retired) | same | same |
+| Cowork in the cloud | `~\.burnmon\cloud` and `.burnmon\cloud` next to `burnmon.exe`, read only if they exist (not created; the `burnmon-cloud` mod copies to `~\.burnmon\cloud`) | same | same |
 | GitHub Copilot in VS Code | wherever `github.copilot.chat.otel.outfile` points, matched by `copilot_vscode_otel_file` | same (no default: the setting has none on any OS, you always choose the path) | same |
 
 WSL distro detection (the registry-based scan for Claude Code and Codex transcripts inside a WSL distribution) only
@@ -357,9 +365,9 @@ that calls Foreman's own gate command. All of them use documented commands, no u
 This is a beta, built and used daily by one person. It runs on your own machine and changes nothing outside the folders
 you point it at. It comes with no warranty (see `LICENSE`).
 
-- **Cloud Cowork sessions arrive late.** The plugin writes within about 20 seconds; the copy to your laptop took about 3
-  minutes in one measurement on 2026-11-02. A long tool run writes no usage at all until the next model request, so a busy
-  cloud session can show as idle. The session only counts when `~/.burnmon` is connected to it.
+- **Cloud Cowork sessions arrive late.** Read Cowork (Cloud) sessions copies on its own timer, and the `burnmon-cloud`
+  mod copies at the end of a turn, once mods run in cloud sessions at all. A long tool run writes no usage until the next
+  model request, so a busy cloud session can show as idle. The mod only delivers when `~/.burnmon` is connected.
 - **Prices are API-price equivalents**, not your bill. On a subscription seat you pay the seat.
 - **Linux has no app window, and neither has the bare `burnmon` file on macOS.** The dashboard opens in your browser,
   served by a local web server. Linux is untested on real hardware. `BurnMon.app` in the macOS zip has its own window:

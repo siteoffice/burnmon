@@ -1,5 +1,7 @@
 # BurnMon cloud
 
+Archived 1.1.4. Its successor, 2.0.0, is a mod in `plugins\burnmon-cloud` (2026-11-24).
+
 Counts the tokens of Cowork sessions that run in Anthropic's cloud, for
 [BurnMon](https://github.com/siteoffice/burnmon), the local token and cost monitor.
 

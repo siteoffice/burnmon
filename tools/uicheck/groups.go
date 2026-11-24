@@ -35,7 +35,7 @@ var devGroups = []devGroup{
 		{"d10", caseD10}, {"d11", caseD11}, {"d12", caseD12}, {"d13", caseD13},
 		{"d14", caseD14}, {"d15", caseD15}, {"d16", caseD16}, {"d17", caseD17},
 		{"d18", caseD18}, {"d20", caseD20}, {"d21", caseD21}, {"d22", caseD22},
-		{"d49", caseD49}, {"d50", caseD50}, {"d52", caseD52},
+		{"d49", caseD49}, {"d50", caseD50}, {"d52", caseD52}, {"d53", caseD53},
 	},sizedStart(1280, 860)}, // size as in check_d10.go:12
 	{"station", []devCase{
 		{"d23", caseD23}, {"d25", caseD25}, {"d26", caseD26}, {"d27", caseD27},
