@@ -21,6 +21,11 @@ type cloudRow struct {
 	SessionID     string `json:"session_id"`
 	RequestID     string `json:"request_id"`
 	MessageID     string `json:"message_id"`
+	// StepKey is "turn-<turnId>-<index>", written by the burnmon-cloud mod
+	// for a request whose ids it could not yet read from the transcript, so
+	// the usage still counts (02_roadmap\2026-11-24_cloud_mod_route_plan.md,
+	// section 4a).
+	StepKey       string `json:"step_key"`
 	Model         string `json:"model"`
 	Agent         string `json:"agent"` // "main", or "agent-<id>" for a subagent's request
 	InputTokens   int64  `json:"input_tokens"`
@@ -58,6 +63,9 @@ func parseCloudDrop(path string) ([]schema.Event, []schema.ToolCall, int64, erro
 		key := r.RequestID
 		if key == "" {
 			key = r.MessageID
+		}
+		if key == "" {
+			key = r.StepKey
 		}
 		if key == "" {
 			continue

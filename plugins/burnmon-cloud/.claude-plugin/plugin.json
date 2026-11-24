@@ -1,0 +1,10 @@
+{
+  "name": "burnmon-cloud",
+  "displayName": "BurnMon cloud",
+  "version": "2.0.0",
+  "description": "Counts the tokens of Cowork sessions that run in the cloud, for BurnMon on your computer. Usage numbers only: no prompts, answers, tool input or paths leave the session.",
+  "author": {
+    "name": "ZeroNonsense.dev"
+  },
+  "license": "MIT"
+}

@@ -1705,9 +1705,14 @@ tr.pct-more td{padding-top:1px; padding-bottom:1px}
     var note = document.getElementById('vendorStripNote');
     if(note){
       var showNote = !!cloudTip && payload && (payload.cloud_pull === 'partial' || payload.cloud_pull === 'failed');
-      note.textContent = showNote ? cloudTip : '';
-      note.title = showNote ? cloudTip : '';
-      note.hidden = !showNote;
+      // The cloud mod's status rides along while the reason shows; a real
+      // delivery shows on its own too (decision 3 of the cloud mod route).
+      var mod = (payload && payload.cloud_mod) || '';
+      var text = showNote ? cloudTip : '';
+      if(mod && (showNote || (payload && payload.cloud_mod_delivered))){ text = text ? text + ' | ' + mod : mod; }
+      note.textContent = text;
+      note.title = text;
+      note.hidden = !text;
     }
   }
 

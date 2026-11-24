@@ -233,6 +233,10 @@ var allowlist = map[string]string{
 	`sprints\<project>\<slug>\sprint.json`: "Foreman state file under foreman_root, outside the repo",
 	`flows\<project>\<flow>\flow.json`:     "Foreman state file under foreman_root, outside the repo",
 	`flows\_lib\flow_transition.py`:        "Foreman script under foreman_root, outside the repo",
+
+	// The burnmon-cloud mod's delivery (cloud mod route, 2026-11-24).
+	`~\.burnmon`:                           "runtime folder in the user's home (backslash spelling), not a repo file",
+	`~\.burnmon\cloud\mod-<session>.jsonl`: "runtime file the burnmon-cloud mod copies to the user's computer, not a repo file",
 }
 
 func repoDocs(t *testing.T, root string) map[string]string {

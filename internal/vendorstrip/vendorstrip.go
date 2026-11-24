@@ -59,6 +59,12 @@ var cloudLastMeasured = func() (time.Time, bool) {
 	return scan.CloudLastMeasured(scan.CloudDropDirs())
 }
 
+// cloudModNewest returns when the burnmon-cloud mod last delivered a file. A
+// var so tests can fix it without drop folders.
+var cloudModNewest = func() (time.Time, bool) {
+	return scan.CloudModNewest(scan.CloudDropDirs())
+}
+
 // cloudPullStatus reads the cloud pull runner's state. A var so tests can fix it.
 var cloudPullStatus = func() cloudpull.Status { return cloudpull.ReadStatus(cloudpull.StatePath()) }
 
@@ -106,6 +112,12 @@ type Payload struct {
 	// burnmon.exe and BurnMon Dev show the same words. Empty when no cell is
 	// marked.
 	CloudTip string `json:"cloud_tip,omitempty"`
+	// CloudMod is the burnmon-cloud mod's status for the line under the strip:
+	// "cloud mod: no delivery yet" or "cloud mod: newest delivery <local date
+	// time>". CloudModDelivered is true for the second; the page then shows the
+	// status on its own, else only appended to a reason it already shows.
+	CloudMod          string `json:"cloud_mod"`
+	CloudModDelivered bool   `json:"cloud_mod_delivered"`
 	// CopilotCreditsLeft is refreshed on the same 1-minute cadence as the
 	// rest of this payload (rather than bmLive's 2-second poll, or a fourth
 	// backend call the business-mode card would otherwise need): an
@@ -225,6 +237,11 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 	}
 	if haveLast {
 		p.CloudMeasuredUntil = last.In(time.Local).Format("2006-01-02 15:04")
+	}
+	p.CloudMod = "cloud mod: no delivery yet"
+	if at, ok := cloudModNewest(); ok {
+		p.CloudMod = "cloud mod: newest delivery " + at.In(time.Local).Format("2006-01-02 15:04")
+		p.CloudModDelivered = true
 	}
 	switch {
 	case pull == CloudPullPartial:

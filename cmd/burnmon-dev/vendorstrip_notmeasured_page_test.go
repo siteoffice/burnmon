@@ -74,3 +74,17 @@ func TestPageVendorStripShowsCloudReasonLine(t *testing.T) {
 		}
 	}
 }
+
+// The burnmon-cloud mod's status rides on the same line (decision 3, placement
+// by Wilco 2026-11-24): appended while the reason shows, and a real delivery
+// shows on its own too.
+func TestPageVendorStripShowsCloudModStatus(t *testing.T) {
+	r := strings.Index(pageHTML, "function renderVendorStrip(")
+	render := pageHTML[r:]
+	render = render[:strings.Index(render, "function renderHeadline(")]
+	for _, want := range []string{"payload.cloud_mod", "payload.cloud_mod_delivered"} {
+		if !strings.Contains(render, want) {
+			t.Errorf("renderVendorStrip lacks %q", want)
+		}
+	}
+}

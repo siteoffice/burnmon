@@ -123,10 +123,11 @@ func TestReadmeWhichAppSectionAndCloudWording(t *testing.T) {
 			}
 		}
 	}
-	// The burnmon-cloud plugin is retired (2026-11-17): the README says so and
-	// no longer sends the reader to install or connect it.
-	if !strings.Contains(appFlat, "The `burnmon-cloud` plugin is retired (2026-11-17).") {
-		t.Error("cmd\\burnmon\\README.md does not say the burnmon-cloud plugin is retired")
+	// The burnmon-cloud plugin returned as a mod (2026-11-24) that waits on
+	// Anthropic: the README says so, and not the old 1.x set-up steps.
+	if !strings.Contains(appFlat, "The `burnmon-cloud` plugin returns as a mod, version 2.0.0") ||
+		!strings.Contains(appFlat, "Today it delivers nothing") {
+		t.Error("cmd\\burnmon\\README.md does not say burnmon-cloud returns as a mod that delivers nothing yet")
 	}
 	for _, gone := range []string{"Set it up once:", "Install the plugin \"BurnMon cloud\"", "Start BurnMon once. It creates"} {
 		if strings.Contains(appFlat, gone) {

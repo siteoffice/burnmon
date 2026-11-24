@@ -74,6 +74,27 @@ func CloudLastMeasured(dirs []string) (time.Time, bool) {
 	return newest, !newest.IsZero()
 }
 
+// CloudModNewest returns the newest modification time over every mod-*.jsonl
+// in the given drop folders: when the burnmon-cloud mod last delivered a file
+// from a Cowork (Cloud) session. false when no folder holds one, which today
+// means mods do not run in cloud sessions yet (decision 3 of
+// 02_roadmap\2026-11-24_cloud_mod_route_plan.md).
+func CloudModNewest(dirs []string) (time.Time, bool) {
+	var newest time.Time
+	for _, d := range dirs {
+		files, err := filepath.Glob(filepath.Join(d, "mod-*.jsonl"))
+		if err != nil {
+			continue
+		}
+		for _, p := range files {
+			if fi, err := os.Stat(p); err == nil && fi.ModTime().After(newest) {
+				newest = fi.ModTime().UTC()
+			}
+		}
+	}
+	return newest, !newest.IsZero()
+}
+
 func newestRowTime(path string) (time.Time, bool) {
 	f, err := os.Open(path)
 	if err != nil {
