@@ -36,7 +36,8 @@ In:
   `agent-<id>` from `e.agentId`), input, output, cache creation and cache read tokens. No text, no tool input, no
   paths. File: `/mnt/user-data/outputs/burnmon-cloud-<session>.jsonl`, rewritten whole (under 4 MiB per file).
   `turn.complete` of the main agent: `$.mcp.call('remote-devices', 'device_commit_files', ...)` to
-  `~/.burnmon/cloud/mod-<session>.jsonl` with force. Every hook passes the event on and fails open (`.catch`).
+  `~/.burnmon/cloud/mod-<session>.jsonl`, about 10 s after the turn ends so the outputs mount has uploaded the
+  write (built without a force flag: the 1.x copy hooks overwrote `latest.jsonl` with `files` alone). Every hook passes the event on and fails open (`.catch`).
 - BurnMon: the scan of `~\.burnmon\cloud` reads `mod-*.jsonl` with the existing parser; a de-duplication rule so a
   request stored from a pulled transcript and from a mod row counts once (exact key set by lane step 1); the reason
   line under the strip adds "cloud mod: no delivery yet" or "cloud mod: newest delivery <local date time>", from the
