@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"burnmon/internal/controls"
@@ -33,6 +34,7 @@ type deps struct {
 	zndConfig func() (controlsenv.ZndConfig, error)
 	env       func(z controlsenv.ZndConfig) controls.Env
 	wait      func(time.Duration)
+	git       func() gitEnv
 }
 
 func realDeps() deps {
@@ -42,7 +44,17 @@ func realDeps() deps {
 		exeDir = filepath.Dir(exe)
 	}
 	return deps{
-		wait:      time.Sleep,
+		wait: time.Sleep,
+		git: func() gitEnv {
+			storePath, _ := store.DefaultPath()
+			git, _ := exec.LookPath("git")
+			if abs, err := filepath.Abs(git); err == nil && git != "" {
+				git = abs
+			}
+			python, _ := controls.ResolvePython(exec.LookPath, runtime.GOOS)
+			return gitEnv{Git: git, Python: python, Engine: controlsenv.LoadBurnmonConfig(exeDir, dataDir).GroundworkEngine,
+				AuditPath: controls.AuditPath(storePath), Runner: controls.ExecRunner{}, Now: time.Now}
+		},
 		zndConfig: func() (controlsenv.ZndConfig, error) { return controlsenv.LoadZndConfig(exeDir, dataDir) },
 		env: func(z controlsenv.ZndConfig) controls.Env {
 			snapPath, _ := snapshot.DefaultPath()
@@ -56,7 +68,8 @@ func realDeps() deps {
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, realDeps())) }
 
-const usage = "usage: znd answer <gate-wait-id> approve|send-back (--dry-run | --yes)"
+const usage = "usage: znd answer <gate-wait-id> approve|send-back (--dry-run | --yes)\n" +
+	"       znd git save|share|land|tag|sync --cwd <repo> [recipe flags] (--dry-run | --yes)"
 
 func run(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) == 0 {
@@ -66,6 +79,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	switch args[0] {
 	case "answer":
 		return runAnswer(args[1:], stdout, stderr, d)
+	case "git":
+		return runGit(args[1:], stdout, stderr, d)
 	}
 	fmt.Fprintf(stderr, "unknown command %q\n%s\n", args[0], usage)
 	return exitUsage
