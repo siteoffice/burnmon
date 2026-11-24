@@ -35,6 +35,7 @@ type deps struct {
 	env       func(z controlsenv.ZndConfig) controls.Env
 	wait      func(time.Duration)
 	git       func() gitEnv
+	audit     func() auditEnv
 }
 
 func realDeps() deps {
@@ -45,6 +46,10 @@ func realDeps() deps {
 	}
 	return deps{
 		wait: time.Sleep,
+		audit: func() auditEnv {
+			storePath, _ := store.DefaultPath()
+			return auditEnv{Path: controls.AuditPath(storePath), Now: time.Now}
+		},
 		git: func() gitEnv {
 			storePath, _ := store.DefaultPath()
 			git, _ := exec.LookPath("git")
@@ -69,7 +74,9 @@ func realDeps() deps {
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, realDeps())) }
 
 const usage = "usage: znd answer <gate-wait-id> approve|send-back (--dry-run | --yes)\n" +
-	"       znd git save|share|land|tag|sync --cwd <repo> [recipe flags] (--dry-run | --yes)"
+	"       znd git save|share|land|tag|sync --cwd <repo> [recipe flags] (--dry-run | --yes)\n" +
+	"       znd update-mods --from <folder> --to <mod folder> (--dry-run | --yes)\n" +
+	"       znd audit --control <name> --target <text> --exit <code>"
 
 func run(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) == 0 {
@@ -81,6 +88,13 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runAnswer(args[1:], stdout, stderr, d)
 	case "git":
 		return runGit(args[1:], stdout, stderr, d)
+	case "update-mods":
+		return runUpdateMods(args[1:], stdout, stderr, d)
+	case "audit":
+		return runAudit(args[1:], stdout, stderr, d)
+	case "--version":
+		fmt.Fprintln(stdout, "znd "+version)
+		return exitOK
 	}
 	fmt.Fprintf(stderr, "unknown command %q\n%s\n", args[0], usage)
 	return exitUsage
