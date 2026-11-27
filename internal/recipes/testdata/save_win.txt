@@ -1,0 +1,11 @@
+```powershell
+# runs in: PowerShell 7 on Windows, normal window
+# cwd: C:\w\r
+# needs: nothing
+# recipe: git save
+Set-Location -LiteralPath 'C:\w\r'
+git add -- 'a.txt'
+git commit -m 'msg'
+git status --short
+# expect: one new commit, and git status --short no longer lists the saved files
+```

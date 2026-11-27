@@ -3,36 +3,30 @@
 package controls
 
 import (
-	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
-var errUnsupported = errors.New("controls run on Windows only")
-
-// CurrentSelf has no ancestor walk off Windows, so ChainComplete stays false
-// and the service must not run controls here anyway (ExecRunner is a stub).
+// CurrentSelf has no ancestor walk off Windows, so ChainComplete stays false.
+// The service keeps the agent controls (Stop, Attach) off here for that reason;
+// the gate and close controls do not use the process tree.
 func CurrentSelf() (Self, error) {
 	d, err := exeDir()
 	return Self{PID: os.Getpid(), ExeDir: d}, err
 }
 
-// ExecRunner is a stub off Windows.
-type ExecRunner struct{}
+// consoleAttr has nothing to hide off Windows.
+func consoleAttr(*exec.Cmd) {}
 
-func (ExecRunner) Run(ctx context.Context, argv []string, dir string) (int, string, error) {
-	return -1, "", errUnsupported
-}
+// Start refuses off Windows: attach needs a console window.
+func (ExecRunner) Start(argv []string) error { return errors.New("attach runs on Windows only") }
 
-func (ExecRunner) RunLast(ctx context.Context, argv []string, dir string) (int, string, error) {
-	return -1, "", errUnsupported
-}
+// Elevated is true for root, so controls stay off for a root process as they
+// do for an elevated one on Windows.
+func Elevated() bool { return rootElevated(os.Geteuid()) }
 
-func (ExecRunner) Start(argv []string) error { return errUnsupported }
-
-// Elevated is always false off Windows.
-func Elevated() bool { return false }
 
 // resolveReal resolves links in an existing path.
 func resolveReal(p string) (string, bool) {

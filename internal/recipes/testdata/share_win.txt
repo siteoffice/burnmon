@@ -1,0 +1,10 @@
+```powershell
+# runs in: PowerShell 7 on Windows, normal window
+# cwd: C:\w\r
+# needs: nothing
+# recipe: git share
+Set-Location -LiteralPath 'C:\w\r'
+git push -u origin HEAD
+git status -sb
+# expect: the branch is on origin and git status -sb shows no ahead count
+```

@@ -247,6 +247,10 @@ type Config struct {
 	// and the snapshot lists no foreman source.
 	ForemanRoot string `json:"foreman_root,omitempty"`
 
+	// GroundworkEngine is the full path of Groundwork's git_flow.py. Only
+	// "znd git land" reads it; empty (the default) makes land refuse.
+	GroundworkEngine string `json:"groundwork_engine,omitempty"`
+
 	// AgentView is opt-in (default false): when true, BurnMon polls the
 	// documented "claude agents --json" for questions and permission prompts
 	// that wait on you. Off by default because the next "claude agents" call

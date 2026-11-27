@@ -32,6 +32,9 @@ type Target struct {
 	Project   string
 	// Foreman gate
 	FlowID, Gate, GateToken, FlowDir, Title string
+	// Via is "foreman_read" when the gate came from a fresh Foreman read
+	// because no snapshot was current. It goes to the audit line only.
+	Via string
 	// Foreman sprint close
 	SprintID, SprintDir, Branch string
 }

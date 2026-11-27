@@ -225,10 +225,21 @@ func TestWalkChain(t *testing.T) {
 			map[uint32]int{100: 30, 80: 10}, []int{80}, true, true},
 		{"parent pid zero", map[uint32]procInfo{100: {0, "x.exe"}},
 			map[uint32]int{100: 30}, nil, true, true},
-		{"parent exited", map[uint32]procInfo{100: {90, "x.exe"}},
-			map[uint32]int{100: 30}, []int{90}, false, false},
-		{"grandparent exited", map[uint32]procInfo{100: {90, "x.exe"}, 90: {80, "cmd.exe"}},
-			map[uint32]int{100: 30, 90: 20}, []int{90, 80}, false, false},
+		{"parent exited ends the chain, pid kept", map[uint32]procInfo{100: {90, "x.exe"}},
+			map[uint32]int{100: 30}, []int{90}, true, true},
+		{"grandparent exited ends the chain, pid kept", map[uint32]procInfo{100: {90, "x.exe"}, 90: {80, "cmd.exe"}},
+			map[uint32]int{100: 30, 90: 20}, []int{90, 80}, true, true},
+		{"herdr pane: dead parent above two herdr-core", map[uint32]procInfo{
+			100: {2752, "pwsh.exe"}, 2752: {35380, "herdr-core.exe"}, 35380: {31040, "herdr-core.exe"}},
+			map[uint32]int{100: 30, 2752: 20, 35380: 10}, []int{2752, 35380, 31040}, true, true},
+		{"dead parent above a living parent with unreadable start time", map[uint32]procInfo{100: {90, "x.exe"}, 90: {80, "cmd.exe"}},
+			map[uint32]int{100: 30}, []int{90, 80}, true, false},
+		// Pins the known gap: pid 80 may still run, but toolhelp keeps no parent
+		// pid for the exited 90, so 80 cannot be found and is not listed.
+		{"living grandparent above a dead parent is not listed", map[uint32]procInfo{100: {90, "x.exe"}, 80: {70, "claude.exe"}},
+			map[uint32]int{100: 30, 80: 10}, []int{90}, true, true},
+		{"dead parent above a reused living parent", map[uint32]procInfo{100: {90, "x.exe"}, 90: {80, "cmd.exe"}},
+			map[uint32]int{100: 30, 90: 40}, []int{90, 80}, true, false},
 		{"reused parent pid keeps walking, unverified", map[uint32]procInfo{100: {90, "x.exe"}, 90: {80, "other.exe"}, 80: {0, "explorer.exe"}},
 			map[uint32]int{100: 30, 90: 40, 80: 5}, []int{90, 80}, true, false},
 		{"parent start time unreadable", map[uint32]procInfo{100: {90, "x.exe"}, 90: {0, "svc.exe"}},
@@ -295,8 +306,10 @@ func TestCurrentSelfFailsClosed(t *testing.T) {
 		"own entry missing": func(e *selfEnv) {
 			e.procs = func() (map[uint32]procInfo, error) { return map[uint32]procInfo{}, nil }
 		},
-		"parent exited": func(e *selfEnv) {
-			e.procs = func() (map[uint32]procInfo, error) { return map[uint32]procInfo{100: {90, "b.exe"}}, nil }
+		"loop": func(e *selfEnv) {
+			e.procs = func() (map[uint32]procInfo, error) {
+				return map[uint32]procInfo{100: {90, "b.exe"}, 90: {100, "c.exe"}}, nil
+			}
 		},
 	}
 	for name, mod := range mods {
@@ -307,12 +320,22 @@ func TestCurrentSelfFailsClosed(t *testing.T) {
 			t.Errorf("%s: want an error, got %+v", name, s)
 			continue
 		}
-		if name != "parent exited" && (s.PID != 0 || len(s.Ancestors) != 0 || s.ChainComplete) {
+		if name != "loop" && (s.PID != 0 || len(s.Ancestors) != 0 || s.ChainComplete) {
 			t.Errorf("%s: Self must be unusable, got %+v", name, s)
 		}
-		if name == "parent exited" && (s.ChainComplete || s.ChainVerified || !strings.Contains(err.Error(), "ancestor chain")) {
+		if name == "loop" && (s.ChainComplete || s.ChainVerified || !strings.Contains(err.Error(), "ancestor chain")) {
 			t.Errorf("%s: %+v %v", name, s, err)
 		}
+	}
+}
+
+// A parent that has exited ends the chain: Herdr panes end this way.
+func TestCurrentSelfParentExitedPasses(t *testing.T) {
+	env := goodEnv()
+	env.procs = func() (map[uint32]procInfo, error) { return map[uint32]procInfo{100: {90, "b.exe"}}, nil }
+	s, err := currentSelf(env)
+	if err != nil || !s.ChainComplete || !s.ChainVerified || len(s.Ancestors) != 1 || s.Ancestors[0] != 90 {
+		t.Fatalf("%+v %v", s, err)
 	}
 }
 

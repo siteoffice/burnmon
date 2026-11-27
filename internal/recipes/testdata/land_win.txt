@@ -1,0 +1,9 @@
+```powershell
+# runs in: PowerShell 7 on Windows, normal window
+# cwd: C:\w\r
+# needs: nothing
+# recipe: git land
+Set-Location -LiteralPath 'C:\w\r'
+py -3 'C:\g\git_flow.py' land --apply --repo 'C:\w\r' --subject 's'
+# expect: the engine reports the pull request merged and the work branch removed
+```

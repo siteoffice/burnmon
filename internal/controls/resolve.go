@@ -19,7 +19,15 @@ import (
 // directly startable interpreter. On Windows that means a .exe that is not
 // the Microsoft Store alias stub under a WindowsApps folder.
 func ResolvePython(look func(string) (string, error), goos string) (string, error) {
-	p, err := look("python")
+	var p string
+	var err error
+	if goos != "windows" {
+		// A Mac usually has only python3.
+		p, err = look("python3")
+	}
+	if goos == "windows" || err != nil {
+		p, err = look("python")
+	}
 	if err != nil {
 		return "", errors.New("python not found")
 	}

@@ -19,6 +19,9 @@ type AuditLine struct {
 	// Phase is "start" on the line written before a control runs, and empty on
 	// the result line and on refusals.
 	Phase string `json:"phase,omitempty"`
+	// Via names a non-default decision path. It is "foreman_read" when a gate
+	// was decided from a fresh Foreman read without a current snapshot.
+	Via string `json:"via,omitempty"`
 }
 
 // AuditPath is the audit file next to the store file.

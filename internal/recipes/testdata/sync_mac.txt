@@ -1,0 +1,11 @@
+```sh
+# runs in: Terminal on the Mac (zsh)
+# cwd: /w/r
+# needs: nothing
+# recipe: git sync
+cd -- '/w/r'
+git fetch --prune origin
+git merge --ff-only '@{u}'
+git status -sb
+# expect: git status -sb shows the branch level with its upstream
+```

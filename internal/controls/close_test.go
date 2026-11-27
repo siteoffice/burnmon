@@ -419,7 +419,7 @@ func TestCloseWithFakeForemanLibrary(t *testing.T) {
 
 	argv := CloseArgv(py, root, sprintDir)
 	if runtime.GOOS != "windows" {
-		t.Skip("ExecRunner runs controls on Windows only (sys_other.go errUnsupported)")
+		t.Skip("this test builds a Windows python path; the shared runner is tested in runner_other_test.go")
 	}
 	code, line, err := ExecRunner{}.Run(context.Background(), argv, lib)
 	if err != nil || code != 0 {

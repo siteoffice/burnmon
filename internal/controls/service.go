@@ -39,7 +39,22 @@ type Env struct {
 	// Merged says whether branch is in the main branch of repo. known is false
 	// when it cannot be told; the Close control then refuses.
 	Merged func(repo, branch string) (merged, known bool)
+	// GateWithoutSnapshot says what a gate control does when no snapshot is
+	// current: GateRefuse (also the empty value) refuses; GateForemanRead goes
+	// on with the fresh Foreman read alone. Only znd sets it; BurnMon Dev and
+	// the Control Centre leave it empty.
+	GateWithoutSnapshot string
 }
+
+// Values of Env.GateWithoutSnapshot.
+const (
+	GateRefuse      = "refuse"
+	GateForemanRead = "foreman_read"
+)
+
+// WhyAgentOffWindows is the reason Stop and Attach are unusable off Windows:
+// never-self needs the ancestor walk, which exists on Windows only.
+const WhyAgentOffWindows = "needs the process tree check, Windows only"
 
 // Service ties previews, fresh checks, the audit file and the runner together.
 type Service struct {
@@ -77,6 +92,9 @@ type PreviewResult struct {
 	Command     string `json:"command"`
 	Label       string `json:"label"`
 	ExpiresInMs int    `json:"expires_in_ms"`
+	// Display is Command with the gate token left out, for a caller that prints
+	// the command (znd). It is not sent to a page.
+	Display string `json:"-"`
 }
 
 // RunResult is what the page shows after the second press. Failed is true for
@@ -162,6 +180,8 @@ func (s *Service) unusable(c string) string {
 	}
 	if !isGate(c) {
 		switch {
+		case controlsGOOS != "windows":
+			return WhyAgentOffWindows
 		case s.Env.ClaudePath == "":
 			if s.Env.ClaudeWhy != "" {
 				return s.Env.ClaudeWhy
@@ -288,7 +308,9 @@ func (s *Service) Preview(req PreviewRequest) (PreviewResult, error) {
 		return PreviewResult{}, errors.New("no snapshot")
 	}
 	rd := s.Env.Snapshot()
-	if rd.Status != snapshot.StatusOK || rd.Snapshot == nil {
+	current := rd.Status == snapshot.StatusOK && rd.Snapshot != nil
+	viaForeman := !current && isGate(req.Control) && s.Env.GateWithoutSnapshot == GateForemanRead
+	if !current && !viaForeman {
 		return PreviewResult{}, errors.New("the snapshot is not current, nothing to control")
 	}
 	var (
@@ -296,7 +318,9 @@ func (s *Service) Preview(req PreviewRequest) (PreviewResult, error) {
 		argv []string
 		err  error
 	)
-	if isGate(req.Control) {
+	if viaForeman {
+		t, argv, err = s.previewGate(req, nil)
+	} else if isGate(req.Control) {
 		t, argv, err = s.previewGate(req, rd.Snapshot)
 	} else if req.Control == CloseSprint {
 		t, argv, err = s.previewSprint(req, rd.Snapshot)
@@ -307,7 +331,7 @@ func (s *Service) Preview(req PreviewRequest) (PreviewResult, error) {
 		return PreviewResult{}, err
 	}
 	pe := s.previews.Add(t, argv)
-	return PreviewResult{Token: pe.Token, Command: pe.Command, Label: t.Label(), ExpiresInMs: int(PreviewTTL / time.Millisecond)}, nil
+	return PreviewResult{Token: pe.Token, Command: pe.Command, Label: t.Label(), ExpiresInMs: int(PreviewTTL / time.Millisecond), Display: auditCommand(pe)}, nil
 }
 
 func (s *Service) previewAgent(req PreviewRequest, snap *snapshot.Snapshot, self Self) (Target, []string, error) {
@@ -360,18 +384,29 @@ func (s *Service) previewAgent(req PreviewRequest, snap *snapshot.Snapshot, self
 	return t, argv, nil
 }
 
+// previewGate checks a gate against a fresh Foreman read. A nil snap is the
+// foreman_read path: no snapshot is current, so the id comes from the request
+// and the audit lines say so (Target.Via).
 func (s *Service) previewGate(req PreviewRequest, snap *snapshot.Snapshot) (Target, []string, error) {
-	var item *waits.Item
-	for i := range snap.WaitItems {
-		if snap.WaitItems[i].Kind == "gate" && snap.WaitItems[i].ID == req.Target {
-			item = &snap.WaitItems[i]
-			break
+	via := ""
+	if snap == nil {
+		if !strings.HasPrefix(req.Target, "gate:") {
+			return Target{}, nil, errors.New("not a valid gate id")
+		}
+		via = GateForemanRead
+	} else {
+		var item *waits.Item
+		for i := range snap.WaitItems {
+			if snap.WaitItems[i].Kind == "gate" && snap.WaitItems[i].ID == req.Target {
+				item = &snap.WaitItems[i]
+				break
+			}
+		}
+		if item == nil {
+			return Target{}, nil, errors.New("the gate is not a listed wait item")
 		}
 	}
-	if item == nil {
-		return Target{}, nil, errors.New("the gate is not a listed wait item")
-	}
-	rest := strings.TrimPrefix(item.ID, "gate:")
+	rest := strings.TrimPrefix(req.Target, "gate:")
 	i := strings.LastIndex(rest, ":")
 	if i <= 0 || i == len(rest)-1 {
 		return Target{}, nil, errors.New("not a valid gate id")
@@ -404,7 +439,7 @@ func (s *Service) previewGate(req PreviewRequest, snap *snapshot.Snapshot) (Targ
 		if !insideFlows(s.Env.ForemanRoot, f.Dir) {
 			return Target{}, nil, errors.New("the flow folder is outside foreman_root\\flows")
 		}
-		t := Target{Control: req.Control, FlowID: f.ID, Gate: gate, GateToken: f.GateToken, FlowDir: f.Dir, Title: flowLabel(f)}
+		t := Target{Control: req.Control, FlowID: f.ID, Gate: gate, GateToken: f.GateToken, FlowDir: f.Dir, Title: flowLabel(f), Via: via}
 		if err := CheckGate(t, flows); err != nil {
 			return Target{}, nil, err
 		}
@@ -522,7 +557,7 @@ func auditErr(err error) error {
 
 func (s *Service) line(pe Pending) AuditLine {
 	return AuditLine{Time: s.now().UTC().Format(time.RFC3339), Control: pe.Target.Control,
-		Target: auditTarget(pe.Target), Command: auditCommand(pe)}
+		Target: auditTarget(pe.Target), Command: auditCommand(pe), Via: pe.Target.Via}
 }
 
 // refuseAudited writes a refusal line (best effort: nothing runs either way)

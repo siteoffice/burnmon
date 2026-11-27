@@ -19,7 +19,7 @@ type Self struct {
 	PID           int
 	Ancestors     []int
 	ExeDir        string
-	ChainComplete bool // the walk reached a root (pid 0 or a login/system process)
+	ChainComplete bool // the walk reached a root (pid 0, a login/system process) or a parent that has exited
 	ChainVerified bool // every parent link was checked by creation time
 }
 
