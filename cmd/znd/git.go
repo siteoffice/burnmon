@@ -98,7 +98,7 @@ func runGit(args []string, stdout, stderr io.Writer, d deps) int {
 	if dry {
 		// The block copies snip.py; --yes runs the resolved paths below, so show them.
 		for i, a := range plan.Argv {
-			fmt.Fprintf(stdout, "# runs %d of %d: %s\n", i+1, len(plan.Argv), strings.Join(a, " "))
+			fmt.Fprintf(stdout, "# runs %d of %d: %s\n", i+1, len(plan.Argv), showArgs(a))
 		}
 		return exitOK
 	}
@@ -124,7 +124,7 @@ func runGit(args []string, stdout, stderr io.Writer, d deps) int {
 	result := controls.AuditLine{Time: line.Time, Control: control, Target: plan.Dir, Command: line.Command}
 	code := exitOK
 	for i, argv := range plan.Argv {
-		fmt.Fprintf(stdout, "step %d of %d: %s\n", i+1, len(plan.Argv), shown[i])
+		fmt.Fprintf(stdout, "step %d of %d: %s\n", i+1, len(plan.Argv), showArgs(argv))
 		ctx, cancel := context.WithTimeout(context.Background(), gitStepTimeout)
 		exit, first, rerr := env.Runner.Run(ctx, argv, plan.Dir)
 		cancel()
@@ -145,6 +145,20 @@ func runGit(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitFailed
 	}
 	return code
+}
+
+// showArgs joins argv for the printed run and step lines. An argument that
+// holds a space or is empty gets quotes, so a reader sees where each one ends.
+// The audit command field is not built from this.
+func showArgs(argv []string) string {
+	out := make([]string, len(argv))
+	for i, a := range argv {
+		if a == "" || strings.Contains(a, " ") {
+			a = `"` + a + `"`
+		}
+		out[i] = a
+	}
+	return strings.Join(out, " ")
 }
 
 func dirExists(p string) bool {

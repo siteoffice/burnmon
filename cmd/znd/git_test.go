@@ -228,3 +228,25 @@ func TestGitDryRunShowsRunLines(t *testing.T) {
 		t.Errorf("argv text missing: %q", tail)
 	}
 }
+
+// TestShownArgsQuoteSpaceAndEmpty: the printed run and step lines put an
+// argument in quotes when it holds a space or is empty. Other arguments stay bare.
+func TestShownArgsQuoteSpaceAndEmpty(t *testing.T) {
+	got := showArgs([]string{"git", "commit", "-m", "fix it", "", "a.txt"})
+	if want := `git commit -m "fix it" "" a.txt`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
+func TestGitPrintedLinesQuoteSpaces(t *testing.T) {
+	r := newGitRig(t)
+	_, out, errs := r.run("save", "--cwd", r.cwd, "--files", "a b.txt", "--message", "fix it", "--dry-run")
+	if !strings.Contains(out, `"a b.txt"`) || !strings.Contains(out, `"fix it"`) {
+		t.Errorf("run lines not quoted: %q %s", out, errs)
+	}
+	r = newGitRig(t)
+	code, out, errs := r.run("save", "--cwd", r.cwd, "--files", "a b.txt", "--message", "fix it", "--yes")
+	if code != exitOK || !strings.Contains(out, `step 1 of 3: `) || !strings.Contains(out, `"a b.txt"`) {
+		t.Errorf("step lines not quoted: code %d %q %s", code, out, errs)
+	}
+}

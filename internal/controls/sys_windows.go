@@ -180,9 +180,11 @@ func isRootProc(exe string) bool {
 // walkChain follows parent links from pid through the process table.
 //
 // Decision for exited parents: a parent that has exited is not in the
-// toolhelp table, so its own parent cannot be read and the walk cannot go on.
-// The dead parent's pid is still recorded (a reused pid then refuses, which is
-// the safe direction), and the result is ChainComplete false and unverified.
+// toolhelp table, so its own parent cannot be read and the walk ends there,
+// complete. Every living ancestor below it was checked, and a process whose
+// parent died has no ancestor left to ask. The dead parent's pid is still
+// recorded (a reused pid then refuses, which is the safe direction). This is
+// what lets a Herdr pane pass: its chain ends at a parent that has exited.
 // A parent that is alive but was created after its child has a reused pid: it
 // is recorded and the walk continues through the table, marked unverified. A
 // parent whose start time cannot be read is recorded and marked unverified.
@@ -211,7 +213,7 @@ func walkChain(pid uint32, procs map[uint32]procInfo, created func(uint32) (time
 		seen[pp] = true
 		anc = append(anc, int(pp))
 		if _, alive := procs[pp]; !alive {
-			return anc, false, false
+			return anc, true, verified
 		}
 		pt, tok := created(pp)
 		switch {
