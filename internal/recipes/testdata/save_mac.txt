@@ -1,0 +1,11 @@
+```sh
+# runs in: Terminal on the Mac (zsh)
+# cwd: /w/r
+# needs: nothing
+# recipe: git save
+cd -- '/w/r'
+git add -- 'a.txt'
+git commit -m 'msg'
+git status --short
+# expect: one new commit, and git status --short no longer lists the saved files
+```

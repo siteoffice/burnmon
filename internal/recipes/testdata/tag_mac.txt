@@ -1,0 +1,11 @@
+```sh
+# runs in: Terminal on the Mac (zsh)
+# cwd: /w/r
+# needs: nothing
+# recipe: git tag
+cd -- '/w/r'
+git tag -a 'v1' -m 'msg'
+git push origin 'v1'
+git ls-remote --tags origin 'v1'
+# expect: git ls-remote prints one line ending in refs/tags/v1
+```

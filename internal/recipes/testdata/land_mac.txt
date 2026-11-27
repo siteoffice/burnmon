@@ -1,0 +1,9 @@
+```sh
+# runs in: Terminal on the Mac (zsh)
+# cwd: /w/r
+# needs: nothing
+# recipe: git land
+cd -- '/w/r'
+python3 '/g/git_flow.py' land --apply --repo '/w/r' --subject 's'
+# expect: the engine reports the pull request merged and the work branch removed
+```
