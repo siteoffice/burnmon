@@ -181,15 +181,18 @@ func isRootProc(exe string) bool {
 //
 // Decision for exited parents: a parent that has exited is not in the
 // toolhelp table, so its own parent cannot be read and the walk ends there,
-// complete. Every living ancestor below it was checked, and a process whose
-// parent died has no ancestor left to ask. The dead parent's pid is still
+// complete. Every living ancestor below it was checked. Known gap: the walk
+// cannot see past a dead parent, so a living grandparent above it (for
+// example the session that started a shell which then exited) is not in the
+// ancestor list, and Self.Refuses cannot skip that session by its pid. Only
+// the working folder rule covers it. The dead parent's pid is still
 // recorded (a reused pid then refuses, which is the safe direction). This is
 // what lets a Herdr pane pass: its chain ends at a parent that has exited.
 // A parent that is alive but was created after its child has a reused pid: it
 // is recorded and the walk continues through the table, marked unverified. A
 // parent whose start time cannot be read is recorded and marked unverified.
-// The walk ends complete at parent pid 0 or at a root process (explorer,
-// services, ...), and ends incomplete on a loop or after maxChain steps.
+// The walk ends complete at parent pid 0, at a root process (explorer,
+// services, ...) or at a parent that has exited, and ends incomplete on a loop or after maxChain steps.
 func walkChain(pid uint32, procs map[uint32]procInfo, created func(uint32) (time.Time, bool)) (anc []int, complete, verified bool) {
 	curT, ok := created(pid)
 	if !ok {

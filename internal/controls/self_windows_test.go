@@ -234,6 +234,10 @@ func TestWalkChain(t *testing.T) {
 			map[uint32]int{100: 30, 2752: 20, 35380: 10}, []int{2752, 35380, 31040}, true, true},
 		{"dead parent above a living parent with unreadable start time", map[uint32]procInfo{100: {90, "x.exe"}, 90: {80, "cmd.exe"}},
 			map[uint32]int{100: 30}, []int{90, 80}, true, false},
+		// Pins the known gap: pid 80 may still run, but toolhelp keeps no parent
+		// pid for the exited 90, so 80 cannot be found and is not listed.
+		{"living grandparent above a dead parent is not listed", map[uint32]procInfo{100: {90, "x.exe"}, 80: {70, "claude.exe"}},
+			map[uint32]int{100: 30, 80: 10}, []int{90}, true, true},
 		{"dead parent above a reused living parent", map[uint32]procInfo{100: {90, "x.exe"}, 90: {80, "cmd.exe"}},
 			map[uint32]int{100: 30, 90: 40}, []int{90, 80}, true, false},
 		{"reused parent pid keeps walking, unverified", map[uint32]procInfo{100: {90, "x.exe"}, 90: {80, "other.exe"}, 80: {0, "explorer.exe"}},
